@@ -77,6 +77,9 @@ export const processActivitySyncTask = onTaskDispatched({
             case QueueResult.Processed:
                 logger.info(`[ActivitySyncTaskWorker] Successfully processed item ${queueItemId}`);
                 break;
+            case QueueResult.Skipped:
+                logger.error(`[ActivitySyncTaskWorker] Item ${queueItemId} requires manual reconciliation; stopping automatic retries.`);
+                break;
             case QueueResult.Deferred:
                 logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;

@@ -7,10 +7,9 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">devices</mat-icon>
       <mat-card-title id="mcp-connections-title">MCP connections</mat-card-title>
       <mat-card-subtitle>
-        Read-only clients that completed authorization to access activity and Training metrics, body measurements,
-        activity details, sleep, or saved routes. Disconnect here remains authoritative even if an external client does
-        not notify Quantified Self. Reauthorizing the same verified client replaces its previous grant only after the
-        new authorization finishes.
+        These apps can only view the data you approved. Disconnect an app here to stop sharing—even if you already
+        removed it from ChatGPT or another service. Reconnecting the same app keeps the current connection active until
+        the new setup finishes.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -37,11 +36,12 @@
               <div class="mcp-connections__details">
                 <h3>{{ connection.clientName }}</h3>
                 <p>{{ connection.redirectHost }}</p>
-                <ul aria-label="Granted permissions">
+                <p class="mcp-connections__permissions-label">Read-only access</p>
+                <div class="mcp-connections__permissions" role="group" aria-label="Granted read-only permissions">
                   @for (scope of connection.scopes; track scope) {
-                    <li>{{ scopeLabels[scope] }}</li>
+                    <mat-checkbox checked disabled>{{ scopeLabels[scope] }}</mat-checkbox>
                   }
-                </ul>
+                </div>
                 <p class="mcp-connections__dates">
                   Connected {{ connection.createdAtMs | date:'mediumDate' }}
                   @if (connection.lastUsedAtMs) {

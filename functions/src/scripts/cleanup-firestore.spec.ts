@@ -14,11 +14,10 @@ vi.mock('../OAuth2', () => ({
 import { COLLECTION_GROUPS, DEAUTH_CONFIG } from './cleanup-firestore';
 
 describe('cleanup-firestore provider coverage', () => {
-    it('includes Wahoo token, queue, mapping, and remote deauthorization cleanup', () => {
+    it('includes Wahoo token, queue, and remote deauthorization cleanup', () => {
         expect(COLLECTION_GROUPS).toEqual(expect.arrayContaining([
             'wahooAPIAccessTokens',
             'wahooAPIWorkoutQueue',
-            'wahooAPIUserMappings',
         ]));
         expect(DEAUTH_CONFIG.wahooAPIAccessTokens).toMatchObject({
             service: ServiceNames.WahooAPI,

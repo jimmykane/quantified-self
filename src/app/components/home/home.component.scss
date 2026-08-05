@@ -38,6 +38,25 @@
     }
 }
 
+@media (max-width: 959.98px) {
+    .public-below-fold {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 1800px;
+    }
+
+    .features-section.public-below-fold {
+        contain-intrinsic-size: auto 6400px;
+    }
+
+    .ai-insights-section.public-below-fold {
+        contain-intrinsic-size: auto 1800px;
+    }
+
+    .analysis-section.public-below-fold {
+        contain-intrinsic-size: auto 2600px;
+    }
+}
+
 @keyframes gradientShift {
     0% {
         background-position: 0% 50%;
@@ -150,7 +169,7 @@
         gap: 2rem;
 
         // Immediate Entrance Animation
-        &>* {
+        &>*:not(.hero-title):not(.hero-subtitle) {
             opacity: 0; // Start hidden
             animation: fadeInUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
@@ -160,20 +179,12 @@
             animation-delay: 0.1s;
         }
 
-        .hero-title {
+        .hero-actions {
             animation-delay: 0.2s;
         }
 
-        .hero-subtitle {
-            animation-delay: 0.3s;
-        }
-
-        .hero-actions {
-            animation-delay: 0.4s;
-        }
-
         .trust-indicators {
-            animation-delay: 0.5s;
+            animation-delay: 0.3s;
         }
     }
 
@@ -527,6 +538,10 @@
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
+        }
+
+        .feature-link {
+            margin-top: 1rem;
         }
 
         .metric-chip {

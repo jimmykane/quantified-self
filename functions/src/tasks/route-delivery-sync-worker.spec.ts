@@ -63,6 +63,7 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 import { processRouteDeliverySyncTask } from './route-delivery-sync-worker';
+import * as logger from 'firebase-functions/logger';
 
 const invokeWorker = (request: TaskRequestMock): Promise<void> =>
   (processRouteDeliverySyncTask as unknown as TaskCallableMock)(request);
@@ -158,5 +159,20 @@ describe('processRouteDeliverySyncTask', () => {
     mockProcessRouteDeliverySyncQueueItem.mockResolvedValueOnce('DEFERRED');
 
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+  });
+
+  it('stops Cloud Task retries when accepted provider work requires manual reconciliation', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'routeDeliverySyncQueue/queue-item-1' },
+      data: () => ({ processed: false }),
+    });
+    mockProcessRouteDeliverySyncQueueItem.mockResolvedValueOnce('SKIPPED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[RouteDeliverySyncTaskWorker] Item queue-item-1 requires manual reconciliation; stopping automatic retries.',
+    );
   });
 });

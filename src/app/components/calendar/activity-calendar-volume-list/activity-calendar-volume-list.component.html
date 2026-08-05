@@ -1,0 +1,31 @@
+<div class="calendar-family-volume-list">
+  @for (family of rows(); track family.id) {
+  <div class="calendar-family-volume-row" role="group" [attr.aria-label]="family.ariaLabel">
+    <div class="calendar-family-volume-identity">
+      <mat-icon aria-hidden="true" [style.color]="family.color">{{ family.icon }}</mat-icon>
+      <span class="calendar-family-volume-copy">
+        <strong>{{ family.label }}</strong>
+        <span>{{ family.eventCountLabel }}</span>
+      </span>
+    </div>
+    <strong class="calendar-family-volume-value">{{ family.valueLabel }}</strong>
+    <div class="calendar-family-volume-track"
+      [attr.role]="family.hasData ? 'progressbar' : null"
+      [attr.aria-label]="family.hasData ? family.progressLabel : null"
+      [attr.aria-valuemin]="family.hasData ? 0 : null"
+      [attr.aria-valuemax]="family.hasData ? family.maximumValue : null"
+      [attr.aria-valuenow]="family.hasData ? family.value : null"
+      [attr.aria-valuetext]="family.hasData ? family.valueLabel : null">
+      <span class="calendar-family-volume-fill"
+        [style.width.%]="family.barPercent"
+        [style.background-color]="family.color"></span>
+    </div>
+    @if (family.stats.length) {
+    <app-activity-calendar-volume-stats [stats]="family.stats"></app-activity-calendar-volume-stats>
+    }
+  </div>
+  @if (!$last) {
+  <mat-divider></mat-divider>
+  }
+  }
+</div>

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
 
@@ -101,8 +101,17 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 import { buildRouteDeliverySyncQueueItemId, enqueueRouteDeliverySyncQueueItem } from './queue';
 
 describe('route-delivery-sync/queue', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTransactionGet.mockReset();
+    mockTransactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+    });
     mockDoc.mockReturnValue({ parent: { id: 'routeDeliverySyncQueue' }, get: mockGet, set: mockSet, update: mockUpdate });
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
@@ -136,7 +145,14 @@ describe('route-delivery-sync/queue', () => {
   });
 
   it('enqueues a new route delivery sync queue item and dispatches Cloud Task', async () => {
-    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    vi.useFakeTimers();
+    vi.setSystemTime(1700000000000);
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      });
 
     const result = await enqueueRouteDeliverySyncQueueItem({
       routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
@@ -169,6 +185,35 @@ describe('route-delivery-sync/queue', () => {
     expect(mockUpdate).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
   });
 
+  it('does not overwrite a provider-operation claim when the worker starts before the dispatch marker is written', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          processed: false,
+          dispatchedToCloudTask: Number.MAX_SAFE_INTEGER - 1,
+        }),
+      });
+
+    const result = await enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp,
+      destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1',
+      savedRouteID: 'route-1',
+      sourceRevisionKey: 'rev-1',
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: true,
+      queueItemId: 'routeDeliverySync__SuuntoApp_to_GarminAPI__user-1__route-1__rev-1',
+    });
+    expect(mockEnqueueRouteDeliverySyncTask).toHaveBeenCalledOnce();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
   it('does not mark an existing pending item as redispatched when Cloud Task already exists', async () => {
     mockTransactionGet.mockResolvedValueOnce({
       exists: true,
@@ -196,5 +241,63 @@ describe('route-delivery-sync/queue', () => {
       1700000000000,
     );
     expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not attach an old redispatch marker to a replaced queue revision', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000001 }),
+      });
+
+    const result = await enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp,
+      destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1',
+      savedRouteID: 'route-1',
+      sourceRevisionKey: 'rev-1',
+      manual: false,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      enqueued: false,
+      reason: 'already_pending',
+    }));
+    expect(mockEnqueueRouteDeliverySyncTask).toHaveBeenCalledOnce();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not let a manual resend overwrite a fail-closed reconciliation marker', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        processed: true,
+        resultStatus: 'manual_reconciliation_required',
+        destinationProviderRouteId: 'accepted-route-1',
+      }),
+    });
+
+    const result = await enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp,
+      destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1',
+      savedRouteID: 'route-1',
+      sourceRevisionKey: 'rev-1',
+      manual: true,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'routeDeliverySync__SuuntoApp_to_GarminAPI__user-1__route-1__rev-1',
+      reason: 'already_processed',
+    });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueRouteDeliverySyncTask).not.toHaveBeenCalled();
   });
 });

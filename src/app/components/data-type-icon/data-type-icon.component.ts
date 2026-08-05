@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { Privacy } from '@sports-alliance/sports-lib';
+import { NgClass, NgStyle } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
@@ -133,7 +135,8 @@ import {
   templateUrl: './data-type-icon.component.html',
   styleUrls: ['./data-type-icon.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+  standalone: true,
+  imports: [NgClass, NgStyle, MatIconModule, MatTooltipModule],
 })
 
 export class DataTypeIconComponent {

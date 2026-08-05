@@ -2,6 +2,7 @@ import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { publicLayoutRoutes, routes as appRoutes } from './app.routing.module';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
+import { HomeComponent } from './components/home/home.component';
 import {
   CLIENT_RENDERED_APP_ROUTES,
   PRERENDERED_FEATURE_ROUTES,
@@ -13,7 +14,6 @@ import {
 } from './app.routes.server';
 import { dashboardRoutes } from './dashboard.routing.module';
 import { eventRoutes } from './event.routing.module';
-import { homeRoutes } from './home.routing.module';
 import { loginRoutes } from './login.routing.module';
 import { adminRoutes } from './modules/admin.module';
 import { myTracksRoutes } from './my-tracks.routing.module';
@@ -39,7 +39,6 @@ function fullAdminRoutePaths(): string[] {
 const rootOnlyLazyRouteModules = [
   ['dashboard', dashboardRoutes],
   ['event', eventRoutes],
-  ['home', homeRoutes],
   ['login', loginRoutes],
   ['mytracks', myTracksRoutes],
   ['policies', policiesRoutes],
@@ -65,6 +64,7 @@ describe('serverRoutes', () => {
     expect(PRERENDERED_FEATURE_ROUTES).toEqual([
       'features',
       'features/workout-data-comparison',
+      'features/activity-calendar',
       'features/training-analysis',
       'features/mcp-server',
       'features/ai-insights',
@@ -111,6 +111,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('tools/compare/saved')).toBe(false);
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
@@ -182,6 +183,7 @@ describe('serverRoutes', () => {
 
   it('puts every footer-bearing route inside the public layout, never the admin route', () => {
     const publicLayout = appRoutes.at(-1);
+    const publicLayoutPaths = new Set(publicLayoutRoutes.map(route => route.path));
 
     expect(publicLayout).toMatchObject({
       path: '',
@@ -189,8 +191,18 @@ describe('serverRoutes', () => {
       children: publicLayoutRoutes,
     });
     expect(publicLayoutRoutes.some(route => route.path === 'admin')).toBe(false);
-    expect(publicLayoutRoutes.some(route => route.path === 'help')).toBe(true);
+    for (const prerenderedRoute of PRERENDERED_PUBLIC_ROUTES) {
+      expect(publicLayoutPaths.has(prerenderedRoute), prerenderedRoute).toBe(true);
+    }
     expect(publicLayoutRoutes.some(route => route.path === '**')).toBe(true);
+  });
+
+  it('lazy-loads the standalone home component without a feature module', async () => {
+    const homeRoute = publicLayoutRoutes.find(route => route.path === '');
+
+    expect(homeRoute?.loadChildren).toBeUndefined();
+    expect(homeRoute?.loadComponent).toBeTypeOf('function');
+    await expect(homeRoute?.loadComponent?.()).resolves.toBe(HomeComponent);
   });
 
   it('keeps exact admin child routes mirrored as client-rendered server routes', () => {

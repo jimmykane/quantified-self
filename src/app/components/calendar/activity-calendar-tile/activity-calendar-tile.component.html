@@ -1,0 +1,34 @@
+<section class="activity-calendar-tile" aria-labelledby="activity-calendar-tile-title">
+  <header class="activity-calendar-tile-header">
+    <div>
+      <h2 id="activity-calendar-tile-title">Activity calendar</h2>
+      <span>{{ calendarModel().periodLabel }}</span>
+    </div>
+  </header>
+
+  <div class="activity-calendar-tile-progress">
+    @if (isLoading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+    }
+  </div>
+
+  @if (hasError()) {
+  <div class="activity-calendar-tile-status activity-calendar-tile-status--error" role="alert">
+    <mat-icon aria-hidden="true">error_outline</mat-icon>
+    <span>Calendar unavailable</span>
+    <button mat-icon-button type="button" matTooltip="Retry" aria-label="Retry loading calendar" (click)="retry()">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+  } @else {
+  <app-activity-calendar-grid
+    [model]="calendarModel()"
+    [compact]="true"
+    [hideOutsideDays]="true"
+    (daySelected)="openDay($event)">
+  </app-activity-calendar-grid>
+  @if (!isLoading() && !hasEvents()) {
+  <div class="activity-calendar-tile-status" role="status">No activities this month</div>
+  }
+  }
+</section>

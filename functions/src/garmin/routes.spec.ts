@@ -153,6 +153,30 @@ describe('garmin route sending', () => {
     await expect(createGarminRouteSendContext('user-1')).rejects.toBeInstanceOf(GarminRouteSendPermissionRequiredError);
   });
 
+  it('maps structurally equivalent terminal auth errors to reconnect-required', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    tokenMocks.getTokenData.mockRejectedValueOnce({
+      name: 'TerminalServiceAuthError',
+      message: 'Reconnect required',
+      dlqContext: 'AUTH_RECONNECT_REQUIRED',
+    });
+
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
   it('creates a Garmin course on first send', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),
@@ -201,6 +225,29 @@ describe('garmin route sending', () => {
     });
   });
 
+  it('runs the queued-route guard immediately before creating a Garmin course', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    const beforeProviderRequest = vi.fn().mockRejectedValue(Object.assign(
+      new Error('Garmin disconnect is pending.'),
+      { name: 'TokenUseSkippedForPendingDisconnectError' },
+    ));
+
+    const context = await createGarminRouteSendContext('user-1');
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+      { beforeProviderRequest },
+    )).rejects.toMatchObject({ name: 'TokenUseSkippedForPendingDisconnectError' });
+
+    expect(beforeProviderRequest).toHaveBeenCalledTimes(1);
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
   it('creates a Garmin course from a manually selected route without delivery metadata', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),
@@ -244,6 +291,32 @@ describe('garmin route sending', () => {
     }));
     expect(requestHelperMocks.post).not.toHaveBeenCalled();
     expect(result.providerRouteId).toBe('course-42');
+  });
+
+  it('runs the queued-route guard immediately before updating a Garmin course', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    const beforeProviderRequest = vi.fn().mockRejectedValue(Object.assign(
+      new Error('Garmin disconnect is pending.'),
+      { name: 'TokenUseSkippedForPendingDisconnectError' },
+    ));
+
+    const context = await createGarminRouteSendContext('user-1');
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+      { beforeProviderRequest },
+    )).rejects.toMatchObject({ name: 'TokenUseSkippedForPendingDisconnectError' });
+
+    expect(beforeProviderRequest).toHaveBeenCalledTimes(1);
+    expect(requestHelperMocks.put).not.toHaveBeenCalled();
   });
 
   it('keeps resends pinned to the Garmin account that already owns the delivered course', async () => {
@@ -396,7 +469,9 @@ describe('garmin route sending', () => {
       context,
     )).rejects.toMatchObject({
       statusCode: 429,
-      code: 'unavailable',
+      code: 'resource-exhausted',
+      disposition: 'retryable',
+      operation: 'route_create',
     });
   });
 
@@ -419,8 +494,246 @@ describe('garmin route sending', () => {
       context,
     )).rejects.toMatchObject({
       statusCode: 429,
-      code: 'unavailable',
+      code: 'resource-exhausted',
+      disposition: 'retryable',
+      operation: 'route_update',
+      providerOperationId: 'course-42',
     });
+  });
+
+  it('fails closed when a Garmin create 5xx response has an ambiguous outcome', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce({ statusCode: 503 });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      statusCode: 503,
+      providerUserId: 'garmin-user-1',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  });
+
+  it('fails closed when a Garmin create transport failure has an ambiguous outcome', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce(Object.assign(
+      new Error('socket closed before a response'),
+      { code: 'ECONNRESET' },
+    ));
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      providerUserId: 'garmin-user-1',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  });
+
+  it('fails closed when Garmin accepts a create request without returning a course id', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockResolvedValueOnce({ status: 'accepted' });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      providerUserId: 'garmin-user-1',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+      message: expect.stringContaining('without returning an identifier'),
+    });
+  });
+
+  it('keeps a Garmin update transport failure retryable', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    requestHelperMocks.put.mockRejectedValueOnce(Object.assign(
+      new Error('socket closed before a response'),
+      { code: 'ECONNRESET' },
+    ));
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_update',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      providerOperationId: 'course-42',
+      dlqContext: 'GARMIN_ROUTE_UPDATE_RETRY_EXHAUSTED',
+    });
+  });
+
+  it('keeps a Garmin update 5xx response retryable', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    requestHelperMocks.put.mockRejectedValueOnce({ statusCode: 503 });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      operation: 'route_update',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      statusCode: 503,
+      providerOperationId: 'course-42',
+      dlqContext: 'GARMIN_ROUTE_UPDATE_RETRY_EXHAUSTED',
+    });
+  });
+
+  it('fails closed when a Garmin create request times out ambiguously', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce({ statusCode: 408 });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      statusCode: 408,
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  });
+
+  it('normalizes explicit Garmin create rejection as permanent', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce(Object.assign(new Error('Bad course payload'), { statusCode: 400 }));
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_create',
+      disposition: 'permanent',
+      statusCode: 400,
+      dlqContext: 'GARMIN_ROUTE_CREATE_REJECTED',
+    });
+  });
+
+  it('preserves account-deletion token guards instead of classifying them as provider rejection', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    const deletionError = Object.assign(new Error('Account deletion started'), {
+      name: 'TokenRefreshSkippedForDeletedUserError',
+    });
+    tokenMocks.getTokenData.mockRejectedValueOnce(deletionError);
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toBe(deletionError);
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
+  it('preserves transient token-document read failures before a Garmin create request', async () => {
+    const tokenSnapshot = createTokenSnapshot('token-1', 'garmin-user-1');
+    const firestoreError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
+    tokenSnapshot.ref.get.mockRejectedValueOnce(firestoreError);
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [tokenSnapshot]);
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toBe(firestoreError);
+    expect(requestHelperMocks.post).not.toHaveBeenCalled();
+  });
+
+  it('preserves transient token-document read failures before a Garmin update request', async () => {
+    const tokenSnapshot = createTokenSnapshot('token-1', 'garmin-user-1');
+    const firestoreError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
+    tokenSnapshot.ref.get.mockRejectedValueOnce(firestoreError);
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [tokenSnapshot]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toBe(firestoreError);
+    expect(requestHelperMocks.put).not.toHaveBeenCalled();
   });
 
   it('maps hiking trail route types to HIKING before generic trail matching', async () => {

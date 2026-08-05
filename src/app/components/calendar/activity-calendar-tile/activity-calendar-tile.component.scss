@@ -1,0 +1,75 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.activity-calendar-tile {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  padding: 12px 14px 10px;
+  color: var(--mat-sys-on-surface);
+}
+
+.activity-calendar-tile-header {
+  display: flex;
+  min-height: 40px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-right: 40px;
+}
+
+.activity-calendar-tile-header h2 {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: 0;
+}
+
+.activity-calendar-tile-header span {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: 0;
+}
+
+.activity-calendar-tile-progress {
+  height: 3px;
+  margin-bottom: 3px;
+}
+
+.activity-calendar-tile-progress mat-progress-bar {
+  margin: 0;
+}
+
+app-activity-calendar-grid {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.activity-calendar-tile-status {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.activity-calendar-tile-status--error {
+  min-height: 64px;
+  color: var(--mat-sys-error);
+}
+
+@media (max-width: 480px) {
+  .activity-calendar-tile {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}

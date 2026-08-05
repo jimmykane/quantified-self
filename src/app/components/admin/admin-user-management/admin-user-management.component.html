@@ -200,10 +200,10 @@
         <mat-card class="qs-filter-container">
             <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
                 <mat-label>Search users</mat-label>
-                <input matInput [value]="searchTerm" (input)="onSearchInput($event)"
+                <input matInput [value]="searchInputValue" (input)="onSearchInput($event)"
                     placeholder="Search by email, name, or UID">
-                <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
-                <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+                <mat-icon matSuffix *ngIf="!searchInputValue">search</mat-icon>
+                <button mat-icon-button matSuffix *ngIf="searchInputValue" (click)="clearSearch()" aria-label="Clear">
                     <mat-icon>close</mat-icon>
                 </button>
             </mat-form-field>

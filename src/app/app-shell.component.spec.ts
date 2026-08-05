@@ -130,6 +130,7 @@ describe('AppShellComponent', () => {
                     provide: AppWhatsNewService, useValue: {
                         unreadCount: signal(0),
                         markAsRead: vi.fn(),
+                        ensureChangelogsLoaded: vi.fn(),
                         setAdminMode: vi.fn()
                     }
                 },
@@ -588,11 +589,13 @@ describe('AppShellComponent', () => {
         expect(component.hasBanner).toBe(false);
     });
 
-    it('should open whats new dialog with expected config', () => {
+    it('should open whats new dialog with expected config', async () => {
         const dialog = TestBed.inject(MatDialog) as any;
-        component.openWhatsNew();
+        const whatsNewService = TestBed.inject(AppWhatsNewService) as any;
+        await component.openWhatsNew();
         const [, config] = dialog.open.mock.calls.at(-1);
 
+        expect(whatsNewService.ensureChangelogsLoaded).toHaveBeenCalledOnce();
         expect(dialog.open).toHaveBeenCalledWith(
             expect.any(Function),
             expect.objectContaining({
@@ -625,39 +628,36 @@ describe('AppShellComponent', () => {
         vi.useRealTimers();
     });
 
-    it('should hide initial loader immediately when minimum duration has elapsed', () => {
-        component.showInitialLoader = true;
-        (component as any).initialLoaderStartedAt = Date.now() - 1500;
-        (component as any).minimumLoaderDurationMs = 950;
+    it('should hide the initial loader before the admin-role lookup completes', async () => {
+        window.history.pushState({}, '', '/dashboard');
+        mockRouter.url = '/dashboard';
+        const authUser$ = new Subject<any>();
+        mockAppAuthService.user$ = authUser$.asObservable();
+        const appUserService = TestBed.inject(AppUserService) as any;
+        let resolveAdminLookup: (isAdmin: boolean) => void;
+        appUserService.isAdmin.mockReturnValue(new Promise<boolean>(resolve => {
+            resolveAdminLookup = resolve;
+        }));
+        const privateFixture = TestBed.createComponent(AppShellComponent);
+        const privateComponent = privateFixture.componentInstance;
+        privateFixture.detectChanges();
 
-        (component as any).scheduleInitialLoaderHide();
+        expect(privateComponent.showInitialLoader).toBe(true);
 
-        expect(component.showInitialLoader).toBe(false);
-        expect((component as any).initialLoaderTimeout).toBeNull();
-    });
+        authUser$.next({
+            uid: 'u1',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            hasSubscribedOnce: true,
+            onboardingCompleted: true
+        });
 
-    it('should keep initial loader visible until minimum duration is reached', () => {
-        vi.useFakeTimers();
-        try {
-            component.showInitialLoader = true;
-            (component as any).initialLoaderTimeout = null;
-            (component as any).initialLoaderStartedAt = Date.now();
-            (component as any).minimumLoaderDurationMs = 600;
+        expect(privateComponent.showInitialLoader).toBe(false);
 
-            (component as any).scheduleInitialLoaderHide();
-
-            expect(component.showInitialLoader).toBe(true);
-            expect((component as any).initialLoaderTimeout).toBeTruthy();
-
-            vi.advanceTimersByTime(599);
-            expect(component.showInitialLoader).toBe(true);
-
-            vi.advanceTimersByTime(1);
-            expect(component.showInitialLoader).toBe(false);
-            expect((component as any).initialLoaderTimeout).toBeNull();
-        } finally {
-            vi.useRealTimers();
-        }
+        resolveAdminLookup!(false);
+        await Promise.resolve();
+        privateFixture.destroy();
     });
 
     it('should render metric loader component while initial loader is visible', () => {
@@ -790,22 +790,4 @@ describe('AppShellComponent', () => {
         expect(appUserService.updateUserProperties).not.toHaveBeenCalled();
     });
 
-    it('should clear pending initial loader timeout on destroy', () => {
-        vi.useFakeTimers();
-        try {
-            component.showInitialLoader = true;
-            (component as any).initialLoaderStartedAt = Date.now();
-            (component as any).minimumLoaderDurationMs = 450;
-            (component as any).scheduleInitialLoaderHide();
-            expect((component as any).initialLoaderTimeout).toBeTruthy();
-
-            component.ngOnDestroy();
-            expect((component as any).initialLoaderTimeout).toBeNull();
-
-            vi.advanceTimersByTime(450);
-            expect(component.showInitialLoader).toBe(true);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
 });

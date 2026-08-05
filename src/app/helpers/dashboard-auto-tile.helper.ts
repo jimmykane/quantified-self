@@ -19,6 +19,7 @@ import {
 } from '../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
@@ -61,6 +62,8 @@ import {
   getDefaultDashboardMapTileSizeForSource,
 } from './dashboard-tile-default-size.helper';
 
+export const DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID: AppDashboardAutoTileId = 'activityCalendar';
+export const DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE = 'default-calendar';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_ID: AppDashboardAutoTileId = 'sleepTrend';
 export const DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE = 'sleep-sync';
 export const DASHBOARD_AUTO_TILE_POWER_CURVE_ID = DASHBOARD_POWER_CURVE_CYCLING_AUTO_TILE_ID;
@@ -72,7 +75,10 @@ export const DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE = 'route-preview';
 export const DASHBOARD_AUTO_TILE_CURATED_SOURCE = 'default-curated';
 export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
-export type DashboardDefaultCuratedChartType = Exclude<DashboardCuratedChartType, typeof DASHBOARD_SLEEP_TREND_CHART_TYPE>;
+export type DashboardDefaultCuratedChartType = Exclude<
+  DashboardCuratedChartType,
+  typeof DASHBOARD_SLEEP_TREND_CHART_TYPE | typeof DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE
+>;
 export type DashboardDefaultCuratedAutoChartType = Exclude<DashboardDefaultCuratedChartType, typeof DASHBOARD_POWER_CURVE_CHART_TYPE>;
 
 export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefaultCuratedChartType, AppDashboardAutoTileId> = {
@@ -242,6 +248,14 @@ export function isDashboardSleepTrendTile(tile: TileSettingsInterface | null | u
   return `${chartTile.chartType}` === DASHBOARD_SLEEP_TREND_CHART_TYPE;
 }
 
+export function isDashboardActivityCalendarTile(tile: TileSettingsInterface | null | undefined): boolean {
+  if (!tile || tile.type !== TileTypes.Chart) {
+    return false;
+  }
+
+  return `${(tile as TileChartSettingsInterface).chartType}` === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+}
+
 export function isDashboardCuratedAutoTile(
   tile: TileSettingsInterface | null | undefined,
   chartType: DashboardDefaultCuratedChartType,
@@ -278,6 +292,13 @@ export function isDashboardRoutePreviewTile(tile: TileSettingsInterface | null |
 export function getDashboardAutoTileDescriptorForTile(
   tile: TileSettingsInterface | null | undefined,
 ): DashboardAutoTileDescriptor | null {
+  if (isDashboardActivityCalendarTile(tile)) {
+    return {
+      id: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    };
+  }
+
   if (isDashboardSleepTrendTile(tile)) {
     return {
       id: DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,

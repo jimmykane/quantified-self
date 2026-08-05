@@ -96,16 +96,20 @@ async function markActivitySyncQueueItemDispatchedIfUserActive(
     queueItemId: string,
     userID: string,
     phase: string,
-): Promise<boolean> {
-    const result = await markQueueItemDispatchedIfUserActive({
+    expectedDateCreated: number,
+): Promise<QueueDispatchMarkerResult> {
+    return markQueueItemDispatchedIfUserActive({
         queueItemDocument: queueDocRef,
         queueItemId,
         userID,
         phase,
         dispatchedAtMs: Date.now(),
         logPrefix: 'ActivitySync',
+        isCurrent: currentQueueItem => currentQueueItem.processed !== true
+            && Number(currentQueueItem.dateCreated) === expectedDateCreated
+            && (currentQueueItem.dispatchedToCloudTask === null
+                || currentQueueItem.dispatchedToCloudTask === undefined),
     });
-    return result === QueueDispatchMarkerResult.Marked;
 }
 
 export async function buildActivitySyncQueueItemId(
@@ -148,6 +152,14 @@ export async function enqueueActivitySyncQueueItem(
                     reason: 'already_pending',
                     dateCreated: Number(existingData.dateCreated) || Date.now(),
                     shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
+                };
+            }
+
+            if (existingData.resultStatus === 'manual_reconciliation_required') {
+                return {
+                    enqueued: false,
+                    queueItemId,
+                    reason: 'already_processed',
                 };
             }
 
@@ -198,7 +210,14 @@ export async function enqueueActivitySyncQueueItem(
         }
         const wasTaskEnqueued = await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
         if (wasTaskEnqueued) {
-            if (!(await markActivitySyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, params.userID, 'activity_sync_queue_mark_new_dispatched'))) {
+            const markerResult = await markActivitySyncQueueItemDispatchedIfUserActive(
+                queueDocRef,
+                queueItemId,
+                params.userID,
+                'activity_sync_queue_mark_new_dispatched',
+                decision.dateCreated || 0,
+            );
+            if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,
                     queueItemId,
@@ -223,7 +242,14 @@ export async function enqueueActivitySyncQueueItem(
         }
         const wasTaskEnqueued = await enqueueActivitySyncTask(queueItemId, decision.dateCreated || Date.now());
         if (wasTaskEnqueued) {
-            if (!(await markActivitySyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, params.userID, 'activity_sync_queue_mark_existing_dispatched'))) {
+            const markerResult = await markActivitySyncQueueItemDispatchedIfUserActive(
+                queueDocRef,
+                queueItemId,
+                params.userID,
+                'activity_sync_queue_mark_existing_dispatched',
+                decision.dateCreated || 0,
+            );
+            if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,
                     queueItemId,

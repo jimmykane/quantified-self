@@ -34,6 +34,7 @@ import type {
 } from '../../../helpers/dashboard-sleep-range.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -196,6 +197,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
   public chartTypes = ChartTypes;
+  public activityCalendarChartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
   public recoveryNowChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
   public formChartType = DASHBOARD_FORM_CHART_TYPE;
   public acwrKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
@@ -300,7 +302,11 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showHeaderControls(): boolean {
-    return this.showSharedRangeControls || this.showActions;
+    return this.showCalendarRouteAction || this.showSharedRangeControls || this.showActions;
+  }
+
+  get showCalendarRouteAction(): boolean {
+    return this.chartType === this.activityCalendarChartType;
   }
 
   get showStackedMobileHeaderControls(): boolean {

@@ -45,6 +45,7 @@ export interface AppDashboardSleepTrendSettingsInterface {
 }
 
 export type AppDashboardAutoTileId =
+    | 'activityCalendar'
     | 'sleepTrend'
     | 'curatedRecoveryNow'
     | 'curatedForm'

@@ -364,6 +364,107 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
     });
 
+    it('resumes a known Wahoo upload by status instead of posting the FIT file again', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const row = {
+            id: 'wahoo-failed-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'failed' as const,
+            attempts: 1,
+            progress: 0,
+            message: 'Reconnect Wahoo before checking the upload.',
+            jobId: 'wahoo-job',
+            uploadId: 'wahoo-upload-1',
+        };
+        component.uploadRows.set([row]);
+        mockProcessingService.addJob.mockReturnValueOnce('wahoo-retry-job');
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'success', message: 'Activity uploaded to Wahoo.' },
+        });
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile');
+
+        await component.retryUpload(row);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'getWahooAPIWorkoutFileUploadStatus',
+            { uploadId: 'wahoo-upload-1' },
+        );
+        expect(uploadSpy).not.toHaveBeenCalled();
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'success',
+            attempts: 2,
+            message: 'Activity uploaded to Wahoo.',
+        });
+    });
+
+    it('retains a Wahoo upload id across reconnect-required status failures', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const row = {
+            id: 'wahoo-pending-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'Wahoo is processing the activity.',
+            jobId: 'wahoo-job',
+            uploadId: 'wahoo-upload-1',
+        };
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/unauthenticated',
+            message: 'Reconnect Wahoo before sending activities.',
+        });
+
+        await component.refreshUpload(row);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: 'wahoo-upload-1',
+        });
+    });
+
+    it('clears a Wahoo upload id only after a definitive processing failure', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const row = {
+            id: 'wahoo-pending-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'Wahoo is processing the activity.',
+            jobId: 'wahoo-job',
+            uploadId: 'wahoo-upload-1',
+        };
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/failed-precondition',
+            message: 'Wahoo could not process this activity.',
+            details: { retryMode: 'restart', providerOperation: 'activity_upload_status' },
+        });
+
+        await component.refreshUpload(row);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: undefined,
+        });
+    });
+
     it('should reject non-fit files', async () => {
         const file = {
             file: new File(['content'], 'test.txt'),
@@ -687,6 +788,71 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(retriedRow.attempts).toBe(2);
         expect(retriedRow.message).toBe('Uploaded to Suunto App');
         expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2', 'Uploaded to Suunto App');
+    });
+
+    it('should retain Suunto resume identifiers from a callable error and reuse them on retry', async () => {
+        const file = new File(['a'], 'resume.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [file],
+                value: 'pending-upload'
+            }
+        };
+        const resumeError = Object.assign(new Error('Suunto is temporarily unavailable.'), {
+            details: {
+                retryMode: 'resume',
+                resumeUploadId: 'suunto-upload-1',
+                resumeProviderUserId: 'suunto-user-1',
+            },
+        });
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockRejectedValueOnce(resumeError)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
+
+        await component.getFiles(event);
+
+        const failedRow = component.uploadRows()[0];
+        expect(failedRow).toMatchObject({
+            status: 'failed',
+            uploadId: 'suunto-upload-1',
+            providerUserId: 'suunto-user-1',
+        });
+
+        await component.retryUpload(failedRow);
+
+        expect(uploadSpy).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ name: 'resume.fit' }),
+            {
+                uploadId: 'suunto-upload-1',
+                providerUserId: 'suunto-user-1',
+            },
+        );
+    });
+
+    it('should send the FIT with Suunto resume identifiers so a confirmed empty job can recover', async () => {
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+        await component.processAndUploadFile(file, {
+            uploadId: 'suunto-upload-1',
+            providerUserId: 'suunto-user-1',
+        });
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importActivityToSuuntoApp', {
+            file: expect.any(String),
+            resumeUploadId: 'suunto-upload-1',
+            resumeProviderUserId: 'suunto-user-1',
+        });
     });
 
     it('retryFailedUploads should retry only failed rows', async () => {

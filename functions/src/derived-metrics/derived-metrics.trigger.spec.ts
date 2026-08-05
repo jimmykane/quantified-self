@@ -84,6 +84,7 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
             expect.objectContaining({
                 document: 'users/{uid}/events/{eventId}',
+                memory: '512MiB',
                 retry: true,
             }),
             expect.any(Function),
@@ -94,6 +95,7 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
             expect.objectContaining({
                 document: 'users/{uid}/activities/{activityId}',
+                memory: '512MiB',
                 retry: true,
             }),
             expect.any(Function),
@@ -104,6 +106,7 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
             expect.objectContaining({
                 document: 'users/{uid}/sleepSessions/{sleepSessionId}',
+                memory: '512MiB',
                 retry: true,
             }),
             expect.any(Function),

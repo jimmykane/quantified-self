@@ -56,6 +56,10 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+export interface EventDocumentData extends Record<string, unknown> {
+  id: string;
+}
+
 export type EventQueryCursor = QueryDocumentSnapshot<DocumentData>;
 
 export interface GetEventsPageOptions {
@@ -632,6 +636,21 @@ export class AppEventService implements OnDestroy {
       return this.getEventsStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
     }
     return this._getEvents(user, where, orderBy, asc, limit);
+  }
+
+  /**
+   * Watches persisted event fields without constructing sports-lib event objects.
+   * Summary views should use this path when they do not need activities or rich event behavior.
+   */
+  public watchEventDocumentsBy(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+    orderByField: string = 'startDate',
+    asc: boolean = false,
+    limitCount: number = 10,
+  ): Observable<EventDocumentData[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
+    return collectionData(q, { idField: 'id' }) as Observable<EventDocumentData[]>;
   }
 
   public getEventsOnceBy(

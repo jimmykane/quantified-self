@@ -11,7 +11,6 @@ import {
 
 import { getTokenData } from './tokens';
 import { getServiceAdapter } from './auth/factory';
-import { PreviousOwnerTokenCleanupGuard } from './auth/ServiceAuthAdapter';
 import { markServiceConnected } from './service-connection-meta';
 import {
   cleanupServiceConnectionForUser,
@@ -328,8 +327,6 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     }
 
     let uniqueId: string | undefined;
-    let previousOwnerUserID: string | undefined;
-    let previousOwnerTokenCleanupGuard: PreviousOwnerTokenCleanupGuard | undefined;
     try {
       await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
 
@@ -355,22 +352,6 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     }
 
     if (await hasProAccess(userID)) {
-      if (uniqueId && adapter.onTokenPersisted) {
-        try {
-          const persistedIdentity = await adapter.onTokenPersisted(userID, uniqueId);
-          previousOwnerUserID = persistedIdentity?.previousOwnerUserID;
-          previousOwnerTokenCleanupGuard = persistedIdentity?.previousOwnerTokenCleanupGuard;
-        } catch (error) {
-          await cleanupServiceTokenById(
-            userID,
-            serviceName,
-            uniqueId,
-            SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
-          );
-          tokenPersisted = false;
-          throw error;
-        }
-      }
       await clearServiceDisconnectPending(userID, serviceName);
       const didMarkConnected = serviceName === ServiceNames.WahooAPI && uniqueId
         ? await markServiceConnected(userID, serviceName, uniqueId)
@@ -408,19 +389,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     // Remove any OTHER users connected to this same external account
     if (uniqueId) {
       try {
-        if (adapter.managesDuplicateConnections) {
-          if (previousOwnerUserID && previousOwnerUserID !== userID) {
-            await cleanupServiceTokenById(
-              previousOwnerUserID,
-              serviceName,
-              uniqueId,
-              SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
-              { shouldDeleteInTransaction: previousOwnerTokenCleanupGuard },
-            );
-          }
-        } else {
-          await removeDuplicateConnections(userID, serviceName, uniqueId);
-        }
+        await removeDuplicateConnections(userID, serviceName, uniqueId);
       } catch (e) {
         logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
         // Don't fail the auth flow for this, just log

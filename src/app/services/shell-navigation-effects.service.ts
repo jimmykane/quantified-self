@@ -71,7 +71,7 @@ export class ShellNavigationEffectsService {
         this.hasCompletedInitialNavigation = true;
         const hasNavigationPathChanged = this.hasNavigationPathChanged(event.urlAfterRedirects);
         this.lastNavigationPath = this.readNavigationPath(event.urlAfterRedirects);
-        const isInitialNavigationEnd = this.updateAnimationState();
+        const isInitialNavigationEnd = this.updateAnimationState(hasNavigationPathChanged);
         if (!isInitialNavigationEnd && hasNavigationPathChanged) {
           this.resetScrollPosition();
         }
@@ -79,12 +79,18 @@ export class ShellNavigationEffectsService {
       });
   }
 
-  private updateAnimationState(): boolean {
+  private updateAnimationState(hasNavigationPathChanged: boolean): boolean {
     if (!this.hasSeenInitialNavigationEnd) {
       this.hasSeenInitialNavigationEnd = true;
       // Suppress the initial route transition animation.
       this.animationStateSignal.set(null);
       return true;
+    }
+
+    // Query-only state changes are handled inside the active page. Keeping the
+    // route animation state unchanged avoids replaying the full-page transition.
+    if (!hasNavigationPathChanged) {
+      return false;
     }
 
     this.animationStateSignal.set(this.readCurrentAnimationFromSnapshot());

@@ -198,6 +198,7 @@ describe('Firebase Hosting configuration', () => {
 
     expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
@@ -211,6 +212,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/share/event/user-1/event-1/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/features/activity-calendar')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);
@@ -259,6 +261,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
@@ -268,7 +271,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-07-29');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-07-29');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-07-29');
@@ -279,11 +282,13 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/calendar</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
+    expect(robotsTxt).toContain('Disallow: /calendar');
     expect(robotsTxt).toContain('Disallow: /training');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Disallow: /mcp/authorize');

@@ -105,6 +105,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRouteId } from '@shared/ro
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 import { normalizeDeviceDisplaySettings } from '../helpers/device-color-preferences.helper';
 import { normalizeEventDetailsSettings } from '../helpers/event-lap-table-columns.helper';
+import { buildDashboardActivityCalendarTile } from '../helpers/dashboard-activity-calendar.helper';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -181,7 +182,7 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [];
+        return [buildDashboardActivityCalendarTile(0)];
     }
 
     private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {

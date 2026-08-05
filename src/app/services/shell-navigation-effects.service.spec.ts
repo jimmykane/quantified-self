@@ -60,6 +60,13 @@ describe('ShellNavigationEffectsService', () => {
     expect(service.animationState()).toBe('Dashboard');
   });
 
+  it('does not start a full-page animation for a query-only navigation after refresh', () => {
+    events$.next(new NavigationEnd(1, '/calendar?view=year&date=2026-08-03', '/calendar?view=year&date=2026-08-03'));
+    events$.next(new NavigationEnd(2, '/calendar?view=year&date=2027-08-03', '/calendar?view=year&date=2027-08-03'));
+
+    expect(service.animationState()).toBeNull();
+  });
+
   it('uses the disabled animation state when any active route opts out', () => {
     (mockRouter as any).routerState.snapshot.root = {
       data: { animation: 'Root' },

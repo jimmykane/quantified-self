@@ -131,6 +131,7 @@ describe('SeoService', () => {
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
         expect(mockScript.textContent).toContain('private dashboard');
+        expect(mockScript.textContent).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');
         expect(mockScript.textContent).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');

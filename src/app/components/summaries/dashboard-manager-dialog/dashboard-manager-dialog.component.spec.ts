@@ -22,6 +22,7 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -70,6 +71,7 @@ import {
   DashboardDerivedMetricsService,
 } from '../../../services/dashboard-derived-metrics.service';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
@@ -264,6 +266,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component).toBeTruthy();
     expect(component.curatedChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
@@ -529,6 +532,31 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'added',
       source: 'sleep-sync',
+    });
+  });
+
+  it('marks Activity Calendar auto-tile state added when manually restoring it', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      activityCalendar: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as any;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
     });
   });
 
@@ -1002,10 +1030,12 @@ describe('DashboardManagerDialogComponent', () => {
     expect(template).toContain('class="dashboard-manager-error" role="alert"');
   });
 
-  it('starts a new dashboard clean rather than adding default training tiles', () => {
+  it('keeps an explicitly empty saved dashboard empty while defaults include the calendar', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
-    expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
+    expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+      expect.objectContaining({ chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE }),
+    ]);
     expect(component.dashboardTiles).toEqual([]);
     expect(component.isAddAllDisabled).toBe(false);
     expect(component.isRemoveAllDisabled).toBe(false);
@@ -1422,6 +1452,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.tiles).toEqual([]);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(false);
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
+      state: 'dismissed',
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'dismissed',
       source: 'sleep-sync',

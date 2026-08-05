@@ -7,7 +7,6 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLEC
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
-    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from '../wahoo/constants';
 
@@ -163,33 +162,6 @@ async function cleanupUser(uid: string, dryRun: boolean) {
         }
     }
 
-    // Wahoo mappings are transferable. Re-read ownership transactionally so stale orphan scans cannot delete a new owner's mapping.
-    try {
-        const snapshot = await db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
-            .where('firebaseUserID', '==', uid)
-            .get();
-        let deletedMappingCount = 0;
-        for (const doc of snapshot.docs) {
-            const mappingDeleted = await db.runTransaction(async (transaction) => {
-                const latestSnapshot = await transaction.get(doc.ref);
-                if (!latestSnapshot.exists || latestSnapshot.data()?.firebaseUserID !== uid) {
-                    return false;
-                }
-
-                // Mapping documents cannot have descendants by design.
-                transaction.delete(doc.ref);
-                return true;
-            });
-            if (mappingDeleted) {
-                deletedMappingCount += 1;
-            }
-        }
-        if (deletedMappingCount > 0) {
-            logger.info(`    - Transactionally deleted ${deletedMappingCount} Wahoo user mappings`);
-        }
-    } catch (e: unknown) {
-        logger.error(`    - Error cleaning up Wahoo user mappings: ${(e as Error).message}`);
-    }
 }
 
 async function cleanupOrphanedUsers() {

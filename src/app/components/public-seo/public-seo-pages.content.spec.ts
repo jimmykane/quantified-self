@@ -10,6 +10,7 @@ describe('public-seo-pages.content', () => {
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
+      activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
       mcpServer: 'features/mcp-server',
       aiInsights: 'features/ai-insights',
@@ -57,6 +58,19 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('sports watch benchmark reports');
+
+    expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for endurance training');
+    expect(PUBLIC_SEO_PAGES.activityCalendar.description).toContain('Week, Month, and Year calendar views');
+    expect(PUBLIC_SEO_PAGES.activityCalendar.intro).toContain('Garmin, Suunto, COROS, Wahoo');
+    expect(PUBLIC_SEO_PAGES.activityCalendar.sections.some(section => (
+      section.items.some(item => item.title === 'Duration-scaled activity circles')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityCalendar.sections.some(section => (
+      section.items.some(item => item.title === 'Activity-group duration bars')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityCalendar.faqItems.some(item => (
+      item.question === 'Does the activity calendar follow the dashboard event search?'
+    ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
@@ -158,6 +172,7 @@ describe('public-seo-pages.content', () => {
     ].map(action => action.routerLink);
 
     expect(featureHubLinks).toContain('/features/ai-insights');
+    expect(featureHubLinks).toContain('/features/activity-calendar');
     expect(featureHubLinks).toContain('/features/training-analysis');
     expect(featureHubLinks).toContain('/features/mcp-server');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');

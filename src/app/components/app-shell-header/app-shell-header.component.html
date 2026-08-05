@@ -35,8 +35,9 @@
   }
 
   @if (showUploadActivities) {
-  <app-upload-activities class="right" [isHandset]="isHandset">
-  </app-upload-activities>
+  <ng-container
+    *ngComponentOutlet="dashboardHeaderUploadComponent(); inputs: dashboardHeaderUploadInputs()">
+  </ng-container>
   }
 
   @if (isAdminUser && !isAdminRoute) {

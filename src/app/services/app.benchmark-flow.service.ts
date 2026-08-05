@@ -9,8 +9,6 @@ import { BENCHMARK_NO_OVERLAP_MESSAGE, BenchmarkNoOverlapError, AppBenchmarkServ
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
 import { AppAnalyticsService } from './app.analytics.service';
-import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
-import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { firstValueFrom } from 'rxjs';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 
@@ -58,7 +56,10 @@ export class AppBenchmarkFlowService {
 
   async openBenchmarkReport(config: BenchmarkFlowConfig): Promise<void> {
     if (!config.result) return;
-    const activeEvent = await this.resolveEventWithActivitiesOnly(config);
+    const [{ BenchmarkBottomSheetComponent }, activeEvent] = await Promise.all([
+      import('../components/benchmark/benchmark-bottom-sheet.component'),
+      this.resolveEventWithActivitiesOnly(config),
+    ]);
     const nextConfig: BenchmarkFlowConfig = {
       ...config,
       event: activeEvent,
@@ -84,12 +85,18 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun && nextConfig.allowRerun !== false) {
-        void this.openBenchmarkSelectionDialog(nextConfig);
+        void this.openBenchmarkSelectionDialog(nextConfig).catch((error: unknown) => {
+          this.logger.error('[AppBenchmarkFlowService] Failed to reopen benchmark selection', error);
+          this.snackBar.open('Could not open benchmark selection', undefined, { duration: 3000 });
+        });
       }
     });
   }
 
   async openBenchmarkSelectionDialog(config: BenchmarkFlowConfig): Promise<void> {
+    const { BenchmarkSelectionDialogComponent } = await import(
+      '../components/benchmark/benchmark-selection-dialog.component'
+    );
     const seededActivities = config.event.getActivities?.() || [];
     const initialSelection = this.resolveInitialBenchmarkSelection(config.initialSelection, seededActivities);
 

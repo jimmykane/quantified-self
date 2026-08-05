@@ -1,12 +1,24 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChartDataCategoryTypes, ChartDataValueTypes, ChartTypes, DataDistance, TileTypes, TimeIntervals } from '@sports-alliance/sports-lib';
-import { Subject, of } from 'rxjs';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  DataDistance,
+  TileTypes,
+  TimeIntervals,
+  type TileSettingsInterface,
+} from '@sports-alliance/sports-lib';
+import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
 } from '../helpers/dashboard-auto-tile.helper';
+import { buildDashboardActivityCalendarTile } from '../helpers/dashboard-activity-calendar.helper';
+import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
 import type { AppUserInterface } from '../models/app-user.interface';
 import { AppRouteService } from './app.route.service';
 import { AppUserService } from './app.user.service';
@@ -46,9 +58,71 @@ describe('DashboardAutoTileService', () => {
     service = TestBed.inject(DashboardAutoTileService);
   });
 
-  it('keeps the default automatic rule set limited to route previews', () => {
-    expect(DASHBOARD_AUTO_TILE_RULES).toHaveLength(1);
-    expect(DASHBOARD_AUTO_TILE_RULES[0].id).toBe(DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID);
+  it('keeps the default automatic rule set limited to Calendar and route previews', () => {
+    expect(DASHBOARD_AUTO_TILE_RULES.map(rule => rule.id)).toEqual([
+      DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+      DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+    ]);
+  });
+
+  it('adds the Activity Calendar once to an existing dashboard', async () => {
+    const user = createUser([makeDistanceTile(3)]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]: true,
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]);
+    expect(user.settings?.dashboardSettings?.tiles).toMatchObject([
+      { name: 'Distance', order: 3 },
+      {
+        name: 'Activity calendar',
+        order: 4,
+        type: TileTypes.Chart,
+        chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+        size: { columns: 1, rows: 1 },
+      },
+    ]);
+    expect(user.settings?.dashboardSettings?.autoTiles?.activityCalendar).toMatchObject({
+      state: 'added', source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
+    expect(mockSnackBar.open).toHaveBeenCalledWith(
+      'Added Activity Calendar tile to your dashboard.',
+      'Undo',
+      { duration: 7000 },
+    );
+  });
+
+  it('does not duplicate the Activity Calendar already present on a default dashboard', async () => {
+    const user = createUser([buildDashboardActivityCalendarTile(0)]);
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]: true,
+    });
+
+    expect(result).toEqual({ addedRules: [], persisted: false });
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('does not restore an Activity Calendar that the user dismissed', async () => {
+    const user = createUser();
+    user.settings!.dashboardSettings!.autoTiles = {
+      activityCalendar: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+      },
+    };
+
+    const result = await service.applyEligibleAutoTiles(user, {
+      [DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]: true,
+    });
+
+    expect(result).toEqual({ addedRules: [], persisted: false });
+    expect(user.settings?.dashboardSettings?.tiles).toEqual([]);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
   it('adds a route-preview map once when route previews qualify', async () => {
@@ -91,9 +165,24 @@ describe('DashboardAutoTileService', () => {
     routeEligibility$.next(true);
     await flushMicrotasks();
 
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect((user.settings?.dashboardSettings?.tiles?.[0] as { mapSource?: string }).mapSource).toBe('routes');
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(2);
+    expect(`${(user.settings?.dashboardSettings?.tiles?.[0] as { chartType?: string }).chartType}`)
+      .toBe(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE);
+    expect((user.settings?.dashboardSettings?.tiles?.[1] as { mapSource?: string }).mapSource).toBe('routes');
     subscription.unsubscribe();
+  });
+
+  it('undoes an Activity Calendar migration and keeps it dismissed', async () => {
+    const user = createUser();
+    await service.applyEligibleAutoTiles(user, { [DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]: true });
+
+    undo$.next();
+    await flushMicrotasks();
+
+    expect(user.settings?.dashboardSettings?.tiles).toEqual([]);
+    expect(user.settings?.dashboardSettings?.autoTiles?.activityCalendar).toMatchObject({
+      state: 'dismissed', source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
   });
 
   it('undoes a route-preview auto tile by dismissing only that explicit suggestion', async () => {
@@ -140,11 +229,25 @@ describe('DashboardAutoTileService', () => {
   });
 });
 
-function createUser(): AppUserInterface {
+function createUser(tiles: TileSettingsInterface[] = []): AppUserInterface {
   return {
     uid: 'user-1',
-    settings: { dashboardSettings: { tiles: [], autoTiles: {} } },
+    settings: { dashboardSettings: { tiles, autoTiles: {} } },
   } as AppUserInterface;
+}
+
+function makeDistanceTile(order: number): TileSettingsInterface {
+  return {
+    name: 'Distance',
+    order,
+    type: TileTypes.Chart,
+    chartType: ChartTypes.ColumnsVertical,
+    dataType: DataDistance.type,
+    dataValueType: ChartDataValueTypes.Total,
+    dataCategoryType: ChartDataCategoryTypes.DateType,
+    dataTimeInterval: TimeIntervals.Daily,
+    size: { columns: 1, rows: 1 },
+  };
 }
 
 async function flushMicrotasks(): Promise<void> {

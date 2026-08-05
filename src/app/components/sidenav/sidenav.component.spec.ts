@@ -286,6 +286,7 @@ describe('SideNavComponent', () => {
         fixture.detectChanges();
         const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
         const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
+        const calendarItem = navigationItems.find(item => item.nativeElement.textContent.includes('Calendar'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
@@ -293,6 +294,7 @@ describe('SideNavComponent', () => {
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
 
         expect(dashboardItem).toBeTruthy();
+        expect(calendarItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
@@ -301,6 +303,7 @@ describe('SideNavComponent', () => {
         const dashboardIndex = navigationItems.indexOf(dashboardItem!);
         expect([
             navigationItems.indexOf(dashboardItem!),
+            navigationItems.indexOf(calendarItem!),
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
@@ -313,6 +316,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 3,
             dashboardIndex + 4,
             dashboardIndex + 5,
+            dashboardIndex + 6,
         ]);
         expect(aiInsightsItem?.nativeElement.textContent).toContain('AI Insights');
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Going away');

@@ -1,6 +1,9 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import { WORKOUT_DATA_COMPARISON_PATH } from './workout-data-comparison-page.paths';
+
+export { WORKOUT_DATA_COMPARISON_PATH } from './workout-data-comparison-page.paths';
 
 export interface ComparisonProviderSource {
   label: string;
@@ -26,7 +29,6 @@ export interface ComparisonRouteData {
   jsonLd: Record<string, unknown>;
 }
 
-export const WORKOUT_DATA_COMPARISON_PATH = 'features/workout-data-comparison';
 export const WORKOUT_DATA_COMPARISON_URL = `https://quantified-self.io/${WORKOUT_DATA_COMPARISON_PATH}`;
 export const COMPARISON_FREE_PLAN_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 export const COMPARISON_FREE_PLAN_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;

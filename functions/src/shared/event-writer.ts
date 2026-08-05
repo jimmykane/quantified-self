@@ -100,7 +100,6 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 
 function isControlFlowWriteAbort(error: Error): boolean {
     return error.name === 'EventWriteSkippedForDeletedUserError'
-        || error.name === 'EventWriteSkippedByTransactionGuardError'
         || error.name === 'UserDeletionGuardReadError';
 }
 
@@ -281,10 +280,9 @@ export class EventWriter {
 
             this.logger.info(`Starting write batch for ${writePromises.length} writes...`);
             const startWrites = Date.now();
-            // A guarded write can reject after another concurrent write has
-            // committed. Wait for every write before surfacing the rejection
-            // so the caller's attempt-scoped compensation sees every root it
-            // may need to remove.
+            // A deletion-guarded write can reject while sibling writes are
+            // still settling. Wait for all writes so no background write can
+            // continue after the caller starts deletion handling.
             const writeResults = await Promise.allSettled(writePromises);
             const rejectedWrite = writeResults.find(
                 (result): result is PromiseRejectedResult => result.status === 'rejected',

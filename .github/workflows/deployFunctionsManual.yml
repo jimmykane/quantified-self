@@ -1,0 +1,107 @@
+name: Deploy Functions (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full commit SHA already merged into main. Leave blank to deploy the latest main commit.
+        required: false
+        type: string
+
+concurrency:
+  group: production-functions-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve a commit from main
+        id: resolve
+        env:
+          TARGET_COMMIT: ${{ inputs.commit }}
+        run: |
+          if [[ -n "$TARGET_COMMIT" ]]; then
+            target_commit="$TARGET_COMMIT"
+          else
+            target_commit="origin/main"
+          fi
+
+          commit="$(git rev-parse --verify "${target_commit}^{commit}")"
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "The requested commit is not contained in main." >&2
+            exit 1
+          fi
+
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: resolve
+    uses: ./.github/workflows/_run-tests.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
+
+  deploy:
+    needs:
+      - resolve
+      - test
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
+      - name: Install and build Functions
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create service account key
+        run: |
+          umask 077
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
+
+      - name: Create Functions environment file
+        working-directory: functions
+        run: |
+          echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> .env
+          echo "SUUNTOAPP_CLIENT_ID=${{ secrets.SUUNTOAPP_CLIENT_ID }}" >> .env
+          echo "SUUNTOAPP_CLIENT_SECRET=${{ secrets.SUUNTOAPP_CLIENT_SECRET }}" >> .env
+          echo "SUUNTOAPP_SUBSCRIPTION_KEY=${{ secrets.SUUNTOAPP_SUBSCRIPTION_KEY }}" >> .env
+          echo "COROSAPI_CLIENT_ID=${{ secrets.COROSAPI_CLIENT_ID }}" >> .env
+          echo "COROSAPI_CLIENT_SECRET=${{ secrets.COROSAPI_CLIENT_SECRET }}" >> .env
+          echo "GARMINHEALTHAPI_CONSUMER_KEY=${{ secrets.GARMINHEALTHAPI_CONSUMER_KEY }}" >> .env
+          echo "GARMINHEALTHAPI_CONSUMER_SECRET=${{ secrets.GARMINHEALTHAPI_CONSUMER_SECRET }}" >> .env
+          echo "GARMINAPI_CLIENT_ID=${{ secrets.GARMINAPI_CLIENT_ID }}" >> .env
+          echo "GARMINAPI_CLIENT_SECRET=${{ secrets.GARMINAPI_CLIENT_SECRET }}" >> .env
+          echo "WAHOOAPI_CLIENT_ID=${{ secrets.WAHOOAPI_CLIENT_ID }}" >> .env
+          echo "WAHOOAPI_CLIENT_SECRET=${{ secrets.WAHOOAPI_CLIENT_SECRET }}" >> .env
+          echo "WAHOOAPI_WEBHOOK_TOKEN=${{ secrets.WAHOOAPI_WEBHOOK_TOKEN }}" >> .env
+          echo "WAHOOAPI_ALLOWED_FILE_HOSTS=${{ secrets.WAHOOAPI_ALLOWED_FILE_HOSTS }}" >> .env
+
+      - name: Deploy Functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase_service_account.json
+        run: firebase deploy --only functions

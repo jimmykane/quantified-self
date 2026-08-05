@@ -660,7 +660,7 @@ mat-table {
     0 -8px 32px rgba(0, 0, 0, 0.12),
     0 -2px 8px rgba(0, 0, 0, 0.08) !important;
   padding: 16px !important;
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   overflow: hidden;
 }

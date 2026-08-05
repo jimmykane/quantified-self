@@ -15,6 +15,7 @@ describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'activity-calendar',
       'training-analysis',
       'ai-insights',
       'plans-and-billing',
@@ -25,8 +26,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define eight unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(8);
+  it('should define nine unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(9);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -152,11 +153,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
-    expect(gettingStartedSection?.content).toContain('New dashboards start clean');
+    expect(gettingStartedSection?.content).toContain('New dashboards start with the Activity Calendar tile');
+    expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
+    expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
     expect(gettingStartedSection?.content).toContain('Open Training');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
-    expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
+    expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
+    expect(gettingStartedSection?.content).toContain('[Activity Calendar guide](/help#activity-calendar)');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
     expect(gettingStartedSection?.content).toContain('**Reset to default**');
     expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
@@ -176,6 +180,43 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
   });
 
+  it('should provide a dedicated Activity Calendar guide', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
+
+    expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
+    expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
+    expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
+    expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
+    expect(calendarSection?.content).toContain('size reflects recorded duration');
+    expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
+    expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
+    expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
+    expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
+    expect(calendarSection?.content).toContain('scaled against the longest-duration group');
+    expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
+    expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');
+    expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
+    expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(calendarSection?.content).toContain('visible-period activity query');
+    expect(calendarSection?.content).toContain('independent from the dashboard event table');
+    expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
+    expect(calendarSection?.links).toContainEqual({
+      label: 'Activity Calendar Overview',
+      icon: 'travel_explore',
+      kind: 'route',
+      target: '/features/activity-calendar',
+    });
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Activity Calendar guide',
+      icon: 'school',
+      kind: 'route',
+      target: '/help',
+      fragment: 'activity-calendar',
+    });
+  });
+
   it('should document safe event merge retry and recovery behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
     const troubleshootingSection = HELP_SECTIONS.find(section => section.id === 'troubleshooting');
@@ -191,6 +232,9 @@ describe('help.content', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
     expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('compact line above the **Training** title');
+    expect(trainingSection?.content).toContain('content does not shift');
+    expect(trainingSection?.content).toContain('failed update adds **Retry**');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');
@@ -425,7 +469,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Latest workout TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
-    expect(gettingStartedSection?.content).toContain('status notice');
+    expect(gettingStartedSection?.content).toContain('top summary-header slot');
+    expect(gettingStartedSection?.content).toContain('before **Today** and the tiles');
   });
 
   it('should document new derived KPI rows and curated charts', () => {
@@ -605,6 +650,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
+    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job first instead of immediately uploading the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('only when Suunto explicitly reports that the earlier job is still empty');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
@@ -791,6 +838,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');

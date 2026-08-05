@@ -69,14 +69,35 @@ export const sendRoutesToService = onCall({
         await assertRouteSendUserActive(userID, 'before_route_prepare');
         const preparedRoute = await prepareSavedRouteForSending(userID, routeId);
         await assertRouteSendUserActive(userID, 'before_provider_upload');
-        const providerResult = await sendPreparedRouteToDestination(userID, preparedRoute, adapter, context);
-        await persistRouteDeliveryMetadataAfterSend({
+        let acceptancePersistedDuringSend = false;
+        const persistAcceptedDelivery = async (acceptedResult: {
+          providerRouteId?: string;
+          deliveries?: Array<{
+            providerUserId?: string | null;
+            providerRouteId?: string | null;
+          }>;
+        }) => {
+          await persistRouteDeliveryMetadataAfterSend({
+            userID,
+            routeID: routeId,
+            destinationServiceName: adapter.destinationServiceName,
+            providerRouteId: acceptedResult.providerRouteId,
+            deliveries: acceptedResult.deliveries,
+            requirePersistence: true,
+          });
+          acceptancePersistedDuringSend = true;
+        };
+        const providerResult = await sendPreparedRouteToDestination(
           userID,
-          routeID: routeId,
-          destinationServiceName: adapter.destinationServiceName,
-          providerRouteId: providerResult.providerRouteId,
-          deliveries: providerResult.deliveries,
-        });
+          preparedRoute,
+          adapter,
+          context,
+          persistAcceptedDelivery,
+          { skipPreviouslyAcceptedDestinationAccounts: payload.forceCopy !== true },
+        );
+        if (!providerResult.alreadyAccepted && !acceptancePersistedDuringSend) {
+          await persistAcceptedDelivery(providerResult);
+        }
         results.push({
           routeId,
           destinationServiceName: adapter.destinationServiceName,
@@ -167,8 +188,13 @@ function normalizeSendRoutesRequest(payload: Partial<SendRoutesToServiceRequest>
     throw new HttpsError('invalid-argument', `Send at most ${SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS} routes at a time.`);
   }
 
+  if (payload?.forceCopy !== undefined && typeof payload.forceCopy !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'forceCopy must be a boolean when provided.');
+  }
+
   return {
     destinationServiceName,
     routeIds,
+    forceCopy: payload?.forceCopy === true,
   };
 }

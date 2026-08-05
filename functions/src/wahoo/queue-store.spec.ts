@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
@@ -8,26 +7,18 @@ const mocks = vi.hoisted(() => {
   const transactionSet = vi.fn();
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
-  const mappingRef = { id: 'wahoo-1', path: 'wahooAPIUserMappings/wahoo-1' };
+  const refGet = vi.fn();
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
-  const eventRef = { id: 'event-1', path: 'users/firebase-1/events/event-1' };
-  const activityRefOne = { id: 'activity-1', path: 'users/firebase-1/activities/activity-1' };
-  const activityRefTwo = { id: 'activity-2', path: 'users/firebase-1/activities/activity-2' };
-  const processingMetaRef = { id: 'processing', path: 'users/firebase-1/events/event-1/metaData/processing' };
   const activityQueryGet = vi.fn();
   return {
     transactionGet,
     transactionSet,
     transactionUpdate,
     transactionDelete,
+    refGet,
     ref,
-    mappingRef,
     failedRef,
-    eventRef,
-    activityRefOne,
-    activityRefTwo,
-    processingMetaRef,
     activityQueryGet,
     recursiveDelete: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (runner: any) => runner({
@@ -64,17 +55,10 @@ vi.mock('firebase-admin', () => ({
       }
       return { doc: () => {
         if (name === 'failed_jobs') return mocks.failedRef;
-        if (name === 'wahooAPIUserMappings') return mocks.mappingRef;
         return mocks.ref;
       } };
     },
-    doc: (path: string) => {
-      if (path === mocks.eventRef.path) return mocks.eventRef;
-      if (path === mocks.activityRefOne.path) return mocks.activityRefOne;
-      if (path === mocks.activityRefTwo.path) return mocks.activityRefTwo;
-      if (path === mocks.processingMetaRef.path) return mocks.processingMetaRef;
-      return mocks.ref;
-    },
+    doc: () => mocks.ref,
     runTransaction: mocks.runTransaction,
     recursiveDelete: mocks.recursiveDelete,
   }),
@@ -107,13 +91,9 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 
 import {
   claimWahooWorkoutQueueRevision,
-  cleanupWahooPartialEventPersistence,
   completeWahooWorkoutQueueRevision,
-  acquireWahooEventPublicationLease,
-  createWahooEventWriteOwnershipGuard,
   failWahooWorkoutQueueRevision,
-  getClaimedWahooWorkoutQueueRevisionEventWriteFence,
-  releaseWahooEventPublicationLease,
+  isClaimedWahooWorkoutQueueRevisionCurrent,
   upsertWahooWorkoutQueueItem,
 } from './queue-store';
 
@@ -138,6 +118,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     mocks.recursiveDelete.mockResolvedValue(undefined);
     mocks.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
     mocks.activityQueryGet.mockResolvedValue({ docs: [] });
+    mocks.refGet.mockResolvedValue({ exists: false });
   });
 
   it('queues a new revision and dispatches immediate webhook work', async () => {
@@ -205,7 +186,8 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
   });
 
-  it('invalidates an older worker lease when a newer summary arrives', async () => {
+  it('preserves an active older worker lease when a newer summary arrives', async () => {
+    const processingLeaseExpiresAt = Date.now() + 60_000;
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({
@@ -213,7 +195,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
         summaryUpdatedAt: '2026-07-18T09:00:00.000Z',
         processingOwner: 'older-worker',
         processingRevision: '2026-07-18T09:00:00.000Z',
-        processingLeaseExpiresAt: Date.now() + 60_000,
+        processingLeaseExpiresAt,
       }),
     });
 
@@ -222,7 +204,27 @@ describe('upsertWahooWorkoutQueueItem', () => {
     const queuePayload = mocks.transactionSet.mock.calls[0][1];
     expect(queuePayload).toEqual(expect.objectContaining({
       summaryUpdatedAt: input.summaryUpdatedAt,
+      processingOwner: 'older-worker',
+      processingRevision: '2026-07-18T09:00:00.000Z',
+      processingLeaseExpiresAt,
     }));
+  });
+
+  it('does not preserve an expired worker lease when a newer summary arrives', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        summaryUpdatedAt: '2026-07-18T09:00:00.000Z',
+        processingOwner: 'expired-worker',
+        processingRevision: '2026-07-18T09:00:00.000Z',
+        processingLeaseExpiresAt: Date.now() - 1,
+      }),
+    });
+
+    await upsertWahooWorkoutQueueItem(input, 'deferred');
+
+    const queuePayload = mocks.transactionSet.mock.calls[0][1];
     expect(queuePayload).not.toHaveProperty('processingOwner');
     expect(queuePayload).not.toHaveProperty('processingRevision');
     expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
@@ -286,163 +288,49 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
-  it('does not create an event-write fence after Wahoo ownership transfers', async () => {
-    mocks.transactionGet.mockImplementation((ref: unknown) => {
-      if (ref === mocks.ref) {
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
-      }
-      return Promise.resolve({
-        exists: true,
-        data: () => ({ firebaseUserID: 'new-firebase-owner' }),
-      });
+  it('keeps an older claimed revision current while a newer summary waits behind its lease', async () => {
+    mocks.refGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        workoutSummaryID: 'summary-2',
+        summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+        processingOwner: 'worker-1',
+        processingRevision: input.summaryUpdatedAt,
+        processingLeaseExpiresAt: Date.now() + 60_000,
+      }),
     });
 
-    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
       { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
-    )).resolves.toBeNull();
-    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.ref);
-    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.mappingRef);
-  });
+    )).resolves.toBe(true);
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-2',
+    )).resolves.toBe(false);
 
-  it('captures the Wahoo ownership version for a claimed current revision', async () => {
-    mocks.transactionGet.mockImplementation((ref: unknown) => {
-      if (ref === mocks.ref) {
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
-      }
-      return Promise.resolve({
-        exists: true,
-        data: () => ({ firebaseUserID: input.firebaseUserID, ownershipVersion: 7 }),
-      });
+    mocks.refGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        processingOwner: 'worker-1',
+        processingRevision: input.summaryUpdatedAt,
+        processingLeaseExpiresAt: Date.now() - 1,
+      }),
     });
-
-    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
       { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
-    )).resolves.toEqual({
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-    });
+    )).resolves.toBe(false);
   });
 
-  it('rejects event writes when the captured Wahoo mapping version is superseded', async () => {
-    const publicationFence = {
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-      publicationLease: {
-        leaseID: 'publication-lease-1',
-        expiresAt: Date.now() + 60_000,
-      },
-    };
-    const guard = createWahooEventWriteOwnershipGuard(publicationFence);
-    const transaction = {
-      get: vi.fn().mockResolvedValue({
-        exists: true,
-        data: () => ({ firebaseUserID: 'new-firebase-owner', ownershipVersion: 8 }),
-      }),
-    } as unknown as admin.firestore.Transaction;
-
-    await expect(guard(transaction)).resolves.toBe(false);
-    expect(transaction.get).toHaveBeenCalledWith(mocks.mappingRef);
-
-    transaction.get.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [publicationFence.publicationLease],
-      }),
-    });
-    await expect(guard(transaction)).resolves.toBe(true);
-  });
-
-  it('leases publication on the ownership mapping and releases only its own lease', async () => {
-    const otherPublicationLease = {
-      leaseID: 'publication-lease-other',
-      expiresAt: Date.now() + 60_000,
-    };
-    mocks.transactionGet.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [otherPublicationLease],
-      }),
-    });
-    const ownershipFence = {
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-    };
-
-    const publicationFence = await acquireWahooEventPublicationLease(ownershipFence);
-
-    expect(publicationFence).toEqual(expect.objectContaining({
-      ...ownershipFence,
-      publicationLease: expect.objectContaining({
-        leaseID: expect.any(String),
-        expiresAt: expect.any(Number),
-      }),
-    }));
-    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.mappingRef, {
-      eventPublicationLeases: [
-        otherPublicationLease,
-        expect.objectContaining({ leaseID: expect.any(String) }),
-      ],
-    });
-
-    mocks.transactionGet.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [publicationFence!.publicationLease, otherPublicationLease],
-      }),
-    });
-    await releaseWahooEventPublicationLease(publicationFence!);
-    expect(mocks.transactionUpdate).toHaveBeenLastCalledWith(mocks.mappingRef, {
-      eventPublicationLeases: [otherPublicationLease],
-    });
-  });
-
-  it('recursively removes only roots created by a rejected attempt, preserving older deterministic revisions', async () => {
-    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
-      mocks.activityRefTwo.path,
-      mocks.processingMetaRef.path,
-    ]);
-
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.processingMetaRef);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.eventRef);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.activityRefOne);
-  });
-
-  it('uses the created event root as the sole recursive cleanup root for its newly created metadata subtree', async () => {
-    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
-      mocks.eventRef.path,
-      mocks.processingMetaRef.path,
-      mocks.activityRefTwo.path,
-    ]);
-
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.eventRef);
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.processingMetaRef);
-  });
-
-  it('lets the latest revision claim immediately after replacing an older worker lease', async () => {
+  it('makes the latest revision wait until the older worker releases its lease', async () => {
     const latestRevision = {
       ...input,
       workoutSummaryID: 'summary-2',
       summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
     };
+    const activeLeaseExpiresAt = Date.now() + 60_000;
     mocks.transactionGet
       .mockResolvedValueOnce({
         exists: true,
@@ -450,25 +338,36 @@ describe('upsertWahooWorkoutQueueItem', () => {
           ...input,
           processed: false,
           processingOwner: 'older-worker',
-          processingLeaseExpiresAt: Date.now() + 60_000,
+          processingRevision: input.summaryUpdatedAt,
+          processingLeaseExpiresAt: activeLeaseExpiresAt,
         }),
       })
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ ...latestRevision, processed: false, dispatchedToCloudTask: null }),
+        data: () => ({
+          ...latestRevision,
+          processed: false,
+          dispatchedToCloudTask: null,
+          processingOwner: 'older-worker',
+          processingRevision: input.summaryUpdatedAt,
+          processingLeaseExpiresAt: activeLeaseExpiresAt,
+        }),
       });
 
     await upsertWahooWorkoutQueueItem(latestRevision, 'deferred');
     await expect(claimWahooWorkoutQueueRevision({ ...latestRevision, ref: mocks.ref } as any, 'latest-worker'))
-      .resolves.toBe('claimed');
+      .resolves.toBe('busy');
 
     const latestPayload = mocks.transactionSet.mock.calls[0][1];
-    expect(latestPayload).not.toHaveProperty('processingOwner');
-    expect(latestPayload).not.toHaveProperty('processingLeaseExpiresAt');
-    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
-      processingOwner: 'latest-worker',
-      processingRevision: latestRevision.summaryUpdatedAt,
+    expect(latestPayload).toEqual(expect.objectContaining({
+      processingOwner: 'older-worker',
+      processingRevision: input.summaryUpdatedAt,
+      processingLeaseExpiresAt: activeLeaseExpiresAt,
     }));
+    expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(
+      mocks.ref,
+      expect.objectContaining({ processingOwner: 'latest-worker' }),
+    );
   });
 
   it('releases an older worker lease without completing a newer revision', async () => {

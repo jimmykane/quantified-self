@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "10.6.0",
+  "version": "10.7.0",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "build": "ng build --verbose",
     "build-beta": "ng build --configuration beta",
-    "build-production": "ng build --configuration production",
+    "build-production": "ng build --configuration production && npm run verify:public-initial-output",
+    "verify:public-initial-output": "node tools/verify-public-initial-output.mjs",
     "firebase-hosting-beta": "firebase deploy --only hosting:beta",
     "firebase-hosting-production": "firebase deploy --only hosting:production",
     "build-and-deploy-beta": "npm run clean && npm run build-beta && npm run firebase-hosting-beta",

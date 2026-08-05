@@ -17,6 +17,7 @@ import {
 } from './dashboard-manager-presets.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -29,18 +30,19 @@ import {
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 35 unique definitions', () => {
+  it('exposes the expanded preset catalog with 36 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(35);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(35);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(8);
+    expect(definitions).toHaveLength(36);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(36);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(9);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(17);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(2);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
+    expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_ACTIVITY_CALENDAR);
   });
 
   it('returns only recommended presets with evidence in their default data windows', () => {
@@ -57,6 +59,7 @@ describe('dashboard-manager-presets.helper', () => {
     const ids = recommended.map(definition => definition.id);
 
     expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR);
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_ACTIVITY_CALENDAR);
     expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_TRAINING_TIME);
     expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
     expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_AEROBIC_CAPACITY);
@@ -118,6 +121,25 @@ describe('dashboard-manager-presets.helper', () => {
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Daily,
     });
+  });
+
+  it('builds the Activity Calendar preset without event filters', () => {
+    const tile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_ACTIVITY_CALENDAR,
+      order: 4,
+      size: { columns: 2, rows: 2 },
+    });
+
+    expect(tile).toMatchObject({
+      name: 'Activity calendar',
+      type: TileTypes.Chart,
+      order: 4,
+      size: { columns: 2, rows: 2 },
+      chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      dataType: DataDuration.type,
+      dataTimeInterval: TimeIntervals.Daily,
+    });
+    expect((tile as { eventFilters?: unknown }).eventFilters).toBeUndefined();
   });
 
   it('builds the Sleep preset as a curated dashboard manager tile', () => {

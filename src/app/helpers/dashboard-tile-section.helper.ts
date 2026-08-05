@@ -12,6 +12,7 @@ import {
   TileTypes,
 } from '@sports-alliance/sports-lib';
 import {
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
@@ -53,6 +54,7 @@ export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
   DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id);
 
 const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
+  [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'activityOverview',
   [DASHBOARD_FORM_CHART_TYPE]: 'trainingState',
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'performancePower',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'performancePower',

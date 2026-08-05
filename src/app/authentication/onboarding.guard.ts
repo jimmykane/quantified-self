@@ -3,7 +3,7 @@ import { Router, CanMatchFn } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { filter, map, startWith, take } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
-import { POLICY_CONTENT } from '../shared/policies.content';
+import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from '../shared/policy-consent-fields';
 
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
@@ -72,10 +72,8 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 return true; // Let authGuard handle unauthenticated users
             }
 
-            // Dynamically check all policies that require acceptance (exclude optional ones)
-            const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel && !p.isOptional);
-            const termsAccepted = requiredPolicies.every(policy => {
-                const userProperty = mapFormControlNameToUserProperty(policy.formControlName || '');
+            const termsAccepted = REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES.every(formControlName => {
+                const userProperty = mapFormControlNameToUserProperty(formControlName);
                 return (user as any)[userProperty] === true;
             });
 

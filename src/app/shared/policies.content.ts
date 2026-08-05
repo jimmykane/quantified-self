@@ -1,4 +1,5 @@
 import { QUANTIFIED_SELF_OPERATOR } from './company-contact';
+import { POLICY_CONSENT_FORM_CONTROL_NAMES } from './policy-consent-fields';
 
 export interface PolicyItem {
     id: string;
@@ -116,7 +117,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             content: [
                 '<strong>Collected from Wahoo:</strong> When you connect Wahoo, Quantified Self can receive completed workout-summary webhooks and request Wahoo workout history. Only workouts with an available FIT file are imported, and records identified by Wahoo as originating from third-party fitness applications are skipped.',
                 '<strong>Stored and used in Quantified Self:</strong> Imported Wahoo FIT activities, source identifiers, summary revision metadata, and original activity files are used for event analysis, dashboard metrics, exports, deduplication, and reprocessing. OAuth credentials are stored server-side and are not readable by the browser.',
-                '<strong>Disconnect and retention:</strong> Disconnecting Wahoo revokes future provider access and stops new imports. Activities already imported into Quantified Self are retained until you delete those activities or delete your account. Account deletion removes Wahoo tokens, provider mappings, queue state, and imported account data under the normal deletion workflow.',
+                '<strong>Disconnect and retention:</strong> Disconnecting Wahoo revokes future provider access and stops new imports. Activities already imported into Quantified Self are retained until you delete those activities or delete your account. Account deletion removes Wahoo tokens, queue state, and imported account data under the normal deletion workflow.',
                 '<strong>Shared with Wahoo:</strong> You can explicitly send a selected FIT activity file or GPX/FIT course/route file directly to Wahoo, turn on/send a date range for Garmin, COROS, or Suunto activities already stored in Quantified Self, or opt in to automatic/backfill delivery of Suunto routes already saved in Quantified Self. Quantified Self converts selected GPX routes to FIT in memory before sending them to Wahoo, and converts saved Suunto routes to FIT in memory for the same destination. Saved-route delivery uses an opaque stable key so an updated saved route updates the same Wahoo route. Direct Wahoo activity delivery does not create or retain a Quantified Self activity; direct course/route delivery does not create or retain a Quantified Self route.',
                 '<strong>Shared with Suunto:</strong> You can turn on or backfill Wahoo-to-Suunto activity sync. Quantified Self sends the retained original FIT file from a Wahoo-imported event to Suunto only after you enable or start that route.',
                 '<strong>Outbound boundaries:</strong> Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route. Suunto-to-Wahoo saved-route delivery is a separate opt-in route workflow in Suunto Services; direct GPX/FIT course/route delivery is a separate Wahoo-only upload. Plans, sleep, and other non-activity data are not sent between Wahoo and another provider. Existing Wahoo connections may need to be reconnected to grant workout and route access for delivery to Wahoo.',
@@ -174,7 +175,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Third-Party Processors and Recipients:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (place resolution for location-based AI queries and MCP place-name searches), Google GenAI / Gemini (AI Insights using minimum derived stats only), connected fitness services you explicitly use, and MCP clients you explicitly authorize. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for details.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
-        formControlName: 'acceptPrivacyPolicy'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.privacy
     },
     {
         id: 'data',
@@ -188,7 +189,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. After a 30-day grace period, plan limits and feature restrictions apply. Existing activities are not automatically deleted due to downgrade alone.'
         ],
         checkboxLabel: 'I have read and agree to the Data Availability Policy.',
-        formControlName: 'acceptDataPolicy'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.data
     },
     {
         id: 'gdpr',
@@ -216,7 +217,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Withdraw Consent:</strong> You can withdraw your analytics consent at any time in your account settings.'
         ],
         checkboxLabel: 'I have read and consent to the collection of anonymized usage data for analytics.',
-        formControlName: 'acceptTrackingPolicy',
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.tracking,
         isOptional: true
     },
     {
@@ -232,7 +233,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Plan Changes After Cancellation:</strong> Upon expiration or cancellation of a subscription, your account moves to the applicable plan limits after any grace period. Stored activities are not automatically deleted due to plan expiration or cancellation. It is still your responsibility to keep your own backups of critical data.'
         ],
         checkboxLabel: 'I have read and agree to the Terms of Service and Subscription Policy.',
-        formControlName: 'acceptTos'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.terms
     },
     {
         id: 'marketing',
@@ -245,7 +246,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>No Spam:</strong> We respect your inbox and only send relevant updates about the service.'
         ],
         checkboxLabel: 'I have read and agree to receive marketing emails and updates.',
-        formControlName: 'acceptMarketingPolicy',
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.marketing,
         isOptional: true
     }
 ];

@@ -67,6 +67,7 @@ const EMPTY_CHART_UPDATE_SETTINGS: ChartSetOptionSettings = {
     notMerge: true,
     lazyUpdate: false
 };
+const ADMIN_USER_SEARCH_DEBOUNCE_MS = 750;
 
 @Component({
     selector: 'app-admin-user-management',
@@ -124,6 +125,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     // Search and sort state
     searchTerm = '';
+    searchInputValue = '';
     sortField = 'created';
     sortDirection: 'asc' | 'desc' = 'desc';
 
@@ -150,6 +152,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private readonly userGrowthTrend = signal<UserGrowthTrendResponse | null>(null);
     private readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
+    private userFetchRequestSequence = 0;
     private readonly supportedSortFields = new Set([
         'email',
         'displayName',
@@ -170,7 +173,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     async ngOnInit(): Promise<void> {
         // Handle search debounce
         this.searchSubject.pipe(
-            debounceTime(300),
+            debounceTime(ADMIN_USER_SEARCH_DEBOUNCE_MS),
             distinctUntilChanged(),
             takeUntil(this.destroy$)
         ).subscribe(term => {
@@ -255,6 +258,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     fetchUsers(): void {
+        const requestSequence = ++this.userFetchRequestSequence;
         this.isLoading = true;
         this.error = null;
 
@@ -269,11 +273,17 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
         this.adminService.getUsers(params).pipe(takeUntil(this.destroy$)).subscribe({
             next: (response) => {
+                if (requestSequence !== this.userFetchRequestSequence) {
+                    return;
+                }
                 this.users = response.users;
                 this.totalCount = response.totalCount;
                 this.isLoading = false;
             },
             error: (err) => {
+                if (requestSequence !== this.userFetchRequestSequence) {
+                    return;
+                }
                 this.error = 'Failed to load users. ' + (err.message || '');
                 this.isLoading = false;
                 this.logger.error('AdminUserManagement error:', err);
@@ -316,10 +326,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     onSearchInput(event: Event): void {
         const value = (event.target as HTMLInputElement).value;
+        this.searchInputValue = value;
         this.searchSubject.next(value);
     }
 
     clearSearch(): void {
+        this.searchInputValue = '';
         this.searchTerm = '';
         this.searchSubject.next('');
     }

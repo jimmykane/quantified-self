@@ -450,6 +450,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const [
             activitySyncPendingSnap,
             activitySyncSucceededSnap,
+            activitySyncManualReconciliationSnap,
             activitySyncStuckSnap,
             activitySyncRetry0to3Snap,
             activitySyncRetry4to7Snap,
@@ -464,6 +465,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             activitySyncCollection.where('resultStatus', '==', 'success').count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count activity sync succeeded jobs:', e);
+                return null;
+            }),
+            activitySyncCollection.where('resultStatus', '==', 'manual_reconciliation_required').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count activity sync jobs requiring manual reconciliation:', e);
                 return null;
             }),
             activitySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
@@ -498,6 +503,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
         const activitySyncPending = activitySyncPendingSnap?.data().count || 0;
         const activitySyncSucceeded = activitySyncSucceededSnap?.data().count || 0;
+        const activitySyncManualReconciliationRequired = activitySyncManualReconciliationSnap?.data().count || 0;
         const activitySyncStuck = activitySyncStuckSnap?.data().count || 0;
         const activitySyncDead = activitySyncDeadSnap?.data().count || 0;
         const activitySyncRetryHistogram = {
@@ -519,6 +525,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeDeliverySyncPendingSnap,
             routeDeliverySyncSucceededSnap,
             routeDeliverySyncSkippedSnap,
+            routeDeliverySyncManualReconciliationSnap,
             routeDeliverySyncStuckSnap,
             routeDeliverySyncRetry0to3Snap,
             routeDeliverySyncRetry4to7Snap,
@@ -537,6 +544,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             routeDeliverySyncCollection.where('resultStatus', '==', 'skipped').count().get().catch(e => {
                 logger.error('[admin/getQueueStats] Failed to count route delivery sync skipped jobs:', e);
+                return null;
+            }),
+            routeDeliverySyncCollection.where('resultStatus', '==', 'manual_reconciliation_required').count().get().catch(e => {
+                logger.error('[admin/getQueueStats] Failed to count route delivery sync jobs requiring manual reconciliation:', e);
                 return null;
             }),
             routeDeliverySyncCollection.where('processed', '==', false).where('retryCount', '>=', 10).count().get().catch(e => {
@@ -572,6 +583,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const routeDeliverySyncPending = routeDeliverySyncPendingSnap?.data().count || 0;
         const routeDeliverySyncSucceeded = routeDeliverySyncSucceededSnap?.data().count || 0;
         const routeDeliverySyncSkipped = routeDeliverySyncSkippedSnap?.data().count || 0;
+        const routeDeliverySyncManualReconciliationRequired = routeDeliverySyncManualReconciliationSnap?.data().count || 0;
         const routeDeliverySyncStuck = routeDeliverySyncStuckSnap?.data().count || 0;
         const routeDeliverySyncDead = routeDeliverySyncDeadSnap?.data().count || 0;
         const routeDeliverySyncRetryHistogram = {
@@ -1138,6 +1150,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             activitySync: {
                 pending: activitySyncPending,
                 succeeded: activitySyncSucceeded,
+                manualReconciliationRequired: activitySyncManualReconciliationRequired,
                 stuck: activitySyncStuck,
                 dead: activitySyncDead,
                 dlqByContext: activitySyncByContext,
@@ -1152,6 +1165,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 pending: routeDeliverySyncPending,
                 succeeded: routeDeliverySyncSucceeded,
                 skipped: routeDeliverySyncSkipped,
+                manualReconciliationRequired: routeDeliverySyncManualReconciliationRequired,
                 stuck: routeDeliverySyncStuck,
                 dead: routeDeliverySyncDead,
                 dlqByContext: routeDeliverySyncByContext,

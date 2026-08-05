@@ -24,4 +24,10 @@ describe('searchHelpSections', () => {
 
     expect(matches.map(section => section.id)).toContain('training-analysis');
   });
+
+  it('finds the Activity Calendar guide from marker terminology', () => {
+    const matches = searchHelpSections(HELP_SECTIONS, 'duration-scaled activity circles');
+
+    expect(matches.map(section => section.id)).toContain('activity-calendar');
+  });
 });

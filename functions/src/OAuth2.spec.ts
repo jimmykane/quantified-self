@@ -2025,6 +2025,15 @@ describe('OAuth2', () => {
             expect(mockWhere).toHaveBeenCalledWith('userID', '==', externalUserId);
         });
 
+        it('should query Wahoo tokens by stable user ID and service name', async () => {
+            mockGet.mockResolvedValue({ docs: [] });
+
+            await removeDuplicateConnections(currentUserID, ServiceNames.WahooAPI, externalUserId);
+
+            expect(mockWhere).toHaveBeenCalledWith('wahooUserID', '==', externalUserId);
+            expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.WahooAPI);
+        });
+
         it('should skip tokens with mismatched serviceName', async () => {
             const mockDoc = {
                 id: 'token-id',

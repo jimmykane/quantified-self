@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isDerivedMetricPendingStatus } from './derived-metric-status.helper';
+import {
+  isDerivedMetricPendingStatus,
+  resolveDerivedMetricsRefreshPhase,
+} from './derived-metric-status.helper';
 
 describe('derived-metric-status.helper', () => {
   it('returns true for pending statuses used by derived dashboards', () => {
@@ -15,5 +18,14 @@ describe('derived-metric-status.helper', () => {
     expect(isDerivedMetricPendingStatus('missing')).toBe(false);
     expect(isDerivedMetricPendingStatus(null)).toBe(false);
     expect(isDerivedMetricPendingStatus(undefined)).toBe(false);
+  });
+
+  it('resolves one route-level refresh phase with failures taking priority', () => {
+    expect(resolveDerivedMetricsRefreshPhase(['ready', 'failed', 'stale'])).toBe('failed');
+    expect(resolveDerivedMetricsRefreshPhase(['ready', 'stale', 'building'])).toBe('refreshing');
+    expect(resolveDerivedMetricsRefreshPhase(['ready', 'queued'])).toBe('building');
+    expect(resolveDerivedMetricsRefreshPhase(['ready', 'missing'])).toBe('building');
+    expect(resolveDerivedMetricsRefreshPhase(['ready', 'ready'])).toBeNull();
+    expect(resolveDerivedMetricsRefreshPhase([])).toBeNull();
   });
 });

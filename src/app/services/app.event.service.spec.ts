@@ -301,6 +301,30 @@ describe('AppEventService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should expose raw event documents without sports-lib hydration', async () => {
+        const user = { uid: 'calendar-user' } as any;
+        const queryRef = { kind: 'calendar-query' };
+        const documents = [{ id: 'event-1', startDate: 1710000000000 }];
+        (collection as Mock).mockReturnValue('events-collection');
+        (where as Mock).mockImplementation((fieldPath: unknown, opStr: unknown, value: unknown) => ({
+            fieldPath,
+            opStr,
+            value,
+        }));
+        (query as Mock).mockReturnValue(queryRef);
+        (collectionData as Mock).mockReturnValue(of(documents));
+
+        const result = await firstValueFrom(service.watchEventDocumentsBy(user, [{
+            fieldPath: 'startDate',
+            opStr: '>=',
+            value: 1710000000000,
+        }], 'startDate', true, 0));
+
+        expect(result).toBe(documents);
+        expect(collectionData).toHaveBeenCalledWith(queryRef, { idField: 'id' });
+        expect(mocks.getEventFromJSON).not.toHaveBeenCalled();
+    });
+
     describe('watchHasAnyPowerCurveEventForActivityTypes', () => {
         beforeEach(() => {
             (collection as Mock).mockReturnValue('events-collection');

@@ -8,8 +8,8 @@ import {
 
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
 import {
-  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
-  GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  getRouteDeliveryMetadataAbortMessage,
+  getRouteDeliveryMetadataPersistenceFailureMessage,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
   SendRoutesToServiceResponse,
@@ -45,7 +45,19 @@ import {
   WahooRouteWriteScopeRequiredError,
 } from '../wahoo/routes';
 import { setRouteDeliveryMetadata } from './route-persistence';
-import { TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import {
+  TokenRefreshSkippedForDeletedUserError,
+  TokenUseSkippedForPendingDisconnectError,
+} from '../tokens';
+import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
+import {
+  isProviderOperationError,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
+import {
+  RouteProviderAcceptanceHandler,
+  RouteProviderSendResult,
+} from './provider-acceptance';
 
 export interface PreparedSavedRoute {
   routeId: string;
@@ -62,13 +74,20 @@ export interface RouteSendDestinationAdapter<Context = unknown> {
     userID: string,
     preparedRoute: PreparedSavedRoute,
     context: Context,
-  ): Promise<{
-    providerRouteId?: string;
-    deliveries?: Array<{
-      providerUserId?: string | null;
-      providerRouteId?: string | null;
-    }>;
-  }>;
+    onProviderAccepted?: RouteProviderAcceptanceHandler,
+    options?: RouteSendExecutionOptions,
+  ): Promise<RouteProviderSendResult>;
+}
+
+/** Internal controls for a specific route-send invocation. */
+export interface RouteSendExecutionOptions {
+  /**
+   * User-triggered resends can use durable per-account delivery receipts to
+   * avoid posting a route again after a partial multi-account delivery.
+   * Automated delivery jobs intentionally leave this off: their source
+   * revision state decides whether a changed route must be delivered again.
+   */
+  skipPreviouslyAcceptedDestinationAccounts?: boolean;
 }
 
 export class RouteSendItemError extends Error {
@@ -104,11 +123,31 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
     userID: string,
     preparedRoute: PreparedSavedRoute,
     context: SuuntoRouteUploadContext,
-  ): Promise<{ providerRouteId?: string; deliveries?: Array<{ providerUserId?: string | null; providerRouteId?: string | null }> }> {
-    const uploadContext = getSuuntoRouteSendContext(preparedRoute.routeDocument, context);
-    const result = await uploadGPXRouteToSuuntoApp(userID, preparedRoute.gpxContent, uploadContext);
+    onProviderAccepted?: RouteProviderAcceptanceHandler,
+    options?: RouteSendExecutionOptions,
+  ): Promise<RouteProviderSendResult> {
+    const uploadContext = getSuuntoRouteSendContext(
+      preparedRoute.routeDocument,
+      context,
+      options?.skipPreviouslyAcceptedDestinationAccounts === true,
+    );
+    if (!uploadContext) {
+      return {
+        complete: true,
+        alreadyAccepted: true,
+      };
+    }
+    const result = onProviderAccepted
+      ? await uploadGPXRouteToSuuntoApp(
+        userID,
+        preparedRoute.gpxContent,
+        uploadContext,
+        onProviderAccepted,
+      )
+      : await uploadGPXRouteToSuuntoApp(userID, preparedRoute.gpxContent, uploadContext);
     return {
       providerRouteId: result.providerRouteIds[0],
+      complete: true,
       deliveries: result.deliveries,
     };
   }
@@ -125,14 +164,33 @@ class GarminRouteSendAdapter implements RouteSendDestinationAdapter<GarminRouteS
     userID: string,
     preparedRoute: PreparedSavedRoute,
     context: GarminRouteSendContext,
-  ): Promise<{ providerRouteId?: string; deliveries?: Array<{ providerUserId?: string | null; providerRouteId?: string | null }> }> {
+    onProviderAccepted?: RouteProviderAcceptanceHandler,
+    _options?: RouteSendExecutionOptions,
+  ): Promise<RouteProviderSendResult> {
     return sendRouteToGarminConnect(
       userID,
       preparedRoute.routeId,
       preparedRoute.routeDocument,
       preparedRoute.routeFile,
       context,
-    );
+      {
+        beforeProviderRequest: async () => {
+          await assertRouteSendUserActive(userID, 'before_garmin_provider_request');
+          if (await isServiceDisconnectPendingForUser(userID, ServiceNames.GarminAPI)) {
+            throw new TokenUseSkippedForPendingDisconnectError(
+              userID,
+              ServiceNames.GarminAPI,
+              'pending-disconnect',
+              'before_return',
+            );
+          }
+        },
+      },
+    ).then(async (result) => {
+      const acceptedResult = { ...result, complete: true };
+      await onProviderAccepted?.(acceptedResult);
+      return acceptedResult;
+    });
   }
 }
 
@@ -146,13 +204,18 @@ class WahooRouteSendAdapter implements RouteSendDestinationAdapter<void> {
   async sendRoute(
     userID: string,
     preparedRoute: PreparedSavedRoute,
+    _context: void,
+    onProviderAccepted?: RouteProviderAcceptanceHandler,
+    _options?: RouteSendExecutionOptions,
   ): Promise<{ providerRouteId?: string }> {
     const result = await sendSavedRouteToWahoo(
       userID,
       preparedRoute.routeId,
       preparedRoute.routeFile,
     );
-    return { providerRouteId: result.providerRouteId };
+    const providerResult = { providerRouteId: result.providerRouteId, complete: true };
+    await onProviderAccepted?.(providerResult);
+    return providerResult;
   }
 }
 
@@ -190,20 +253,21 @@ function getRouteSourceProviderUserId(routeDocument: FirestoreRouteJSON): string
 function getSuuntoRouteSendContext(
   routeDocument: FirestoreRouteJSON,
   context: SuuntoRouteUploadContext,
-): SuuntoRouteUploadContext {
-  if (getRouteSourceServiceName(routeDocument) !== ServiceNames.SuuntoApp) {
-    return context;
+  skipPreviouslyAcceptedDestinationAccounts: boolean,
+): SuuntoRouteUploadContext | null {
+  let eligibleTokenRefs = context.tokenRefs;
+  if (getRouteSourceServiceName(routeDocument) === ServiceNames.SuuntoApp) {
+    const sourceProviderUserId = getRouteSourceProviderUserId(routeDocument);
+    if (!sourceProviderUserId) {
+      throw new RouteSendItemError(
+        'SOURCE_SERVICE_BLOCKED',
+        'Routes imported from Suunto can only be sent to a different connected Suunto account once the source account is known.',
+      );
+    }
+
+    eligibleTokenRefs = eligibleTokenRefs.filter(tokenRef => tokenRef.providerUserId !== sourceProviderUserId);
   }
 
-  const sourceProviderUserId = getRouteSourceProviderUserId(routeDocument);
-  if (!sourceProviderUserId) {
-    throw new RouteSendItemError(
-      'SOURCE_SERVICE_BLOCKED',
-      'Routes imported from Suunto can only be sent to a different connected Suunto account once the source account is known.',
-    );
-  }
-
-  const eligibleTokenRefs = context.tokenRefs.filter(tokenRef => tokenRef.providerUserId !== sourceProviderUserId);
   if (eligibleTokenRefs.length === 0) {
     throw new RouteSendItemError(
       'SOURCE_SERVICE_BLOCKED',
@@ -211,10 +275,33 @@ function getSuuntoRouteSendContext(
     );
   }
 
+  if (skipPreviouslyAcceptedDestinationAccounts) {
+    const acceptedProviderUserIds = getPreviouslyAcceptedDestinationProviderUserIds(routeDocument, ServiceNames.SuuntoApp);
+    eligibleTokenRefs = eligibleTokenRefs.filter(tokenRef => !acceptedProviderUserIds.has(tokenRef.providerUserId));
+    if (eligibleTokenRefs.length === 0) {
+      return null;
+    }
+  }
+
   return {
     tokenRefs: eligibleTokenRefs,
     userNames: Array.from(new Set(eligibleTokenRefs.map(tokenRef => tokenRef.providerUserId))),
   };
+}
+
+function getPreviouslyAcceptedDestinationProviderUserIds(
+  routeDocument: FirestoreRouteJSON,
+  destinationServiceName: ServiceNames,
+): Set<string> {
+  const summaries = Array.isArray(routeDocument.deliverySummaries)
+    ? routeDocument.deliverySummaries
+    : [];
+  const matchingSummary = summaries.find(summary => summary?.serviceName === destinationServiceName);
+  return new Set(
+    (matchingSummary?.providerUserIds || [])
+      .map(providerUserId => normalizeNonEmptyString(providerUserId))
+      .filter((providerUserId): providerUserId is string => providerUserId !== null),
+  );
 }
 
 export function getRouteSendAdapter(destinationServiceName: ServiceNames): RouteSendDestinationAdapter | null {
@@ -433,6 +520,7 @@ export async function persistRouteDeliveryMetadataAfterSend(params: {
     providerUserId?: string | null;
     providerRouteId?: string | null;
   }>;
+  requirePersistence?: boolean;
 }): Promise<void> {
   const deliveryEntries = params.deliveries && params.deliveries.length > 0
     ? params.deliveries
@@ -457,7 +545,10 @@ export async function persistRouteDeliveryMetadataAfterSend(params: {
           },
         });
         if (!persisted) {
-          throw new RouteSendItemError('DELIVERY_METADATA_PERSIST_FAILED', GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE);
+          throw new RouteSendItemError(
+            'DELIVERY_METADATA_PERSIST_FAILED',
+            getRouteDeliveryMetadataPersistenceFailureMessage(params.destinationServiceName),
+          );
         }
       }
       return;
@@ -474,7 +565,7 @@ export async function persistRouteDeliveryMetadataAfterSend(params: {
     }
   }
 
-  if (STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS.has(params.destinationServiceName)) {
+  if (params.requirePersistence === true || STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS.has(params.destinationServiceName)) {
     logger.error('[RouteSendCore] Route delivery metadata persistence failed for a strict destination', {
       userID: params.userID,
       routeID: params.routeID,
@@ -482,7 +573,10 @@ export async function persistRouteDeliveryMetadataAfterSend(params: {
       maxAttempts: ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS,
       error: lastError,
     });
-    throw new RouteSendItemError('DELIVERY_METADATA_PERSIST_FAILED', GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE);
+    throw new RouteSendItemError(
+      'DELIVERY_METADATA_PERSIST_FAILED',
+      getRouteDeliveryMetadataPersistenceFailureMessage(params.destinationServiceName),
+    );
   }
 }
 
@@ -491,14 +585,10 @@ export async function sendPreparedRouteToDestination(
   preparedRoute: PreparedSavedRoute,
   adapter: RouteSendDestinationAdapter,
   context: unknown,
-): Promise<{
-  providerRouteId?: string;
-  deliveries?: Array<{
-    providerUserId?: string | null;
-    providerRouteId?: string | null;
-  }>;
-}> {
-  return adapter.sendRoute(userID, preparedRoute, context);
+  onProviderAccepted?: RouteProviderAcceptanceHandler,
+  options?: RouteSendExecutionOptions,
+): Promise<RouteProviderSendResult> {
+  return adapter.sendRoute(userID, preparedRoute, context, onProviderAccepted, options);
 }
 
 export function buildRouteSendFailureResult(
@@ -625,7 +715,7 @@ export function buildUnattemptedRouteSendResultsAfterDeliveryMetadataFailure(
     destinationServiceName,
     status: 'failure',
     reason: 'SEND_REQUEST_FAILED',
-    message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+    message: getRouteDeliveryMetadataAbortMessage(destinationServiceName),
   }));
 }
 
@@ -668,14 +758,16 @@ export function isUserDeletionGuardReadError(error: unknown): error is UserDelet
 }
 
 export function isDestinationAuthRequiredError(error: unknown): boolean {
-  return (error as { code?: unknown } | null)?.code === 'unauthenticated'
+  return (isProviderOperationError(error) && error.disposition === 'auth_required')
+    || (error as { code?: unknown } | null)?.code === 'unauthenticated'
     || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
 }
 
 export function isDestinationPermissionRequiredError(
   error: unknown,
-): error is GarminRouteSendPermissionRequiredError | WahooRouteWriteScopeRequiredError {
-  return error instanceof GarminRouteSendPermissionRequiredError
+): error is GarminRouteSendPermissionRequiredError | WahooRouteWriteScopeRequiredError | ProviderOperationError {
+  return (isProviderOperationError(error) && error.disposition === 'permission_required')
+    || error instanceof GarminRouteSendPermissionRequiredError
     || error instanceof WahooRouteWriteScopeRequiredError
     || (error instanceof Error && (
       error.name === 'GarminRouteSendPermissionRequiredError'

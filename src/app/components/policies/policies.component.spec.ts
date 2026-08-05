@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MaterialModule } from '../../modules/material.module';
 import { PoliciesComponent } from './policies.component';
 
 describe('PoliciesComponent', () => {
@@ -26,7 +27,7 @@ describe('PoliciesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [PoliciesComponent],
-      imports: [MaterialModule, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
+      imports: [MatCardModule, MatIconModule, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PoliciesComponent);

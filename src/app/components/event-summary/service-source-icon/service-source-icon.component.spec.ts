@@ -4,8 +4,7 @@ import { ServiceSourceIconComponent } from './service-source-icon.component';
 import { AppEventService } from '../../../services/app.event.service';
 import { of } from 'rxjs';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
-import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatIconRegistry } from '@angular/material/icon';
 import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
 
 describe('ServiceSourceIconComponent', () => {
@@ -30,8 +29,7 @@ describe('ServiceSourceIconComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServiceSourceIconComponent],
-            imports: [MatIconModule, MatTooltipModule],
+            imports: [ServiceSourceIconComponent],
             providers: [
                 { provide: AppEventService, useValue: eventService },
                 { provide: MatIconRegistry, useValue: iconRegistry }

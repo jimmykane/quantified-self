@@ -1,0 +1,60 @@
+<section class="calendar-day-details" [attr.aria-label]="title">
+  <app-bottom-sheet-header [title]="title" icon="calendar_month">
+    <button mat-icon-button type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+
+  <div class="bottom-sheet-content calendar-day-details-content">
+    <div class="calendar-day-total" aria-label="Day total">
+      <span>{{ data.day.eventCount }} {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
+      <strong>{{ data.day.durationLabel }}</strong>
+    </div>
+
+    <section aria-labelledby="calendar-day-family-title">
+      <h3 id="calendar-day-family-title">Activities</h3>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows"></app-activity-calendar-volume-list>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section aria-labelledby="calendar-day-activities-title">
+      <h3 id="calendar-day-activities-title">Activity details</h3>
+      <mat-nav-list>
+        @for (event of eventRows; track event.id) {
+          @if (event.route) {
+          <a mat-list-item class="calendar-day-event-item"
+            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
+            (click)="dismiss()">
+            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
+              aria-hidden="true"></app-activity-type-icon>
+            <span matListItemTitle>{{ event.label }}</span>
+            <div matListItemLine class="calendar-day-event-supporting">
+              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              @if (event.metricStats.length) {
+              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+              }
+            </div>
+            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+          </a>
+          } @else {
+          <div mat-list-item class="calendar-day-event-item"
+            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0">
+            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
+              aria-hidden="true"></app-activity-type-icon>
+            <span matListItemTitle>{{ event.label }}</span>
+            <div matListItemLine class="calendar-day-event-supporting">
+              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              @if (event.metricStats.length) {
+              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+              }
+            </div>
+          </div>
+          }
+        }
+      </mat-nav-list>
+    </section>
+  </div>
+</section>

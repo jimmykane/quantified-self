@@ -19,13 +19,13 @@ import {
 } from '@sports-alliance/sports-lib';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../helpers/dashboard-form.helper';
 import {
+    DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
     DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     DASHBOARD_FORM_CHART_TYPE,
     DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
     DASHBOARD_POWER_CURVE_CHART_TYPE,
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
-    isDashboardCuratedChartType,
     isDashboardKpiChartType,
     isDashboardSpecialChartType,
 } from '../helpers/dashboard-special-chart-types';
@@ -187,8 +187,13 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should start new dashboard settings without curated training tiles', () => {
-            expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
+        it('should start new dashboard settings with only the activity calendar tile', () => {
+            expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+                expect.objectContaining({
+                    chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+                    size: { columns: 1, rows: 1 },
+                }),
+            ]);
         });
 
         it('should not include sleep tile in default dashboard tiles', () => {
@@ -202,7 +207,8 @@ describe('AppUserUtilities', () => {
         });
 
         it('should start new dashboard settings without KPI tiles', () => {
-            expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
+            expect(AppUserUtilities.getDefaultUserDashboardTiles()
+                .filter((tile: any) => isDashboardKpiChartType(tile.chartType))).toEqual([]);
         });
 
         it('should fill defaults for empty settings', () => {

@@ -15,14 +15,18 @@ import {
   AppUserInterface,
 } from '../models/app-user.interface';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   buildDashboardRoutePreviewAutoTile,
   ensureDashboardAutoTiles,
+  isDashboardActivityCalendarTile,
   isDashboardRoutePreviewTile,
   markDashboardAutoTileAdded,
   markDashboardAutoTileDismissed,
 } from '../helpers/dashboard-auto-tile.helper';
+import { buildDashboardActivityCalendarTile } from '../helpers/dashboard-activity-calendar.helper';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
 import { AppRouteService } from './app.route.service';
@@ -46,15 +50,26 @@ export interface DashboardAutoTileApplyResult {
   persisted: boolean;
 }
 
-export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
-  id: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
-  label: 'Routes',
-  source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
-  noun: 'map',
-  qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] === true,
-  isPresent: (tiles) => tiles.some(tile => isDashboardRoutePreviewTile(tile)),
-  createTile: (order) => buildDashboardRoutePreviewAutoTile(order),
-}];
+export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [
+  {
+    id: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+    label: 'Activity Calendar',
+    source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    noun: 'tile',
+    qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID] === true,
+    isPresent: (tiles) => tiles.some(tile => isDashboardActivityCalendarTile(tile)),
+    createTile: (order) => buildDashboardActivityCalendarTile(order),
+  },
+  {
+    id: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
+    label: 'Routes',
+    source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
+    noun: 'map',
+    qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] === true,
+    isPresent: (tiles) => tiles.some(tile => isDashboardRoutePreviewTile(tile)),
+    createTile: (order) => buildDashboardRoutePreviewAutoTile(order),
+  },
+];
 
 @Injectable({
   providedIn: 'root',
@@ -248,6 +263,7 @@ export class DashboardAutoTileService {
 
   private buildDefaultDashboardEligibility(_user: AppUserInterface): DashboardAutoTileEligibility {
     return {
+      [DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID]: true,
       [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: false,
     };
   }

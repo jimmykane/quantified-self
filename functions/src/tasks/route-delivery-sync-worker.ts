@@ -61,6 +61,9 @@ export const processRouteDeliverySyncTask = onTaskDispatched({
             case QueueResult.MovedToDLQ:
                 logger.warn(`[RouteDeliverySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                 return;
+            case QueueResult.Skipped:
+                logger.error(`[RouteDeliverySyncTaskWorker] Item ${queueItemId} requires manual reconciliation; stopping automatic retries.`);
+                return;
             case QueueResult.RetryIncremented:
                 logger.warn(`[RouteDeliverySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`);
                 throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);

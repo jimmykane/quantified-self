@@ -1,6 +1,7 @@
 import { ChartTypes } from '@sports-alliance/sports-lib';
 
 export const DASHBOARD_RECOVERY_NOW_CHART_TYPE = 'RecoveryNowPie' as const;
+export const DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE = 'ActivityCalendar' as const;
 export const DASHBOARD_FORM_CHART_TYPE = 'Form' as const;
 export const DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE = 'FreshnessForecast' as const;
 export const DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE = 'IntensityDistribution' as const;
@@ -29,6 +30,7 @@ export const DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE = 'KpiAerobicDurability
 export const RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE = 'KpiReadinessConfidence' as const;
 
 export type DashboardRecoveryNowChartType = typeof DASHBOARD_RECOVERY_NOW_CHART_TYPE;
+export type DashboardActivityCalendarChartType = typeof DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
 export type DashboardFormChartType = typeof DASHBOARD_FORM_CHART_TYPE;
 export type DashboardFreshnessForecastChartType = typeof DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE;
 export type DashboardIntensityDistributionChartType = typeof DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
@@ -55,6 +57,7 @@ export type DashboardKpiAerobicDurabilityChartType = typeof DASHBOARD_AEROBIC_DU
 
 export type DashboardCuratedChartType =
   | DashboardRecoveryNowChartType
+  | DashboardActivityCalendarChartType
   | DashboardFormChartType
   | DashboardFreshnessForecastChartType
   | DashboardIntensityDistributionChartType
@@ -109,6 +112,10 @@ const DASHBOARD_CURATED_CHART_DEFINITIONS: DashboardCuratedChartDefinition[] = [
   {
     chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     label: 'Recovery',
+  },
+  {
+    chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+    label: 'Activity Calendar',
   },
   {
     chartType: DASHBOARD_FORM_CHART_TYPE,
@@ -242,6 +249,12 @@ export function isDashboardRecoveryNowChartType(chartType: unknown): chartType i
   return `${chartType}` === DASHBOARD_RECOVERY_NOW_CHART_TYPE;
 }
 
+export function isDashboardActivityCalendarChartType(
+  chartType: unknown,
+): chartType is DashboardActivityCalendarChartType {
+  return `${chartType}` === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+}
+
 export function isDashboardFormChartType(chartType: unknown): chartType is DashboardFormChartType {
   return `${chartType}` === DASHBOARD_FORM_CHART_TYPE;
 }
@@ -282,6 +295,7 @@ export function isRetiredDashboardReadinessConfidenceKpiChartType(
 
 export function isDashboardCuratedChartType(chartType: unknown): chartType is DashboardCuratedChartType {
   return isDashboardRecoveryNowChartType(chartType)
+    || isDashboardActivityCalendarChartType(chartType)
     || isDashboardFormChartType(chartType)
     || isDashboardFreshnessForecastChartType(chartType)
     || isDashboardIntensityDistributionChartType(chartType)

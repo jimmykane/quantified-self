@@ -3,8 +3,10 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -30,8 +32,39 @@ function createSleepService(sessions: readonly SleepSession[] = []) {
   };
 }
 
+function createRouteReadyDerivedState(
+  overrides: Partial<DashboardDerivedMetricsState> = {},
+): DashboardDerivedMetricsState {
+  return {
+    ...createDashboardDerivedMetricsMissingState(),
+    formStatus: 'ready',
+    recoveryNowStatus: 'ready',
+    acwrStatus: 'ready',
+    rampRateStatus: 'ready',
+    monotonyStrainStatus: 'ready',
+    formNowStatus: 'ready',
+    formPlus7dStatus: 'ready',
+    freshnessForecastStatus: 'ready',
+    intensityDistributionStatus: 'ready',
+    trainingSummaryStatus: 'ready',
+    trainingBuildComparisonStatus: 'ready',
+    trainingCapacityStatus: 'ready',
+    trainingExplanationStatus: 'ready',
+    trainingDurabilityStatus: 'ready',
+    trainingReadinessStatus: 'ready',
+    bodyWeightTrendStatus: 'ready',
+    powerCurveStatus: 'ready',
+    trainingSwimPerformanceStatus: 'ready',
+    ...overrides,
+  };
+}
+
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
@@ -87,6 +120,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
+    const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
+    expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
+    expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('All 3');
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
@@ -131,6 +167,22 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Preparing rolling power capacity');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every route-header action in one compact row through tablet widths', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const styles = readFileSync(stylePath, 'utf8');
+    const compactActionsStart = styles.indexOf('@media (max-width: 800px)');
+    const extraSmallLayoutStart = styles.indexOf('@media (max-width: 400px)', compactActionsStart);
+    const compactActionsStyles = styles.slice(compactActionsStart, extraSmallLayoutStart);
+
+    expect(compactActionsStart).toBeGreaterThan(-1);
+    expect(extraSmallLayoutStart).toBeGreaterThan(compactActionsStart);
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
+    expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
+    expect(compactActionsStyles).toContain('width: 48px;');
   });
 
   it('renders activity-family icons only for sport-specific training driver cards', async () => {
@@ -631,6 +683,8 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
+      .toContain('Building derived metrics');
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming workouts.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
@@ -1685,6 +1739,123 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.derivedState.formNow?.value).toBe(8.5);
     expect(fixture.componentInstance.trainingComparisonState).toBe('updating');
+    const routeStatus = fixture.nativeElement.querySelector('.training-derived-metrics-status') as HTMLElement | null;
+    const pageHeader = routeStatus?.closest('.training-page-header');
+    const firstSection = fixture.nativeElement.querySelector('.training-section');
+    expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
+    expect(routeStatus?.textContent).toContain('Available last completed values');
+    expect(pageHeader?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
+
+    derivedState$.next({
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'failed',
+      trainingSummary: {
+        asOfDayMs: 0,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    });
+    fixture.detectChanges();
+    const retryButton = fixture.nativeElement.querySelector('.training-derived-metrics-retry') as HTMLButtonElement;
+    expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
+      .toContain('Derived metrics update failed');
+    expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
+    retryButton.click();
+    expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
+      { uid: 'user-1' },
+      expect.objectContaining({ trainingSummaryStatus: 'failed' }),
+      { force: true, metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
+    );
+  });
+
+  it('ignores the optional recovery status unless an active estimate is visible', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({ recoveryNowStatus: 'failed' });
+
+    (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.derivedState = createRouteReadyDerivedState({
+      recoveryNowStatus: 'failed',
+      recoveryNow: { totalSeconds: 3_600, endTimeMs: nowMs },
+    });
+    (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
+  it('ignores compact fallback failures when the rendered Form and forecast series supply those values', () => {
+    const nowMs = Date.UTC(2026, 6, 18);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const formPoints = [
+      {
+        time: nowMs - (7 * 24 * 60 * 60 * 1000),
+        trainingStressScore: 40,
+        ctl: 100,
+        atl: 98,
+        formSameDay: 2,
+        formPriorDay: 1,
+      },
+      {
+        time: nowMs,
+        trainingStressScore: 60,
+        ctl: 102,
+        atl: 98,
+        formSameDay: 4,
+        formPriorDay: 3,
+      },
+    ];
+    const freshnessForecast = {
+      generatedAtMs: nowMs,
+      points: [{
+        dayMs: nowMs + (7 * 24 * 60 * 60 * 1000),
+        trainingStressScore: 0,
+        ctl: 90,
+        atl: 70,
+        formSameDay: 20,
+        formPriorDay: 19,
+        isForecast: true,
+      }],
+    };
+    component.derivedState = createRouteReadyDerivedState({
+      formPoints,
+      freshnessForecast,
+      formNowStatus: 'failed',
+      rampRateStatus: 'failed',
+      formPlus7dStatus: 'failed',
+    });
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.derivedState = { ...component.derivedState, formPoints: null };
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+
+    component.derivedState = { ...component.derivedState, formPoints, freshnessForecast: null };
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });
 });

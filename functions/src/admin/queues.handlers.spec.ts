@@ -413,6 +413,7 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.activitySync).toEqual({
             pending: 5,
             succeeded: 5,
+            manualReconciliationRequired: 5,
             stuck: 5,
             dead: 5,
             dlqByContext: expect.arrayContaining([
@@ -761,6 +762,9 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'success')) {
                 return 2;
             }
+            if (has('resultStatus', '==', 'manual_reconciliation_required')) {
+                return 6;
+            }
             if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
                 return 1;
             }
@@ -862,6 +866,7 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.activitySync).toEqual(expect.objectContaining({
             pending: 4,
             succeeded: 2,
+            manualReconciliationRequired: 6,
             stuck: 1,
             dead: 2,
             advanced: expect.objectContaining({
@@ -1018,6 +1023,9 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'skipped')) {
                 return 3;
             }
+            if (has('resultStatus', '==', 'manual_reconciliation_required')) {
+                return 4;
+            }
             if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
                 return 2;
             }
@@ -1120,6 +1128,7 @@ describe('getQueueStats Cloud Function', () => {
             pending: 8,
             succeeded: 6,
             skipped: 3,
+            manualReconciliationRequired: 4,
             stuck: 2,
             dead: 7,
             advanced: expect.objectContaining({

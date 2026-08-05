@@ -15,10 +15,12 @@ import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTi
 import { vi } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE } from '../../../../helpers/dashboard-auto-tile.helper';
 
 describe('TileChartActionsComponent', () => {
   let component: TileChartActionsComponent;
@@ -355,6 +357,34 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('should persist Activity Calendar auto-tile dismissal when deleting it', async () => {
+    userMock.settings.dashboardSettings.autoTiles = {};
+    userMock.settings.dashboardSettings.tiles = [
+      {
+        order: 0,
+        chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+        dataType: 'Duration',
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 2, rows: 2 },
+        type: TileTypes.Chart,
+      },
+      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: TileTypes.Chart },
+    ];
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as any;
+    component.order = 0;
+    fixture.detectChanges();
+
+    await component.deleteTile({} as any);
+
+    expect(userMock.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
+      state: 'dismissed',
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 
   it('should restore auto-tile state and tiles when deleting Sleep Trend fails to persist', async () => {

@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { SharedModule } from '../../modules/shared.module';
+import { RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
 import { AppAnalyticsService, ToolCompareEntrySource } from '../../services/app.analytics.service';
 
 interface ToolCard {
@@ -13,7 +16,7 @@ interface ToolCard {
 @Component({
   selector: 'app-tools-hub-page',
   standalone: true,
-  imports: [SharedModule],
+  imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule],
   templateUrl: './tools-hub-page.component.html',
   styleUrls: ['./tools-hub-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

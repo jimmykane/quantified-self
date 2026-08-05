@@ -1268,11 +1268,15 @@ export class RoutesPageComponent implements OnInit {
         ) {
             return;
         }
+        const forceSuuntoCopy = destinationServiceName === ServiceNames.SuuntoApp
+            && hasRouteDeliveryForService(route, ServiceNames.SuuntoApp);
 
         this.sendingToServiceRouteID.set(routeID);
         this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
         try {
-            const result = await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
+            const result = forceSuuntoCopy
+                ? await this.routeSendService.sendRoutesToService([routeID], destinationServiceName, { forceCopy: true })
+                : await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
             const status = result.successCount > 0 ? 'success' : 'failure';
             this.analyticsService.logSavedRouteAction('send_service_route', {
                 status,
@@ -1469,6 +1473,8 @@ export class RoutesPageComponent implements OnInit {
         ) {
             return;
         }
+        const forceSuuntoCopy = destinationServiceName === ServiceNames.SuuntoApp
+            && sendableRoutes.some(item => hasRouteDeliveryForService(item.route, ServiceNames.SuuntoApp));
 
         this.bulkActionInProgress.set(true);
         const jobId = this.processingService.addJob('process', `Sending routes to ${destinationLabel}...`);
@@ -1484,6 +1490,7 @@ export class RoutesPageComponent implements OnInit {
                 .map(item => item.route.id)
                 .filter((routeID): routeID is string => !!routeID);
             const result = await this.routeSendService.sendRoutesToService(routeIDs, destinationServiceName, {
+                ...(forceSuuntoCopy ? { forceCopy: true } : {}),
                 onProgress: progress => {
                     this.processingService.updateJob(jobId, {
                         status: 'processing',

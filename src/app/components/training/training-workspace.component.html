@@ -1,18 +1,48 @@
 <main class="training-workspace" aria-labelledby="training-title">
   <header class="training-page-header">
     <div>
-      <p class="training-eyebrow">28-day training analysis</p>
+      <div class="training-page-kicker">
+        @if (derivedMetricsRouteStatus) {
+          <div
+            class="training-derived-metrics-status"
+            [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
+            [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'"
+            [attr.aria-label]="derivedMetricsRouteStatus.title + '. ' + derivedMetricsRouteStatus.description">
+            @if (derivedMetricsRouteStatus.type === 'pending') {
+              <mat-icon aria-hidden="true">sync</mat-icon>
+            } @else {
+              <mat-icon aria-hidden="true">error_outline</mat-icon>
+            }
+            <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
+          </div>
+        } @else {
+          <p class="training-eyebrow">28-day training analysis</p>
+        }
+      </div>
       <h1 id="training-title">Training</h1>
     </div>
     <div class="training-page-actions">
+      @if (derivedMetricsRouteStatus?.showRetry) {
+        <button
+          mat-stroked-button
+          type="button"
+          class="training-derived-metrics-retry"
+          aria-label="Retry derived metrics update"
+          (click)="retryDerivedMetricsRebuild()"
+        >
+          <mat-icon aria-hidden="true">refresh</mat-icon>
+          <span class="training-derived-metrics-retry-label">Retry</span>
+        </button>
+      }
       <button
         mat-stroked-button
         type="button"
+        class="training-sport-visibility-action"
         (click)="openTrainingSportVisibilityDialog()"
         [attr.aria-label]="visibleDisciplinesAccessibleLabel"
       >
         <mat-icon aria-hidden="true">tune</mat-icon>
-        <span>{{ visibleDisciplinesCompactLabel }}</span>
+        <span class="training-sport-visibility-action-label">{{ visibleDisciplinesCompactLabel }}</span>
       </button>
       <a
         mat-stroked-button
@@ -23,7 +53,7 @@
         aria-label="Send feedback about Training to support"
       >
         <mat-icon aria-hidden="true">feedback</mat-icon>
-        <span>Feedback</span>
+        <span class="training-feedback-action-label">Feedback</span>
       </a>
       <a
         mat-stroked-button

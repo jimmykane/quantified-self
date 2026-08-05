@@ -108,4 +108,27 @@ describe('PublicSeoPageComponent', () => {
 
     mcpFixture.destroy();
   });
+
+  it('renders the public Activity Calendar overview and help links', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.activityCalendar;
+
+    const calendarFixture = TestBed.createComponent(PublicSeoPageComponent);
+    calendarFixture.detectChanges();
+
+    const text = calendarFixture.nativeElement.textContent as string;
+    const hrefs = Array.from(calendarFixture.nativeElement.querySelectorAll('a'))
+      .map(link => (link as HTMLAnchorElement).getAttribute('href') ?? '');
+
+    expect(text).toContain('Activity calendar for endurance training');
+    expect(text).toContain('Week, Month, and Year views');
+    expect(text).toContain('Duration-scaled activity circles');
+    expect(text).toContain('independent from dashboard event-search filters');
+    expect(calendarFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(6);
+    expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
+    expect(hrefs).toContain('/calendar');
+    expect(hrefs).toContain('/help#activity-calendar');
+    expect(hrefs).toContain('/features/training-analysis');
+
+    calendarFixture.destroy();
+  });
 });

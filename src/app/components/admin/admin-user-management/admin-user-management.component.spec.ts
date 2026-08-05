@@ -11,7 +11,7 @@ import { AppImpersonationService } from '../../../services/app.impersonation.ser
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { of, throwError, BehaviorSubject } from 'rxjs';
+import { of, throwError, BehaviorSubject, Subject } from 'rxjs';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSortModule, Sort } from '@angular/material/sort';
@@ -219,6 +219,8 @@ describe('AdminUserManagementComponent', () => {
             proNet: 6
         }
     };
+
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     beforeEach(async () => {
         adminServiceSpy = {
@@ -626,6 +628,47 @@ describe('AdminUserManagementComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should ignore stale user fetch responses and errors', () => {
+        const firstRequest = new Subject<ListUsersResponse>();
+        const secondRequest = new Subject<ListUsersResponse>();
+        const secondUsers: AdminUser[] = [{
+            ...mockUsers[1],
+            uid: 'latest-user',
+            email: 'latest@example.com'
+        }];
+
+        adminServiceSpy.getUsers
+            .mockReturnValueOnce(firstRequest.asObservable())
+            .mockReturnValueOnce(secondRequest.asObservable());
+
+        component.searchTerm = 'old';
+        component.fetchUsers();
+        component.searchTerm = 'latest';
+        component.fetchUsers();
+
+        firstRequest.next({
+            ...mockResponse,
+            users: [mockUsers[0]],
+            totalCount: 1
+        });
+        firstRequest.error(new Error('stale failure'));
+
+        expect(component.users).toEqual(mockUsers);
+        expect(component.error).toBeNull();
+        expect(component.isLoading).toBe(true);
+
+        secondRequest.next({
+            ...mockResponse,
+            users: secondUsers,
+            totalCount: 1
+        });
+
+        expect(component.users).toEqual(secondUsers);
+        expect(component.totalCount).toBe(1);
+        expect(component.error).toBeNull();
+        expect(component.isLoading).toBe(false);
+    });
+
     it('should trigger fetch on page change', () => {
         vi.clearAllMocks();
         const pageEvent: PageEvent = { pageIndex: 1, pageSize: 50, length: 100 };
@@ -706,12 +749,41 @@ describe('AdminUserManagementComponent', () => {
         expect(component.isAdmin(mockUsers[1])).toBe(false);
     });
 
+    it('should debounce rapid search input before fetching users', async () => {
+        vi.clearAllMocks();
+        component.currentPage = 3;
+
+        component.onSearchInput({ target: { value: 's' } } as unknown as Event);
+        component.onSearchInput({ target: { value: 'se' } } as unknown as Event);
+        component.onSearchInput({ target: { value: 'serg' } } as unknown as Event);
+
+        expect(component.searchInputValue).toBe('serg');
+        expect(component.searchTerm).toBe('');
+        expect(adminServiceSpy.getUsers).not.toHaveBeenCalled();
+
+        await wait(850);
+
+        expect(component.searchTerm).toBe('serg');
+        expect(component.currentPage).toBe(0);
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledTimes(1);
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: 'serg',
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
+    });
+
     it('should update searchTerm on input and reset page on clear', () => {
+        component.searchInputValue = 'existing';
         component.searchTerm = 'existing';
         component.currentPage = 3;
 
         component.clearSearch();
 
+        expect(component.searchInputValue).toBe('');
         expect(component.searchTerm).toBe('');
     });
 

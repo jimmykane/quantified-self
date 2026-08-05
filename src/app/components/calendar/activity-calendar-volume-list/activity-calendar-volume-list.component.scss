@@ -1,0 +1,124 @@
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.calendar-family-volume-row {
+  display: grid;
+  min-height: 76px;
+  grid-template-columns: minmax(180px, 280px) minmax(88px, auto) minmax(180px, 1fr);
+  align-items: center;
+  column-gap: 18px;
+  row-gap: 7px;
+  padding: 10px 4px;
+}
+
+.calendar-family-volume-identity {
+  display: flex;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-family-volume-identity > mat-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  font-size: 28px;
+  line-height: 28px;
+}
+
+.calendar-family-volume-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.calendar-family-volume-copy strong,
+.calendar-family-volume-copy > span {
+  overflow: hidden;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-family-volume-copy strong {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+}
+
+.calendar-family-volume-copy > span {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.calendar-family-volume-value {
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-family-volume-track {
+  position: relative;
+  height: 8px;
+  grid-column: 3;
+  grid-row: 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--mat-sys-surface-container-highest);
+}
+
+.calendar-family-volume-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+}
+
+.calendar-family-volume-row > app-activity-calendar-volume-stats {
+  min-width: 0;
+  grid-column: 3;
+  grid-row: 2;
+}
+
+@container (max-width: 720px) {
+  .calendar-family-volume-row {
+    min-height: 92px;
+    grid-template-columns: minmax(0, 1fr) minmax(72px, auto);
+    gap: 8px 12px;
+    padding: 10px 2px;
+  }
+
+  .calendar-family-volume-identity {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .calendar-family-volume-value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .calendar-family-volume-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .calendar-family-volume-row > app-activity-calendar-volume-stats {
+    grid-column: 1 / -1;
+    grid-row: 3;
+
+    --calendar-volume-stats-column-gap: 12px;
+  }
+}

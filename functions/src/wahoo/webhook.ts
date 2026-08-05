@@ -9,7 +9,6 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import {
   WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
-  WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
 } from './constants';
 import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
@@ -22,17 +21,32 @@ export function secureTokenMatches(actual: unknown, expected: string): boolean {
   return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-async function resolveActiveWahooOwner(wahooUserID: string): Promise<string | null> {
+export async function resolveActiveWahooOwner(wahooUserID: string): Promise<string | null> {
+  const normalizedWahooUserID = `${wahooUserID || ''}`.trim();
+  if (!normalizedWahooUserID) return null;
+
   const db = admin.firestore();
-  const mapping = await db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(wahooUserID).get();
-  const firebaseUserID = mapping.exists ? `${mapping.data()?.firebaseUserID || ''}`.trim() : '';
-  if (!firebaseUserID) return null;
-  const token = await db.collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(firebaseUserID)
-    .collection('tokens')
-    .doc(wahooUserID)
+  const tokenMatches = await db.collectionGroup('tokens')
+    .where('wahooUserID', '==', normalizedWahooUserID)
+    .where('serviceName', '==', ServiceNames.WahooAPI)
+    .limit(2)
     .get();
-  if (!token.exists || token.data()?.serviceName !== ServiceNames.WahooAPI) return null;
+
+  if (tokenMatches.docs.length === 0) return null;
+  if (tokenMatches.docs.length !== 1) {
+    throw new Error(`Wahoo account ${normalizedWahooUserID} has multiple active token owners.`);
+  }
+
+  const token = tokenMatches.docs[0];
+  const tokenRoot = token.ref.parent.parent;
+  const firebaseUserID = `${tokenRoot?.id || ''}`.trim();
+  const isExpectedTokenPath = token.id === normalizedWahooUserID
+    && token.ref.parent.id === 'tokens'
+    && tokenRoot?.parent.id === WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME;
+  if (!firebaseUserID || !isExpectedTokenPath) {
+    throw new Error(`Wahoo account ${normalizedWahooUserID} resolved to an invalid token path.`);
+  }
+
   const deletionGuard = await getUserDeletionGuardState(db, firebaseUserID);
   if (deletionGuard.shouldSkip || await isServiceDisconnectPendingForUser(firebaseUserID, ServiceNames.WahooAPI)) return null;
   return (await hasProAccess(firebaseUserID)) ? firebaseUserID : null;

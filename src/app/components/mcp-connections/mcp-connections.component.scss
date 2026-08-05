@@ -237,11 +237,19 @@
     overflow-wrap: anywhere;
   }
 
-  ul {
-    color: var(--mat-sys-on-surface);
-    margin: 10px 0 0;
-    padding-left: 20px;
-  }
+}
+
+.mcp-connections__details .mcp-connections__permissions-label {
+  color: var(--mat-sys-on-surface);
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.mcp-connections__permissions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 16px;
+  margin-top: 4px;
 }
 
 .mcp-connections__dates {
@@ -266,7 +274,8 @@
   }
 
   .mcp-connections__setup-grid,
-  .mcp-connections__authorization-list {
+  .mcp-connections__authorization-list,
+  .mcp-connections__permissions {
     grid-template-columns: minmax(0, 1fr);
   }
 
