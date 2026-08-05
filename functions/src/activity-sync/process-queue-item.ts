@@ -89,6 +89,7 @@ interface ErrorLike {
     status?: unknown;
     statusCode?: unknown;
     message?: unknown;
+    details?: unknown;
 }
 
 function asErrorLike(error: unknown): ErrorLike {
@@ -189,6 +190,41 @@ function isAccountDeletionSkipError(error: unknown): boolean {
             || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
             || error.name === 'WahooActivityUploadSkippedForDeletedUserError'
         );
+}
+
+function getWahooProviderConfirmedRestartError(
+    queueItem: ActivitySyncQueueItemInterface,
+    error: unknown,
+): ProviderOperationError | null {
+    if (
+        queueItem.destinationServiceName !== ServiceNames.WahooAPI
+        || !queueItem.destinationUploadID
+        || isProviderOperationError(error)
+    ) {
+        return null;
+    }
+
+    const details = asErrorLike(error).details;
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+        return null;
+    }
+
+    const retryMode = `${(details as { retryMode?: unknown }).retryMode || ''}`.trim();
+    const providerOperation = `${(details as { providerOperation?: unknown }).providerOperation || ''}`.trim();
+    if (retryMode !== 'restart' || providerOperation !== 'activity_upload_status') {
+        return null;
+    }
+
+    return new ProviderOperationError({
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'activity_upload_status',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        code: 'failed-precondition',
+        message: toError(error).message,
+        providerOperationId: queueItem.destinationUploadID,
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    });
 }
 
 function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
@@ -1531,15 +1567,20 @@ export async function processActivitySyncQueueItem(
             );
         }
 
-        const normalizedError = toError(error);
+        // Wahoo's public callable exposes a definitive failed-status result as
+        // an HttpsError with restart details. For a queue item with a durable
+        // upload ID, that is safe to convert to the canonical restart policy.
+        const providerOperationError = getWahooProviderConfirmedRestartError(queueItem, error);
+        const actionableError = providerOperationError || error;
+        const normalizedError = toError(actionableError);
         const metadataError = toActivitySyncMetadataError(normalizedError);
 
-        if (duringDestinationUpload && isProviderOperationError(error) && error.disposition === 'retryable') {
-            if (error.retryMode === 'resume') {
+        if (duringDestinationUpload && isProviderOperationError(actionableError) && actionableError.disposition === 'retryable') {
+            if (actionableError.retryMode === 'resume') {
                 const persistedResumeState = hasPersistedDestinationUpload(queueItem);
-                const providerOperationId = error.providerOperationId
+                const providerOperationId = actionableError.providerOperationId
                     || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
-                const providerUserId = error.providerUserId
+                const providerUserId = actionableError.providerUserId
                     || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
                 if (!providerOperationId || (
                     queueItem.destinationServiceName === ServiceNames.SuuntoApp && !providerUserId
@@ -1564,7 +1605,7 @@ export async function processActivitySyncQueueItem(
                 }
                 const pendingUploadState = {
                     status: 'pending',
-                    message: error.message,
+                    message: actionableError.message,
                     uploadId: providerOperationId,
                     providerUserId,
                 } satisfies UploadActivityFileResult;
@@ -1585,7 +1626,7 @@ export async function processActivitySyncQueueItem(
                         return QueueResult.Processed;
                     }
                 }
-            } else if (error.retryMode === 'restart') {
+            } else if (actionableError.retryMode === 'restart') {
                 const cleared = await clearPendingDestinationUploadForRestart(queueItem);
                 if (!cleared) {
                     return QueueResult.Processed;
@@ -1599,22 +1640,22 @@ export async function processActivitySyncQueueItem(
                 queueItem,
                 normalizedError,
                 bulkWriter,
-                error.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
+                actionableError.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
             );
             if (retryResult === QueueResult.MovedToDLQ) {
                 await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
                     ...routeMeta,
                     error: metadataError,
                 }));
-                logProviderFailureDecision(queueItem, error, 'dlq');
+                logProviderFailureDecision(queueItem, actionableError, 'dlq');
             } else {
-                logProviderFailureDecision(queueItem, error, 'retry');
+                logProviderFailureDecision(queueItem, actionableError, 'retry');
             }
             return retryResult;
         }
 
-        if ((!isProviderOperationError(error) && isTransientActivitySyncError(error)) || (
-            duringDestinationUpload && isLegacyRetryableSuuntoActivitySyncError(queueItem, error)
+        if ((!isProviderOperationError(actionableError) && isTransientActivitySyncError(actionableError)) || (
+            duringDestinationUpload && isLegacyRetryableSuuntoActivitySyncError(queueItem, actionableError)
         )) {
             await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
                 ...routeMeta,
@@ -1627,8 +1668,8 @@ export async function processActivitySyncQueueItem(
             );
         }
 
-        if (duringDestinationUpload && isProviderOperationError(error)) {
-            logProviderFailureDecision(queueItem, error, 'dlq');
+        if (duringDestinationUpload && isProviderOperationError(actionableError)) {
+            logProviderFailureDecision(queueItem, actionableError, 'dlq');
         }
 
         await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
@@ -1639,8 +1680,8 @@ export async function processActivitySyncQueueItem(
             queueItem,
             normalizedError,
             bulkWriter,
-            isProviderOperationError(error) && error.dlqContext
-                ? error.dlqContext
+            isProviderOperationError(actionableError) && actionableError.dlqContext
+                ? actionableError.dlqContext
                 : getDeadLetterContext(normalizedError),
         );
     }

@@ -1364,6 +1364,92 @@ describe('activity-sync/process-queue-item', () => {
     })).toBe(false);
   });
 
+  it('restarts a provider-confirmed failed Wahoo upload instead of requiring manual reconciliation', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      destinationUploadID: 'wahoo-definitively-failed-upload',
+    };
+    mockGetWahooActivityUploadStatus.mockRejectedValueOnce(Object.assign(
+      new Error('Wahoo could not process this activity: FIT file is malformed'),
+      {
+        code: 'failed-precondition',
+        details: {
+          retryMode: 'restart',
+          providerOperation: 'activity_upload_status',
+        },
+      },
+    ));
+
+    const retryResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(retryResult).toBe(QueueResult.RetryIncremented);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-definitively-failed-upload',
+    );
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_pending_upload_restart',
+      updateData: expect.objectContaining({
+        destinationUploadID: null,
+        destinationProviderUserID: null,
+        destinationWorkoutKey: null,
+        destinationInfoCode: null,
+        destinationUploadContinuation: null,
+      }),
+    }));
+    expect(queueItem.destinationUploadID).toBeNull();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        operation: 'activity_upload_status',
+        retryMode: 'restart',
+        providerOperationId: 'wahoo-definitively-failed-upload',
+      }),
+      1,
+      undefined,
+      'WAHOO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    );
+
+    const restartResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(restartResult).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.any(Object),
+    );
+  });
+
+  it('does not restart a Wahoo status failure without the provider-confirmed restart signal', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      destinationUploadID: 'wahoo-status-failure-without-restart-confirmation',
+    };
+    mockGetWahooActivityUploadStatus.mockRejectedValueOnce(Object.assign(
+      new Error('Wahoo could not process this activity.'),
+      { code: 'failed-precondition' },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('wahoo-status-failure-without-restart-confirmation');
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({ message: 'Wahoo could not process this activity.' }),
+      undefined,
+      'ACTIVITY_SYNC_PERMANENT_FAILURE',
+    );
+  });
+
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
