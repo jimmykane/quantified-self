@@ -121,11 +121,20 @@ describe('AssistantPageComponent', () => {
     });
     expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
       .not.toContain('composer-shell-sticky');
+    const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
+    const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
+    const trustRow = fixture.nativeElement.querySelector('.assistant-trust-row') as HTMLElement;
+    expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(composer.compareDocumentPosition(trustRow) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
     expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
+    const mcpIcon = fixture.nativeElement.querySelector('.external-mcp-icon') as HTMLElement;
+    expect(mcpIcon.textContent?.trim()).toBe('hub');
   });
 
   it('makes the compact composer sticky only after a conversation starts', () => {

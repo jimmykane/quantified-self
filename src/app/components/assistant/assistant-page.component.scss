@@ -323,10 +323,6 @@ h1 {
   gap: 10px;
 }
 
-.composer mat-form-field {
-  width: 100%;
-}
-
 .composer-footer {
   display: flex;
   justify-content: space-between;
@@ -356,6 +352,7 @@ h1 {
 }
 
 .external-mcp-card mat-card-content > div > mat-icon {
+  flex-shrink: 0;
   color: var(--mat-sys-primary);
 }
 

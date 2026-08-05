@@ -31,6 +31,36 @@
     </div>
   </header>
 
+  <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
+    <form class="composer" (submit)="handleComposerSubmit($event)">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Ask about your data</mat-label>
+        <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+          (keydown)="handleComposerKeydown($event)"
+          [placeholder]="composerPlaceholder"></textarea>
+        <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
+      </mat-form-field>
+      <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+        @if (sending()) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          <mat-icon>arrow_upward</mat-icon>
+        }
+      </button>
+    </form>
+    @if (errorMessage()) {
+      <section class="assistant-error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage() }}</span>
+        <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
+      </section>
+    }
+    <footer class="composer-footer">
+      <span>{{ quotaText() }}</span>
+      <span>Answers can be wrong. Verify important health or Training decisions.</span>
+    </footer>
+  </section>
+
   <section class="assistant-trust-row" aria-label="Assistant privacy and data source">
     <span><mat-icon>verified_user</mat-icon> Verified requests</span>
     <span><mat-icon>hub</mat-icon> Grounded in read-only MCP</span>
@@ -138,40 +168,10 @@
     </section>
   }
 
-  <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
-    <form class="composer" (submit)="handleComposerSubmit($event)">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Ask about your data</mat-label>
-        <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
-          (keydown)="handleComposerKeydown($event)"
-          [placeholder]="composerPlaceholder"></textarea>
-        <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
-      </mat-form-field>
-      <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
-        @if (sending()) {
-          <mat-spinner diameter="20"></mat-spinner>
-        } @else {
-          <mat-icon>arrow_upward</mat-icon>
-        }
-      </button>
-    </form>
-    @if (errorMessage()) {
-      <section class="assistant-error" role="alert">
-        <mat-icon>error_outline</mat-icon>
-        <span>{{ errorMessage() }}</span>
-        <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
-      </section>
-    }
-    <footer class="composer-footer">
-      <span>{{ quotaText() }}</span>
-      <span>Answers can be wrong. Verify important health or Training decisions.</span>
-    </footer>
-  </section>
-
   <mat-card class="external-mcp-card qs-glass-card-panel">
     <mat-card-content>
       <div>
-        <mat-icon>extension</mat-icon>
+        <mat-icon class="external-mcp-icon" aria-hidden="true">hub</mat-icon>
         <span>
           <strong>Prefer ChatGPT or another compatible client?</strong>
           Connect through MCP for a bring-your-own-AI experience that does not use your in-app Assistant allowance.
