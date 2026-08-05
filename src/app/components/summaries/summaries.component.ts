@@ -107,8 +107,13 @@ import {
   isDashboardSpecialChartType,
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import {
+  CalendarMonthPickerBottomSheetComponent,
+  type CalendarMonthPickerBottomSheetData,
+} from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import type { SleepSession } from '@shared/sleep';
 import {
   DERIVED_METRIC_KINDS,
@@ -356,6 +361,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private routeService: AppRouteService,
     private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
+    private bottomSheet: MatBottomSheet,
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
     @Inject(LOCALE_ID) private locale: string,
@@ -494,6 +500,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public async openDashboardManagerDialog(): Promise<void> {
     return this.openDashboardManagerDialogWithState();
+  }
+
+  public openDashboardCalendar(event: MouseEvent): void {
+    event.preventDefault();
+    if (!this.user?.uid) {
+      return;
+    }
+    this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
+      CalendarMonthPickerBottomSheetComponent,
+      { data: { user: this.user } },
+    );
   }
 
   public async openDashboardManagerForTileOrder(order: number): Promise<void> {

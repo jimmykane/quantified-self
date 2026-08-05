@@ -20,7 +20,14 @@
       </div>
     </div>
     } @else if (showTodaySummary) {
-    <div class="dashboard-section-title-block">
+    <a
+      mat-button
+      href="/calendar"
+      class="dashboard-section-title-block dashboard-today-button"
+      appHapticTap
+      aria-label="Open this month's activity calendar"
+      (click)="openDashboardCalendar($event)"
+    >
       <mat-icon aria-hidden="true">today</mat-icon>
       <div class="dashboard-section-title-copy">
         <h2 id="dashboard-today-title">Today</h2>
@@ -28,7 +35,7 @@
           {{ todayDateSubtitle }}
         </div>
       </div>
-    </div>
+    </a>
     }
     @if (showActions || derivedMetricsBanner?.showRetry) {
     <div class="dashboard-section-actions">

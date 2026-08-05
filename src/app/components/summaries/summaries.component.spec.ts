@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, Subject, Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -42,6 +43,7 @@ import { DASHBOARD_READINESS_SLEEP_MAX_AGE_MS } from '../../helpers/dashboard-tr
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
+import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -58,6 +60,7 @@ describe('SummariesComponent', () => {
   let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
+  let mockBottomSheet: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
@@ -133,6 +136,7 @@ describe('SummariesComponent', () => {
         afterClosed: () => of({ saved: false }),
       }),
     };
+    mockBottomSheet = { open: vi.fn() };
     buildDashboardTileViewModelsSpy = vi.spyOn(dashboardTileViewModelHelper, 'buildDashboardTileViewModels');
     originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
@@ -163,6 +167,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
+        { provide: MatBottomSheet, useValue: mockBottomSheet },
         { provide: LOCALE_ID, useValue: 'en-US' },
       ],
     }).compileComponents();
@@ -231,7 +236,7 @@ describe('SummariesComponent', () => {
       size: { columns: 1, rows: 1 },
     } as any;
 
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [kpiTile, mainGridTile, mainMapTile];
     component.kpiLaneTiles = [kpiTile];
@@ -243,6 +248,13 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
     expect(dashboardHeader).not.toBeNull();
+    const todayButton = dashboardHeader?.querySelector('.dashboard-today-button') as HTMLAnchorElement | null;
+    expect(todayButton?.getAttribute('href')).toBe('/calendar');
+    expect(todayButton?.getAttribute('aria-label')).toBe("Open this month's activity calendar");
+    todayButton?.click();
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
+      data: { user: component.user },
+    });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();

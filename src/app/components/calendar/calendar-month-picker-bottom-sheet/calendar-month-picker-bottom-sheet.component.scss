@@ -1,0 +1,33 @@
+:host {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.calendar-month-picker-bottom-sheet {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+}
+
+.calendar-month-picker-content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+app-activity-calendar-tile {
+  min-height: 272px;
+}
+
+@media (max-width: 480px) {
+  .calendar-month-picker-content {
+    padding: 12px;
+  }
+}

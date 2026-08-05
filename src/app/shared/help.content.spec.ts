@@ -182,6 +182,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
     expect(gettingStartedSection?.content).toContain('Open Training');
     expect(gettingStartedSection?.content).toContain('**Open Training** and **Calendar** actions');
+    expect(gettingStartedSection?.content).toContain('Select **Today** to open a mini calendar for the current month');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
