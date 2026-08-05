@@ -127,7 +127,13 @@ describe('Function secret deployment safety', () => {
 
     expect(entries.map(entry => entry.name).sort()).toEqual([...ALL_SECRET_NAMES].sort());
     expect(entries.every(entry => entry.value === '')).toBe(true);
-    expect(readFileSync(resolve(FUNCTIONS_ROOT, '.gitignore'), 'utf8')).toMatch(/^\.secret\.local$/m);
+    const functionsGitignore = readFileSync(resolve(FUNCTIONS_ROOT, '.gitignore'), 'utf8');
+    expect(functionsGitignore).toMatch(/^\.env\*$/m);
+    expect(functionsGitignore).toMatch(/^\.secret\.local\*$/m);
+    expect(functionsGitignore).toMatch(/^!\.secret\.local\.example$/m);
+    expect(functionsGitignore).toMatch(/^\*\*\/\.runtimeconfig\.json$/m);
+    expect(functionsGitignore).toMatch(/^\*\*\/\*service-account\*\.json$/m);
+    expect(functionsGitignore).toMatch(/^\*\*\/\*firebase-adminsdk\*\.json$/m);
   });
 
   it('does not materialize Function runtime secrets in GitHub workflows', () => {
