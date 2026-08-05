@@ -111,6 +111,9 @@ describe('CalendarDayDetailsComponent', () => {
     );
 
     expect(styles).toMatch(/\.calendar-day-event-item-with-metrics\s*\{[^}]*height:\s*auto[^}]*min-height:\s*88px/s);
+    expect(styles).toMatch(
+      /\.calendar-day-event-item-with-metrics app-activity-type-icon\[matListItemIcon\]\s*\{[^}]*align-self:\s*center[^}]*margin-top:\s*0/s,
+    );
     expect(styles).toMatch(/\.calendar-day-event-supporting\s*\{[^}]*display:\s*grid[^}]*overflow:\s*visible/s);
   });
 });
