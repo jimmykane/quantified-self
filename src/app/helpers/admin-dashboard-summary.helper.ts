@@ -182,12 +182,14 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             cloudTasks: queues?.activitySync?.pending,
             completed: stats.activitySync?.succeeded,
             completedLabel: 'Succeeded',
-            problemCount: stats.activitySync?.stuck,
-            problemLabel: 'Stuck',
+            problemCount: normalizeCount(stats.activitySync?.stuck)
+                + normalizeCount(stats.activitySync?.manualReconciliationRequired),
+            problemLabel: 'Stuck / Manual',
             dead: stats.activitySync?.dead,
             deadLabel: 'Dead',
             throughput: stats.activitySync?.advanced?.throughput,
             maxLagMs: stats.activitySync?.advanced?.maxLagMs,
+            chips: countChip('Manual review', stats.activitySync?.manualReconciliationRequired),
         }),
         buildQueueRow({
             id: 'route-delivery-sync',
@@ -198,13 +200,17 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             cloudTasks: queues?.routeDeliverySync?.pending,
             completed: stats.routeDeliverySync?.succeeded,
             completedLabel: 'Delivered',
-            problemCount: stats.routeDeliverySync?.stuck,
-            problemLabel: 'Stuck',
+            problemCount: normalizeCount(stats.routeDeliverySync?.stuck)
+                + normalizeCount(stats.routeDeliverySync?.manualReconciliationRequired),
+            problemLabel: 'Stuck / Manual',
             dead: stats.routeDeliverySync?.dead,
             deadLabel: 'Dead',
             throughput: stats.routeDeliverySync?.advanced?.throughput,
             maxLagMs: stats.routeDeliverySync?.advanced?.maxLagMs,
-            chips: countChip('Skipped', stats.routeDeliverySync?.skipped),
+            chips: [
+                ...countChip('Skipped', stats.routeDeliverySync?.skipped),
+                ...countChip('Manual review', stats.routeDeliverySync?.manualReconciliationRequired),
+            ],
         }),
         buildQueueRow({
             id: 'route-sync',

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
-  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  getRouteDeliveryMetadataAbortMessage,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
@@ -248,7 +248,7 @@ export class AppRouteSendService {
           destinationServiceName,
           status: 'failure',
           reason: 'SEND_REQUEST_FAILED',
-          message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+          message: getRouteDeliveryMetadataAbortMessage(destinationServiceName),
         })),
       };
     }

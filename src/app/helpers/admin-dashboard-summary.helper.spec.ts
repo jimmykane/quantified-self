@@ -147,6 +147,7 @@ describe('admin-dashboard-summary helper', () => {
             activitySync: {
                 pending: 0,
                 succeeded: 20,
+                manualReconciliationRequired: 2,
                 stuck: 0,
                 dead: 0,
                 dlqByContext: [],
@@ -156,6 +157,7 @@ describe('admin-dashboard-summary helper', () => {
                 pending: 1,
                 succeeded: 12,
                 skipped: 5,
+                manualReconciliationRequired: 3,
                 stuck: 0,
                 dead: 0,
                 dlqByContext: [],
@@ -233,7 +235,18 @@ describe('admin-dashboard-summary helper', () => {
             'derived-metrics',
         ]);
         expect(rows.find(row => row.id === 'workout')?.severity).toBe('error');
-        expect(rows.find(row => row.id === 'route-delivery-sync')?.severity).toBe('ok');
+        expect(rows.find(row => row.id === 'activity-sync')).toEqual(expect.objectContaining({
+            problemCount: 2,
+            problemLabel: 'Stuck / Manual',
+            severity: 'error',
+            chips: ['Manual review: 2'],
+        }));
+        expect(rows.find(row => row.id === 'route-delivery-sync')).toEqual(expect.objectContaining({
+            problemCount: 3,
+            problemLabel: 'Stuck / Manual',
+            severity: 'error',
+            chips: ['Skipped: 5', 'Manual review: 3'],
+        }));
         expect(rows.find(row => row.id === 'route-sync')?.maxLagLabel).toBe('0s');
         expect(rows.find(row => row.id === 'derived-metrics')?.maxLagLabel).toBe('-');
         expect(rows.find(row => row.id === 'reparse')?.pendingDb).toBe(6);

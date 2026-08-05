@@ -688,7 +688,7 @@ Suunto tools currently include:
 - uploading FIT activities to Suunto,
 - uploading GPX or FIT routes to Suunto.
 
-Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. If Suunto has already issued an upload job when a temporary error occurs, retrying the same row checks that job instead of uploading the FIT again. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. If Suunto has already issued an upload job when a temporary error occurs, retrying the same row checks that job first instead of immediately uploading the FIT again. A replacement is started only when Suunto explicitly reports that the earlier job is still empty. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 
@@ -783,7 +783,7 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
-Direct FIT activity delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an activity upload asynchronously; Services keeps the upload status available to refresh. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
+Direct FIT activity delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an activity upload asynchronously; Services keeps the upload status available to refresh. If Wahoo has already issued an upload ID, retrying after a connection or status error checks that same upload instead of sending the FIT again. A fresh upload starts only after Wahoo explicitly reports that processing failed. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
 
 Direct course/route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory before sending it to Wahoo; the GPX must contain exactly one route with valid coordinates. It sends the route to Wahoo without creating or retaining a route in Quantified Self. If you connected Wahoo before route sending was available, reconnect it once to grant route access. When a route send reports missing Wahoo route access, select **Reconnect Wahoo** in the displayed dialog, then send the route again after you return. Routes imported by Wahoo's Cloud API sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
 

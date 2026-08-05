@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
   GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
+  getRouteDeliveryMetadataAbortMessage,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
 } from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
@@ -309,6 +310,51 @@ describe('AppRouteSendService', () => {
       message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
     });
   });
+
+  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])(
+    'uses destination-specific delivery-state guidance for unattempted %s chunks',
+    async destinationServiceName => {
+      const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
+      functionsServiceMock.call.mockResolvedValueOnce({
+        data: {
+          destinationServiceName,
+          status: 'failure',
+          routeCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+          successCount: 0,
+          failureCount: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
+          skippedCount: 0,
+          results: [
+            {
+              routeId: routeIds[0],
+              destinationServiceName,
+              status: 'failure',
+              reason: 'DELIVERY_METADATA_PERSIST_FAILED',
+              message: 'The route was accepted, but its delivery state could not be saved.',
+            },
+            ...routeIds.slice(1, SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS).map(routeId => ({
+              routeId,
+              destinationServiceName,
+              status: 'failure',
+              reason: 'SEND_REQUEST_FAILED',
+              message: getRouteDeliveryMetadataAbortMessage(destinationServiceName),
+            })),
+          ],
+        },
+      });
+
+      const result = await service.sendRoutesToService(routeIds, destinationServiceName);
+
+      expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
+      expect(result.results.at(-1)).toEqual({
+        routeId: routeIds.at(-1),
+        destinationServiceName,
+        status: 'failure',
+        reason: 'SEND_REQUEST_FAILED',
+        message: getRouteDeliveryMetadataAbortMessage(destinationServiceName),
+      });
+      expect(result.results.at(-1)?.message).not.toContain('Garmin');
+    },
+  );
 
   it('maps common route send errors to user-facing messages', () => {
     expect(getRouteSendErrorMessage({ code: 'functions/permission-denied' })).toBe('Sending routes to services is a Pro feature.');

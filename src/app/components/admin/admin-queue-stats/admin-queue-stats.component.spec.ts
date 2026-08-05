@@ -222,6 +222,7 @@ describe('AdminQueueStatsComponent', () => {
                 activitySync: {
                     pending: 3,
                     succeeded: 11,
+                    manualReconciliationRequired: 2,
                     stuck: 1,
                     dead: 0,
                     dlqByContext: [],
@@ -242,6 +243,10 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
             expect(optionArg.series[0].data).toEqual([2, 1, 0]);
+            const manualReconciliationCard = Array.from(
+                (fixture.nativeElement as HTMLElement).querySelectorAll('mat-card')
+            ).find(card => card.textContent?.includes('Manual Reconciliation (Sync)'));
+            expect(manualReconciliationCard?.textContent).toContain('2');
         });
 
         it('should use route sync retry histogram in route-sync view', async () => {
@@ -302,6 +307,7 @@ describe('AdminQueueStatsComponent', () => {
                     pending: 4,
                     succeeded: 8,
                     skipped: 3,
+                    manualReconciliationRequired: 4,
                     stuck: 1,
                     dead: 0,
                     dlqByContext: [],
@@ -322,6 +328,10 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
             expect(optionArg.series[0].data).toEqual([3, 1, 1]);
+            const manualReconciliationCard = Array.from(
+                (fixture.nativeElement as HTMLElement).querySelectorAll('mat-card')
+            ).find(card => card.textContent?.includes('Manual Reconciliation (Route Delivery)'));
+            expect(manualReconciliationCard?.textContent).toContain('4');
         });
 
         it('should use sleep sync retry histogram in sleep-sync view', async () => {
