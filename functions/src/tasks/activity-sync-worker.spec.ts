@@ -197,4 +197,16 @@ describe('processActivitySyncTask', () => {
 
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
   });
+
+  it('stops Cloud Task retries when accepted provider work requires manual reconciliation', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('SKIPPED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+  });
 });

@@ -31,8 +31,10 @@ const requestMocks = {
 vi.mock('../request-helper', () => ({
     default: {
         post: (...args: any[]) => requestMocks.post(...args),
+        get: (...args: any[]) => requestMocks.get(...args),
     },
     post: (...args: any[]) => requestMocks.post(...args),
+    get: (...args: any[]) => requestMocks.get(...args),
 }));
 
 const utilsMocks = {
@@ -53,6 +55,17 @@ const tokensMocks = {
 
 vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
+    TokenUseSkippedForPendingDisconnectError: class TokenUseSkippedForPendingDisconnectError extends Error {
+        readonly name = 'TokenUseSkippedForPendingDisconnectError';
+        constructor(
+            public readonly firebaseUserID: string,
+            public readonly serviceName: string,
+            public readonly tokenDocumentID: string,
+            public readonly phase: string,
+        ) {
+            super(`Skipping ${serviceName} token use while disconnect is pending.`);
+        }
+    },
 }));
 
 const deletionGuardMocks = {
@@ -152,7 +165,12 @@ vi.mock('firebase-admin', () => {
 });
 
 // Import functions under test
-import { importRouteToSuuntoApp, uploadGPXRouteToSuuntoApp } from './routes';
+import {
+    createSuuntoRouteUploadContext,
+    exportSuuntoRouteAsGPX,
+    importRouteToSuuntoApp,
+    uploadGPXRouteToSuuntoApp,
+} from './routes';
 
 // Helper to create mock request
 function createMockRequest(overrides: Partial<{
@@ -194,6 +212,35 @@ describe('importRouteToSuuntoApp', () => {
         (admin.firestore() as any).runTransaction.mockImplementation(
             async (runner: (transaction: { set: (...args: any[]) => unknown }) => unknown) => runner({ set: setMock }),
         );
+    });
+
+    it('encodes provider route ids before exporting with an OAuth token', async () => {
+        const tokenSnapshot = {
+            id: 'token1',
+            exists: true,
+            data: () => ({ userName: 'suunto-user' }),
+        };
+        const context = {
+            tokenRefs: [{
+                id: 'token1',
+                providerUserId: 'suunto-user',
+                sourceKey: 'suunto-user:source',
+                ref: { get: vi.fn().mockResolvedValue(tokenSnapshot) },
+            }],
+            userNames: ['suunto-user'],
+        };
+        requestMocks.get.mockResolvedValue('<gpx>route</gpx>');
+
+        const result = await exportSuuntoRouteAsGPX(
+            'test-user-id',
+            '../routes?access=other',
+            { context: context as any, providerUserId: 'suunto-user' },
+        );
+
+        expect(result).toBe('<gpx>route</gpx>');
+        expect(requestMocks.get).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'https://cloudapi.suunto.com/v2/route/..%2Froutes%3Faccess%3Dother/export',
+        }));
     });
 
     it('should successfully upload a route', async () => {
@@ -272,6 +319,16 @@ describe('importRouteToSuuntoApp', () => {
         expect(requestMocks.post).not.toHaveBeenCalled();
     });
 
+    it('returns a callable-safe error when route context creation sees a pending disconnect', async () => {
+        disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(true);
+
+        await expect(createSuuntoRouteUploadContext('test-user-id')).rejects.toMatchObject({
+            name: 'TokenUseSkippedForPendingDisconnectError',
+            code: 'failed-precondition',
+            message: 'Suunto disconnect is pending.',
+        });
+    });
+
     it('rejects legacy gzip routes that expand beyond the manual route limit before calling Suunto', async () => {
         const expandedPayload = Buffer.alloc((20 * 1024 * 1024) + 1, 'a');
         const compressedBase64 = Buffer.from(zlib.gzipSync(expandedPayload)).toString('base64');
@@ -293,7 +350,7 @@ describe('importRouteToSuuntoApp', () => {
 
         await expect(importRouteToSuuntoApp(createMockRequest({
             data: { file: compressedBase64 },
-        }) as any)).rejects.toMatchObject({ code: 'internal' });
+        }) as any)).rejects.toMatchObject({ code: 'failed-precondition' });
 
         const loggedOutput = JSON.stringify({
             error: loggerMocks.error.mock.calls,
@@ -313,7 +370,7 @@ describe('importRouteToSuuntoApp', () => {
 
         await expect(importRouteToSuuntoApp(createMockRequest({
             data: { file: compressedBase64 },
-        }) as any)).rejects.toMatchObject({ code: 'internal' });
+        }) as any)).rejects.toMatchObject({ code: 'failed-precondition' });
 
         const loggedOutput = JSON.stringify({
             error: loggerMocks.error.mock.calls,
@@ -366,6 +423,185 @@ describe('importRouteToSuuntoApp', () => {
         }));
     });
 
+    it('persists each accepted Suunto delivery before starting the next account upload', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post.mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }));
+        const persistenceError = new Error('receipt write failed');
+        const onProviderAccepted = vi.fn().mockRejectedValueOnce(persistenceError);
+
+        await expect(uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+            onProviderAccepted,
+        )).rejects.toBe(persistenceError);
+
+        expect(onProviderAccepted).toHaveBeenCalledWith({
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks multi-account acceptance complete only after every account was attempted', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }))
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-2' }));
+        const onProviderAccepted = vi.fn().mockResolvedValue(undefined);
+
+        const result = await uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+            onProviderAccepted,
+        );
+
+        expect(result).toMatchObject({ status: 'success', successCount: 2 });
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(1, {
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(2, {
+            providerRouteId: 'route-1',
+            complete: true,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }, {
+                providerUserId: 'suunto-token-2',
+                providerRouteId: 'route-2',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps a multi-account acceptance incomplete when a later account upload fails', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }))
+            .mockResolvedValueOnce(JSON.stringify({ error: 'route import failed' }));
+        const onProviderAccepted = vi.fn().mockResolvedValue(undefined);
+
+        await expect(uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+            onProviderAccepted,
+        )).rejects.toMatchObject({
+            code: 'failed-precondition',
+            disposition: 'permanent',
+            retryMode: 'none',
+            dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
+        });
+
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(1, {
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(2, {
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails closed after a partial direct multi-account upload without retrying accepted accounts', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }))
+            .mockResolvedValueOnce(JSON.stringify({ error: 'route import failed' }));
+
+        await expect(uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+        )).rejects.toMatchObject({
+            disposition: 'permanent',
+            retryMode: 'none',
+            code: 'failed-precondition',
+            dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
+        });
+
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+    });
+
     it('surfaces a deleted Suunto token as reconnect-required auth failure', async () => {
         const context = {
             tokenRefs: [{
@@ -383,6 +619,94 @@ describe('importRouteToSuuntoApp', () => {
                 message: 'Authentication failed. Please re-connect your Suunto account.',
             });
 
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('normalizes terminal token refresh cleanup as reconnect-required auth failure', async () => {
+        tokensMocks.getTokenData.mockRejectedValue(Object.assign(new Error('Refresh token revoked'), {
+            name: 'TerminalServiceAuthError',
+            providerErrorCode: 'invalid_grant',
+            providerUserId: 'suunto-user',
+            dlqContext: 'INVALID_GRANT',
+        }));
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'auth_required',
+                retryMode: 'none',
+                code: 'unauthenticated',
+                dlqContext: 'INVALID_GRANT',
+            });
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('keeps temporary Suunto invalid_grant refresh failures retryable before route creation', async () => {
+        tokensMocks.getTokenData.mockRejectedValue(Object.assign(new Error('Temporary invalid_grant'), {
+            statusCode: 400,
+            error: {
+                error: 'invalid_grant',
+                error_description: 'Temporary provider outage',
+            },
+        }));
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'retryable',
+                retryMode: 'restart',
+                code: 'unavailable',
+                dlqContext: 'SUUNTO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+            });
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('does not classify a token refresh 503 as an ambiguous route create', async () => {
+        const refreshError = Object.assign(new Error('Token endpoint unavailable'), { statusCode: 503 });
+        tokensMocks.getTokenData.mockRejectedValue(refreshError);
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toBe(refreshError);
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('keeps an explicit Suunto rate-limit rejection retryable', async () => {
+        requestMocks.post.mockRejectedValue(Object.assign(new Error('Rate limited'), { statusCode: 429 }));
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'retryable',
+                retryMode: 'restart',
+                code: 'resource-exhausted',
+            });
+    });
+
+    it.each([
+        ['HTTP 503', Object.assign(new Error('Service unavailable'), { statusCode: 503 })],
+        ['transport reset', Object.assign(new Error('Socket reset'), { code: 'ECONNRESET' })],
+    ])('fails closed after an ambiguous Suunto route create outcome: %s', async (_scenario, providerError) => {
+        requestMocks.post.mockRejectedValue(providerError);
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'permanent',
+                retryMode: 'none',
+                dlqContext: 'SUUNTO_ROUTE_CREATE_AMBIGUOUS',
+            });
+        expect(requestMocks.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves pending-disconnect token failures for queue deferral', async () => {
+        tokensMocks.getTokenData.mockRejectedValue(Object.assign(new Error('Disconnect pending'), {
+            name: 'TokenUseSkippedForPendingDisconnectError',
+            serviceName: 'suuntoApp',
+        }));
+
+        await expect(uploadGPXRouteToSuuntoApp('test-user-id', '<gpx>route</gpx>'))
+            .rejects.toMatchObject({ name: 'TokenUseSkippedForPendingDisconnectError' });
         expect(requestMocks.post).not.toHaveBeenCalled();
     });
 
@@ -483,7 +807,7 @@ describe('importRouteToSuuntoApp', () => {
         try {
             await importRouteToSuuntoApp(request as any);
         } catch (e: any) {
-            expect(e.code).toBe('internal');
+            expect(e.code).toBe('failed-precondition');
         }
     });
 

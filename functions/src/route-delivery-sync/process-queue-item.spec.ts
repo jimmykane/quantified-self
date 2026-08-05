@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
 
 const {
@@ -9,9 +10,11 @@ const {
   mockShouldSkipDeletedUser,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
+  mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
   mockMarkQueueItemSkipped,
   mockIncreaseRetryCount,
   mockMoveToDLQ,
+  mockMoveToDLQIfCurrentParams,
   mockSetRouteDeliveryMetadata,
   mockGetServiceConnectionMeta,
   mockAssertRouteSendUserActive,
@@ -20,6 +23,7 @@ const {
   mockPrepareSavedRoute,
   mockSendPreparedRoute,
   mockPersistRouteDeliveryMetadata,
+  mockUpdateQueueItemIfUserActive,
   mockIsAccountDeletionSkipError,
   mockIsDestinationAuthRequiredError,
   mockIsDestinationPermissionRequiredError,
@@ -33,9 +37,11 @@ const {
   mockShouldSkipDeletedUser: vi.fn(),
   mockUpdateToProcessed: vi.fn(),
   mockDeferQueueItemForPendingDisconnect: vi.fn(),
+  mockDeferQueueItemForPendingDisconnectIfCurrentUserActive: vi.fn(),
   mockMarkQueueItemSkipped: vi.fn(),
   mockIncreaseRetryCount: vi.fn(),
   mockMoveToDLQ: vi.fn(),
+  mockMoveToDLQIfCurrentParams: vi.fn(),
   mockSetRouteDeliveryMetadata: vi.fn(),
   mockGetServiceConnectionMeta: vi.fn(),
   mockAssertRouteSendUserActive: vi.fn(),
@@ -44,6 +50,7 @@ const {
   mockPrepareSavedRoute: vi.fn(),
   mockSendPreparedRoute: vi.fn(),
   mockPersistRouteDeliveryMetadata: vi.fn(),
+  mockUpdateQueueItemIfUserActive: vi.fn(),
   mockIsAccountDeletionSkipError: vi.fn(),
   mockIsDestinationAuthRequiredError: vi.fn(),
   mockIsDestinationPermissionRequiredError: vi.fn(),
@@ -77,6 +84,19 @@ vi.mock('../queue/user-deletion-skip', () => ({
 }));
 
 vi.mock('../queue-utils', () => ({
+  PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER: Number.MAX_SAFE_INTEGER - 1,
+  ProviderOperationStillInFlightError: class ProviderOperationStillInFlightError extends Error {
+    constructor(
+      public readonly queueItemId: string,
+      public readonly providerOperationStartedAt: number,
+    ) {
+      super(`Provider operation for queue item ${queueItemId} is still in flight.`);
+    }
+  },
+  isProviderOperationInFlightLeaseActive: (queueItem: any) => (
+    queueItem.dispatchedToCloudTask === Number.MAX_SAFE_INTEGER - 1
+    && Number(queueItem.providerOperationStartedAt) > Date.now() - 12 * 60 * 1000
+  ),
   QueueResult: {
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
@@ -90,13 +110,41 @@ vi.mock('../queue-utils', () => ({
   },
   updateToProcessed: (...args: any[]) => mockUpdateToProcessed(...args),
   deferQueueItemForPendingDisconnect: (...args: any[]) => mockDeferQueueItemForPendingDisconnect(...args),
+  deferQueueItemForPendingDisconnectIfCurrentUserActive: (params: any) => (
+    mockDeferQueueItemForPendingDisconnectIfCurrentUserActive(params)
+  ),
   markQueueItemSkipped: (...args: any[]) => mockMarkQueueItemSkipped(...args),
   increaseRetryCountForQueueItem: (...args: any[]) => mockIncreaseRetryCount(...args),
+  increaseRetryCountIfCurrentUserActive: (params: any) => {
+    const args = [params.queueItem, params.error, params.incrementBy, params.bulkWriter];
+    if (params.maxRetryDlqContext !== undefined) {
+      args.push(params.maxRetryDlqContext);
+    }
+    return mockIncreaseRetryCount(...args);
+  },
   moveToDeadLetterQueue: (...args: any[]) => mockMoveToDLQ(...args),
+  moveToDeadLetterQueueIfCurrentUserActive: (params: any) => {
+    mockMoveToDLQIfCurrentParams(params);
+    return mockMoveToDLQ(
+      params.queueItem,
+      params.error,
+      params.bulkWriter,
+      params.context,
+    );
+  },
 }));
 
 vi.mock('../service-connection-meta', () => ({
   getServiceConnectionMeta: (...args: any[]) => mockGetServiceConnectionMeta(...args),
+}));
+
+vi.mock('../queue/dispatch-marker', () => ({
+  QueueItemUserGuardedUpdateResult: {
+    Updated: 'updated',
+    SkippedDeletedUser: 'skipped_deleted_user',
+    NotCurrent: 'not_current',
+  },
+  updateQueueItemIfUserActive: (...args: any[]) => mockUpdateQueueItemIfUserActive(...args),
 }));
 
 vi.mock('../routes/route-send-core', () => ({
@@ -118,12 +166,20 @@ vi.mock('../routes/route-persistence', () => ({
 
 vi.mock('firebase-admin/firestore', () => ({
   FieldValue: {
+    delete: vi.fn(() => 'DELETE_FIELD'),
     serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+  },
+  Timestamp: {
+    fromDate: vi.fn((date: Date) => date),
   },
 }));
 
-import { QueueResult } from '../queue-utils';
+import {
+  PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+  QueueResult,
+} from '../queue-utils';
 import { RouteDeliverySyncQueueItemInterface } from '../queue/queue-item.interface';
+import { ProviderOperationError } from '../shared/provider-operation-error';
 import { processRouteDeliverySyncQueueItem } from './process-queue-item';
 
 type QueueItemRefMock = RouteDeliverySyncQueueItemInterface['ref'];
@@ -184,8 +240,10 @@ function mockSuccessfulPrerequisites(): void {
     deliveries: [{ providerUserId: 'garmin-user', providerRouteId: 'garmin-course-1' }],
   });
   mockPersistRouteDeliveryMetadata.mockResolvedValue(undefined);
+  mockUpdateQueueItemIfUserActive.mockReset().mockResolvedValue('updated');
   mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
   mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
+  mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
   mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
   mockIncreaseRetryCount.mockResolvedValue(QueueResult.RetryIncremented);
   mockMoveToDLQ.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -210,6 +268,7 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({ routeId: 'route-1' }),
       expect.objectContaining({ destinationServiceName: suuntoToGarminRoute.destinationServiceName }),
       { context: true },
+      expect.any(Function),
     );
     expect(mockPersistRouteDeliveryMetadata).toHaveBeenCalledWith(expect.objectContaining({
       userID: 'user-1',
@@ -218,10 +277,414 @@ describe('route-delivery-sync/process-queue-item', () => {
       providerRouteId: 'garmin-course-1',
       routeSyncRouteId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
       sourceRevisionKey: CURRENT_SOURCE_REVISION_KEY,
+      requirePersistence: true,
     }));
-    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
-      resultStatus: 'success',
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItemId: 'queue-1',
+      userID: 'user-1',
+      updateData: expect.objectContaining({
+        dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+        destinationProviderRouteId: 'garmin-course-1',
+        destinationDeliveries: [{
+          providerUserId: 'garmin-user',
+          providerRouteId: 'garmin-course-1',
+        }],
+        destinationDeliveryAcceptedAt: expect.any(Number),
+      }),
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_success_finalize',
+      updateData: expect.objectContaining({
+        processed: true,
+        resultStatus: 'success',
+        destinationProviderRouteId: 'garmin-course-1',
+      }),
+    }));
+    const claim = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_route_delivery_destination_provider_operation');
+    const receipt = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_route_delivery_provider_acceptance_persist');
+    const finalization = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_route_delivery_success_finalize');
+    const acceptedAt = receipt?.updateData.destinationDeliveryAcceptedAt;
+    const providerOperationStartedAt = claim?.updateData.providerOperationStartedAt;
+    expect(acceptedAt).toEqual(expect.any(Number));
+    expect(providerOperationStartedAt).toEqual(expect.any(Number));
+    expect(claim?.isCurrent({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: baseQueueItem.dispatchedToCloudTask,
+      providerOperationStartedAt: undefined,
+    })).toBe(true);
+    expect(claim?.isCurrent({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+    })).toBe(false);
+    expect(receipt?.isCurrent({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+    })).toBe(true);
+    expect(receipt?.isCurrent({
+      ...baseQueueItem,
+      sourceRevisionKey: STALE_SOURCE_REVISION_KEY,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+    })).toBe(false);
+    expect(finalization?.isCurrent({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+      destinationDeliveryAcceptedAt: acceptedAt,
       destinationProviderRouteId: 'garmin-course-1',
+      destinationDeliveries: [{
+        providerUserId: 'garmin-user',
+        providerRouteId: 'garmin-course-1',
+      }],
+    })).toBe(true);
+    expect(finalization?.isCurrent({
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+      destinationDeliveryAcceptedAt: acceptedAt,
+      destinationDeliveryComplete: false,
+      destinationProviderRouteId: 'garmin-course-1',
+      destinationDeliveries: [{
+        providerUserId: 'garmin-user',
+        providerRouteId: 'garmin-course-1',
+      }],
+    })).toBe(false);
+    expect(finalization?.isCurrent({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt,
+      destinationDeliveryAcceptedAt: acceptedAt,
+      destinationProviderRouteId: 'garmin-course-1',
+      destinationDeliveries: [{
+        providerUserId: 'garmin-user',
+        providerRouteId: 'garmin-course-1',
+      }],
+    })).toBe(false);
+  });
+
+  it('does not call the provider when another worker already claimed this dispatch', async () => {
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when later work fails after a partial provider acceptance', async () => {
+    const laterFailure = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'A later provider account is temporarily unavailable.',
+      dlqContext: 'GARMIN_ROUTE_UPDATE_RETRY_EXHAUSTED',
+    });
+    mockSendPreparedRoute.mockImplementationOnce(async (...args: unknown[]) => {
+      const onProviderAccepted = args[4] as (result: unknown) => Promise<void>;
+      await onProviderAccepted({
+        providerRouteId: 'suunto-route-1',
+        complete: false,
+        deliveries: [{ providerUserId: 'suunto-user-1', providerRouteId: 'suunto-route-1' }],
+      });
+      throw laterFailure;
+    });
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_provider_acceptance_persist',
+      updateData: expect.objectContaining({
+        destinationProviderRouteId: 'suunto-route-1',
+        destinationDeliveryComplete: false,
+        destinationDeliveries: [{
+          providerUserId: 'suunto-user-1',
+          providerRouteId: 'suunto-route-1',
+        }],
+      }),
+    }));
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationDeliveryAcceptedAt: expect.any(Number),
+        destinationDeliveryComplete: false,
+        destinationProviderRouteId: 'suunto-route-1',
+      }),
+      expect.objectContaining({
+        disposition: 'permanent',
+        dlqContext: 'DESTINATION_PROVIDER_PARTIAL_ACCEPTANCE',
+      }),
+      undefined,
+      'DESTINATION_PROVIDER_PARTIAL_ACCEPTANCE',
+    );
+    expect(mockMoveToDLQIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      manualReconciliation: {
+        additionalData: expect.objectContaining({
+          destinationDeliveryComplete: false,
+          destinationProviderRouteId: 'suunto-route-1',
+          destinationDeliveries: [{
+            providerUserId: 'suunto-user-1',
+            providerRouteId: 'suunto-route-1',
+          }],
+        }),
+      },
+    }));
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+  });
+
+  it('moves a stale partial multi-account acceptance to DLQ without replaying the route', async () => {
+    const result = await processRouteDeliverySyncQueueItem({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now() - (13 * 60 * 1000),
+      destinationDeliveryAcceptedAt: 1710000001000,
+      destinationDeliveryComplete: false,
+      destinationProviderRouteId: 'suunto-route-accepted',
+      destinationDeliveries: [{
+        providerUserId: 'suunto-destination-user',
+        providerRouteId: 'suunto-route-accepted',
+      }],
+    });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationDeliveryComplete: false }),
+      expect.objectContaining({ dlqContext: 'DESTINATION_PROVIDER_PARTIAL_ACCEPTANCE' }),
+      undefined,
+      'DESTINATION_PROVIDER_PARTIAL_ACCEPTANCE',
+    );
+  });
+
+  it('waits for the active worker when a partial multi-account acceptance was just persisted', async () => {
+    const processing = processRouteDeliverySyncQueueItem({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+      destinationDeliveryAcceptedAt: 1710000001000,
+      destinationDeliveryComplete: false,
+      destinationProviderRouteId: 'suunto-route-accepted',
+      destinationDeliveries: [{
+        providerUserId: 'suunto-destination-user',
+        providerRouteId: 'suunto-route-accepted',
+      }],
+    });
+
+    await expect(processing).rejects.toMatchObject({
+      message: expect.stringContaining('still in flight'),
+    });
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('finalizes a persisted provider acceptance without sending the route again', async () => {
+    const result = await processRouteDeliverySyncQueueItem({
+      ...baseQueueItem,
+      destinationDeliveryAcceptedAt: 1710000001000,
+      destinationProviderRouteId: 'suunto-route-accepted',
+      destinationDeliveries: [{
+        providerUserId: 'suunto-destination-user',
+        providerRouteId: 'suunto-route-accepted',
+      }],
+    });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockHasProAccess).not.toHaveBeenCalled();
+    expect(mockPrepareSavedRoute).not.toHaveBeenCalled();
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockPersistRouteDeliveryMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      providerRouteId: 'suunto-route-accepted',
+      deliveries: [{
+        providerUserId: 'suunto-destination-user',
+        providerRouteId: 'suunto-route-accepted',
+      }],
+      requirePersistence: true,
+    }));
+  });
+
+  it('moves an accepted provider route to DLQ when its durable receipt cannot be persisted', async () => {
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationDeliveryAcceptedAt: expect.any(Number),
+        destinationProviderRouteId: 'garmin-course-1',
+        destinationDeliveries: [{
+          providerUserId: 'garmin-user',
+          providerRouteId: 'garmin-course-1',
+        }],
+      }),
+      expect.objectContaining({
+        dlqContext: 'ROUTE_DELIVERY_PROVIDER_ACCEPTANCE_PERSIST_FAILED',
+      }),
+      undefined,
+      'ROUTE_DELIVERY_PROVIDER_ACCEPTANCE_PERSIST_FAILED',
+    );
+    expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges accepted provider work when receipt and DLQ persistence both fail', async () => {
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockRejectedValueOnce(new Error('Firestore unavailable'));
+    mockMoveToDLQ.mockResolvedValueOnce(QueueResult.Failed);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Skipped);
+    expect(mockSendPreparedRoute).toHaveBeenCalledTimes(1);
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(3);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenLastCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_manual_reconciliation_persist',
+      updateData: expect.objectContaining({
+        processed: true,
+        resultStatus: 'manual_reconciliation_required',
+        expireAt: 'DELETE_FIELD',
+        destinationProviderRouteId: 'garmin-course-1',
+      }),
+    }));
+  });
+
+  it('retries only the durable claim transition when accepted route work cannot be recorded', async () => {
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockRejectedValueOnce(new Error('Firestore unavailable'))
+      .mockRejectedValueOnce(new Error('Firestore still unavailable'));
+    mockMoveToDLQ.mockResolvedValueOnce(QueueResult.Failed);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Failed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledTimes(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(3);
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+  });
+
+  it('stops after guarded receipt persistence removes work for a deleting user', async () => {
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockResolvedValueOnce('skipped_deleted_user');
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledTimes(1);
+    expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+  });
+
+  it('moves an unresolved provider operation to DLQ without sending the route again', async () => {
+    const queueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockPrepareSavedRoute).not.toHaveBeenCalled();
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        disposition: 'permanent',
+        retryMode: 'none',
+        dlqContext: 'DESTINATION_PROVIDER_OUTCOME_UNKNOWN',
+      }),
+      undefined,
+      'DESTINATION_PROVIDER_OUTCOME_UNKNOWN',
+    );
+  });
+
+  it('retries a recently claimed provider operation without changing queue state', async () => {
+    const queueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+    };
+
+    await expect(processRouteDeliverySyncQueueItem(queueItem)).rejects.toMatchObject({
+      message: expect.stringContaining('still in flight'),
+    });
+
+    expect(mockPrepareSavedRoute).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('retries metadata from a durable acceptance receipt without repeating the provider send', async () => {
+    const metadataError = new MockRouteSendItemError(
+      'DELIVERY_METADATA_PERSIST_FAILED',
+      'Could not save delivery metadata.',
+    );
+    mockPersistRouteDeliveryMetadata.mockRejectedValueOnce(metadataError);
+    mockIsDeliveryMetadataPersistenceError.mockImplementation(error => error === metadataError);
+
+    const firstResult = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationDeliveryAcceptedAt: expect.any(Number),
+        destinationProviderRouteId: 'garmin-course-1',
+      }),
+      metadataError,
+      1,
+      undefined,
+      'ROUTE_DELIVERY_METADATA_PERSIST_FAILED',
+    );
+    expect(mockSendPreparedRoute).toHaveBeenCalledTimes(1);
+
+    mockPersistRouteDeliveryMetadata.mockResolvedValueOnce(undefined);
+    mockIncreaseRetryCount.mockClear();
+    mockUpdateToProcessed.mockClear();
+    const retryResult = await processRouteDeliverySyncQueueItem({
+      ...baseQueueItem,
+      destinationDeliveryAcceptedAt: 1710000001000,
+      destinationProviderRouteId: 'garmin-course-1',
+      destinationDeliveries: [{
+        providerUserId: 'garmin-user',
+        providerRouteId: 'garmin-course-1',
+      }],
+    });
+
+    expect(retryResult).toBe(QueueResult.Processed);
+    expect(mockSendPreparedRoute).toHaveBeenCalledTimes(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_success_finalize',
     }));
   });
 
@@ -251,8 +714,9 @@ describe('route-delivery-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.Processed);
     expect(mockSendPreparedRoute).toHaveBeenCalled();
-    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
-      resultStatus: 'success',
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_success_finalize',
+      updateData: expect.objectContaining({ resultStatus: 'success' }),
     }));
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'stale_source_revision',
@@ -320,9 +784,11 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({ routeId: 'route-1' }),
       expect.objectContaining({ destinationServiceName: suuntoToGarminRoute.destinationServiceName }),
       { context: true },
+      expect.any(Function),
     );
-    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
-      resultStatus: 'success',
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_route_delivery_success_finalize',
+      updateData: expect.objectContaining({ resultStatus: 'success' }),
     }));
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'source_route_mismatch',
@@ -408,9 +874,95 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockMoveToDLQ).not.toHaveBeenCalled();
   });
 
+  it('defers when the provider adapter detects a pending disconnect immediately before send', async () => {
+    const pendingDisconnectError = Object.assign(new Error('Garmin disconnect is pending.'), {
+      name: 'TokenUseSkippedForPendingDisconnectError',
+      serviceName: suuntoToGarminRoute.destinationServiceName,
+    });
+    mockSendPreparedRoute.mockRejectedValue(pendingDisconnectError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForPendingDisconnectIfCurrentUserActive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueItem: expect.objectContaining({ id: baseQueueItem.id }),
+        additionalData: expect.objectContaining({
+          deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
+        }),
+        phase: 'route_delivery_sync_pending_disconnect_transition',
+      }),
+    );
+    const guardedDeferral = mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mock.calls[0][0];
+    expect(guardedDeferral.isCurrent({ ...guardedDeferral.queueItem })).toBe(true);
+    expect(guardedDeferral.isCurrent({ ...guardedDeferral.queueItem, processed: true })).toBe(false);
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('guards a legacy authentication skip returned after provider sending starts', async () => {
+    const authError = Object.assign(new Error('Reconnect Garmin before sending routes.'), {
+      code: 'unauthenticated',
+    });
+    mockSendPreparedRoute.mockRejectedValue(authError);
+    mockIsDestinationAuthRequiredError.mockImplementation(error => error === authError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'route_delivery_sync_auth_skip_transition',
+      updateData: expect.objectContaining({
+        processed: true,
+        skippedReason: 'destination_not_connected',
+      }),
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ skippedReason: 'destination_not_connected' }),
+    );
+  });
+
+  it('guards a legacy permission skip returned after provider sending starts', async () => {
+    const permissionError = new Error('Grant Garmin COURSE_IMPORT permission.');
+    mockSendPreparedRoute.mockRejectedValue(permissionError);
+    mockIsDestinationPermissionRequiredError.mockImplementation(error => error === permissionError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'route_delivery_sync_permission_skip_transition',
+      updateData: expect.objectContaining({
+        processed: true,
+        skippedReason: 'destination_permission_required',
+      }),
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ skippedReason: 'destination_permission_required' }),
+    );
+  });
+
   it('retries transient provider failures', async () => {
     const transientError = Object.assign(new Error('Garmin unavailable'), { code: 'unavailable' });
     mockSendPreparedRoute.mockRejectedValue(transientError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCount).toHaveBeenCalledWith(expect.anything(), transientError, 1, undefined);
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['named code', { code: 'resource-exhausted' }],
+    ['numeric gRPC code', { code: 8 }],
+  ])('retries Firestore resource exhaustion reported as a %s', async (_scenario, errorFields) => {
+    const transientError = Object.assign(new Error('Firestore quota temporarily exhausted'), errorFields);
+    mockPrepareSavedRoute.mockRejectedValue(transientError);
 
     const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
 
@@ -428,6 +980,120 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(result).toBe(QueueResult.RetryIncremented);
     expect(mockIncreaseRetryCount).toHaveBeenCalledWith(expect.anything(), rateLimitError, 1, undefined);
     expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('retries an HTTP 408 before route delivery starts', async () => {
+    const timeoutError = Object.assign(new Error('token request timed out'), { statusCode: 408 });
+    mockPrepareSavedRoute.mockRejectedValue(timeoutError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCount).toHaveBeenCalledWith(expect.anything(), timeoutError, 1, undefined);
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('retries an explicitly retryable destination provider failure with its DLQ context', async () => {
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'Garmin Connect is temporarily unavailable.',
+      statusCode: 503,
+      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+    });
+    mockSendPreparedRoute.mockRejectedValue(providerError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCount).toHaveBeenCalledWith(
+      expect.anything(),
+      providerError,
+      1,
+      undefined,
+      'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+    );
+    expect(mockMoveToDLQ).not.toHaveBeenCalled();
+  });
+
+  it('moves an explicitly permanent destination provider failure directly to DLQ', async () => {
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'permanent',
+      code: 'failed-precondition',
+      message: 'Garmin rejected the route.',
+      statusCode: 400,
+      dlqContext: 'GARMIN_ROUTE_CREATE_REJECTED',
+    });
+    mockSendPreparedRoute.mockRejectedValue(providerError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.anything(),
+      providerError,
+      undefined,
+      'GARMIN_ROUTE_CREATE_REJECTED',
+    );
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+  });
+
+  it('retains the Garmin account identity for an ambiguous route create reconciliation', async () => {
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'permanent',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created.',
+      providerUserId: 'garmin-destination-account',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+    mockSendPreparedRoute.mockRejectedValue(providerError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationProviderUserId: 'garmin-destination-account',
+        destinationProviderOperation: 'route_create',
+      }),
+      providerError,
+      undefined,
+      'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    );
+    expect(mockMoveToDLQIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      manualReconciliation: {
+        additionalData: expect.objectContaining({
+          destinationProviderUserId: 'garmin-destination-account',
+          destinationProviderOperation: 'route_create',
+        }),
+      },
+    }));
+  });
+
+  it('does not apply provider retry policy after a successful send', async () => {
+    const metadataError = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_update',
+      disposition: 'retryable',
+      code: 'unavailable',
+      message: 'Metadata write failed after provider success.',
+      dlqContext: 'SHOULD_NOT_RETRY_PROVIDER_SEND',
+    });
+    mockPersistRouteDeliveryMetadata.mockRejectedValue(metadataError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(mockMoveToDLQ).toHaveBeenCalled();
   });
 
   it('retries transient route preparation failures', async () => {

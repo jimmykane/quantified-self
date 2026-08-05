@@ -22,7 +22,13 @@ import {
 import { getRouteDeliveryMetadataRef } from '../routes/route-persistence';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { getTokenData, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import {
+  isProviderOperationError,
+  isTerminalServiceAuthError,
+  isTransientProviderTransportError,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
 
 const GARMIN_COURSES_API_BASE_URL = 'https://apis.garmin.com/training-api/courses/v1/course';
 
@@ -74,22 +80,20 @@ interface GarminCreateCourseResponse {
   courseId?: number | string | null;
 }
 
+class GarminCourseProviderRequestError extends Error {
+  readonly name = 'GarminCourseProviderRequestError';
+
+  constructor(readonly providerError: unknown) {
+    super('Garmin course provider request failed.');
+  }
+}
+
 export class GarminRouteSendPermissionRequiredError extends Error {
   readonly name = 'GarminRouteSendPermissionRequiredError';
 }
 
 export class GarminRouteValidationError extends Error {
   readonly name = 'GarminRouteValidationError';
-}
-
-class GarminRouteSendRateLimitError extends Error {
-  readonly name = 'GarminRouteSendRateLimitError';
-  readonly code = 'unavailable';
-  readonly statusCode = 429;
-
-  constructor() {
-    super('Garmin Connect rate limit reached. Please retry later.');
-  }
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {
@@ -138,6 +142,78 @@ function getGarminStatusCode(error: unknown): number | null {
 
 function buildGarminAuthRequiredError(message = 'Reconnect Garmin before sending routes.'): HttpsError {
   return new HttpsError('unauthenticated', message);
+}
+
+function toGarminRouteProviderError(
+  error: unknown,
+  operation: 'route_create' | 'route_update',
+  providerUserId: string,
+  providerRouteId?: string,
+): ProviderOperationError {
+  if (isProviderOperationError(error)) {
+    return error;
+  }
+
+  const statusCode = getGarminStatusCode(error) ?? undefined;
+  const transientTransportFailure = statusCode === undefined && isTransientProviderTransportError(error);
+  const ambiguousCreate = operation === 'route_create'
+    && (
+      statusCode === 408
+      || (statusCode !== undefined && statusCode >= 500)
+      || transientTransportFailure
+    );
+  if (ambiguousCreate) {
+    return new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation,
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+      statusCode,
+      providerUserId,
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  }
+  const retryable = statusCode === 408
+    || statusCode === 429
+    || (statusCode !== undefined && statusCode >= 500)
+    || transientTransportFailure;
+  const message = retryable
+    ? 'Garmin Connect is temporarily unavailable. Please retry.'
+    : error instanceof Error
+      ? error.message
+      : 'Garmin Connect rejected the route upload.';
+  return new ProviderOperationError({
+    serviceName: ServiceNames.GarminAPI,
+    operation,
+    disposition: retryable ? 'retryable' : 'permanent',
+    retryMode: retryable ? 'restart' : 'none',
+    code: statusCode === 429
+      ? 'resource-exhausted'
+      : retryable
+        ? 'unavailable'
+        : 'failed-precondition',
+    message,
+    statusCode,
+    providerUserId,
+    providerOperationId: providerRouteId,
+    dlqContext: retryable
+      ? `GARMIN_${operation.toUpperCase()}_RETRY_EXHAUSTED`
+      : `GARMIN_${operation.toUpperCase()}_REJECTED`,
+  });
+}
+
+function shouldPreserveGarminRouteControlError(error: unknown): boolean {
+  return isProviderOperationError(error)
+    || error instanceof HttpsError
+    || error instanceof TokenRefreshSkippedForDeletedUserError
+    || (error instanceof Error && (
+      error.name === 'TokenRefreshSkippedForDeletedUserError'
+      || error.name === 'TokenUseSkippedForPendingDisconnectError'
+      || error.name === 'UserDeletionGuardReadError'
+      || error.name === 'RouteSendSkippedForDeletedUserError'
+    ));
 }
 
 function getGarminCourseId(value: unknown): string | null {
@@ -278,7 +354,7 @@ async function getGarminAccessToken(
       throw error;
     }
 
-    if (error instanceof TerminalServiceAuthError) {
+    if (isTerminalServiceAuthError(error)) {
       throw buildGarminAuthRequiredError();
     }
 
@@ -288,25 +364,29 @@ async function getGarminAccessToken(
 
 async function executeGarminCourseRequest<T>(
   tokenSnapshotRef: GarminRouteSendTokenSnapshot,
+  beforeProviderRequest: (() => Promise<void>) | undefined,
   requestFactory: (accessToken: string) => Promise<T>,
 ): Promise<T> {
   const latestTokenSnapshot = await getLatestGarminTokenSnapshot(tokenSnapshotRef);
 
+  const execute = async (forceRefresh: boolean): Promise<T> => {
+    const accessToken = await getGarminAccessToken(latestTokenSnapshot, forceRefresh);
+    await beforeProviderRequest?.();
+    try {
+      return await requestFactory(accessToken);
+    } catch (error) {
+      throw new GarminCourseProviderRequestError(error);
+    }
+  };
+
   try {
-    const accessToken = await getGarminAccessToken(latestTokenSnapshot, false);
-    return await requestFactory(accessToken);
+    return await execute(false);
   } catch (error) {
-    if (error instanceof TokenRefreshSkippedForDeletedUserError) {
-      throw error;
-    }
-
-    if (error instanceof HttpsError && error.code === 'unauthenticated') {
-      throw error;
-    }
-
-    if (getGarminStatusCode(error) === 401) {
-      const accessToken = await getGarminAccessToken(latestTokenSnapshot, true);
-      return requestFactory(accessToken);
+    if (
+      error instanceof GarminCourseProviderRequestError
+      && getGarminStatusCode(error.providerError) === 401
+    ) {
+      return execute(true);
     }
 
     throw error;
@@ -319,34 +399,48 @@ async function createGarminCourse(
   beforeProviderRequest?: () => Promise<void>,
 ): Promise<string> {
   try {
-    const response = await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => {
-      await beforeProviderRequest?.();
-      return requestPromise.post({
+    const response = await executeGarminCourseRequest(
+      tokenSnapshotRef,
+      beforeProviderRequest,
+      accessToken => requestPromise.post({
         url: GARMIN_COURSES_API_BASE_URL,
         json: true,
         body: payload,
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      });
-    });
+      }),
+    );
     const courseId = getGarminCourseId(response);
     if (!courseId) {
-      throw new Error('Garmin course create response did not include a course id.');
+      throw new ProviderOperationError({
+        serviceName: ServiceNames.GarminAPI,
+        operation: 'route_create',
+        disposition: 'permanent',
+        retryMode: 'none',
+        code: 'failed-precondition',
+        message: 'Garmin accepted the course request without returning an identifier. Check Garmin Connect before trying again.',
+        providerUserId: tokenSnapshotRef.providerUserId,
+        dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+      });
     }
     return courseId;
   } catch (error) {
-    const statusCode = getGarminStatusCode(error);
+    if (shouldPreserveGarminRouteControlError(error)) {
+      throw error;
+    }
+    if (!(error instanceof GarminCourseProviderRequestError)) {
+      throw error;
+    }
+    const providerError = error.providerError;
+    const statusCode = getGarminStatusCode(providerError);
     if (statusCode === 401) {
       throw buildGarminAuthRequiredError();
     }
     if (statusCode === 412) {
       throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
     }
-    if (statusCode === 429) {
-      throw new GarminRouteSendRateLimitError();
-    }
-    throw error;
+    throw toGarminRouteProviderError(providerError, 'route_create', tokenSnapshotRef.providerUserId);
   }
 }
 
@@ -354,18 +448,30 @@ async function updateGarminCourse(
   tokenSnapshotRef: GarminRouteSendTokenSnapshot,
   courseId: string,
   payload: GarminCoursePayload,
+  beforeProviderRequest?: () => Promise<void>,
 ): Promise<'updated' | 'missing'> {
   try {
-    await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => requestPromise.put({
-      url: `${GARMIN_COURSES_API_BASE_URL}/${encodeURIComponent(courseId)}`,
-      body: payload,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }));
+    await executeGarminCourseRequest(
+      tokenSnapshotRef,
+      beforeProviderRequest,
+      accessToken => requestPromise.put({
+        url: `${GARMIN_COURSES_API_BASE_URL}/${encodeURIComponent(courseId)}`,
+        body: payload,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }),
+    );
     return 'updated';
   } catch (error) {
-    const statusCode = getGarminStatusCode(error);
+    if (shouldPreserveGarminRouteControlError(error)) {
+      throw error;
+    }
+    if (!(error instanceof GarminCourseProviderRequestError)) {
+      throw error;
+    }
+    const providerError = error.providerError;
+    const statusCode = getGarminStatusCode(providerError);
     if (statusCode === 404) {
       return 'missing';
     }
@@ -375,10 +481,7 @@ async function updateGarminCourse(
     if (statusCode === 412) {
       throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
     }
-    if (statusCode === 429) {
-      throw new GarminRouteSendRateLimitError();
-    }
-    throw error;
+    throw toGarminRouteProviderError(providerError, 'route_update', tokenSnapshotRef.providerUserId, courseId);
   }
 }
 
@@ -617,6 +720,9 @@ export async function sendRouteToGarminConnect(
   routeDocument: FirestoreRouteJSON,
   routeFile: RouteFileInterface,
   context: GarminRouteSendContext,
+  options: {
+    beforeProviderRequest?: () => Promise<void>;
+  } = {},
 ): Promise<{
   providerRouteId: string;
   deliveries: Array<{ providerUserId: string; providerRouteId: string }>;
@@ -629,12 +735,17 @@ export async function sendRouteToGarminConnect(
 
   let providerRouteId = existingCourseId;
   if (existingCourseId) {
-    const updateResult = await updateGarminCourse(tokenSnapshotRef, existingCourseId, payload);
+    const updateResult = await updateGarminCourse(
+      tokenSnapshotRef,
+      existingCourseId,
+      payload,
+      options.beforeProviderRequest,
+    );
     if (updateResult === 'missing') {
-      providerRouteId = await createGarminCourse(tokenSnapshotRef, payload);
+      providerRouteId = await createGarminCourse(tokenSnapshotRef, payload, options.beforeProviderRequest);
     }
   } else {
-    providerRouteId = await createGarminCourse(tokenSnapshotRef, payload);
+    providerRouteId = await createGarminCourse(tokenSnapshotRef, payload, options.beforeProviderRequest);
   }
   if (!providerRouteId) {
     throw new Error('Garmin route delivery did not return a course id.');

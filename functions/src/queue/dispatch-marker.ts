@@ -12,6 +12,7 @@ import {
 export enum QueueDispatchMarkerResult {
     Marked = 'marked',
     SkippedDeletedUser = 'skipped_deleted_user',
+    NotCurrent = 'not_current',
 }
 
 export enum QueueItemUserGuardedUpdateResult {
@@ -45,6 +46,48 @@ export interface MarkQueueItemDispatchedIfUserActiveParams {
     isCurrent?: UpdateQueueItemIfUserActiveParams['isCurrent'];
 }
 
+export interface CleanupQueueItemAfterUserDeletionGuardParams {
+    queueItemDocument: admin.firestore.DocumentReference;
+    queueItemId: string;
+    logPrefix: string;
+    actionDescription: string;
+}
+
+export async function cleanupQueueItemAfterUserDeletionGuard(
+    params: CleanupQueueItemAfterUserDeletionGuardParams,
+): Promise<void> {
+    const db = admin.firestore();
+    try {
+        const collectionName = params.queueItemDocument.parent?.id;
+        if (!collectionName) {
+            logger.error(
+                `[${params.logPrefix}] Cannot determine queue collection for item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
+            );
+            return;
+        }
+        const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
+            collectionName,
+            params.queueItemId,
+            QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+        );
+        if (!tombstoneWritten) {
+            logger.error(
+                `[${params.logPrefix}] Failed to write cleanup tombstone for queue item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
+            );
+            return;
+        }
+        await db.recursiveDelete(params.queueItemDocument);
+        logger.info(
+            `[${params.logPrefix}] Deleted queue item ${params.queueItemId} after deletion guard tripped before ${params.actionDescription}.`,
+        );
+    } catch (error) {
+        logger.error(
+            `[${params.logPrefix}] Failed to delete queue item ${params.queueItemId} after deletion guard tripped before ${params.actionDescription}.`,
+            error,
+        );
+    }
+}
+
 export async function markQueueItemDispatchedIfUserActive(
     params: MarkQueueItemDispatchedIfUserActiveParams,
 ): Promise<QueueDispatchMarkerResult> {
@@ -61,9 +104,15 @@ export async function markQueueItemDispatchedIfUserActive(
         isCurrent: params.isCurrent,
     });
 
-    return result === QueueItemUserGuardedUpdateResult.Updated
-        ? QueueDispatchMarkerResult.Marked
-        : QueueDispatchMarkerResult.SkippedDeletedUser;
+    switch (result) {
+        case QueueItemUserGuardedUpdateResult.Updated:
+            return QueueDispatchMarkerResult.Marked;
+        case QueueItemUserGuardedUpdateResult.NotCurrent:
+            return QueueDispatchMarkerResult.NotCurrent;
+        case QueueItemUserGuardedUpdateResult.SkippedDeletedUser:
+        default:
+            return QueueDispatchMarkerResult.SkippedDeletedUser;
+    }
 }
 
 export async function updateQueueItemIfUserActive(
@@ -103,35 +152,7 @@ export async function updateQueueItemIfUserActive(
     });
 
     if (result === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
-        try {
-            const collectionName = params.queueItemDocument.parent?.id;
-            if (!collectionName) {
-                logger.error(
-                    `[${params.logPrefix}] Cannot determine queue collection for item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
-                );
-                return result;
-            }
-            const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
-                collectionName,
-                params.queueItemId,
-                QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
-            );
-            if (!tombstoneWritten) {
-                logger.error(
-                    `[${params.logPrefix}] Failed to write cleanup tombstone for queue item ${params.queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`,
-                );
-                return result;
-            }
-            await db.recursiveDelete(params.queueItemDocument);
-            logger.info(
-                `[${params.logPrefix}] Deleted queue item ${params.queueItemId} after deletion guard tripped before ${params.actionDescription}.`,
-            );
-        } catch (error) {
-            logger.error(
-                `[${params.logPrefix}] Failed to delete queue item ${params.queueItemId} after deletion guard tripped before ${params.actionDescription}.`,
-                error,
-            );
-        }
+        await cleanupQueueItemAfterUserDeletionGuard(params);
     }
 
     return result;

@@ -67,6 +67,8 @@ vi.mock('./cleanup-tombstone', () => ({
 }));
 
 import {
+    markQueueItemDispatchedIfUserActive,
+    QueueDispatchMarkerResult,
     QueueItemUserGuardedUpdateResult,
     updateQueueItemIfUserActive,
 } from './dispatch-marker';
@@ -174,6 +176,31 @@ describe('queue dispatch marker guarded updates', () => {
         });
 
         expect(result).toBe(QueueItemUserGuardedUpdateResult.NotCurrent);
+        expect(mockTransactionUpdate).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    });
+
+    it('reports a stale dispatch-marker write as not current rather than user deletion', async () => {
+        mockTransactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ dispatchedToCloudTask: 456 }),
+        });
+        const queueItemDocument = {
+            parent: { id: 'activitySyncQueue' },
+            update: vi.fn(),
+        };
+
+        const result = await markQueueItemDispatchedIfUserActive({
+            queueItemDocument: queueItemDocument as any,
+            queueItemId: 'activity-sync-item-1',
+            userID: 'active-user',
+            phase: 'activity_sync_dispatch_marker',
+            dispatchedAtMs: 123,
+            logPrefix: 'ActivitySync',
+            isCurrent: queueItem => queueItem.dispatchedToCloudTask == null,
+        });
+
+        expect(result).toBe(QueueDispatchMarkerResult.NotCurrent);
         expect(mockTransactionUpdate).not.toHaveBeenCalled();
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });

@@ -158,6 +158,8 @@ export interface SyncPipelineQueueStats {
     succeeded: number;
     stuck: number;
     dead: number;
+    /** Provider accepted or may have accepted the operation, so an operator must reconcile it before replay. */
+    manualReconciliationRequired?: number;
     dlqByContext: { context: string; count: number }[];
     advanced: QueueAdvancedStats;
 }

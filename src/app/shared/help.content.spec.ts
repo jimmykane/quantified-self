@@ -650,6 +650,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
+    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job first instead of immediately uploading the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('only when Suunto explicitly reports that the earlier job is still empty');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
@@ -836,6 +838,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');

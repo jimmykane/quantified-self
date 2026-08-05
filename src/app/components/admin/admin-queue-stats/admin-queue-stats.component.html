@@ -251,6 +251,17 @@
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
             </mat-card>
+            <mat-card class="app-stat-card status-error"
+                matTooltip="The provider accepted or may have accepted these uploads, but Quantified Self could not safely finalize them. Reconcile them before retrying.">
+                <div class="app-stat-header">
+                    <mat-icon>rule</mat-icon>
+                    <span>Manual Reconciliation (Sync)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.activitySync?.manualReconciliationRequired ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
             <mat-card class="app-stat-card status-dlq" *ngIf="stats?.activitySync"
                 style="background: rgba(244, 67, 54, 0.1);">
                 <div class="app-stat-header">
@@ -391,6 +402,17 @@
                     <span>Stuck (Delivery)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeDeliverySync?.stuck ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-error"
+                matTooltip="The provider accepted or may have accepted these routes, but Quantified Self could not safely finalize them. Reconcile them before retrying.">
+                <div class="app-stat-header">
+                    <mat-icon>rule</mat-icon>
+                    <span>Manual Reconciliation (Route Delivery)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.routeDeliverySync?.manualReconciliationRequired ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>

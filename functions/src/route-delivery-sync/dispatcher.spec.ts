@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 import { MAX_PENDING_TASKS } from '../shared/queue-config';
 
 interface QueueQueryChainMock {
@@ -184,6 +185,61 @@ describe('route-delivery-sync/dispatcher', () => {
       dispatchedAtMs: nowMs,
       logPrefix: 'RouteDeliverySyncDispatcher',
     }));
+    const markerParams = mockMarkQueueItemDispatchedIfUserActive.mock.calls[0][0];
+    expect(markerParams.isCurrent({ processed: false, dispatchedToCloudTask: null, dateCreated: 999 })).toBe(true);
+    expect(markerParams.isCurrent({ processed: false, dispatchedToCloudTask: null, dateCreated: 1000 })).toBe(false);
+    expect(markerParams.isCurrent({
+      processed: false,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      dateCreated: 999,
+    })).toBe(false);
+    expect(markerParams.isCurrent({ processed: true, dispatchedToCloudTask: null, dateCreated: 999 })).toBe(false);
+  });
+
+  it('does not redispatch an active provider operation claim', async () => {
+    const nowMs = 1_700_000_000_000;
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'provider-operation-in-flight',
+        data: () => ({
+          dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+          providerOperationStartedAt: nowMs - (10 * 60 * 1000),
+          dateCreated: 100,
+          userID: 'user-1',
+        }),
+        ref: { path: 'routeDeliverySyncQueue/provider-operation-in-flight' },
+      }],
+    });
+
+    const result = await reconcileRouteDeliverySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 0, skippedRecent: 1 });
+    expect(mockEnqueueRouteDeliverySyncTask).not.toHaveBeenCalled();
+    expect(mockMarkQueueItemDispatchedIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('redispatches a stale provider operation claim without replacing its resume marker', async () => {
+    const nowMs = 1_700_000_000_000;
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'stale-provider-operation',
+        data: () => ({
+          dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+          providerOperationStartedAt: nowMs - (3 * 60 * 60 * 1000),
+          dateCreated: 100,
+          userID: 'user-1',
+        }),
+        ref: { path: 'routeDeliverySyncQueue/stale-provider-operation' },
+      }],
+    });
+
+    const result = await reconcileRouteDeliverySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 1, skippedRecent: 0 });
+    expect(mockEnqueueRouteDeliverySyncTask).toHaveBeenCalledWith('stale-provider-operation', 100);
+    expect(mockMarkQueueItemDispatchedIfUserActive).not.toHaveBeenCalled();
   });
 
   it('does not mark queue item as dispatched when Cloud Task enqueue returns false', async () => {
