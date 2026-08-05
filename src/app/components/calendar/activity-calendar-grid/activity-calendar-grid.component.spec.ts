@@ -76,6 +76,20 @@ describe('ActivityCalendarGridComponent', () => {
     expect(styles).not.toMatch(/\.activity-calendar-weekday--weekend\s*{\s*background:/);
   });
 
+  it('centers the current-day number without a font-specific horizontal offset', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+    const numberRule = styles.match(/\.activity-calendar-day-number\s*\{([^}]*)\}/)?.[1];
+    const todayRule = styles.match(/\.activity-calendar-day--today \.activity-calendar-day-number\s*\{([^}]*)\}/)?.[1];
+
+    expect(numberRule).toContain('display: inline-grid;');
+    expect(numberRule).toContain('place-items: center;');
+    expect(numberRule).toContain('padding: 0;');
+    expect(todayRule).not.toMatch(/padding-(left|right)/);
+  });
+
   it('keeps activity days free of tooltips so touch scrolling remains native', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.html'),

@@ -157,20 +157,19 @@
 
 .activity-calendar-day-number {
   box-sizing: border-box;
-  display: inline-flex;
+  display: inline-grid;
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
-  align-items: center;
-  justify-content: center;
+  place-items: center;
+  padding: 0;
   border-radius: 50%;
   font: var(--mat-sys-label-large);
   letter-spacing: 0;
+  text-align: center;
 }
 
 .activity-calendar-day--today .activity-calendar-day-number {
-  /* Inter's proportional numerals sit slightly right inside the circular marker. */
-  padding-right: 1px;
   background: var(--mat-sys-primary);
   color: var(--mat-sys-on-primary);
 }
