@@ -20,6 +20,7 @@ export class PageHeaderComponent {
   readonly subtitle = input<string | null>(null);
   readonly variant = input<AppPageHeaderVariant>('route');
   readonly status = input<AppPageHeaderStatus | null>(null);
+  readonly leadingAction = input(false);
   readonly ariaLabel = input<string | null>(null);
 
   protected statusIcon(): string | null {

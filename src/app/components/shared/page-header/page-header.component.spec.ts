@@ -14,7 +14,8 @@ import { PageHeaderComponent } from './page-header.component';
       [subtitle]="subtitle"
       [headingLevel]="headingLevel"
       [variant]="variant"
-      [status]="status">
+      [status]="status"
+      [leadingAction]="leadingAction">
       <button pageHeaderLeading type="button">Open calendar</button>
       <button pageHeaderActions type="button">Action</button>
     </app-page-header>
@@ -27,6 +28,7 @@ class PageHeaderHostComponent {
   headingLevel: 1 | 2 = 1;
   variant: 'route' | 'compact' = 'route';
   status: 'pending' | 'warning' | null = null;
+  leadingAction = false;
 }
 
 describe('PageHeaderComponent', () => {
@@ -65,5 +67,15 @@ describe('PageHeaderComponent', () => {
     expect(header.classList).toContain('qs-page-header--compact');
     expect(header.querySelector('.qs-page-header__status-icon')?.textContent?.trim()).toBe('error_outline');
     expect(header.querySelector('h2#test-page-title')?.textContent?.trim()).toBe('Derived metrics update failed');
+  });
+
+  it('tightens the title-row gap for a leading action without changing the projected control', async () => {
+    const fixture = await createFixture();
+    fixture.componentInstance.leadingAction = true;
+    fixture.detectChanges();
+
+    const titleRow = fixture.nativeElement.querySelector('.qs-page-header__title-row') as HTMLElement;
+    expect(titleRow.classList).toContain('qs-page-header__title-row--leading-action');
+    expect(titleRow.querySelector('[pageHeaderLeading]')?.textContent?.trim()).toBe('Open calendar');
   });
 });

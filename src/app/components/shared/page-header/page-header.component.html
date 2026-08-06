@@ -16,7 +16,7 @@
     </div>
 
     @if (title()) {
-      <div class="qs-page-header__title-row">
+      <div class="qs-page-header__title-row" [class.qs-page-header__title-row--leading-action]="leadingAction()">
         <ng-content select="[pageHeaderLeading]"></ng-content>
         @if (statusIcon(); as icon) {
           <mat-icon class="qs-page-header__status-icon" aria-hidden="true">{{ icon }}</mat-icon>

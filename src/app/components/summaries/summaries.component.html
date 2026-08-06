@@ -9,6 +9,7 @@
     [headingLevel]="2"
     [subtitle]="derivedMetricsBanner ? derivedMetricsBanner.description : (showTodaySummary ? todayDateSubtitle : null)"
     [status]="derivedMetricsBanner?.type || null"
+    [leadingAction]="!derivedMetricsBanner && showTodaySummary"
     [ariaLabel]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
     @if (!derivedMetricsBanner && showTodaySummary) {
       <button pageHeaderLeading mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap

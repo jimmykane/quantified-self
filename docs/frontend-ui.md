@@ -13,7 +13,8 @@ as Dashboard Today. The component provides:
 - `title`, `titleId`, and `headingLevel` for the page or section heading.
 - `eyebrow` and `subtitle` for concise context and data currency.
 - `status` for a consistent pending or warning title state.
-- `pageHeaderLeading` for a leading Material icon or an existing icon action.
+- `pageHeaderLeading` for a leading Material icon or an existing icon action. Set `leadingAction` for an icon action to
+  preserve its Material touch target while keeping the title visually compact.
 - `pageHeaderContext` for projected, domain-specific status content that replaces the eyebrow without adding a banner.
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
