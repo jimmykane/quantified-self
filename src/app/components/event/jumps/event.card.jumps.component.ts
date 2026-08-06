@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
+import { Sort } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import {
   ActivityInterface,
@@ -11,6 +12,16 @@ import {
 } from '@sports-alliance/sports-lib';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 
+type JumpTableColumn =
+  | '#'
+  | 'At'
+  | 'Jump Distance'
+  | 'Jump Height'
+  | 'Jump Hang Time'
+  | 'Jump Speed'
+  | 'Jump Rotations'
+  | 'Jump Score';
+
 interface JumpTableRow {
   '#': number;
   At: string;
@@ -20,6 +31,7 @@ interface JumpTableRow {
   'Jump Speed': string;
   'Jump Rotations': string;
   'Jump Score': string;
+  sortValues: Record<JumpTableColumn, number | null>;
 }
 
 interface JumpActivityView {
@@ -75,6 +87,17 @@ export class EventCardJumpsComponent implements OnChanges {
 
   isSticky(column: string): boolean {
     return column === '#';
+  }
+
+  public sortRows(dataSource: MatTableDataSource<JumpTableRow>, sort: Sort): void {
+    const column = sort.active as JumpTableColumn;
+    if (!sort.direction || !this.isJumpTableColumn(column)) {
+      return;
+    }
+
+    dataSource.data = [...dataSource.data].sort((left, right) =>
+      this.compareRows(left, right, column, sort.direction)
+    );
   }
 
   private updateData(): void {
@@ -148,6 +171,16 @@ export class EventCardJumpsComponent implements OnChanges {
         'Jump Speed': this.formatUnitAwareStat(jumpData.speed),
         'Jump Rotations': this.formatUnitAwareStat(jumpData.rotations),
         'Jump Score': this.formatUnitAwareStat(jumpData.score),
+        sortValues: {
+          '#': index + 1,
+          At: this.toSortableTimestamp(event),
+          'Jump Distance': this.getSortableStatValue(jumpData.distance),
+          'Jump Height': this.getSortableStatValue(jumpData.height),
+          'Jump Hang Time': this.getSortableStatValue(jumpData.hang_time),
+          'Jump Speed': this.getSortableStatValue(jumpData.speed),
+          'Jump Rotations': this.getSortableStatValue(jumpData.rotations),
+          'Jump Score': this.getSortableStatValue(jumpData.score),
+        },
       });
 
       return rows;
@@ -234,6 +267,11 @@ export class EventCardJumpsComponent implements OnChanges {
     return Number.NaN;
   }
 
+  private toSortableTimestamp(event: unknown): number | null {
+    const timestamp = this.resolveNumericTimestamp(event);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
   private formatHangTime(stat: DataInterface | null | undefined): string {
     if (!stat) {
       return '';
@@ -292,6 +330,55 @@ export class EventCardJumpsComponent implements OnChanges {
     }
   }
 
+  private getSortableStatValue(stat: DataInterface | null | undefined): number | null {
+    if (!stat) {
+      return null;
+    }
+
+    const preferredStat = this.getUnitAwareStat(stat);
+    try {
+      const rawValue: unknown = preferredStat.getValue();
+      const numericValue = typeof rawValue === 'number'
+        ? rawValue
+        : typeof rawValue === 'string' ? Number(rawValue) : Number.NaN;
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+    } catch {
+      // Fall back to the formatted number for providers that do not expose getValue().
+    }
+
+    const displayValue = this.getDisplayValueSafe(preferredStat).replace(',', '.');
+    const parsedValue = Number.parseFloat(displayValue);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  private compareRows(
+    left: JumpTableRow,
+    right: JumpTableRow,
+    column: JumpTableColumn,
+    direction: Sort['direction'],
+  ): number {
+    const leftValue = left.sortValues[column];
+    const rightValue = right.sortValues[column];
+    if (leftValue === null && rightValue === null) {
+      return left['#'] - right['#'];
+    }
+    if (leftValue === null) {
+      return 1;
+    }
+    if (rightValue === null) {
+      return -1;
+    }
+
+    const valueComparison = leftValue - rightValue;
+    if (valueComparison === 0) {
+      return left['#'] - right['#'];
+    }
+
+    return direction === 'asc' ? valueComparison : -valueComparison;
+  }
+
   private calculateColumns(rows: JumpTableRow[]): string[] {
     const columns = this.getColumnsToDisplay();
     return columns.filter((column) => {
@@ -326,5 +413,9 @@ export class EventCardJumpsComponent implements OnChanges {
       'Jump Rotations',
       'Jump Score',
     ];
+  }
+
+  private isJumpTableColumn(column: string): column is JumpTableColumn {
+    return this.getColumnsToDisplay().includes(column);
   }
 }

@@ -6,6 +6,7 @@ import {
   EventInterface,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { Sort } from '@angular/material/sort';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EventCardJumpsComponent } from './event.card.jumps.component';
 
@@ -139,6 +140,42 @@ describe('EventCardJumpsComponent', () => {
 
     const columns = component.getColumns(jumpActivity);
     expect(columns.includes('Jump Rotations')).toBe(false);
+  });
+
+  it('sorts visible jump columns by their numeric values instead of formatted unit text', () => {
+    const jumpActivity = createActivity('activity-1', 'Snowboarding', [
+      createJumpEvent(120, { distance: createStat('9.8', 'm', 9.8) }),
+      createJumpEvent(60, { distance: createStat('12.1', 'm', 12.1) }),
+      createJumpEvent(180, { distance: createStat('3.4', 'm', 3.4) }),
+    ]);
+
+    component.selectedActivities = [jumpActivity];
+    component.ngOnChanges();
+
+    const dataSource = component.getDataSource(jumpActivity)!;
+    component.sortRows(dataSource, { active: 'Jump Distance', direction: 'asc' } as Sort);
+
+    expect(dataSource.data.map(row => row['Jump Distance'])).toEqual(['3.4 m', '9.8 m', '12.1 m']);
+
+    component.sortRows(dataSource, { active: 'At', direction: 'desc' } as Sort);
+
+    expect(dataSource.data.map(row => row.sortValues.At)).toEqual([180, 120, 60]);
+  });
+
+  it('keeps rows without a sortable value after rows with data in either direction', () => {
+    const jumpActivity = createActivity('activity-1', 'Snowboarding', [
+      createJumpEvent(120, { height: createStat('2.2', 'm', 2.2) }),
+      createJumpEvent(60, { height: undefined }),
+      createJumpEvent(180, { height: createStat('1.4', 'm', 1.4) }),
+    ]);
+
+    component.selectedActivities = [jumpActivity];
+    component.ngOnChanges();
+
+    const dataSource = component.getDataSource(jumpActivity)!;
+    component.sortRows(dataSource, { active: 'Jump Height', direction: 'desc' } as Sort);
+
+    expect(dataSource.data.map(row => row['Jump Height'])).toEqual(['2.2 m', '1.4 m', '']);
   });
 
   it('ignores malformed jump-like events with empty jumpData payloads', () => {

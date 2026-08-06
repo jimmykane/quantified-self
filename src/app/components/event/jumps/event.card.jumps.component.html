@@ -5,10 +5,11 @@
   <mat-tab [label]="view.label">
     @if (view.dataSource) {
     <section class="table-container">
-      <table mat-table [dataSource]="view.dataSource">
+      <table mat-table [dataSource]="view.dataSource" matSort matSortDisableClear
+        (matSortChange)="sortRows(view.dataSource, $event)">
         @for (column of view.columns; track column) {
         <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
-          <mat-header-cell *matHeaderCellDef>
+          <mat-header-cell *matHeaderCellDef [mat-sort-header]="column" [attr.aria-label]="'Sort by ' + column">
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </mat-header-cell>
           <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
