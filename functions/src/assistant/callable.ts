@@ -28,6 +28,7 @@ import {
   assistantConversationStore,
   createAssistantRequestFingerprint,
   type AssistantConversationStore,
+  type AssistantRequestState,
   type BegunAssistantTurn,
   type ReplayedAssistantTurn,
 } from './conversation-store';
@@ -283,21 +284,23 @@ function assertRequestFingerprintMatchesInput(
   }
 }
 
-async function buildReplayResponse(
+async function buildExistingRequestResponse(
   uid: string,
   input: AssistantChatRequest,
-  replayedTurn: ReplayedAssistantTurn,
+  requestState: AssistantRequestState,
   quotaRoleContext: AssistantUserRoleContext | null,
   dependencies: AssistantCallableDependencies,
 ): Promise<AssistantChatResponse> {
-  assertRequestFingerprintMatchesInput(replayedTurn, input);
+  assertRequestFingerprintMatchesInput(requestState, input);
   const quota = quotaRoleContext
     ? await dependencies.getQuotaStatus(uid, quotaRoleContext)
     : await dependencies.getQuotaStatus(uid);
   return {
-    conversation: replayedTurn.conversation,
+    conversation: requestState.conversation,
     quota,
-    pendingRequestId: null,
+    pendingRequestId: requestState.kind === 'pending'
+      ? input.requestId
+      : null,
   };
 }
 
@@ -333,20 +336,25 @@ export async function runAssistantChat(
   try {
     await dependencies.assertLegalAccess(uid);
     const quotaRoleContext = resolveCallableQuotaRoleContext(context);
-    const completedRequest = await dependencies.conversationStore.findCompletedTurn(
+    const requestFingerprint = createAssistantRequestFingerprint(
+      input.requestId,
+      input.message,
+    );
+    const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
       input.conversationId,
       input.requestId,
+      requestFingerprint,
     );
-    if (completedRequest) {
-      const replayResponse = await buildReplayResponse(
+    if (existingRequest) {
+      const existingResponse = await buildExistingRequestResponse(
         uid,
         input,
-        completedRequest,
+        existingRequest,
         quotaRoleContext,
         dependencies,
       );
-      return replayResponse;
+      return existingResponse;
     }
     try {
       reservation = quotaRoleContext
@@ -354,20 +362,21 @@ export async function runAssistantChat(
         : await dependencies.reserveQuota(uid);
     } catch (error) {
       if (error instanceof HttpsError && error.code === 'resource-exhausted') {
-        const requestCompletedWhileReserving = await dependencies.conversationStore.findCompletedTurn(
+        const requestStateWhileReserving = await dependencies.conversationStore.findRequestState(
           uid,
           input.conversationId,
           input.requestId,
+          requestFingerprint,
         );
-        if (requestCompletedWhileReserving) {
-          const replayResponse = await buildReplayResponse(
+        if (requestStateWhileReserving) {
+          const existingResponse = await buildExistingRequestResponse(
             uid,
             input,
-            requestCompletedWhileReserving,
+            requestStateWhileReserving,
             quotaRoleContext,
             dependencies,
           );
-          return replayResponse;
+          return existingResponse;
         }
       }
       throw error;
@@ -376,7 +385,7 @@ export async function runAssistantChat(
       uid,
       input.conversationId,
       input.requestId,
-      createAssistantRequestFingerprint(input.requestId, input.message),
+      requestFingerprint,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);

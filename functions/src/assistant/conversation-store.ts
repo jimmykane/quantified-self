@@ -74,6 +74,8 @@ export type AssistantTurnStart =
   | ReplayedAssistantTurn
   | PendingAssistantTurn;
 
+export type AssistantRequestState = ReplayedAssistantTurn | PendingAssistantTurn;
+
 export type AssistantConversationStoreErrorCode =
   | 'user_deleted'
   | 'conversation_changed'
@@ -94,11 +96,12 @@ export class AssistantConversationStoreError extends Error {
 export interface AssistantConversationStore {
   getActiveConversation: (uid: string) => Promise<AssistantConversation | null>;
   getActiveConversationState: (uid: string) => Promise<AssistantActiveConversationState>;
-  findCompletedTurn: (
+  findRequestState: (
     uid: string,
     expectedConversationId: string | undefined,
     requestId: string,
-  ) => Promise<ReplayedAssistantTurn | null>;
+    requestFingerprint: string,
+  ) => Promise<AssistantRequestState | null>;
   beginTurn: (
     uid: string,
     expectedConversationId?: string,
@@ -311,6 +314,45 @@ function toReplayedTurn(
   };
 }
 
+function findRequestStateInConversation(
+  conversation: StoredAssistantConversation,
+  requestId: string,
+  requestFingerprint: string | undefined,
+  nowMs: number,
+): AssistantRequestState | null {
+  const receipt = findReplayReceipt(conversation, requestId);
+  if (receipt) {
+    return toReplayedTurn(conversation, receipt);
+  }
+  if (conversation.messages.some(
+    message => message.id === requestId && message.role === 'assistant',
+  )) {
+    throw new AssistantConversationStoreError(
+      'request_id_conflict',
+      'The Assistant request identifier conflicts with a saved message.',
+    );
+  }
+  const pendingTurn = conversation.pendingTurn;
+  if (requestFingerprint
+    && pendingTurn
+    && pendingTurn.expiresAtMs > nowMs
+    && pendingTurn.requestId === requestId
+    && pendingTurn.requestFingerprint) {
+    if (pendingTurn.requestFingerprint !== requestFingerprint) {
+      throw new AssistantConversationStoreError(
+        'request_id_conflict',
+        'The Assistant request identifier is already running with a different message.',
+      );
+    }
+    return {
+      kind: 'pending',
+      conversation: toPublicConversation(conversation),
+      requestFingerprint,
+    };
+  }
+  return null;
+}
+
 function getConversationRef(
   db: FirebaseFirestore.Firestore,
   uid: string,
@@ -391,7 +433,12 @@ export function createAssistantConversationStore(
 
     getActiveConversationState,
 
-    findCompletedTurn: async (uid, expectedConversationId, requestId) => {
+    findRequestState: async (
+      uid,
+      expectedConversationId,
+      requestId,
+      requestFingerprint,
+    ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
       return db.runTransaction(async (transaction) => {
@@ -415,19 +462,12 @@ export function createAssistantConversationStore(
             && expectedConversationId !== conversation.conversationId)) {
           return null;
         }
-        const receipt = findReplayReceipt(conversation, requestId);
-        if (receipt) {
-          return toReplayedTurn(conversation, receipt);
-        }
-        if (conversation.messages.some(
-          message => message.id === requestId && message.role === 'assistant',
-        )) {
-          throw new AssistantConversationStoreError(
-            'request_id_conflict',
-            'The Assistant request identifier conflicts with a saved message.',
-          );
-        }
-        return null;
+        return findRequestStateInConversation(
+          conversation,
+          requestId,
+          requestFingerprint,
+          nowMs,
+        );
       });
     },
 
@@ -460,35 +500,18 @@ export function createAssistantConversationStore(
           );
         }
         if (requestId) {
-          const receipt = findReplayReceipt(conversation, requestId);
-          if (receipt) {
-            return toReplayedTurn(conversation, receipt);
-          }
-          if (conversation.messages.some(message => message.id === requestId)) {
-            throw new AssistantConversationStoreError(
-              'request_id_conflict',
-              'The Assistant request identifier conflicts with a saved message.',
-            );
+          const requestState = findRequestStateInConversation(
+            conversation,
+            requestId,
+            requestFingerprint,
+            nowMs,
+          );
+          if (requestState) {
+            return requestState;
           }
         }
         if (conversation.pendingTurn
           && conversation.pendingTurn.expiresAtMs > nowMs) {
-          if (requestId
-            && requestFingerprint
-            && conversation.pendingTurn.requestId === requestId
-            && conversation.pendingTurn.requestFingerprint) {
-            if (conversation.pendingTurn.requestFingerprint !== requestFingerprint) {
-              throw new AssistantConversationStoreError(
-                'request_id_conflict',
-                'The Assistant request identifier is already running with a different message.',
-              );
-            }
-            return {
-              kind: 'pending',
-              conversation: toPublicConversation(conversation),
-              requestFingerprint,
-            };
-          }
           throw new AssistantConversationStoreError(
             'turn_in_progress',
             'Another Assistant response is still in progress.',

@@ -171,6 +171,19 @@ describe('Assistant conversation store', () => {
       requestFingerprint,
     ));
 
+    await expect(store.findRequestState(
+      'user-1',
+      begun.conversationId,
+      requestId,
+      requestFingerprint,
+    )).resolves.toEqual({
+      kind: 'pending',
+      conversation: expect.objectContaining({
+        conversationId: begun.conversationId,
+      }),
+      requestFingerprint,
+    });
+
     await expect(store.beginTurn(
       'user-1',
       begun.conversationId,
@@ -185,6 +198,13 @@ describe('Assistant conversation store', () => {
     });
 
     await expect(store.beginTurn(
+      'user-1',
+      begun.conversationId,
+      requestId,
+      createAssistantRequestFingerprint(requestId, 'A different question'),
+    )).rejects.toMatchObject({ code: 'request_id_conflict' });
+
+    await expect(store.findRequestState(
       'user-1',
       begun.conversationId,
       requestId,
@@ -285,10 +305,11 @@ describe('Assistant conversation store', () => {
     expect(harness.documents.get(
       'users/user-1/assistantConversations/active',
     )?.replayReceipts).toEqual([]);
-    await expect(store.findCompletedTurn(
+    await expect(store.findRequestState(
       'user-1',
       reset.conversationId,
       requestId,
+      createAssistantRequestFingerprint(requestId, 'Question before reset'),
     )).resolves.toBeNull();
   });
 
@@ -332,10 +353,11 @@ describe('Assistant conversation store', () => {
       savedMessage => savedMessage.id === originalRequestId,
     )).toBe(false);
 
-    const replayed = await store.findCompletedTurn(
+    const replayed = await store.findRequestState(
       'user-1',
       conversationId,
       originalRequestId,
+      createAssistantRequestFingerprint(originalRequestId, 'Question 0'),
     );
     expect(replayed).toEqual({
       kind: 'replayed',
@@ -451,10 +473,11 @@ describe('Assistant conversation store', () => {
 
     now = new Date('2026-08-08T12:00:00.001Z');
     await expect(store.getActiveConversation('user-1')).resolves.not.toBeNull();
-    await expect(store.findCompletedTurn(
+    await expect(store.findRequestState(
       'user-1',
       firstTurn.conversationId,
       oldRequestId,
+      createAssistantRequestFingerprint(oldRequestId, 'Old question'),
     )).resolves.toMatchObject({
       kind: 'replayed',
       requestFingerprint: createAssistantRequestFingerprint(
