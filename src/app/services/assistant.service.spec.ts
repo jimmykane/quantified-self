@@ -155,6 +155,7 @@ describe('AssistantService', () => {
               summary: 'Grounded in the daily report.',
               facts: [
                 { label: 'Start Time Ms', value: '2026-08-03T20:26:00.000Z' },
+                { label: 'End Time', value: '2026-08-04T06:15:00.000Z' },
                 { label: 'Duration Seconds', value: '9h 18m' },
                 { label: 'Recovery Time Seconds', value: '3600' },
               ],
@@ -169,9 +170,20 @@ describe('AssistantService', () => {
     });
 
     const loaded = await service.getConversation();
+    const formatTimestamp = (value: string): string => new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
 
     expect(loaded?.messages[1].evidence?.[0].facts).toEqual([
-      { label: 'Start Time', value: '2026-08-03T20:26:00.000Z' },
+      {
+        label: 'Start Time',
+        value: formatTimestamp('2026-08-03T20:26:00.000Z'),
+      },
+      {
+        label: 'End Time',
+        value: formatTimestamp('2026-08-04T06:15:00.000Z'),
+      },
       { label: 'Duration', value: '9h 18m' },
       { label: 'Recovery Time Seconds', value: '3600' },
     ]);
