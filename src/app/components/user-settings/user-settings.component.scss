@@ -127,6 +127,12 @@
     gap: 0;
 }
 
+.settings-content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 40px;
+}
+
 .settings-page-header {
     max-width: 760px;
     margin: 0 0 28px;
@@ -368,7 +374,7 @@
 
 .qs-form-actions-floating {
     position: fixed;
-    right: max(32px, calc((100vw - min(100vw, var(--qs-workspace-max-width))) / 2 + var(--qs-workspace-inline-padding)));
+    right: max(32px, calc((100vw - 760px) / 2));
     bottom: 32px;
     z-index: 100;
 }
@@ -401,11 +407,16 @@
 }
 
 @include bp.max-768 {
+    .settings-content {
+        padding-inline: 16px;
+    }
+
     .settings-profile-shell {
         padding: 0;
     }
 
     .settings-content {
+        padding-top: 24px;
         padding-bottom: 96px;
     }
 

@@ -1282,8 +1282,8 @@ is treated as stale and re-requested.
 UI principles:
 
 - The Training route root uses the shared `qs-workspace-page` shell, so its outer 1440 px width and responsive gutters
-  match Dashboard, Calendar, Routes, Compare files, and Settings. Training cards and charts retain their own responsive
-  constraints inside that shell.
+  match Dashboard, Calendar, Routes, and Compare files. Training cards and charts retain their own responsive constraints
+  inside that shell.
 - Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. In mixed
   stat copy, only numeric expressions and their attached units use Barlow Condensed; comparison words and other context
   inherit Inter. Headings, labels, status words, and narrative explanations remain in Inter. ECharts continues to use its

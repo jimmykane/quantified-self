@@ -28,11 +28,11 @@ public surface and must not become a new authenticated workspace-header pattern.
 
 ## Workspace Shells
 
-Authenticated product workspaces use the shared `qs-workspace-page` shell from `src/styles.scss`. It owns the 1440 px
-maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root alongside the
-route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet. Route-specific
-content can still use intentional inner widths, such as Settings form panels, but those sections should begin at the
-shared workspace edge.
+Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
+owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root
+alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
+Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
+stretching a form workflow across the workspace width.
 
 ## Material and accessibility
 

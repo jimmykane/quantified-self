@@ -266,24 +266,18 @@ describe('UserSettingsComponent', () => {
         expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
     });
 
-    it('uses the shared workspace shell while keeping settings panels readable', () => {
+    it('keeps the settings form in its centered 760px column', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
             'utf8'
         );
-        const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.html'),
-            'utf8'
-        );
-        const pageHeaderRule = styles.match(/\.settings-page-header\s*\{[^}]*\}/)?.[0] ?? '';
-        const panelRule = styles.match(/\.settings-panel-section\s*\{[^}]*\}/)?.[0] ?? '';
+        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
         const saveActionRule = styles.match(/\.qs-form-actions-floating\s*\{[^}]*\}/)?.[0] ?? '';
 
-        expect(template).toContain('class="settings-content qs-workspace-page"');
-        expect(pageHeaderRule).toContain('max-width: 760px');
-        expect(panelRule).toContain('max-width: 760px');
-        expect(saveActionRule).toContain('var(--qs-workspace-max-width)');
-        expect(saveActionRule).toContain('var(--qs-workspace-inline-padding)');
+        expect(contentRule).toContain('max-width: 760px');
+        expect(contentRule).toContain('margin: 0 auto');
+        expect(contentRule).not.toContain('1180px');
+        expect(saveActionRule).toContain('calc((100vw - 760px) / 2)');
     });
 
     it('uses dynamic Material subscript sizing for settings form fields', () => {

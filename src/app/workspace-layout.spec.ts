@@ -12,7 +12,6 @@ const workspaceRoots = [
   ['Routes', 'src/app/components/routes/routes-page.component.html', 'routes-page qs-workspace-page'],
   ['Route detail', 'src/app/components/routes/route-detail/route-detail.component.html', 'route-detail-page qs-workspace-page'],
   ['Compare files', 'src/app/components/tools/tools-compare-page.component.html', 'tools-compare-page qs-workspace-page'],
-  ['Settings', 'src/app/components/user-settings/user-settings.component.html', 'settings-content qs-workspace-page'],
 ] as const;
 
 describe('workspace layout', () => {
