@@ -90,6 +90,20 @@ describe('ActivityCalendarGridComponent', () => {
     expect(todayRule).not.toMatch(/padding-(left|right)/);
   });
 
+  it('keeps compact and yearly current-day markers square', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+    const compactNumberRule = styles.match(
+      /\.activity-calendar--year \.activity-calendar-day-number,\s*\.activity-calendar--compact \.activity-calendar-day-number\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(compactNumberRule).toContain('width: 18px;');
+    expect(compactNumberRule).toContain('height: 18px;');
+    expect(compactNumberRule).toContain('flex-basis: 18px;');
+  });
+
   it('keeps activity days free of tooltips so touch scrolling remains native', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.html'),
