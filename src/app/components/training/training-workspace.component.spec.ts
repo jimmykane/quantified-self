@@ -20,10 +20,7 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import {
-  TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
-  TrainingWorkspaceComponent,
-} from './training-workspace.component';
+import { TrainingWorkspaceComponent } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
@@ -56,6 +53,7 @@ function createRouteReadyDerivedState(
     bodyWeightTrendStatus: 'ready',
     powerCurveStatus: 'ready',
     trainingSwimPerformanceStatus: 'ready',
+    trainingPowerSystemsStatus: 'ready',
     ...overrides,
   };
 }
@@ -180,8 +178,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
     expect(element.textContent).toContain('Preparing imported capacity markers');
-    expect(element.textContent).not.toContain('Preparing rolling power capacity');
-    expect(element.querySelector('.training-power-systems-section')).toBeNull();
+    expect(element.textContent).toContain('Preparing rolling power capacity');
+    expect(element.querySelector('.training-power-systems-section')).not.toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -753,8 +751,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
-    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(7);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -810,7 +809,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).not.toContain('186 W');
   });
 
-  it('renders exact-type rolling power systems for the designated account independently of Training sport visibility', async () => {
+  it('renders exact-type rolling power systems for every account independently of Training sport visibility', async () => {
     const asOfDayMs = Date.UTC(2026, 6, 20);
     const powerSystemsEntry = (
       activityType: string,
@@ -920,7 +919,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
     const authUser$ = new BehaviorSubject({
-      uid: TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+      uid: 'user-1',
       settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
     });
     const derivedMetrics = {
@@ -982,13 +981,13 @@ describe('TrainingWorkspaceComponent', () => {
       .toBeGreaterThan(3);
 
     authUser$.next({
-      uid: 'user-1',
+      uid: 'user-2',
       settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
     });
     fixture.detectChanges();
 
-    expect(component.hasTrainingPowerSystemsAccess).toBe(false);
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {

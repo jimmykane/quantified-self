@@ -52,10 +52,8 @@ The following rules are architectural constraints:
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
   FTP, and only components that pass Sports-lib's `ready` gates expose a value.
-- The Power systems presentation is currently limited in the frontend to one designated account. This is a visibility
-  gate only: snapshot generation, persistence, and the fitting policy remain unchanged. The account identifier is kept
-  in the component source and intentionally omitted from this document. Do not treat this frontend condition as an
-  authorization boundary.
+- Power systems is part of the Training workspace for every authenticated user. Its empty, preparing, failed, and ready
+  states remain visible independently of the Running/Cycling/Swimming detail-card selection.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -512,10 +510,11 @@ surface is missing, queued, processing, building, or stale, the projected status
 of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
 remain visible while the replacement finishes. A failed visible snapshot takes precedence,
 uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
-visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines and the account-gated
-Power systems surface. The optional imported recovery snapshot participates only while its active `Recovery left`
-estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route header in an updating
-state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form or freshness-forecast
+visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines, while the always-
+visible Power systems surface always participates. The optional imported recovery snapshot participates only while its
+active `Recovery left` estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route
+header in an updating state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form
+or freshness-forecast
 series cannot supply the displayed fallback value. Dashboard uses the same continuity rule in its existing top
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
@@ -904,8 +903,8 @@ Tablet and mobile retain the stacked responsive layout.
 every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
 Running/Cycling/Swimming visibility setting and has no combined or all-sports option.
 
-The Training page renders this section only for the currently designated account. The derived metric continues to build
-for every account so removing the presentation gate later does not require a data migration or a policy change.
+The Training page renders this section for every authenticated account. When no exact activity type has a usable stored
+power curve, it shows the normal preparing, unavailable, or confirmed-empty state instead of hiding the feature.
 
 Policy version 1 is fixed:
 

@@ -135,8 +135,6 @@ import {
 } from '../../services/dashboard-derived-metrics.service';
 import { environment } from '../../../environments/environment';
 
-export const TRAINING_POWER_SYSTEMS_ACCESS_USER_ID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
-
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
   label: string;
@@ -297,7 +295,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingPowerSystemsActivityTypes: TrainingPowerSystemsActivityTypeViewModel[] = [];
   public selectedTrainingPowerSystemsActivityType: string | null = null;
   public selectedTrainingPowerSystems: TrainingPowerSystemsActivityTypeViewModel | null = null;
-  public hasTrainingPowerSystemsAccess = false;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public trainingDataAsOfText: string | null = null;
@@ -395,7 +392,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
 
       this.currentUserUID = uid || null;
-      this.hasTrainingPowerSystemsAccess = this.currentUserUID === TRAINING_POWER_SYSTEMS_ACCESS_USER_ID;
       this.dataSubscriptions.unsubscribe();
       this.dataSubscriptions = new Subscription();
       this.resetWorkspace();
@@ -718,9 +714,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (this.isSwimmingVisible) {
       statuses.push(this.derivedState.trainingSwimPerformanceStatus);
     }
-    if (this.hasTrainingPowerSystemsAccess) {
-      statuses.push(this.derivedState.trainingPowerSystemsStatus);
-    }
+    statuses.push(this.derivedState.trainingPowerSystemsStatus);
 
     const refreshPhase = resolveDerivedMetricsRefreshPhase(statuses);
     if (refreshPhase === 'failed') {
