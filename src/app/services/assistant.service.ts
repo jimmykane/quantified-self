@@ -1,10 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import {
   isValidAssistantRequestId,
+  isAssistantLocationAccess,
   type AssistantChatRequest,
   type AssistantChatResponse,
   type AssistantConversation,
+  type AssistantLocationAccess,
   type GetAssistantConversationResponse,
+  type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
 } from '@shared/assistant.types';
 import {
@@ -86,6 +89,10 @@ export class AssistantService {
       const pendingRequestId = (
         response.data as Partial<GetAssistantConversationResponse>
       ).pendingRequestId ?? null;
+      const rawLocationAccess = (
+        response.data as Partial<GetAssistantConversationResponse>
+      ).locationAccess;
+      const locationAccess = rawLocationAccess ?? 'coordinate_free';
       if (pendingRequestId !== null
         && !isValidAssistantRequestId(pendingRequestId)) {
         throw new AssistantError(
@@ -94,8 +101,15 @@ export class AssistantService {
           response.data,
         );
       }
+      if (!isAssistantLocationAccess(locationAccess)) {
+        throw new AssistantError(
+          'INTERNAL',
+          'The saved Assistant data-access setting is invalid.',
+          response.data,
+        );
+      }
       if (response.data.conversation === null) {
-        return { conversation: null, pendingRequestId };
+        return { conversation: null, pendingRequestId, locationAccess };
       }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
@@ -108,6 +122,7 @@ export class AssistantService {
       return {
         conversation: normalizeAssistantConversationEvidence(validation.data),
         pendingRequestId,
+        locationAccess,
       };
     } catch (error) {
       if (error instanceof AssistantError) {
@@ -117,10 +132,16 @@ export class AssistantService {
     }
   }
 
-  async resetConversation(): Promise<AssistantConversation> {
+  async resetConversation(
+    locationAccess: AssistantLocationAccess = 'coordinate_free',
+  ): Promise<AssistantConversation> {
     try {
-      const response = await this.functionsService.call<void, ResetAssistantConversationResponse>(
+      const response = await this.functionsService.call<
+        ResetAssistantConversationRequest,
+        ResetAssistantConversationResponse
+      >(
         'resetAssistantConversation',
+        { locationAccess },
       );
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {

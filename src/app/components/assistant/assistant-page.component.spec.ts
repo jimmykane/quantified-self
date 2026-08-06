@@ -336,6 +336,7 @@ describe('AssistantPageComponent', () => {
       requestId: pendingRequestId,
       message: 'How has my sleep changed?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
     });
     expect(component.sending()).toBe(true);
     expect(component.messages().at(-1)).toMatchObject({
@@ -424,6 +425,7 @@ describe('AssistantPageComponent', () => {
         requestId: pendingRequestId,
         message: 'How has my sleep changed?',
         timeZone: 'Europe/Helsinki',
+        locationAccess: 'coordinate_free',
       });
       expect(assistantService.getConversationState).toHaveBeenCalledOnce();
 
@@ -465,6 +467,7 @@ describe('AssistantPageComponent', () => {
       requestId: pendingRequestId,
       message: 'How has my recovery changed?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
       conversationId: createdConversation.conversationId,
     });
   });
@@ -519,6 +522,7 @@ describe('AssistantPageComponent', () => {
       requestId: pendingRequestId,
       message: 'What contributed to that?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
       conversationId: chatResponse.conversation.conversationId,
     });
   });
@@ -639,6 +643,7 @@ describe('AssistantPageComponent', () => {
       requestId: expect.stringMatching(/^[A-Za-z0-9_-]{16,120}$/),
       message: 'How am I today?',
       timeZone: expect.any(String),
+      locationAccess: 'coordinate_free',
       submittedAtMs: expect.any(Number),
     });
 
@@ -956,13 +961,41 @@ describe('AssistantPageComponent', () => {
       bottomSheet: MatBottomSheet;
     }).bottomSheet;
     const openSpy = vi.spyOn(componentBottomSheet, 'open').mockReturnValue({
-      afterDismissed: () => of(routeExample.prompt),
+      afterDismissed: () => of({ kind: 'prompt', prompt: routeExample.prompt }),
     } as never);
 
     component.openExploreSheet();
 
-    expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent);
+    expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
+      data: { locationAccess: 'coordinate_free' },
+    });
     expect(component.promptControl.value).toBe(routeExample.prompt);
+    openSpy.mockRestore();
+  });
+
+  it('starts a fresh chat when precise activity locations are enabled', async () => {
+    component.promptControl.setValue('Where was my biggest MTB jump?');
+    const componentBottomSheet = (component as unknown as {
+      bottomSheet: MatBottomSheet;
+    }).bottomSheet;
+    const openSpy = vi.spyOn(componentBottomSheet, 'open').mockReturnValue({
+      afterDismissed: () => of({
+        kind: 'location_access',
+        locationAccess: 'precise_activity',
+      }),
+    } as never);
+
+    component.openExploreSheet();
+    await vi.waitFor(() => {
+      expect(assistantService.resetConversation).toHaveBeenCalledWith(
+        'precise_activity',
+      );
+    });
+    fixture.detectChanges();
+
+    expect(component.locationAccess()).toBe('precise_activity');
+    expect(component.promptControl.value).toBe('Where was my biggest MTB jump?');
+    expect(fixture.nativeElement.textContent).toContain('Precise locations on');
     openSpy.mockRestore();
   });
 
@@ -1067,7 +1100,7 @@ describe('AssistantPageComponent', () => {
 
     await component.resetConversation();
 
-    expect(assistantService.resetConversation).toHaveBeenCalledOnce();
+    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free');
     expect(component.messages()).toEqual([]);
   });
 

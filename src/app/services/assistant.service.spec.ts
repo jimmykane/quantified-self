@@ -64,11 +64,13 @@ describe('AssistantService', () => {
       requestId,
       message: 'How am I today?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
     })).resolves.toEqual(response);
     expect(functionsService.call).toHaveBeenCalledWith('assistantChat', {
       requestId,
       message: 'How am I today?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
     });
   });
 
@@ -87,6 +89,7 @@ describe('AssistantService', () => {
       requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
+      locationAccess: 'coordinate_free',
     })).rejects.toMatchObject({ code: 'INTERNAL' });
   });
 
@@ -99,6 +102,7 @@ describe('AssistantService', () => {
       requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
+      locationAccess: 'coordinate_free',
     })).resolves.toMatchObject({ pendingRequestId: requestId });
 
     functionsService.call.mockResolvedValueOnce({
@@ -108,6 +112,7 @@ describe('AssistantService', () => {
       requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
+      locationAccess: 'coordinate_free',
     })).rejects.toMatchObject({ code: 'INTERNAL' });
   });
 
@@ -122,6 +127,7 @@ describe('AssistantService', () => {
       requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
+      locationAccess: 'coordinate_free',
     })).rejects.toMatchObject({ code: 'TURN_IN_PROGRESS' });
     expect(service.getErrorMessage(new AssistantError(
       'TURN_IN_PROGRESS',
@@ -139,7 +145,11 @@ describe('AssistantService', () => {
     await expect(service.getConversation()).resolves.toEqual(response.conversation);
     await expect(service.resetConversation()).resolves.toEqual(response.conversation);
     expect(functionsService.call).toHaveBeenNthCalledWith(1, 'getAssistantConversation');
-    expect(functionsService.call).toHaveBeenNthCalledWith(2, 'resetAssistantConversation');
+    expect(functionsService.call).toHaveBeenNthCalledWith(
+      2,
+      'resetAssistantConversation',
+      { locationAccess: 'coordinate_free' },
+    );
   });
 
   it('cleans legacy storage-unit suffixes from saved evidence labels', async () => {
@@ -200,6 +210,7 @@ describe('AssistantService', () => {
     await expect(service.getConversationState()).resolves.toEqual({
       conversation: response.conversation,
       pendingRequestId: requestId,
+      locationAccess: 'coordinate_free',
     });
 
     functionsService.call.mockResolvedValue({
@@ -220,6 +231,27 @@ describe('AssistantService', () => {
     await expect(service.getConversationState()).resolves.toEqual({
       conversation: response.conversation,
       pendingRequestId: null,
+      locationAccess: 'coordinate_free',
     });
+  });
+
+  it('preserves precise activity-location access from the server-owned chat state', async () => {
+    functionsService.call.mockResolvedValue({
+      data: {
+        conversation: response.conversation,
+        pendingRequestId: null,
+        locationAccess: 'precise_activity',
+      },
+    });
+
+    await expect(service.getConversationState()).resolves.toMatchObject({
+      locationAccess: 'precise_activity',
+    });
+    await expect(service.resetConversation('precise_activity')).resolves
+      .toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith(
+      'resetAssistantConversation',
+      { locationAccess: 'precise_activity' },
+    );
   });
 });

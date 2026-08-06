@@ -8,6 +8,7 @@ import {
   ASSISTANT_MODEL_RETRY_OPTIONS,
   ASSISTANT_SYSTEM_INSTRUCTIONS,
   ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
+  ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS,
   generateAssistantModelAnswer,
   type AssistantRuntimeTool,
 } from './runtime';
@@ -80,6 +81,21 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS).toContain(
       'Location searches, exact coordinates, route geometry, route waypoints',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'explicitly enabled precise activity locations',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'MTB jump coordinates',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'authoritative activity ranking first',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'list_activity_jumps',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'route geometry, route waypoints',
     );
   });
 
@@ -435,6 +451,7 @@ describe('Assistant runtime', () => {
     expect(createMcpSession).toHaveBeenCalledWith(
       'user-1',
       'https://beta.quantified-self.io',
+      'coordinate_free',
     );
     expect(result.answer).toBe('Your readiness is 72 today.');
     expect(result.evidence).toEqual([expect.objectContaining({
@@ -442,6 +459,34 @@ describe('Assistant runtime', () => {
       title: 'Get daily report',
     })]);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('binds explicit precise activity-location consent to the MCP session and model instructions', async () => {
+    const { session } = createSession();
+    const createMcpSession = vi.fn().mockResolvedValue(session);
+    const runtime = createAssistantRuntime({
+      createMcpSession,
+      generateAnswer: async (input) => {
+        expect(input.locationAccess).toBe('precise_activity');
+        await input.tools[0].execute({});
+        return 'Your jump included a recorded location.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Where was that jump?',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    });
+
+    expect(createMcpSession).toHaveBeenCalledWith(
+      'user-1',
+      'https://quantified-self.io',
+      'precise_activity',
+    );
   });
 
   it('preserves an explicit model-selected timezone', async () => {

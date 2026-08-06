@@ -22,8 +22,10 @@ write activities, mutate Training state, or require a public `/integrations/<pro
 
 The built-in Assistant reuses this server through an SDK `Client` and linked `InMemoryTransport`. It calls
 `createMcpServer` with a fixed first-party identity, conservative coordinate-free read scopes including saved-route
-summaries, and a second explicit tool
-allowlist. It does not call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
+summaries, and a second explicit tool allowlist. A server-owned, conversation-bound opt-in can additionally grant the
+existing `activity-location:read` scope and preferred nearby-activity search tool; it never grants route-location access.
+Changing that setting replaces the conversation generation, and New chat returns it to coordinate-free. It does not
+call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
@@ -806,7 +808,9 @@ The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDeg
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
-The built-in Assistant does not receive location tools and does not use Mapbox.
+The built-in Assistant receives no location tools by default. After the user explicitly starts a fresh chat with precise
+activity locations enabled, it can use the preferred nearby-activity search. A place-name lookup then follows this same
+bounded Mapbox path; direct coordinates remain internal. Saved-route location tools remain unavailable.
 
 Mapbox responses have a 5-second timeout and 64 KiB body limit. Only the resolved label, feature type, center, and valid
 bounding box enter the application. Authentication, rate-limit, timeout, malformed-response, and provider failures map

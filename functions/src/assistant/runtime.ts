@@ -3,6 +3,7 @@ import { retry } from 'genkit/model/middleware';
 import {
   ASSISTANT_MAX_RESPONSE_CHARS,
   type AssistantEvidence,
+  type AssistantLocationAccess,
   type AssistantMessage,
 } from '../../../shared/assistant.types';
 import {
@@ -58,6 +59,7 @@ export interface AssistantModelGenerationInput {
   prompt: string;
   history: AssistantMessage[];
   mcpInstructions: string;
+  locationAccess?: AssistantLocationAccess;
   tools: AssistantRuntimeTool[];
   publishedExample: AssistantPublishedPromptExample | null;
   /**
@@ -74,7 +76,11 @@ export interface AssistantRuntimeResult {
 }
 
 export interface AssistantRuntimeDependencies {
-  createMcpSession: typeof createAssistantMcpSession;
+  createMcpSession: (
+    uid: string,
+    appBaseUrl: string,
+    locationAccess: AssistantLocationAccess,
+  ) => Promise<AssistantMcpSession>;
   generateAnswer: (input: AssistantModelGenerationInput) => Promise<string>;
   now: () => Date;
 }
@@ -105,6 +111,16 @@ export const ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS = [
   'Coordinate-free saved-route summaries are available only through list_routes.',
   'Location searches, exact coordinates, route geometry, route waypoints, raw chart streams, original files, and write actions are unavailable.',
   'Do not attempt unavailable tools; briefly direct exact-location, nearby-search, route-geometry, or waypoint questions to an externally authorized MCP client.',
+].join(' ');
+
+export const ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS = [
+  'The user explicitly enabled precise activity locations for this chat.',
+  'Exact activity start/end positions, MTB jump coordinates, and nearby activity search are available.',
+  'Use coordinate-bearing activity data only when it is relevant to the user\'s location, nearby-search, map, trail, or jump-location question.',
+  'For where-was-my-record-jump questions, use the authoritative activity ranking first, then inspect that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
+  'A place-name nearby search sends only the supplied location text to Mapbox; direct-coordinate searches do not use Mapbox.',
+  'Saved-route bounds, route geometry, route waypoints, original files, write actions, and dashboard settings remain unavailable.',
+  'Do not claim that precise locations are unavailable when an enabled tool result provides them.',
 ].join(' ');
 
 function asToolInput(value: unknown): Record<string, unknown> {
@@ -266,7 +282,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   const system = [
     ASSISTANT_SYSTEM_INSTRUCTIONS,
     input.mcpInstructions,
-    ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
+    input.locationAccess === 'precise_activity'
+      ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
+      : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
     publishedExampleInstructions,
   ].filter(Boolean).join(' ');
   await input.onBillableAttempt();
@@ -334,7 +352,12 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
 };
 
 const defaultDependencies: AssistantRuntimeDependencies = {
-  createMcpSession: createAssistantMcpSession,
+  createMcpSession: (uid, appBaseUrl, locationAccess) => createAssistantMcpSession(
+    uid,
+    appBaseUrl,
+    undefined,
+    locationAccess,
+  ),
   generateAnswer: generateAssistantModelAnswer,
   now: () => new Date(),
 };
@@ -353,12 +376,15 @@ export function createAssistantRuntime(
       appBaseUrl: string;
       prompt: string;
       timeZone: string;
+      locationAccess?: AssistantLocationAccess;
       history: AssistantMessage[];
       onBillableAttempt?: () => Promise<void>;
     }): Promise<AssistantRuntimeResult> => {
+      const locationAccess = input.locationAccess ?? 'coordinate_free';
       const session: AssistantMcpSession = await dependencies.createMcpSession(
         input.uid,
         input.appBaseUrl,
+        locationAccess,
       );
       const invocations: AssistantToolInvocation[] = [];
       let toolCallCount = 0;
@@ -419,6 +445,7 @@ export function createAssistantRuntime(
           prompt: input.prompt,
           history: input.history,
           mcpInstructions: session.instructions,
+          locationAccess,
           tools,
           publishedExample,
           onBillableAttempt: input.onBillableAttempt ?? (async () => undefined),

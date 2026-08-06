@@ -6,8 +6,9 @@ import {
   type AuthenticatedMcpRequest,
 } from '../mcp/server';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
+import type { AssistantLocationAccess } from '../../../shared/assistant.types';
 
-export const ASSISTANT_MCP_TOOL_NAMES = [
+export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_types',
   'list_measurement_types',
   'query_measurements',
@@ -29,6 +30,15 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   'get_activity_metrics',
   'rank_activities_by_metric',
   'list_routes',
+] as const;
+
+export const ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES = [
+  'search_activities_near_location',
+] as const;
+
+export const ASSISTANT_MCP_TOOL_NAMES = [
+  ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+  ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -78,7 +88,12 @@ export async function createAssistantMcpSession(
   uid: string,
   publicBaseUrl: string,
   dependencies: AssistantMcpSessionDependencies = defaultDependencies,
+  locationAccess: AssistantLocationAccess = 'coordinate_free',
 ): Promise<AssistantMcpSession> {
+  const activityLocationEnabled = locationAccess === 'precise_activity';
+  const expectedToolNames: readonly AssistantMcpToolName[] = activityLocationEnabled
+    ? ASSISTANT_MCP_TOOL_NAMES
+    : ASSISTANT_BASE_MCP_TOOL_NAMES;
   const auth: AuthenticatedMcpRequest = {
     uid,
     clientId: ASSISTANT_CLIENT_ID,
@@ -88,6 +103,9 @@ export async function createAssistantMcpSession(
       MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.SleepRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      ...(activityLocationEnabled
+        ? [MCP_OAUTH_SCOPES.ActivityLocationRead]
+        : []),
       MCP_OAUTH_SCOPES.RoutesRead,
     ],
   };
@@ -103,7 +121,7 @@ export async function createAssistantMcpSession(
     await client.connect(clientTransport);
     const listedTools = (await client.listTools()).tools;
     const listedToolsByName = new Map(listedTools.map(tool => [tool.name, tool]));
-    const tools = ASSISTANT_MCP_TOOL_NAMES.flatMap((name) => {
+    const tools = expectedToolNames.flatMap((name) => {
       const tool = listedToolsByName.get(name);
       return tool ? [{
         name: tool.name as AssistantMcpToolName,
@@ -116,7 +134,7 @@ export async function createAssistantMcpSession(
       }] : [];
     });
     const listedToolNames = new Set(tools.map(tool => tool.name));
-    const missingToolNames = ASSISTANT_MCP_TOOL_NAMES.filter(name => !listedToolNames.has(name));
+    const missingToolNames = expectedToolNames.filter(name => !listedToolNames.has(name));
     if (missingToolNames.length > 0) {
       throw new Error(`Assistant MCP tools are unavailable: ${missingToolNames.join(', ')}`);
     }

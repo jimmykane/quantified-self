@@ -64,7 +64,11 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
     expect(assistantSection?.content).toContain('at most four extra minutes');
     expect(assistantSection?.content).toContain('deletes the expired record asynchronously');
-    expect(assistantSection?.content).toContain('no access to coordinate fields');
+    expect(assistantSection?.content).toContain('coordinate-free by default');
+    expect(assistantSection?.content).toContain('**Precise activity locations**');
+    expect(assistantSection?.content).toContain('exact activity start/end and MTB jump coordinates');
+    expect(assistantSection?.content).toContain('Changing this setting starts a new chat');
+    expect(assistantSection?.content).toContain('route geometry');
     expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
     expect(assistantSection?.content).toContain('instead of comparing jump counts');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');

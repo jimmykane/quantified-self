@@ -435,20 +435,21 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one read-only Quantified Self result. Expand **grounded results** below an answer to inspect compact facts and app links produced from actual tool results.
-- Use **New chat** to clear the stored messages and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
+- Use **New chat** to clear the stored messages, return precise activity locations to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read
 
 - **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
 - **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
 - **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
-- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps with coordinates redacted, and swim lengths. For an MTB jump record, the Assistant ranks the matching Mountain Biking activities by the relevant maximum-jump metric and treats that persisted maximum as authoritative instead of comparing jump counts or only recent activities. It reads individual jump records only when you ask for those details.
+- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps, and swim lengths. Activity start/end and MTB jump coordinates are redacted by default. In **Examples & data access**, you can start a new chat with **Precise activity locations** enabled for exact activity positions and nearby activity searches. For an MTB jump record, the Assistant ranks the matching Mountain Biking activities by the relevant maximum-jump metric and treats that persisted maximum as authoritative instead of comparing jump counts or only recent activities. It reads individual jump records only when you ask for those details.
 - **Saved routes:** coordinate-free route names, activity types, bounded summary metrics and counts, and import or update times, filterable by sport, name, or recency. Route names can contain user- or provider-assigned place information.
 - **Activity metrics:** one or several bounded aggregate metric queries through the canonical MCP metric catalog.
 
 ## Privacy boundaries
 
-- The built-in Assistant can read coordinate-free saved-route summaries, but it has no access to coordinate fields, saved bounds, route geometry, waypoints, nearby-location search, raw chart streams, original files, write tools, or dashboard settings.
+- The built-in Assistant is coordinate-free by default. When you explicitly enable **Precise activity locations** for a fresh chat, activity tools selected during that chat may send Gemini exact activity start/end and MTB jump coordinates plus nearby activity results. Place-name nearby searches send only the location text to Mapbox; direct-coordinate searches do not use Mapbox. Changing this setting starts a new chat so coordinate-bearing history cannot cross back into a coordinate-free conversation.
+- Saved-route bounds, route geometry, route waypoints, raw chart streams, original files, write tools, and dashboard settings remain unavailable even when precise activity locations are enabled.
 - Gemini receives your message, the browser's IANA timezone for local-day context, bounded recent conversation context, and the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and an answer that repeats an opaque reference or cursor is rejected. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
 - Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
 - The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
@@ -458,12 +459,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Quantified Self stores one active conversation per user, with at most the latest six completed turns.
 - The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
-- **New chat** immediately replaces the stored conversation and removes its prior message content.
+- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations to **off**.
 
 ## Built-in Assistant or external MCP?
 
-- Use the **Assistant** for a zero-setup, app-funded conversation with the conservative coordinate-free tool set above.
-- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, want separately approved location or route-geometry access, or want usage billed by that external client.
+- Use the **Assistant** for a zero-setup, app-funded conversation. It is coordinate-free by default and offers explicit per-chat precise **activity** location access.
+- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, need separately approved saved-route location or geometry access, or want usage billed by that external client.
 - External MCP calls do not consume the in-app Assistant allowance. External clients have their own privacy and retention practices.
 
 ## Troubleshooting quick checks
@@ -473,7 +474,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Another response is in progress**: wait for the current turn to finish. A stale turn lock expires automatically.
 - **Quota reached**: wait for reset, upgrade, or use your own compatible AI client through MCP.
 - **No data found**: ask which measurement, sleep vital, Training metric, activity type, or activity metric is available before assuming it is unsupported.
-- For exact-location, nearby-search, route-geometry, or waypoint questions, use an external MCP client and explicitly approve the related permission.`,
+- For exact activity start/end or MTB jump locations and nearby activity searches, enable **Precise activity locations** in **Examples & data access**. For saved-route location, route geometry, or waypoint questions, use an external MCP client and explicitly approve the related permission.`,
     links: [
       { label: 'Assistant', icon: 'auto_awesome', kind: 'route', target: '/ai-insights' },
       { label: 'Assistant Overview', icon: 'travel_explore', kind: 'route', target: '/features/ai-insights' },
@@ -832,8 +833,8 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
-- The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question.
-- The Assistant can send Gemini coordinate-free saved-route summaries selected for a question, including route names that may contain place information. It cannot access or send raw activity or route files, coordinate fields, saved bounds, route geometry, waypoints, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
+- The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question. It is coordinate-free by default. If you explicitly start a chat with **Precise activity locations** enabled, selected activity-tool results may also send Gemini exact activity start/end and MTB jump coordinates and nearby activity results during that chat. Place-name searches send only the supplied location text to Mapbox. Changing the setting starts a new chat, and **New chat** returns it to off.
+- The Assistant can send Gemini coordinate-free saved-route summaries selected for a question, including route names that may contain place information. It cannot access or send raw activity or route files, saved-route bounds, route geometry, waypoints, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 - The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 

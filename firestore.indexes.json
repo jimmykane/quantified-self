@@ -1595,6 +1595,12 @@
     },
     {
       "collectionGroup": "assistantConversations",
+      "fieldPath": "locationAccess",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
       "fieldPath": "messages",
       "ttl": false,
       "indexes": []

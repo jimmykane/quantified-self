@@ -4,12 +4,15 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
+  isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantChatRequest,
   type AssistantChatResponse,
+  type AssistantLocationAccess,
   type AssistantMessage,
   type AssistantQuotaStatusResponse,
   type GetAssistantConversationResponse,
+  type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
 } from '../../../shared/assistant.types';
 import { isValidIanaTimeZone } from '../../../shared/event-stat-aggregation';
@@ -65,6 +68,7 @@ export interface AssistantCallableDependencies {
     appBaseUrl: string;
     prompt: string;
     timeZone: string;
+    locationAccess: AssistantLocationAccess;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
@@ -185,6 +189,19 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function parseAssistantLocationAccess(value: unknown): AssistantLocationAccess {
+  if (value === undefined) {
+    return 'coordinate_free';
+  }
+  if (!isAssistantLocationAccess(value)) {
+    throw new HttpsError(
+      'invalid-argument',
+      'locationAccess must be coordinate_free or precise_activity.',
+    );
+  }
+  return value;
+}
+
 function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const data = asRecord(value);
   if (!isValidAssistantRequestId(data.requestId)) {
@@ -235,6 +252,7 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     requestId: data.requestId,
     message,
     timeZone,
+    locationAccess: parseAssistantLocationAccess(data.locationAccess),
     ...(conversationId
       ? { conversationId }
       : {}),
@@ -278,6 +296,7 @@ function assertRequestFingerprintMatchesInput(
   if (requestState.requestFingerprint !== createAssistantRequestFingerprint(
     input.requestId,
     input.message,
+    input.locationAccess,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -380,6 +399,7 @@ export async function runAssistantChat(
     const requestFingerprint = createAssistantRequestFingerprint(
       input.requestId,
       input.message,
+      input.locationAccess,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -427,6 +447,7 @@ export async function runAssistantChat(
       input.conversationId,
       input.requestId,
       requestFingerprint,
+      input.locationAccess,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -454,6 +475,7 @@ export async function runAssistantChat(
       appBaseUrl: resolveAssistantAppBaseUrl(context),
       prompt: input.message,
       timeZone: input.timeZone,
+      locationAccess: input.locationAccess,
       history: begunTurn.history,
       onBillableAttempt: finalizeQuotaForBillableAttempt,
     }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
@@ -543,13 +565,16 @@ export async function runGetAssistantConversation(
 }
 
 export async function runResetAssistantConversation(
+  value: unknown,
   context: AssistantCallableContext | undefined,
   conversationStore: AssistantConversationStore = assistantConversationStore,
 ): Promise<ResetAssistantConversationResponse> {
   const uid = requireAuthenticatedUid(context);
+  const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
+  const locationAccess = parseAssistantLocationAccess(data.locationAccess);
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid),
+      conversation: await conversationStore.resetConversation(uid, locationAccess),
     };
   } catch (error) {
     throw mapAssistantError(error);
@@ -588,4 +613,4 @@ export const resetAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.resetAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runResetAssistantConversation(request));
+}, request => runResetAssistantConversation(request.data, request));

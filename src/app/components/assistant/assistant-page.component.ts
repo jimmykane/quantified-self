@@ -18,9 +18,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth } from 'app/firebase/auth';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
+  isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantChatRequest,
   type AssistantConversation,
+  type AssistantLocationAccess,
   type AssistantMessage,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
@@ -30,7 +32,10 @@ import {
   AssistantError,
   AssistantService,
 } from '../../services/assistant.service';
-import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
+import {
+  AssistantExploreBottomSheetComponent,
+  type AssistantExploreBottomSheetResult,
+} from './assistant-explore-bottom-sheet.component';
 
 const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
 const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
@@ -98,6 +103,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     initialValue: this.promptControl.value,
   });
   readonly conversation = signal<AssistantConversation | null>(null);
+  readonly locationAccess = signal<AssistantLocationAccess>('coordinate_free');
+  readonly preciseActivityLocationsEnabled = computed(
+    () => this.locationAccess() === 'precise_activity',
+  );
   readonly pendingUserMessage = signal<AssistantMessage | null>(null);
   readonly quota = signal<AssistantQuotaStatus | null>(null);
   readonly loadingConversation = signal(true);
@@ -163,6 +172,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.cancelPendingResponsePoll();
       this.clearRememberedPendingRequest(rememberedRequest?.requestId);
       this.conversation.set(null);
+      this.locationAccess.set('coordinate_free');
       this.quota.set(null);
       this.retryRequest.set(null);
       this.pendingRequestId.set(null);
@@ -177,6 +187,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (conversationResult.status === 'fulfilled') {
       const state = conversationResult.value;
       this.conversation.set(state.conversation);
+      this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
       if (rememberedRequest
         && this.hasCompletedRequest(state.conversation, rememberedRequest.requestId)) {
         this.clearRememberedPendingRequest(rememberedRequest.requestId);
@@ -244,14 +255,21 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   openExploreSheet(): void {
-    if (this.loadingConversation() || this.conversationLoadError()) {
+    if (this.loadingConversation()
+      || this.conversationLoadError()
+      || this.sending()
+      || this.resetting()) {
       return;
     }
-    this.bottomSheet.open(AssistantExploreBottomSheetComponent)
+    this.bottomSheet.open(AssistantExploreBottomSheetComponent, {
+      data: { locationAccess: this.locationAccess() },
+    })
       .afterDismissed()
-      .subscribe((prompt: string | undefined) => {
-        if (typeof prompt === 'string') {
-          this.useStarterPrompt(prompt);
+      .subscribe((result: AssistantExploreBottomSheetResult | undefined) => {
+        if (result?.kind === 'prompt') {
+          this.useStarterPrompt(result.prompt);
+        } else if (result?.kind === 'location_access') {
+          void this.changeLocationAccess(result.locationAccess);
         }
       });
   }
@@ -289,6 +307,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         message: text,
         requestId: globalThis.crypto.randomUUID(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        locationAccess: this.locationAccess(),
         submittedAtMs: Date.now(),
         ...(activeConversation?.conversationId
           ? { conversationId: activeConversation.conversationId }
@@ -312,6 +331,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         requestId: request.requestId,
         message: text,
         timeZone: request.timeZone,
+        locationAccess: request.locationAccess,
         ...(request.conversationId
           ? { conversationId: request.conversationId }
           : {}),
@@ -333,6 +353,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         const refreshedState = await this.assistantService.getConversationState();
         refreshedConversation = refreshedState.conversation;
         refreshedPendingRequestId = refreshedState.pendingRequestId;
+        this.locationAccess.set(refreshedState.locationAccess ?? 'coordinate_free');
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
@@ -397,21 +418,39 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
+    await this.replaceConversation('coordinate_free', false);
+  }
+
+  private async changeLocationAccess(
+    locationAccess: AssistantLocationAccess,
+  ): Promise<void> {
+    if (locationAccess === this.locationAccess()) {
+      return;
+    }
+    await this.replaceConversation(locationAccess, true);
+  }
+
+  private async replaceConversation(
+    locationAccess: AssistantLocationAccess,
+    preservePrompt: boolean,
+  ): Promise<void> {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.resetting()
       || this.sending()) {
       return;
     }
+    const prompt = preservePrompt ? this.promptControl.value : '';
     this.resetting.set(true);
     this.errorMessage.set(null);
     try {
-      this.conversation.set(await this.assistantService.resetConversation());
+      this.conversation.set(await this.assistantService.resetConversation(locationAccess));
+      this.locationAccess.set(locationAccess);
       this.cancelPendingResponsePoll();
       this.pendingRequestId.set(null);
       this.clearRememberedPendingRequest();
       this.retryRequest.set(null);
-      this.promptControl.setValue('');
+      this.promptControl.setValue(prompt);
       this.scrollToPageStart();
     } catch (error) {
       this.errorMessage.set(this.assistantService.getErrorMessage(error));
@@ -649,6 +688,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const timeZone = typeof data.timeZone === 'string'
         ? data.timeZone.trim()
         : '';
+      const locationAccess = isAssistantLocationAccess(data.locationAccess)
+        ? data.locationAccess
+        : 'coordinate_free';
       const conversationId = typeof data.conversationId === 'string'
         ? data.conversationId.trim()
         : data.conversationId;
@@ -668,6 +710,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         ...rememberedRequestId,
         message,
         timeZone,
+        locationAccess,
         submittedAtMs: Number(data.submittedAtMs),
         ...(conversationId ? { conversationId } : {}),
       };

@@ -31,8 +31,24 @@
       </div>
       <div>
         <mat-icon aria-hidden="true">route</mat-icon>
-        <span>Saved-route summaries are available; coordinates and geometry stay private.</span>
+        <span>Saved-route summaries are available; route coordinates and geometry stay private.</span>
       </div>
+    </section>
+
+    <section class="assistant-location-access" aria-labelledby="assistant-location-access">
+      <span class="assistant-location-icon" aria-hidden="true">
+        <mat-icon>{{ data.locationAccess === 'precise_activity' ? 'location_on' : 'location_off' }}</mat-icon>
+      </span>
+      <div class="assistant-location-copy">
+        <h3 id="assistant-location-access">Precise activity locations</h3>
+        <p>Allow activity tools used in this chat to include exact start/end and MTB jump coordinates, plus nearby activity results, for Gemini.</p>
+        <p class="assistant-location-note">Off by default. Changing this setting starts a new chat so precise locations never cross into a coordinate-free conversation. Place-name searches send only the location text to Mapbox.</p>
+      </div>
+      <mat-slide-toggle
+        [checked]="data.locationAccess === 'precise_activity'"
+        [attr.aria-label]="data.locationAccess === 'precise_activity' ? 'Disable precise activity locations and start a new chat' : 'Enable precise activity locations and start a new chat'"
+        (change)="setPreciseActivityLocations($event.checked)">
+      </mat-slide-toggle>
     </section>
 
     <section class="assistant-mcp-link" aria-labelledby="assistant-mcp-link">

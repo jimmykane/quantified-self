@@ -229,6 +229,7 @@ describe('firestore indexes', () => {
         for (const fieldPath of [
             'version',
             'conversationId',
+            'locationAccess',
             'messages',
             'pendingTurn',
             'replayReceipts',

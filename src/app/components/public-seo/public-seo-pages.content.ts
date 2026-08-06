@@ -512,7 +512,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Conversational analysis',
         title: 'Ask naturally, then follow up',
-        copy: 'The built-in Assistant uses the same validated MCP server foundation with a conservative coordinate-free tool set, without making you install another client.',
+        copy: 'The built-in Assistant uses the same validated MCP server foundation without making you install another client. It is coordinate-free by default, with explicit per-chat access to precise activity locations.',
         items: [
           {
             icon: 'bedtime',
@@ -547,9 +547,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Answers must call a current Quantified Self tool. Missing values remain missing, and the response must distinguish recorded facts from interpretation.',
           },
           {
-            icon: 'location_off',
-            title: 'Sensitive surfaces excluded',
-            copy: 'The built-in Assistant cannot access coordinate fields, saved route bounds, route geometry, waypoints, original files, write tools, or dashboard settings.',
+            icon: 'location_on',
+            title: 'Precise activity locations stay opt-in',
+            copy: 'Activity start/end and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions and nearby activity searches. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
           },
           {
             icon: 'timer',
@@ -562,11 +562,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, and coordinate-free saved-route summaries.',
+        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, and coordinate-free saved-route summaries. Exact activity start/end and MTB jump locations plus nearby activity search are available only after you explicitly enable precise activity locations for a fresh chat.',
       },
       {
         question: 'Does the Assistant send raw files or route locations to Gemini?',
-        answer: 'No. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question, which may include a coordinate-free saved-route summary and its route name. Route names can contain place information. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer. Original FIT, TCX, GPX, JSON, and SML files, coordinate fields, saved bounds, route geometry, and waypoints are not available to the built-in Assistant.',
+        answer: 'No raw files or saved-route locations are sent. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Results are coordinate-free by default. If you explicitly enable precise activity locations for a fresh chat, those results may include exact activity start/end and MTB jump coordinates or nearby activity matches. Place-name searches send only the location text to Mapbox. Coordinate-free saved-route summaries may include route names with place information, but saved bounds, route geometry, and waypoints remain unavailable. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer.',
       },
       {
         question: 'Is the Assistant available on the free plan?',

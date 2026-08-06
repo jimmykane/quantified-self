@@ -4,8 +4,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_STORED_MESSAGES,
+  isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantConversation,
+  type AssistantLocationAccess,
   type AssistantMessage,
 } from '../../../shared/assistant.types';
 import { validateAssistantConversation } from '../../../shared/assistant-response.contract';
@@ -20,6 +22,7 @@ const ASSISTANT_PENDING_TURN_TTL_MS = 4 * 60 * 1_000;
 const ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS = 30 * 1_000;
 export const ASSISTANT_MAX_REPLAY_RECEIPTS = 512;
 const ASSISTANT_REQUEST_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
+const ASSISTANT_DEFAULT_LOCATION_ACCESS: AssistantLocationAccess = 'coordinate_free';
 
 interface AssistantPendingTurn {
   id: string;
@@ -31,6 +34,7 @@ interface AssistantPendingTurn {
 export interface AssistantActiveConversationState {
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
+  locationAccess: AssistantLocationAccess;
 }
 
 interface AssistantReplayReceipt {
@@ -46,6 +50,7 @@ interface StoredAssistantConversation {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   expireAt: Timestamp;
+  locationAccess: AssistantLocationAccess;
   pendingTurn: AssistantPendingTurn | null;
   replayReceipts: AssistantReplayReceipt[];
 }
@@ -55,6 +60,7 @@ export interface BegunAssistantTurn {
   conversationId: string;
   turnId: string;
   history: AssistantMessage[];
+  locationAccess: AssistantLocationAccess;
 }
 
 export interface ReplayedAssistantTurn {
@@ -107,6 +113,7 @@ export interface AssistantConversationStore {
     expectedConversationId?: string,
     requestId?: string,
     requestFingerprint?: string,
+    locationAccess?: AssistantLocationAccess,
   ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
@@ -115,7 +122,10 @@ export interface AssistantConversationStore {
     assistantMessage: AssistantMessage,
   ) => Promise<AssistantConversation>;
   releaseTurn: (uid: string, begunTurn: BegunAssistantTurn) => Promise<void>;
-  resetConversation: (uid: string) => Promise<AssistantConversation>;
+  resetConversation: (
+    uid: string,
+    locationAccess?: AssistantLocationAccess,
+  ) => Promise<AssistantConversation>;
 }
 
 export interface AssistantConversationStoreDependencies {
@@ -135,12 +145,18 @@ const defaultDependencies: AssistantConversationStoreDependencies = {
 export function createAssistantRequestFingerprint(
   requestId: string,
   requestText: string,
+  locationAccess: AssistantLocationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
 ): string {
-  return createHash('sha256')
+  const fingerprint = createHash('sha256')
     .update(requestId)
     .update('\0')
-    .update(requestText)
-    .digest('hex');
+    .update(requestText);
+  // Preserve existing coordinate-free receipts while binding wider consent
+  // to a distinct idempotency fingerprint.
+  if (locationAccess !== ASSISTANT_DEFAULT_LOCATION_ACCESS) {
+    fingerprint.update('\0').update(locationAccess);
+  }
+  return fingerprint.digest('hex');
 }
 
 function toMillis(value: unknown): number | null {
@@ -155,6 +171,7 @@ function toMillis(value: unknown): number | null {
 function normalizeReplayReceipts(
   value: unknown,
   messages: AssistantMessage[],
+  locationAccess: AssistantLocationAccess,
 ): AssistantReplayReceipt[] {
   const receiptsByRequestId = new Map<string, AssistantReplayReceipt>();
   if (Array.isArray(value)) {
@@ -192,7 +209,11 @@ function normalizeReplayReceipts(
     }
     receiptsByRequestId.set(message.id, {
       requestId: message.id,
-      requestFingerprint: createAssistantRequestFingerprint(message.id, message.text),
+      requestFingerprint: createAssistantRequestFingerprint(
+        message.id,
+        message.text,
+        locationAccess,
+      ),
       completedAtMs,
     });
   }
@@ -225,6 +246,9 @@ function parseStoredConversation(
     return null;
   }
   const messages = data.messages as AssistantMessage[];
+  const locationAccess = isAssistantLocationAccess(data.locationAccess)
+    ? data.locationAccess
+    : ASSISTANT_DEFAULT_LOCATION_ACCESS;
   const pendingTurn = data.pendingTurn === null
     ? null
     : data.pendingTurn
@@ -261,8 +285,13 @@ function parseStoredConversation(
     createdAt: data.createdAt as Timestamp,
     updatedAt: data.updatedAt as Timestamp,
     expireAt: data.expireAt as Timestamp,
+    locationAccess,
     pendingTurn,
-    replayReceipts: normalizeReplayReceipts(data.replayReceipts, messages),
+    replayReceipts: normalizeReplayReceipts(
+      data.replayReceipts,
+      messages,
+      locationAccess,
+    ),
   };
 }
 
@@ -280,6 +309,7 @@ function toPublicConversation(
 function createEmptyConversation(
   now: Date,
   createId: () => string,
+  locationAccess: AssistantLocationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
 ): StoredAssistantConversation {
   const timestamp = Timestamp.fromDate(now);
   return {
@@ -289,6 +319,7 @@ function createEmptyConversation(
     createdAt: timestamp,
     updatedAt: timestamp,
     expireAt: Timestamp.fromMillis(now.getTime() + ASSISTANT_CONVERSATION_RETENTION_MS),
+    locationAccess,
     pendingTurn: null,
     replayReceipts: [],
   };
@@ -407,14 +438,22 @@ export function createAssistantConversationStore(
         nowMs,
       );
       if (deletionGuard.shouldSkip) {
-        return { conversation: null, pendingRequestId: null };
+        return {
+          conversation: null,
+          pendingRequestId: null,
+          locationAccess: ASSISTANT_DEFAULT_LOCATION_ACCESS,
+        };
       }
       const snapshot = await transaction.get(conversationRef);
       const conversation = snapshot.exists
         ? parseStoredConversation(snapshot.data(), nowMs)
         : null;
       if (!conversation || conversation.expireAt.toMillis() <= nowMs) {
-        return { conversation: null, pendingRequestId: null };
+        return {
+          conversation: null,
+          pendingRequestId: null,
+          locationAccess: ASSISTANT_DEFAULT_LOCATION_ACCESS,
+        };
       }
       return {
         conversation: toPublicConversation(conversation),
@@ -422,6 +461,7 @@ export function createAssistantConversationStore(
           && conversation.pendingTurn.expiresAtMs > nowMs
           ? conversation.pendingTurn.requestId
           : null,
+        locationAccess: conversation.locationAccess,
       };
     });
   };
@@ -476,6 +516,7 @@ export function createAssistantConversationStore(
       expectedConversationId,
       requestId,
       requestFingerprint,
+      locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -489,7 +530,7 @@ export function createAssistantConversationStore(
           : null;
         const conversation = !storedConversation
           || storedConversation.expireAt.toMillis() <= nowMs
-          ? createEmptyConversation(now, dependencies.createId)
+          ? createEmptyConversation(now, dependencies.createId, locationAccess)
           : storedConversation;
 
         if (expectedConversationId
@@ -497,6 +538,12 @@ export function createAssistantConversationStore(
           throw new AssistantConversationStoreError(
             'conversation_changed',
             'The active Assistant conversation changed. Reload it before sending another message.',
+          );
+        }
+        if (conversation.locationAccess !== locationAccess) {
+          throw new AssistantConversationStoreError(
+            'conversation_changed',
+            'The Assistant data-access setting changed. Reload before sending another message.',
           );
         }
         if (requestId) {
@@ -542,6 +589,7 @@ export function createAssistantConversationStore(
           conversationId: updatedConversation.conversationId,
           turnId,
           history: [...updatedConversation.messages],
+          locationAccess: updatedConversation.locationAccess,
         };
       });
     },
@@ -584,6 +632,7 @@ export function createAssistantConversationStore(
             requestFingerprint: createAssistantRequestFingerprint(
               userMessage.id,
               userMessage.text,
+              begunTurn.locationAccess,
             ),
             completedAtMs: nowMs,
           },
@@ -630,7 +679,10 @@ export function createAssistantConversationStore(
       });
     },
 
-    resetConversation: async (uid) => {
+    resetConversation: async (
+      uid,
+      locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
+    ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
       return db.runTransaction(async (transaction) => {
@@ -642,7 +694,11 @@ export function createAssistantConversationStore(
           uid,
           now.getTime(),
         );
-        const conversation = createEmptyConversation(now, dependencies.createId);
+        const conversation = createEmptyConversation(
+          now,
+          dependencies.createId,
+          locationAccess,
+        );
         transaction.set(conversationRef, conversation);
         return toPublicConversation(conversation);
       });

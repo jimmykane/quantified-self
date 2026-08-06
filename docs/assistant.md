@@ -6,7 +6,7 @@ Quantified Self offers two complementary conversational paths:
 
 | Path | Best for | Who pays for inference | Data authority |
 | --- | --- | --- | --- |
-| Built-in Assistant at `/ai-insights` | Zero-setup questions inside the app | Quantified Self, subject to the existing per-plan request allowance | A conservative first-party coordinate-free MCP tool allowlist |
+| Built-in Assistant at `/ai-insights` | Zero-setup questions inside the app | Quantified Self, subject to the existing per-plan request allowance | A conservative first-party MCP allowlist; coordinate-free by default with explicit per-chat precise activity-location access |
 | External MCP client | ChatGPT or another compatible bring-your-own-AI experience | The external client or user | The scopes explicitly approved in MCP authorization |
 
 The built-in Assistant is not a second fitness-data API. It connects an in-process MCP client to the same canonical
@@ -37,15 +37,15 @@ or Beta caller origin (or loopback while running the Functions emulator), with t
 
 The callable surface consists of:
 
-- `assistantChat`: validates the prompt, client-generated request ID, and IANA timezone; reserves quota while it
+- `assistantChat`: validates the prompt, client-generated request ID, IANA timezone, and conversation-bound activity-location access mode; reserves quota while it
   prepares the grounded runtime; consumes it immediately before the first Gemini or MCP tool attempt; and commits one
   completed user/assistant turn.
 - `getAssistantQuotaStatus`: returns the signed-in user's current Assistant allowance without exposing the server-owned
   usage ledger.
 - `getAssistantConversation`: reads the current server-owned conversation and the opaque request ID of any active
   pending turn for the signed-in user.
-- `resetAssistantConversation`: replaces the active conversation generation so an older in-flight response cannot
-  restore cleared content.
+- `resetAssistantConversation`: replaces the active conversation generation with an explicit location-access mode so an
+  older in-flight response cannot restore cleared content or cross a consent boundary.
 
 All four require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
@@ -53,21 +53,31 @@ Firestore rules deny browser access to `users/{uid}/assistantConversations/activ
 
 ## Tool and data boundary
 
-The internal session grants `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and `routes:read`, then narrows
-the exposed model tools to the explicit `ASSISTANT_MCP_TOOL_NAMES` allowlist. It covers:
+The internal session always grants `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and
+`routes:read`, then narrows the exposed model tools to the explicit Assistant allowlist. It covers:
 
 - daily report and live Readiness;
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
 - first-class body-measurement discovery and bounded history;
-- bounded activity lists, overview, selected metrics, rankings, laps, coordinate-redacted MTB jumps, and swim lengths;
+- bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, and swim lengths;
 - coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
 
-The built-in Assistant does not receive activity-location or route-location scopes, route geometry, waypoints, exact
-coordinates, nearby-location search, activity chart streams, original source files, write tools, or dashboard settings.
-These exclusions are product and privacy boundaries, not merely prompt instructions. External MCP clients can request
-separately approved location permissions; that is the intended path for exact-location and route-geometry questions.
-Saved-route names are included in summaries and can themselves contain user- or provider-assigned place information.
+The default conversation remains coordinate-free: activity start/end and MTB jump coordinates are omitted and nearby
+activity search is absent. In **Examples & data access**, the user can explicitly replace the active generation with a
+fresh `precise_activity` chat. That mode adds only the existing `activity-location:read` scope and preferred
+`search_activities_near_location` tool; existing activity list and jump projections may then contain exact coordinates.
+Place-name searches send only the supplied location text through the existing bounded Mapbox resolver, while direct
+coordinates remain inside Quantified Self. The model is instructed to use coordinate-bearing data only for a relevant
+location, nearby-search, map, trail, or jump-location question.
+
+The selected access mode is stored with the server-owned conversation. `beginTurn` rejects a mismatched mode, request
+fingerprints bind precise-location retries to that wider consent, changing the setting creates a new generation, and
+**New chat** always creates a coordinate-free generation. This prevents coordinate-bearing history from later being
+sent as part of a coordinate-free chat. Route-location scope, saved-route bounds, route geometry, route waypoints,
+activity chart streams, original source files, write tools, and dashboard settings remain unavailable in both modes.
+External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
+are included in summaries and can themselves contain user- or provider-assigned place information.
 
 Every current answer must execute at least one allowlisted tool. Genkit tools are built from the MCP server's live JSON
 input schemas. MCP validates every structured result against its strict output schema before the model receives it; the
@@ -96,7 +106,8 @@ The model receives only:
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
   model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
   are renamed and converted to ISO-8601 strings at this internal boundary. Measurement values such as HRV milliseconds
-  and relative offsets such as a jump `timestampMs` remain numeric.
+  and relative offsets such as a jump `timestampMs` remain numeric. In a `precise_activity` conversation, relevant
+  selected results can also contain validated activity start/end or MTB jump coordinates and nearby activity matches.
 
 Opaque references and cursors remain available to the model only because bounded follow-up detail and pagination calls
 need them. After generation, the runtime rejects any answer that repeats an exact opaque reference, opaque cursor, or
@@ -149,6 +160,7 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - at most 512 private replay receipts containing only a request ID, request fingerprint, and completion time;
 - `createdAt`, `updatedAt`, and `expireAt` timestamps;
 - an opaque conversation generation ID;
+- one `coordinate_free` or `precise_activity` location-access mode for the generation;
 - one four-minute pending-turn lease to serialize requests.
 
 Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID. On
@@ -161,7 +173,7 @@ different text is rejected. Documents from before this field existed derive rece
 in memory and persist them on the next write.
 
 While a send outcome is ambiguous, the page keeps a versioned, account-bound, bounded resumption record in tab-scoped
-session storage: the Firebase UID, question, opaque request ID, IANA timezone, original conversation generation when
+session storage: the Firebase UID, question, opaque request ID, IANA timezone, location-access mode, original conversation generation when
 present, and submission time. A record is discarded without rendering or resubmission if the signed-in UID changes. This
 lets a refreshed page render the pending question immediately. If the refresh cancelled the HTTP request before the
 server registered its turn, the page resubmits the same question with the same request ID; server idempotency prevents a
@@ -182,8 +194,9 @@ Each completed turn refreshes `expireAt` to seven days. Starting a turn never re
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
 valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for
 at most four extra minutes. The conversation becomes unavailable when `expireAt` passes; Firestore TTL deletes the
-expired record asynchronously. **New chat** immediately replaces the document with a new generation, no messages, and
-no replay receipts, so an old response cannot be replayed into a replacement conversation.
+expired record asynchronously. **New chat** immediately replaces the document with a new generation, no messages, no
+replay receipts, and coordinate-free location access, so an old response cannot be replayed into a replacement
+conversation or retain wider consent.
 Account deletion recursively removes the user document and all Assistant subcollection data. Every transactional
 write, including failure cleanup, checks the shared user-deletion guard so an in-flight request cannot recreate data
 after deletion starts.
@@ -269,6 +282,6 @@ Also run the public Help/SEO content tests whenever capabilities, privacy, reten
 ## Deliberately deferred capabilities
 
 The initial version does not include streaming responses, multiple named conversations, proactive notifications,
-voice, location access, route geometry or waypoints, chart-stream analysis, write actions, dashboard arrangement, or medical recommendations.
+voice, saved-route location access, route geometry or waypoints, chart-stream analysis, write actions, dashboard arrangement, or medical recommendations.
 Any expansion needs an explicit product decision, privacy review, bounded data contract, quota/cost model, and rollback
-plan. Exact-location or route-geometry support should normally remain in the external MCP path where the user approves those scopes.
+plan. Saved-route location or route-geometry support should normally remain in the external MCP path where the user approves those scopes.

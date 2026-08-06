@@ -135,6 +135,7 @@ describe('Assistant conversation store', () => {
         conversationId: reset.conversationId,
       }),
       pendingRequestId: requestId,
+      locationAccess: 'coordinate_free',
     });
 
     now = new Date('2026-08-03T12:04:00.001Z');
@@ -143,7 +144,64 @@ describe('Assistant conversation store', () => {
         conversationId: reset.conversationId,
       }),
       pendingRequestId: null,
+      locationAccess: 'coordinate_free',
     });
+  });
+
+  it('binds precise activity-location consent to a fresh conversation generation', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `location-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const conversation = await store.resetConversation(
+      'user-1',
+      'precise_activity',
+    );
+
+    await expect(store.getActiveConversationState('user-1')).resolves.toEqual({
+      conversation,
+      pendingRequestId: null,
+      locationAccess: 'precise_activity',
+    });
+    await expect(store.beginTurn(
+      'user-1',
+      conversation.conversationId,
+      'assistant-location-request-0001',
+      createAssistantRequestFingerprint(
+        'assistant-location-request-0001',
+        'Where was my biggest jump?',
+      ),
+      'coordinate_free',
+    )).rejects.toMatchObject({ code: 'conversation_changed' });
+
+    const begun = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      conversation.conversationId,
+      'assistant-location-request-0001',
+      createAssistantRequestFingerprint(
+        'assistant-location-request-0001',
+        'Where was my biggest jump?',
+        'precise_activity',
+      ),
+      'precise_activity',
+    ));
+    expect(begun.locationAccess).toBe('precise_activity');
+    expect(createAssistantRequestFingerprint(
+      'assistant-location-request-0001',
+      'Where was my biggest jump?',
+    )).not.toBe(createAssistantRequestFingerprint(
+      'assistant-location-request-0001',
+      'Where was my biggest jump?',
+      'precise_activity',
+    ));
   });
 
   it('recognizes only an identical request as the already-running turn', async () => {
@@ -252,6 +310,7 @@ describe('Assistant conversation store', () => {
     );
     if (storedConversation) {
       delete storedConversation.replayReceipts;
+      delete storedConversation.locationAccess;
     }
 
     const replayed = await store.beginTurn(
@@ -271,6 +330,9 @@ describe('Assistant conversation store', () => {
     expect(harness.documents.get(
       'users/user-1/assistantConversations/active',
     )?.pendingTurn).toBeNull();
+    await expect(store.getActiveConversationState('user-1')).resolves.toMatchObject({
+      locationAccess: 'coordinate_free',
+    });
   });
 
   it('clears replay receipts when a new conversation generation replaces the old one', async () => {

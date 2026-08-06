@@ -1,5 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
+import {
+  MAT_BOTTOM_SHEET_DATA,
+  MatBottomSheetRef,
+} from '@angular/material/bottom-sheet';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -26,6 +29,10 @@ describe('AssistantExploreBottomSheetComponent', () => {
       ],
       providers: [
         { provide: MatBottomSheetRef, useValue: bottomSheetRef },
+        {
+          provide: MAT_BOTTOM_SHEET_DATA,
+          useValue: { locationAccess: 'coordinate_free' },
+        },
       ],
     }).compileComponents();
 
@@ -45,6 +52,8 @@ describe('AssistantExploreBottomSheetComponent', () => {
       expect(buttons[index].getAttribute('aria-label')).toContain(prompt.prompt);
     });
     expect(fixture.nativeElement.textContent).toContain('Your data stays in your control');
+    expect(fixture.nativeElement.textContent).toContain('Precise activity locations');
+    expect(fixture.nativeElement.textContent).toContain('starts a new chat');
     expect(fixture.nativeElement.textContent).toContain('MCP connections');
   });
 
@@ -53,7 +62,19 @@ describe('AssistantExploreBottomSheetComponent', () => {
 
     component.selectPrompt(prompt);
 
-    expect(bottomSheetRef.dismiss).toHaveBeenCalledWith(prompt);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({
+      kind: 'prompt',
+      prompt,
+    });
+  });
+
+  it('returns explicit precise activity-location consent to the Assistant page', () => {
+    component.setPreciseActivityLocations(true);
+
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({
+      kind: 'location_access',
+      locationAccess: 'precise_activity',
+    });
   });
 
   it('closes without a prompt when dismissed explicitly', () => {

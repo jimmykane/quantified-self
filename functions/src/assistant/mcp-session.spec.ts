@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import {
+  ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
   createAssistantMcpSession,
 } from './mcp-session';
@@ -46,7 +47,7 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_BASE_MCP_TOOL_NAMES);
       const productionToolNames = new Set(session.tools.map(tool => tool.name));
       for (const example of ASSISTANT_PROMPT_EXAMPLES) {
         expect(
@@ -92,7 +93,7 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.instructions).toBe('Use the registered facts only.');
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_BASE_MCP_TOOL_NAMES);
       expect(session.tools.some(tool => tool.name === ('get_route_geometry' as never))).toBe(false);
       expect(capturedAuth).toMatchObject({
         uid: 'user-1',
@@ -110,6 +111,55 @@ describe('Assistant MCP session', () => {
       await expect(session.callTool('get_daily_report', {})).resolves.toEqual({
         structuredContent: { source: 'get_daily_report' },
       });
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('adds only the activity-location scope and nearby activity tool after explicit consent', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession(
+      'user-1',
+      'https://quantified-self.io',
+      {
+        createServer: (auth) => {
+          capturedAuth = auth;
+          return createTestServer();
+        },
+      },
+      'precise_activity',
+    );
+
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).toContain(
+        'search_activities_near_location',
+      );
+      expect(capturedAuth?.scopes).toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
+      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('uses the production location-aware projections only in a precise activity chat', async () => {
+    const session = await createAssistantMcpSession(
+      'user-1',
+      'https://quantified-self.io',
+      undefined,
+      'precise_activity',
+    );
+
+    try {
+      expect(session.tools.find(tool => tool.name === 'query_activities')?.description)
+        .toContain('exact start and end coordinates');
+      expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
+        .toContain('including exact coordinates');
+      expect(session.tools.find(
+        tool => tool.name === 'search_activities_near_location',
+      )?.description).toContain('Mapbox');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
     } finally {
       await session.close();
     }

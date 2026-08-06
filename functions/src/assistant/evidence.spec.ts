@@ -142,6 +142,27 @@ describe('Assistant evidence', () => {
     expect(JSON.stringify(evidence)).not.toMatch(/Latitude|Longitude|39\.65|20\.84/);
   });
 
+  it('keeps opted-in activity and jump coordinates out of deterministic evidence', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'list_activity_jumps',
+      title: 'List activity jumps',
+    }, {
+      jumps: [{
+        distanceMeters: 10.41,
+        heightMeters: 1.2,
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.853,
+        position: {
+          latitudeDegrees: 39.665,
+          longitudeDegrees: 20.853,
+        },
+      }],
+    });
+
+    expect(JSON.stringify(evidence)).toContain('10.41');
+    expect(JSON.stringify(evidence)).not.toMatch(/Latitude|Longitude|39\.665|20\.853/);
+  });
+
   it('does not use denied provenance counts in its fallback summary', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',

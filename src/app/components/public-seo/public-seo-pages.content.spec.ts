@@ -118,10 +118,13 @@ describe('public-seo-pages.content', () => {
       section.items.some(item => item.copy.includes('maximum-jump metric'))
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
-      section.items.some(item => item.copy.includes('coordinate fields, saved bounds, geometry, and waypoints stay unavailable'))
+      section.items.some(item => item.title === 'Precise activity locations stay opt-in')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
-      item.answer.includes('Route names can contain place information')
+      item.answer.includes('route names with place information')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('exact activity start/end and MTB jump coordinates')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
       item.answer.includes('External MCP connections remain the advanced bring-your-own-AI path')

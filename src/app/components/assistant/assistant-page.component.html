@@ -6,7 +6,7 @@
         <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
           <mat-icon>help_outline</mat-icon>
         </a>
-        <button mat-icon-button type="button" aria-label="Start a new chat" matTooltip="Start a new chat"
+        <button mat-icon-button type="button" aria-label="Start a new coordinate-free chat" matTooltip="Start a new chat"
           [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
           @if (resetting()) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -17,9 +17,15 @@
       </div>
     </div>
     <button class="assistant-explore-trigger" mat-button type="button"
-      [disabled]="loadingConversation() || !!conversationLoadError()" (click)="openExploreSheet()">
+      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="openExploreSheet()">
       <mat-icon>auto_awesome</mat-icon>
       Examples &amp; data access
+      @if (preciseActivityLocationsEnabled()) {
+        <span class="assistant-location-status">
+          <mat-icon aria-hidden="true">location_on</mat-icon>
+          Precise locations on
+        </span>
+      }
     </button>
   </header>
 

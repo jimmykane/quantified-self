@@ -74,6 +74,27 @@ h1 {
   font-size: 18px;
 }
 
+.assistant-location-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--mat-sys-on-primary-container);
+  background: var(--mat-sys-primary-container);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.assistant-location-status mat-icon {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  font-size: 14px;
+}
+
 .assistant-chat {
   display: flex;
   flex: 1 1 auto;
@@ -470,6 +491,14 @@ h1 {
 }
 
 @media (max-width: 430px) {
+  .assistant-location-status {
+    font-size: 0;
+  }
+
+  .assistant-location-status mat-icon {
+    margin: 0;
+  }
+
   .evidence-item dl {
     grid-template-columns: 1fr;
   }

@@ -57,6 +57,7 @@ function createDependencies() {
     getActiveConversationState: vi.fn().mockResolvedValue({
       conversation: null,
       pendingRequestId: null,
+      locationAccess: 'coordinate_free',
     }),
     findRequestState: vi.fn().mockResolvedValue(null),
     beginTurn: vi.fn().mockResolvedValue({
@@ -64,6 +65,7 @@ function createDependencies() {
       conversationId: 'conversation-1',
       turnId: 'turn-1',
       history: [],
+      locationAccess: 'coordinate_free',
     }),
     completeTurn: vi.fn().mockResolvedValue(conversation),
     releaseTurn: vi.fn().mockResolvedValue(undefined),
@@ -227,6 +229,7 @@ describe('Assistant callable', () => {
       'conversation-1',
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
+      'coordinate_free',
     );
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
@@ -234,6 +237,7 @@ describe('Assistant callable', () => {
       appBaseUrl: 'https://beta.quantified-self.io',
       prompt: 'How am I today?',
       timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free',
       history: [],
       onBillableAttempt: expect.any(Function),
     }));
@@ -247,6 +251,54 @@ describe('Assistant callable', () => {
       }),
       expect.objectContaining({ role: 'assistant', text: 'Your readiness is 72 today.' }),
     );
+  });
+
+  it('binds explicit precise activity-location access through idempotency and runtime', async () => {
+    const { dependencies, store } = createDependencies();
+    vi.mocked(store.beginTurn).mockResolvedValue({
+      kind: 'started',
+      conversationId: 'conversation-1',
+      turnId: 'turn-1',
+      history: [],
+      locationAccess: 'precise_activity',
+    });
+
+    await runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'Where was my biggest jump?',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      conversationId: 'conversation-1',
+    }, context, dependencies);
+
+    expect(store.beginTurn).toHaveBeenCalledWith(
+      'user-1',
+      'conversation-1',
+      REQUEST_ID,
+      createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'Where was my biggest jump?',
+        'precise_activity',
+      ),
+      'precise_activity',
+    );
+    expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Where was my biggest jump?',
+      locationAccess: 'precise_activity',
+    }));
+  });
+
+  it('rejects unknown Assistant location-access modes before reserving quota', async () => {
+    const { dependencies } = createDependencies();
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'Where was my biggest jump?',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'all_locations',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
   });
 
   it('requires accepted legal agreements before reserving quota or starting a turn', async () => {
@@ -788,7 +840,7 @@ describe('Assistant callable', () => {
 
     await expect(runGetAssistantConversation(context, store))
       .rejects.toMatchObject({ code: 'unavailable' });
-    await expect(runResetAssistantConversation(context, store))
+    await expect(runResetAssistantConversation({}, context, store))
       .rejects.toMatchObject({ code: 'unavailable' });
   });
 
@@ -797,11 +849,26 @@ describe('Assistant callable', () => {
     vi.mocked(store.getActiveConversationState).mockResolvedValue({
       conversation,
       pendingRequestId: REQUEST_ID,
+      locationAccess: 'precise_activity',
     });
 
     await expect(runGetAssistantConversation(context, store)).resolves.toEqual({
       conversation,
       pendingRequestId: REQUEST_ID,
+      locationAccess: 'precise_activity',
     });
+  });
+
+  it('starts a new server-owned conversation with the requested location boundary', async () => {
+    const { store, conversation } = createDependencies();
+
+    await expect(runResetAssistantConversation({
+      locationAccess: 'precise_activity',
+    }, context, store)).resolves.toEqual({ conversation });
+
+    expect(store.resetConversation).toHaveBeenCalledWith(
+      'user-1',
+      'precise_activity',
+    );
   });
 });

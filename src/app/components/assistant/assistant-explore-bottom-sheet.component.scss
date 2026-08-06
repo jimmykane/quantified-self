@@ -57,6 +57,57 @@ h3 {
   gap: 10px;
 }
 
+.assistant-location-access {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 18px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.assistant-location-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
+}
+
+.assistant-location-icon mat-icon {
+  width: 21px;
+  height: 21px;
+  font-size: 21px;
+}
+
+.assistant-location-copy {
+  min-width: 0;
+}
+
+.assistant-location-copy h3 {
+  margin-bottom: 4px;
+}
+
+.assistant-location-copy p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.assistant-location-copy .assistant-location-note {
+  margin-top: 7px;
+  font-size: 0.76rem;
+}
+
+.assistant-location-access mat-slide-toggle {
+  margin-top: 4px;
+}
+
 .assistant-data-access div {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -92,5 +143,16 @@ h3 {
 
   .assistant-explore-prompts {
     grid-template-columns: 1fr;
+  }
+
+  .assistant-location-access {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .assistant-location-icon {
+    width: 36px;
+    height: 36px;
   }
 }
