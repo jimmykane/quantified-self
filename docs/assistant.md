@@ -145,8 +145,9 @@ in memory and persist them on the next write.
 
 The page retains only the opaque request ID in tab-scoped browser storage while the outcome is ambiguous; it never
 stores the prompt there. The server also returns the request ID attached to an active pending lease. After a reload,
-the page polls that owner-only callable until the exact turn is committed or the lease ends. A 15-second registration
-grace closes the race where the refreshed page loads just before the original callable writes its lease. The local ID
+the page polls that owner-only callable with a bounded two-to-five-second progressive interval until the exact turn is
+committed or the lease ends. A 15-second registration grace closes the race where the refreshed page loads just before
+the original callable writes its lease. Permanent authorization or response-contract failures stop polling. The local ID
 is cleared after confirmed completion, authoritative failure, or conversation reset, and an exact ID match is required
 when reconciling a response that may have been lost. This prevents another tab's same-text turn from being mistaken
 for the current request.

@@ -4,6 +4,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
+  isValidAssistantRequestId,
   type AssistantChatRequest,
   type AssistantChatResponse,
   type AssistantMessage,
@@ -183,8 +184,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const data = asRecord(value);
-  if (typeof data.requestId !== 'string'
-    || !/^[A-Za-z0-9_-]{16,120}$/.test(data.requestId)) {
+  if (!isValidAssistantRequestId(data.requestId)) {
     throw new HttpsError(
       'invalid-argument',
       'requestId must be an opaque identifier containing 16 to 120 letters, numbers, hyphens, or underscores.',

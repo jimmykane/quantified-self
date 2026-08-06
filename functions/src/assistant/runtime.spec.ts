@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GenkitError } from 'genkit';
+import { retry } from 'genkit/model/middleware';
 import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import { assistantGenkit } from './model';
 import {
@@ -201,6 +203,40 @@ describe('Assistant runtime', () => {
     })).rejects.toThrow('MCP tool discovery unavailable');
 
     expect(onBillableAttempt).not.toHaveBeenCalled();
+  });
+
+  it('retries unavailable model failures without retrying permanent Genkit failures', async () => {
+    type TestRetryMiddleware = (
+      request: unknown,
+      next: (request: unknown) => Promise<unknown>,
+    ) => Promise<unknown>;
+    const middleware = retry(ASSISTANT_MODEL_RETRY_OPTIONS) as TestRetryMiddleware;
+    const unavailable = new GenkitError({
+      status: 'UNAVAILABLE',
+      message: 'Temporary provider failure.',
+    });
+    const unavailableNext = vi.fn()
+      .mockRejectedValueOnce(unavailable)
+      .mockResolvedValueOnce('recovered');
+
+    vi.useFakeTimers();
+    try {
+      const recovered = middleware({}, unavailableNext);
+      await vi.runAllTimersAsync();
+      await expect(recovered).resolves.toBe('recovered');
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(unavailableNext).toHaveBeenCalledTimes(2);
+
+    const invalidArgument = new GenkitError({
+      status: 'INVALID_ARGUMENT',
+      message: 'Permanent request failure.',
+    });
+    const invalidArgumentNext = vi.fn().mockRejectedValue(invalidArgument);
+
+    await expect(middleware({}, invalidArgumentNext)).rejects.toBe(invalidArgument);
+    expect(invalidArgumentNext).toHaveBeenCalledOnce();
   });
 
   it.each(ASSISTANT_PROMPT_EXAMPLES)(

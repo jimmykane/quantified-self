@@ -1,10 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import type {
-  AssistantChatRequest,
-  AssistantChatResponse,
-  AssistantConversation,
-  GetAssistantConversationResponse,
-  ResetAssistantConversationResponse,
+import {
+  isValidAssistantRequestId,
+  type AssistantChatRequest,
+  type AssistantChatResponse,
+  type AssistantConversation,
+  type GetAssistantConversationResponse,
+  type ResetAssistantConversationResponse,
 } from '@shared/assistant.types';
 import {
   validateAssistantChatResponse,
@@ -78,8 +79,7 @@ export class AssistantService {
         response.data as Partial<GetAssistantConversationResponse>
       ).pendingRequestId ?? null;
       if (pendingRequestId !== null
-        && (typeof pendingRequestId !== 'string'
-          || !/^[A-Za-z0-9_-]{16,120}$/.test(pendingRequestId))) {
+        && !isValidAssistantRequestId(pendingRequestId)) {
         throw new AssistantError(
           'INTERNAL',
           'The saved Assistant pending request is invalid.',

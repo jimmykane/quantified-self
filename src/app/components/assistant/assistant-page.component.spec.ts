@@ -295,7 +295,7 @@ describe('AssistantPageComponent', () => {
       expect(component.sending()).toBe(true);
       expect(component.errorMessage()).toBeNull();
 
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(3_000);
 
       expect(component.sending()).toBe(false);
       expect(component.conversation()).toEqual(completedConversation);
@@ -351,7 +351,7 @@ describe('AssistantPageComponent', () => {
       expect(component.sending()).toBe(true);
       expect(component.errorMessage()).toBeNull();
 
-      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(5_000);
 
       expect(component.sending()).toBe(false);
       expect(component.conversation()).toEqual(completedConversation);
@@ -359,6 +359,81 @@ describe('AssistantPageComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('backs off pending-turn polling while keeping it bounded', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-progressive-polling';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      assistantService.getConversationState.mockReset().mockResolvedValue({
+        conversation: pendingConversation,
+        pendingRequestId,
+      });
+
+      await component.ngOnInit();
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      // Initial load, then polls after 2s, 3s, 4.5s, 5s, and 5s.
+      expect(assistantService.getConversationState).toHaveBeenCalledTimes(6);
+      expect(component.sending()).toBe(true);
+    } finally {
+      component.ngOnDestroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops pending-turn polling when the state read fails permanently', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-permanent-read-failure';
+      assistantService.getConversationState.mockReset()
+        .mockResolvedValueOnce({
+          conversation: null,
+          pendingRequestId,
+        })
+        .mockRejectedValueOnce(new AssistantError(
+          'UNAUTHENTICATED',
+          'Authentication required.',
+        ));
+      assistantService.getErrorMessage.mockReturnValueOnce(
+        'Sign in before using the Assistant.',
+      );
+
+      await component.ngOnInit();
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(component.sending()).toBe(false);
+      expect(component.errorMessage()).toBe('Sign in before using the Assistant.');
+      expect(assistantService.getConversationState).toHaveBeenCalledTimes(2);
+      expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not start recovery after a permanent initial state failure', async () => {
+    const pendingRequestId = 'assistant-request-initial-permanent-failure';
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      pendingRequestId,
+    );
+    assistantService.getConversationState.mockReset().mockRejectedValueOnce(
+      new AssistantError('PERMISSION_DENIED', 'Assistant access denied.'),
+    );
+    assistantService.getErrorMessage.mockReturnValueOnce(
+      'The Assistant is unavailable for this account.',
+    );
+
+    await component.ngOnInit();
+
+    expect(component.sending()).toBe(false);
+    expect(component.errorMessage()).toBe('The Assistant is unavailable for this account.');
+    expect(assistantService.getConversationState).toHaveBeenCalledOnce();
+    expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
   });
 
   it('opens the explore sheet and inserts a selected example', () => {

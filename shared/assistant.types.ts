@@ -3,6 +3,11 @@ export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
 export const ASSISTANT_MAX_RESPONSE_CHARS = 4_000;
 export const ASSISTANT_MAX_STORED_MESSAGES = 12;
 export const ASSISTANT_MAX_EVIDENCE_ITEMS = 6;
+const ASSISTANT_REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16,120}$/;
+
+export function isValidAssistantRequestId(value: unknown): value is string {
+  return typeof value === 'string' && ASSISTANT_REQUEST_ID_PATTERN.test(value);
+}
 
 export type AssistantQuotaPeriodKind =
   | 'subscription'

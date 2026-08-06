@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_STORED_MESSAGES,
+  isValidAssistantRequestId,
   type AssistantConversation,
   type AssistantMessage,
 } from '../../../shared/assistant.types';
@@ -227,8 +228,7 @@ function parseStoredConversation(
         + ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS
       ? {
         id: data.pendingTurn.id,
-        requestId: typeof data.pendingTurn.requestId === 'string'
-          && /^[A-Za-z0-9_-]{16,120}$/.test(data.pendingTurn.requestId)
+        requestId: isValidAssistantRequestId(data.pendingTurn.requestId)
           ? data.pendingTurn.requestId
           : null,
         expiresAtMs: data.pendingTurn.expiresAtMs,

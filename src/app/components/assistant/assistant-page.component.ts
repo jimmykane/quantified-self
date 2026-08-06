@@ -17,6 +17,7 @@ import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
+  isValidAssistantRequestId,
   type AssistantConversation,
   type AssistantMessage,
 } from '@shared/assistant.types';
@@ -29,11 +30,12 @@ import {
 } from '../../services/assistant.service';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 
-const ASSISTANT_PENDING_POLL_INTERVAL_MS = 2_000;
+const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
+const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
+const ASSISTANT_PENDING_POLL_BACKOFF_FACTOR = 1.5;
 const ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS = (4 * 60 * 1_000) + 30_000;
 const ASSISTANT_PENDING_REGISTRATION_GRACE_MS = 15_000;
 const ASSISTANT_PENDING_REQUEST_STORAGE_KEY = 'quantified-self.assistant.pending-request-id';
-const ASSISTANT_REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16,120}$/;
 
 @Component({
   selector: 'app-assistant-page',
@@ -58,6 +60,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
   private readonly pendingRequestId = signal<string | null>(null);
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
   private pendingRecoveryDeadlineMs = 0;
   private pendingRegistrationDeadlineMs = 0;
   private destroyed = false;
@@ -126,9 +129,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       } else {
         this.clearRememberedPendingRequestId();
       }
-    } else if (rememberedRequestId) {
+    } else if (rememberedRequestId
+      && this.isRetryablePendingStateError(conversationResult.reason)) {
       this.startPendingResponseRecovery(rememberedRequestId, true);
     } else {
+      this.clearRememberedPendingRequestId(rememberedRequestId ?? undefined);
       this.errorMessage.set(this.assistantService.getErrorMessage(conversationResult.reason));
     }
     if (quotaResult.status === 'fulfilled') {
@@ -347,14 +352,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.cancelPendingResponsePoll();
     this.rememberPendingRequestId(requestId);
     this.pendingRequestId.set(requestId);
+    this.pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
     this.pendingRecoveryDeadlineMs = Date.now() + ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
     this.pendingRegistrationDeadlineMs = awaitingServerRegistration
       ? Date.now() + ASSISTANT_PENDING_REGISTRATION_GRACE_MS
       : 0;
     this.sending.set(true);
-    this.pendingPollTimer = setTimeout(() => {
-      void this.pollPendingResponse(requestId);
-    }, ASSISTANT_PENDING_POLL_INTERVAL_MS);
+    this.schedulePendingResponsePoll(requestId);
   }
 
   private async pollPendingResponse(requestId: string): Promise<void> {
@@ -383,7 +387,12 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         await this.finishPendingResponseRecovery(requestId);
         return;
       }
-    } catch {
+    } catch (error) {
+      if (!this.isRetryablePendingStateError(error)) {
+        this.errorMessage.set(this.assistantService.getErrorMessage(error));
+        await this.finishPendingResponseRecovery(requestId);
+        return;
+      }
       // A transient status-read failure is retried within the bounded turn lease.
     }
     if (this.destroyed || this.pendingRequestId() !== requestId) {
@@ -396,9 +405,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       await this.finishPendingResponseRecovery(requestId);
       return;
     }
-    this.pendingPollTimer = setTimeout(() => {
-      void this.pollPendingResponse(requestId);
-    }, ASSISTANT_PENDING_POLL_INTERVAL_MS);
+    this.schedulePendingResponsePoll(requestId);
   }
 
   private async finishPendingResponseRecovery(requestId: string): Promise<void> {
@@ -433,6 +440,21 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  private schedulePendingResponsePoll(requestId: string): void {
+    const delayMs = this.pendingPollIntervalMs;
+    this.pendingPollIntervalMs = Math.min(
+      Math.round(delayMs * ASSISTANT_PENDING_POLL_BACKOFF_FACTOR),
+      ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS,
+    );
+    this.pendingPollTimer = setTimeout(() => {
+      void this.pollPendingResponse(requestId);
+    }, delayMs);
+  }
+
+  private isRetryablePendingStateError(error: unknown): boolean {
+    return !(error instanceof AssistantError) || error.code === 'UNAVAILABLE';
+  }
+
   private rememberPendingRequestId(requestId: string): void {
     try {
       globalThis.sessionStorage?.setItem(
@@ -449,7 +471,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const requestId = globalThis.sessionStorage?.getItem(
         ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
       );
-      if (requestId && ASSISTANT_REQUEST_ID_PATTERN.test(requestId)) {
+      if (isValidAssistantRequestId(requestId)) {
         return requestId;
       }
       this.clearRememberedPendingRequestId();
