@@ -132,6 +132,7 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('latest six completed turns');
     expect(sectionCopy?.innerHTML).toContain('keeps the pending question visible');
     expect(sectionCopy?.innerHTML).toContain('safely resends the same request ID');
+    expect(sectionCopy?.innerHTML).toContain('different signed-in account cannot restore');
     expect(sectionCopy?.innerHTML).toContain('no access to coordinate fields');
     expect(sectionCopy?.innerHTML).toContain('becomes unavailable about <strong>seven days</strong>');
     expect(sectionCopy?.innerHTML).toContain('at most four extra minutes');

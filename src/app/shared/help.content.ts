@@ -433,7 +433,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Ask a question and press **Send**. Press **Shift + Enter** for a new line.
 - Starter prompts fill the composer; they do not send automatically.
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
-- If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. The record is cleared after completion, confirmed failure, reset, or expiry.
+- If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one read-only Quantified Self result. Expand **grounded results** below an answer to inspect compact facts and app links produced from actual tool results.
 - Use **New chat** to clear the stored messages and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 

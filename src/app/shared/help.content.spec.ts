@@ -58,7 +58,8 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('opaque reference or cursor is rejected');
     expect(assistantSection?.content).toContain('latest six completed turns');
     expect(assistantSection?.content).toContain('refresh while an answer is in progress');
-    expect(assistantSection?.content).toContain('bounded question and request metadata');
+    expect(assistantSection?.content).toContain('account-bound, bounded question and request metadata');
+    expect(assistantSection?.content).toContain('different signed-in account cannot restore');
     expect(assistantSection?.content).toContain('safely resends the same request ID');
     expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
     expect(assistantSection?.content).toContain('at most four extra minutes');

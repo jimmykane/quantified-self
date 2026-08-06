@@ -143,13 +143,16 @@ invoking Gemini or consuming another request even after the original messages le
 different text is rejected. Documents from before this field existed derive receipts from their retained user messages
 in memory and persist them on the next write.
 
-While a send outcome is ambiguous, the page keeps a versioned, bounded resumption record in tab-scoped session storage:
-the question, opaque request ID, IANA timezone, original conversation generation when present, and submission time. This
+While a send outcome is ambiguous, the page keeps a versioned, account-bound, bounded resumption record in tab-scoped
+session storage: the Firebase UID, question, opaque request ID, IANA timezone, original conversation generation when
+present, and submission time. A record is discarded without rendering or resubmission if the signed-in UID changes. This
 lets a refreshed page render the pending question immediately. If the refresh cancelled the HTTP request before the
 server registered its turn, the page resubmits the same question with the same request ID; server idempotency prevents a
-duplicate completed turn or duplicate quota charge. A record older than the four-minute turn lease plus the 30-second
-recovery margin is never sent automatically and is instead restored to the composer. The server also returns the request
-ID attached to an active pending lease. After a reload, the page polls that owner-only callable with a bounded
+duplicate completed turn or duplicate quota charge. A first request may also resume into the empty conversation generation
+that its interrupted server call created, but never into a populated or mismatched generation. A record older than the
+four-minute turn lease plus the 30-second recovery margin is never sent automatically and is instead restored to the
+composer. The server also returns the request ID attached to an active pending lease. After a reload, the page polls that
+owner-only callable with a bounded
 two-to-five-second progressive interval until the exact turn is committed or the lease ends. Legacy ID-only records keep
 a 15-second registration grace. Permanent authorization or response-contract failures stop polling. The local resumption
 record is cleared after confirmed completion, authoritative failure, conversation reset, or expiry, and an exact ID match

@@ -15,6 +15,7 @@ import { TextFieldModule } from '@angular/cdk/text-field';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Auth } from 'app/firebase/auth';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   isValidAssistantRequestId,
@@ -37,15 +38,20 @@ const ASSISTANT_PENDING_POLL_BACKOFF_FACTOR = 1.5;
 const ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS = (4 * 60 * 1_000) + 30_000;
 const ASSISTANT_PENDING_REGISTRATION_GRACE_MS = 15_000;
 const ASSISTANT_PENDING_REQUEST_STORAGE_KEY = 'quantified-self.assistant.pending-request-id';
-const ASSISTANT_PENDING_REQUEST_STORAGE_VERSION = 1 as const;
+const ASSISTANT_PENDING_REQUEST_STORAGE_VERSION = 2 as const;
 const ASSISTANT_PENDING_REQUEST_FUTURE_SKEW_MS = 30_000;
 
-interface AssistantPendingRequest extends AssistantChatRequest {
+interface RememberedAssistantRequestId {
   storageVersion: typeof ASSISTANT_PENDING_REQUEST_STORAGE_VERSION;
+  uid: string;
+  requestId: string;
+}
+
+interface AssistantPendingRequest extends AssistantChatRequest, RememberedAssistantRequestId {
   submittedAtMs: number;
 }
 
-type RememberedAssistantRequest = AssistantPendingRequest | {
+type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantRequestId | {
   requestId: string;
 };
 
@@ -67,6 +73,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly auth = inject(Auth);
   private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
   private readonly retryRequest = signal<AssistantPendingRequest | null>(null);
@@ -112,8 +119,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
   readonly quotaPreventsSend = computed(() => {
     const retryRequest = this.retryRequest();
+    const currentUid = this.auth.currentUser?.uid;
+    const isCurrentAccountRetry = !!retryRequest
+      && !!currentUid
+      && retryRequest.uid === currentUid
+      && retryRequest.message === this.promptValue().trim();
     return this.quotaBlocked()
-      && retryRequest?.message !== this.promptValue().trim();
+      && !isCurrentAccountRetry;
   });
   readonly quotaText = computed(() => {
     const status = this.quota();
@@ -126,12 +138,27 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
 
   async ngOnInit(): Promise<void> {
+    const initializingUid = this.auth.currentUser?.uid;
     const rememberedRequest = this.readRememberedPendingRequest();
     let requestToResume: AssistantPendingRequest | null = null;
     const [conversationResult, quotaResult] = await Promise.allSettled([
       this.assistantService.getConversationState(),
       this.quotaService.loadQuotaStatus(),
     ]);
+    if (!initializingUid || this.auth.currentUser?.uid !== initializingUid) {
+      this.cancelPendingResponsePoll();
+      this.clearRememberedPendingRequest(rememberedRequest?.requestId);
+      this.conversation.set(null);
+      this.quota.set(null);
+      this.retryRequest.set(null);
+      this.pendingRequestId.set(null);
+      this.pendingUserMessage.set(null);
+      this.promptControl.setValue('');
+      this.errorMessage.set(null);
+      this.sending.set(false);
+      this.loadingConversation.set(false);
+      return;
+    }
     if (conversationResult.status === 'fulfilled') {
       const state = conversationResult.value;
       this.conversation.set(state.conversation);
@@ -225,7 +252,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     const activeConversation = this.conversation();
     const hadConversationMessages = this.messages().length > 0;
     const retryRequest = this.retryRequest();
+    const currentUid = this.auth.currentUser?.uid ?? '';
     const request: AssistantPendingRequest = retryRequest?.message === text
+      && retryRequest.uid === currentUid
       ? {
         ...retryRequest,
         ...(activeConversation?.conversationId
@@ -234,6 +263,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       }
       : {
         storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
+        uid: currentUid,
         message: text,
         requestId: globalThis.crypto.randomUUID(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -510,6 +540,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   private rememberPendingRequest(request: AssistantPendingRequest): void {
+    if (!request.uid) {
+      return;
+    }
     try {
       globalThis.sessionStorage?.setItem(
         ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
@@ -525,10 +558,17 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (rememberedRequest?.requestId === requestId) {
       return;
     }
+    const uid = this.auth.currentUser?.uid;
     try {
       globalThis.sessionStorage?.setItem(
         ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
-        requestId,
+        uid
+          ? JSON.stringify({
+            storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
+            uid,
+            requestId,
+          } satisfies RememberedAssistantRequestId)
+          : requestId,
       );
     } catch {
       // Server state still provides recovery when browser storage is unavailable.
@@ -552,6 +592,25 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         return null;
       }
       const data = parsed as Partial<AssistantPendingRequest>;
+      const currentUid = this.auth.currentUser?.uid;
+      if (data.storageVersion !== ASSISTANT_PENDING_REQUEST_STORAGE_VERSION
+        || typeof data.uid !== 'string'
+        || !data.uid
+        || data.uid.length > 128
+        || !currentUid
+        || data.uid !== currentUid
+        || !isValidAssistantRequestId(data.requestId)) {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      const rememberedRequestId: RememberedAssistantRequestId = {
+        storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
+        uid: data.uid,
+        requestId: data.requestId,
+      };
+      if (!('message' in data)) {
+        return rememberedRequestId;
+      }
       const message = typeof data.message === 'string'
         ? data.message.trim()
         : '';
@@ -561,9 +620,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const conversationId = typeof data.conversationId === 'string'
         ? data.conversationId.trim()
         : data.conversationId;
-      if (data.storageVersion !== ASSISTANT_PENDING_REQUEST_STORAGE_VERSION
-        || !isValidAssistantRequestId(data.requestId)
-        || !message
+      if (!message
         || message.length > ASSISTANT_MAX_MESSAGE_CHARS
         || !this.isValidTimeZone(timeZone)
         || !Number.isFinite(data.submittedAtMs)
@@ -576,8 +633,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         return null;
       }
       return {
-        storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
-        requestId: data.requestId,
+        ...rememberedRequestId,
         message,
         timeZone,
         submittedAtMs: Number(data.submittedAtMs),
@@ -607,7 +663,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private isResumablePendingRequest(
     request: RememberedAssistantRequest,
   ): request is AssistantPendingRequest {
-    return 'storageVersion' in request;
+    return 'message' in request;
   }
 
   private isFreshPendingRequest(request: AssistantPendingRequest): boolean {
@@ -620,8 +676,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     request: AssistantPendingRequest,
     conversation: AssistantConversation | null,
   ): boolean {
-    return this.isFreshPendingRequest(request)
-      && request.conversationId === conversation?.conversationId;
+    if (!this.isFreshPendingRequest(request)) {
+      return false;
+    }
+    if (request.conversationId) {
+      return request.conversationId === conversation?.conversationId;
+    }
+    return conversation === null || conversation.messages.length === 0;
   }
 
   private restorePendingUserMessage(request: AssistantPendingRequest): void {

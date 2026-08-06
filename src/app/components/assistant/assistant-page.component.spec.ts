@@ -9,6 +9,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Auth } from 'app/firebase/auth';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -73,9 +74,13 @@ describe('AssistantPageComponent', () => {
   const quotaService = {
     loadQuotaStatus: vi.fn(),
   };
+  const auth = {
+    currentUser: { uid: 'assistant-user' },
+  };
 
   beforeEach(async () => {
     sessionStorage.clear();
+    auth.currentUser = { uid: 'assistant-user' };
     assistantService.getConversationState.mockReset().mockResolvedValue({
       conversation: null,
       pendingRequestId: null,
@@ -98,6 +103,7 @@ describe('AssistantPageComponent', () => {
       providers: [
         { provide: AssistantService, useValue: assistantService },
         { provide: AssistantQuotaService, useValue: quotaService },
+        { provide: Auth, useValue: auth },
       ],
     }).compileComponents();
 
@@ -243,7 +249,8 @@ describe('AssistantPageComponent', () => {
       sessionStorage.setItem(
         'quantified-self.assistant.pending-request-id',
         JSON.stringify({
-          storageVersion: 1,
+          storageVersion: 2,
+          uid: 'assistant-user',
           requestId: pendingRequestId,
           message: 'How am I today?',
           timeZone: 'Europe/Helsinki',
@@ -302,7 +309,8 @@ describe('AssistantPageComponent', () => {
     sessionStorage.setItem(
       'quantified-self.assistant.pending-request-id',
       JSON.stringify({
-        storageVersion: 1,
+        storageVersion: 2,
+        uid: 'assistant-user',
         requestId: pendingRequestId,
         message: 'How has my sleep changed?',
         timeZone: 'Europe/Helsinki',
@@ -337,6 +345,255 @@ describe('AssistantPageComponent', () => {
     )).toBeNull();
   });
 
+  it('polls the original turn when the resumed request loses the registration race', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-original-won-registration';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      const completedConversation = {
+        ...chatResponse.conversation,
+        messages: [
+          {
+            id: pendingRequestId,
+            role: 'user' as const,
+            text: 'How has my sleep changed?',
+            createdAt: '2026-08-03T12:00:00.000Z',
+          },
+          chatResponse.conversation.messages[1],
+        ],
+      };
+      assistantService.sendMessage.mockReset().mockRejectedValueOnce(
+        new Error('the original request owns the turn'),
+      );
+      assistantService.getConversationState.mockReset()
+        .mockResolvedValueOnce({
+          conversation: null,
+          pendingRequestId: null,
+        })
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId,
+        })
+        .mockResolvedValueOnce({
+          conversation: completedConversation,
+          pendingRequestId: null,
+        });
+      sessionStorage.setItem(
+        'quantified-self.assistant.pending-request-id',
+        JSON.stringify({
+          storageVersion: 2,
+          uid: 'assistant-user',
+          requestId: pendingRequestId,
+          message: 'How has my sleep changed?',
+          timeZone: 'Europe/Helsinki',
+          submittedAtMs: Date.now(),
+        }),
+      );
+
+      await component.ngOnInit();
+      await vi.waitFor(() => {
+        expect(assistantService.getConversationState).toHaveBeenCalledTimes(2);
+      });
+
+      expect(component.sending()).toBe(true);
+      expect(component.errorMessage()).toBeNull();
+      expect(component.messages().at(-1)?.text).toBe('How has my sleep changed?');
+
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(component.sending()).toBe(false);
+      expect(component.conversation()).toEqual(completedConversation);
+      expect(component.errorMessage()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resumes a first request after it created an empty conversation generation', async () => {
+    const pendingRequestId = 'assistant-request-created-empty-conversation';
+    const createdConversation = {
+      ...chatResponse.conversation,
+      messages: [],
+    };
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: createdConversation,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'assistant-user',
+        requestId: pendingRequestId,
+        message: 'How has my recovery changed?',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).toHaveBeenCalledWith({
+      requestId: pendingRequestId,
+      message: 'How has my recovery changed?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: createdConversation.conversationId,
+    });
+  });
+
+  it('does not move a first request into a populated conversation generation', async () => {
+    const pendingRequestId = 'assistant-request-before-generation-change';
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'assistant-user',
+        requestId: pendingRequestId,
+        message: 'Keep this question safe',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('Keep this question safe');
+    expect(component.errorMessage()).toContain('could not be resumed');
+  });
+
+  it('resumes a follow-up request only in its matching conversation generation', async () => {
+    const pendingRequestId = 'assistant-follow-up-matching-generation';
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'assistant-user',
+        requestId: pendingRequestId,
+        message: 'What contributed to that?',
+        timeZone: 'Europe/Helsinki',
+        conversationId: chatResponse.conversation.conversationId,
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).toHaveBeenCalledWith({
+      requestId: pendingRequestId,
+      message: 'What contributed to that?',
+      timeZone: 'Europe/Helsinki',
+      conversationId: chatResponse.conversation.conversationId,
+    });
+  });
+
+  it('does not resend a follow-up request after its conversation generation changed', async () => {
+    const pendingRequestId = 'assistant-follow-up-changed-generation';
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'assistant-user',
+        requestId: pendingRequestId,
+        message: 'Do not cross the reset',
+        timeZone: 'Europe/Helsinki',
+        conversationId: 'replaced-conversation-generation',
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('Do not cross the reset');
+    expect(component.errorMessage()).toContain('could not be resumed');
+  });
+
+  it('discards a pending question created by a different signed-in account', async () => {
+    const pendingRequestId = 'assistant-request-from-previous-account';
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: null,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'previous-account',
+        requestId: pendingRequestId,
+        message: 'A private question from the previous account',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'A private question from the previous account',
+    );
+    expect(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    )).toBeNull();
+  });
+
+  it('discards initialization results when the signed-in account changes mid-load', async () => {
+    const pendingRequestId = 'assistant-request-during-account-switch';
+    let resolveConversationState: ((value: {
+      conversation: typeof chatResponse.conversation;
+      pendingRequestId: null;
+    }) => void) | undefined;
+    assistantService.getConversationState.mockReset().mockReturnValueOnce(new Promise(
+      resolve => {
+        resolveConversationState = resolve;
+      },
+    ));
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 2,
+        uid: 'assistant-user',
+        requestId: pendingRequestId,
+        message: 'Do not show this after switching accounts',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs: Date.now(),
+      }),
+    );
+
+    const initialization = component.ngOnInit();
+    auth.currentUser = { uid: 'replacement-user' };
+    resolveConversationState?.({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
+    await initialization;
+
+    expect(component.conversation()).toBeNull();
+    expect(component.quota()).toBeNull();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('');
+    expect(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    )).toBeNull();
+  });
+
   it('persists a bounded resumable request only while its result is ambiguous', async () => {
     let resolveSend: ((response: AssistantChatResponse) => void) | undefined;
     assistantService.sendMessage.mockReset().mockReturnValueOnce(new Promise(
@@ -352,7 +609,8 @@ describe('AssistantPageComponent', () => {
     ) || '{}') as Record<string, unknown>;
 
     expect(storedRequest).toMatchObject({
-      storageVersion: 1,
+      storageVersion: 2,
+      uid: 'assistant-user',
       requestId: expect.stringMatching(/^[A-Za-z0-9_-]{16,120}$/),
       message: 'How am I today?',
       timeZone: expect.any(String),
@@ -376,7 +634,8 @@ describe('AssistantPageComponent', () => {
     sessionStorage.setItem(
       'quantified-self.assistant.pending-request-id',
       JSON.stringify({
-        storageVersion: 1,
+        storageVersion: 2,
+        uid: 'assistant-user',
         requestId: pendingRequestId,
         message: 'How was my old week?',
         timeZone: 'Europe/Helsinki',
