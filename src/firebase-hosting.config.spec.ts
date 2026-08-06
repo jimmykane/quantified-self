@@ -387,6 +387,17 @@ describe('Firebase Hosting configuration', () => {
     expect(assets).toContain('src/404.html');
   });
 
+  it('publishes the canonical favicon at the conventional root path', () => {
+    const assets = angularConfig.projects['track-tools'].architect.build.options.assets;
+
+    expect(assets).toContainEqual({
+      glob: 'favicon.ico',
+      input: 'src/assets/favicons',
+      output: '/',
+    });
+    expect(assets).not.toContain('src/favicon.ico');
+  });
+
   it('keeps the static Firebase 404 page noindexed and useful without JavaScript', () => {
     expect(static404Html).toContain('<meta name="robots" content="noindex, follow">');
     expect(static404Html).toContain('<h1>Page not found</h1>');
