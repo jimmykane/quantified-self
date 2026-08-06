@@ -79,13 +79,9 @@ h1 {
   align-items: center;
   gap: 3px;
   margin-left: 2px;
-  padding: 3px 7px;
-  border-radius: 999px;
-  color: var(--mat-sys-on-primary-container);
-  background: var(--mat-sys-primary-container);
-  font-size: 0.7rem;
-  font-weight: 600;
-  line-height: 1;
+  color: var(--mat-sys-primary);
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .assistant-location-status mat-icon {

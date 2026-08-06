@@ -1097,11 +1097,13 @@ describe('AssistantPageComponent', () => {
 
   it('starts a new server-owned conversation', async () => {
     component.conversation.set(chatResponse.conversation);
+    component.locationAccess.set('precise_activity');
 
     await component.resetConversation();
 
     expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free');
     expect(component.messages()).toEqual([]);
+    expect(component.locationAccess()).toBe('coordinate_free');
   });
 
   it('does not send after the current Assistant allowance is exhausted', async () => {

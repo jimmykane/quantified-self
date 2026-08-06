@@ -871,4 +871,14 @@ describe('Assistant callable', () => {
       'precise_activity',
     );
   });
+
+  it('rejects an unknown reset location boundary without replacing the conversation', async () => {
+    const { store } = createDependencies();
+
+    await expect(runResetAssistantConversation({
+      locationAccess: 'all_locations',
+    }, context, store)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    expect(store.resetConversation).not.toHaveBeenCalled();
+  });
 });
