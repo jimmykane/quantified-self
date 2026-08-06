@@ -110,6 +110,8 @@ describe('Assistant runtime', () => {
     expect(example?.routingHint).toContain('pass that exact group to the ranking tool');
     expect(example?.routingHint).toContain('server-expanded activity types');
     expect(example?.routingHint).toContain('top ranked metric value and unit as authoritative');
+    expect(example?.routingHint).toContain("exact ISO startTime when stating when it happened");
+    expect(example?.routingHint).toContain('never substitute the current date');
     expect(example?.routingHint).toContain('unless the user explicitly asks for subrecord details');
   });
 
@@ -631,6 +633,50 @@ describe('Assistant runtime', () => {
       label: 'Open in Quantified Self',
       url: 'https://quantified-self.io/user/private/event/private',
     }]);
+  });
+
+  it('converts absolute MCP timestamps to ISO fields before model use', async () => {
+    const { session, callTool } = createSession();
+    const startTimeMs = Date.parse('2026-07-31T07:50:22.000Z');
+    const endTimeMs = Date.parse('2026-07-31T14:30:45.000Z');
+    callTool.mockResolvedValue({
+      structuredContent: {
+        startTimeMs,
+        endTimeMs,
+        bucketStartMs: startTimeMs,
+        nested: {
+          asOfDayMs: startTimeMs,
+          generatedAtMs: endTimeMs,
+        },
+        averageHrvMs: 42,
+        timestampMs: 320,
+      },
+    });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
+          startTime: '2026-07-31T07:50:22.000Z',
+          endTime: '2026-07-31T14:30:45.000Z',
+          bucketStart: '2026-07-31T07:50:22.000Z',
+          nested: {
+            asOfDay: '2026-07-31T07:50:22.000Z',
+            generatedAt: '2026-07-31T14:30:45.000Z',
+          },
+          averageHrvMs: 42,
+          timestampMs: 320,
+        });
+        return 'The activity started on July 31, 2026.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'When did it happen?',
+      timeZone: 'UTC',
+      history: [],
+    });
   });
 
   it('rejects an answer that echoes an opaque MCP reference or cursor', async () => {

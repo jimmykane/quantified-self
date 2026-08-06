@@ -27,7 +27,8 @@ Resolve activities through opaque public references and request only the detail 
 5. Continue pagination only when the requested analysis needs the remaining detail.
 6. For highest, lowest, best, or worst requests tied to one persisted numeric metric, use the bounded ranking
    capability instead of downloading activity pages and sorting them client-side. Preserve its metric unit, date range,
-   activity filter, scan coverage, and deterministic order.
+   activity filter, scan coverage, and deterministic order. When stating when a ranked result happened, use its returned
+   ISO start time rather than inferring a date from the current conversation time.
 7. For an MTB jump superlative, discover the Mountain Biking activity-group value and pass that group to the bounded
    ranking capability so the server, not the model, expands every canonical subtype. Follow the live server instructions
    to choose the persisted maximum metric matching the user's wording, and clarify genuinely ambiguous wording such as

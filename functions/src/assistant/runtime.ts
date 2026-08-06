@@ -92,6 +92,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Use list_routes for saved-route summary questions by sport, name, or recency.',
   'Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability.',
   'Never invent data, calculations, dates, tool results, health claims, diagnoses, or workout prescriptions.',
+  'Use explicit ISO date/time fields from tool results when stating when something happened; never substitute the current date. Fields ending in Ms that remain numeric are measurements or relative offsets, not calendar dates.',
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
@@ -151,11 +152,27 @@ function projectAssistantToolResultForModel(
   if (typeof value !== 'object' || value === null) {
     return value;
   }
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== 'appUrl')
-      .map(([key, child]) => [key, projectAssistantToolResultForModel(child)]),
-  );
+  const source = value as Record<string, unknown>;
+  const projected: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(source)) {
+    if (key === 'appUrl') {
+      continue;
+    }
+    const isAbsoluteTimestamp = typeof child === 'number'
+      && (/(?:Time|Date|Day|At)Ms$/.test(key) || key === 'bucketStartMs');
+    if (isAbsoluteTimestamp) {
+      const date = new Date(child);
+      if (Number.isFinite(date.getTime())) {
+        const isoKey = key.slice(0, -2);
+        if (source[isoKey] === undefined) {
+          projected[isoKey] = date.toISOString();
+        }
+        continue;
+      }
+    }
+    projected[key] = projectAssistantToolResultForModel(child);
+  }
+  return projected;
 }
 
 function normalizeFieldName(value: string): string {

@@ -457,6 +457,10 @@ level. The only dynamic maps are named wire concepts with constrained values, su
 Power Curve buckets. Optional means the key may be absent; nullable means the key is present but no value is available.
 Historical domain timestamps are signed safe integers so valid dates before 1970 remain representable; operational
 timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
+Server instructions define absolute output fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus
+`bucketStartMs`, as Unix epoch milliseconds that must be converted exactly before a client states a calendar date.
+Metric values such as HRV milliseconds and relative offsets such as jump `timestampMs` are explicitly not calendar
+timestamps. The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
 Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
 and granting one location domain never widens the other.
 
@@ -590,7 +594,9 @@ catalog; the source file is not downloaded or parsed. Coordinates and raw detail
 
 `rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
 the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
-value/start-time/document ordering. Callers can provide a paired explicit range of at most 366 days or omit both dates
+value/start-time/document ordering. Ranked results expose an explicit ISO `startTime` string rather than a
+millisecond value so MCP models can cite the winning activity's recorded date without timestamp arithmetic or
+substituting the current date. Callers can provide a paired explicit range of at most 366 days or omit both dates
 to scan all available history. Both modes retain the 2,000-document, cumulative-byte, and response budgets; an
 over-budget scan fails with `query_too_large` instead of returning a partial ranking that could be mistaken for a true
 record. Explicit ranges reuse the single-field `eventStartDate` ordering plus the document-ID tie-break. An unbounded

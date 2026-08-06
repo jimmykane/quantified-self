@@ -806,9 +806,13 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain(
         'Use get_activity_overview before granular activity reads',
       );
+      expect(instructions).toContain('are Unix epoch milliseconds');
+      expect(instructions).toContain('relative offsets such as jump timestampMs');
       expect(instructions).toContain('rank_activities_by_metric');
       expect(instructions).toContain('Maximum Jump Distance');
       expect(instructions).toContain('Treat the ranked metric value as authoritative');
+      expect(instructions).toContain("use that ranked activity's exact ISO startTime");
+      expect(instructions).toContain('never substitute the current date');
       expect(instructions).toContain('only when jump-level details are requested');
       expect(instructions).toContain('Never rank jump quality by jumpCount');
       expect(listActivityTypes).toBeDefined();

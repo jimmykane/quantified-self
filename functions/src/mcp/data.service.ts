@@ -1625,6 +1625,15 @@ function asTimestampMs(value: unknown): number | null {
   return asFiniteNumber(value);
 }
 
+function asIsoTimestamp(value: number): string | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+  const isoTimestamp = date.toISOString();
+  return isoTimestamp.length === 24 ? isoTimestamp : null;
+}
+
 function asBoundedString(
   value: unknown,
   maximumLength: number,
@@ -4861,6 +4870,7 @@ async function rankActivitiesByMetric(
     const sortTimeMs = asTimestampMs(document.data.eventStartDate);
     const startTimeMs = asTimestampMs(document.data.startDate);
     const endTimeMs = asTimestampMs(document.data.endDate);
+    const startTime = startTimeMs === null ? null : asIsoTimestamp(startTimeMs);
     const activityType = normalizeActivityType(document.data.type);
     const rawStats = document.data.stats;
     const value = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
@@ -4876,6 +4886,7 @@ async function rankActivitiesByMetric(
       || (query.startTimeMs !== undefined && sortTimeMs < query.startTimeMs)
       || (query.endTimeMs !== undefined && sortTimeMs > query.endTimeMs)
       || startTimeMs === null
+      || startTime === null
       || endTimeMs === null
       || endTimeMs < startTimeMs
       || value === null
@@ -4890,6 +4901,7 @@ async function rankActivitiesByMetric(
         eventId,
       }, input.uid, input.connectionId),
       startTimeMs,
+      startTime,
       endTimeMs,
       activityType,
       value,
@@ -4904,18 +4916,17 @@ async function rankActivitiesByMetric(
       || left.id.localeCompare(right.id);
   });
   const result = {
+    activities: candidates.slice(0, limit).map((candidate, index) => ({
+      rank: index + 1,
+      activityRef: candidate.activityRef,
+      startTime: candidate.startTime,
+      activityType: candidate.activityType,
+      value: candidate.value,
+    })),
     metric,
     order: input.order,
     scannedActivityCount: documents.length,
     matchedActivityCount: candidates.length,
-    activities: candidates.slice(0, limit).map((candidate, index) => ({
-      rank: index + 1,
-      activityRef: candidate.activityRef,
-      startTimeMs: candidate.startTimeMs,
-      endTimeMs: candidate.endTimeMs,
-      activityType: candidate.activityType,
-      value: candidate.value,
-    })),
   };
   requireJsonBudget(
     result,

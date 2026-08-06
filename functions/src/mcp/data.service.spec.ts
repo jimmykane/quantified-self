@@ -1028,12 +1028,12 @@ describe('MCP data service', () => {
         rank: 1,
         activityType: ActivityTypes.Running,
         value: 300,
-        startTimeMs: Date.parse('2026-07-02T08:00:00.000Z'),
+        startTime: '2026-07-02T08:00:00.000Z',
       }, {
         rank: 2,
         activityType: ActivityTypes.Running,
         value: 300,
-        startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        startTime: '2026-07-01T08:00:00.000Z',
       }],
     });
     expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledWith(
@@ -1115,6 +1115,7 @@ describe('MCP data service', () => {
       matchedActivityCount: 1,
       activities: [{
         rank: 1,
+        startTime: '2024-05-01T08:00:00.000Z',
         activityType: ActivityTypes.MountainBiking,
         value: 8.4,
       }],
@@ -1132,6 +1133,9 @@ describe('MCP data service', () => {
       25,
       undefined,
     );
+    expect(result.activities[0]).not.toHaveProperty('startTimeMs');
+    expect(result.activities[0]).not.toHaveProperty('endTimeMs');
+    expect(result.activities[0]).not.toHaveProperty('endTime');
     expect(JSON.stringify(result)).not.toContain('private-provider-data');
 
     vi.mocked(dependencies.fetchActivityRankingDocuments).mockClear();
@@ -1167,6 +1171,27 @@ describe('MCP data service', () => {
       code: 'invalid_request',
     });
     expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+  });
+
+  it('skips ranked activities whose stored start time cannot be represented as ISO', async () => {
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
+      activityDocument({
+        startDate: Number.MAX_SAFE_INTEGER,
+        endDate: Number.MAX_SAFE_INTEGER,
+        stats: { [DataAscent.type]: 500 },
+      }),
+    ]);
+
+    await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataAscent.type,
+      order: 'highest',
+    })).resolves.toMatchObject({
+      scannedActivityCount: 1,
+      matchedActivityCount: 0,
+      activities: [],
+    });
   });
 
   it('finds activities by exact start or end position without geocoding coordinates', async () => {

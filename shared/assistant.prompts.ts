@@ -54,7 +54,7 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
     shortLabel: 'Biggest MTB jump',
     icon: 'terrain',
     toolWorkflow: ['list_activity_types', 'rank_activities_by_metric'],
-    routingHint: 'Discover the Mountain Biking activityGroup, pass that exact group to the ranking tool with the server-mapped Maximum Jump Distance metric, and rank all of its server-expanded activity types across all available history. Treat the top ranked metric value and unit as authoritative. Do not spend the bounded workflow on jump-detail pagination unless the user explicitly asks for subrecord details, and never substitute jump count or an activity-page sample for the ranking.',
+    routingHint: 'Discover the Mountain Biking activityGroup, pass that exact group to the ranking tool with the server-mapped Maximum Jump Distance metric, and rank all of its server-expanded activity types across all available history. Treat the top ranked metric value and unit as authoritative, and use that same result\'s exact ISO startTime when stating when it happened; never substitute the current date. Do not spend the bounded workflow on jump-detail pagination unless the user explicitly asks for subrecord details, and never substitute jump count or an activity-page sample for the ranking.',
   },
 ] as const satisfies readonly AssistantPromptExample[];
 

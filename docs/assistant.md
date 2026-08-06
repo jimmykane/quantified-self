@@ -94,7 +94,9 @@ The model receives only:
 - at most the latest six completed conversation turns;
 - the MCP server instructions and allowlisted tool schemas;
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
-  model delivery.
+  model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
+  are renamed and converted to ISO-8601 strings at this internal boundary. Measurement values such as HRV milliseconds
+  and relative offsets such as a jump `timestampMs` remain numeric.
 
 Opaque references and cursors remain available to the model only because bounded follow-up detail and pagination calls
 need them. After generation, the runtime rejects any answer that repeats an exact opaque reference, opaque cursor, or
@@ -118,7 +120,8 @@ duplicate-registration errors during discovery-and-answer workflows.
 The published MTB example also locks the Assistant to the shared MCP superlative workflow: discover the Mountain Biking
 activity-group value, pass it to the shared ranker so Sports Lib expands every canonical subtype, and follow the
 server's maximum-jump mapping across the requested range or all available history. The ranked persisted maximum and unit
-are authoritative. Coordinate-redacted jump records are read only when the user explicitly asks for subrecord details,
+are authoritative, and the answer must cite the winning result's explicit ISO start time rather than the current date.
+Coordinate-redacted jump records are read only when the user explicitly asks for subrecord details,
 avoiding a redundant scan that can exceed the Assistant's turn budget on jump-heavy activities. This is the same ranking
 path available to external MCP clients. It never substitutes `jumpCount` or a newest-first sample for jump quality, and
 an over-budget all-history scan fails instead of being described as an all-time result.
@@ -129,6 +132,8 @@ The model writes only the answer. Evidence shown in the UI is generated determin
 not authored by the model. The evidence adapter:
 
 - caps evidence at six tool results, six compact facts per result, and three app links;
+- gives activity rankings a deterministic winner-first projection containing the activity type, metric value and unit,
+  exact ISO start time, rank, and scan count;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;

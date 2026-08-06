@@ -1006,8 +1006,7 @@ function createFixtureDataService(
       activities: [{
         rank: 1,
         activityRef: ACTIVITY_REF,
-        startTimeMs: DAY_MS,
-        endTimeMs: DAY_MS + 3_600_000,
+        startTime: new Date(DAY_MS).toISOString(),
         activityType: 'Running',
         value: 10_000,
       }],
@@ -2230,11 +2229,23 @@ describe('MCP public output contracts', () => {
       activities: [{
         rank: 1,
         activityRef: ACTIVITY_REF,
-        startTimeMs: DAY_MS,
-        endTimeMs: NEXT_DAY_MS,
+        startTime: new Date(DAY_MS).toISOString(),
         activityType: 'Running',
         value: 10_000,
         eventID: 'private-event-id',
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTime: '2026-02-31T08:00:00.000Z',
+        activityType: 'Running',
+        value: 10_000,
       }],
     }).success).toBe(false);
     expect(registry.rank_activities_by_metric.safeParse({
@@ -2245,15 +2256,13 @@ describe('MCP public output contracts', () => {
       activities: [{
         rank: 1,
         activityRef: ACTIVITY_REF,
-        startTimeMs: NEXT_DAY_MS,
-        endTimeMs: DAY_MS,
+        startTime: new Date(NEXT_DAY_MS).toISOString(),
         activityType: 'Running',
         value: 10_000,
       }, {
         rank: 2,
         activityRef: ACTIVITY_REF,
-        startTimeMs: DAY_MS,
-        endTimeMs: NEXT_DAY_MS,
+        startTime: new Date(DAY_MS).toISOString(),
         activityType: 'Running',
         value: 11_000,
       }],
@@ -2266,15 +2275,27 @@ describe('MCP public output contracts', () => {
       activities: [{
         rank: 1,
         activityRef: ACTIVITY_REF,
-        startTimeMs: DAY_MS,
-        endTimeMs: NEXT_DAY_MS,
+        startTime: new Date(DAY_MS).toISOString(),
         activityType: 'Running',
         value: 10_000,
       }, {
         rank: 2,
         activityRef: ACTIVITY_REF,
-        startTimeMs: NEXT_DAY_MS,
-        endTimeMs: NEXT_DAY_MS + 3_600_000,
+        startTime: new Date(NEXT_DAY_MS).toISOString(),
+        activityType: 'Running',
+        value: 10_000,
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
         activityType: 'Running',
         value: 10_000,
       }],

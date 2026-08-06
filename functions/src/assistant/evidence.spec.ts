@@ -77,6 +77,39 @@ describe('Assistant evidence', () => {
     expect(evidence.links).toEqual([]);
   });
 
+  it('shows the exact winning activity date and value for metric rankings', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'rank_activities_by_metric',
+      title: 'Rank activities by metric',
+    }, {
+      activities: [{
+        rank: 1,
+        activityRef: 'opaque-ranking-ref',
+        startTime: '2026-07-31T07:50:22.000Z',
+        activityType: 'Downhill Cycling',
+        value: 10.411559104919434,
+      }],
+      metric: {
+        type: 'Maximum Jump Distance',
+        displayType: 'Maximum Jump Distance',
+        unit: 'm',
+        unitSystem: 'metric',
+      },
+      order: 'highest',
+      scannedActivityCount: 795,
+      matchedActivityCount: 137,
+    });
+
+    expect(evidence.facts).toEqual([
+      { label: 'Activity Type', value: 'Downhill Cycling' },
+      { label: 'Value', value: '10.41 m' },
+      { label: 'Start Time', value: '2026-07-31T07:50:22.000Z' },
+      { label: 'Rank', value: '1' },
+      { label: 'Scanned Activity Count', value: '795' },
+    ]);
+    expect(JSON.stringify(evidence)).not.toContain('opaque-ranking-ref');
+  });
+
   it('shows route-summary evidence without leaking references or geography', () => {
     const evidence = buildAssistantEvidence({
       name: 'list_routes',

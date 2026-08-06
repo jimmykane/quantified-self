@@ -151,6 +151,61 @@ function collectFacts(
   }
 }
 
+function buildRankingFacts(
+  structuredContent: Record<string, unknown>,
+): AssistantEvidenceFact[] | null {
+  const activities = structuredContent.activities;
+  const metric = structuredContent.metric;
+  if (!Array.isArray(activities)
+    || activities.length === 0
+    || !isRecord(activities[0])
+    || !isRecord(metric)) {
+    return null;
+  }
+  const topActivity = activities[0];
+  const startTime = topActivity.startTime;
+  const activityType = topActivity.activityType;
+  const value = topActivity.value;
+  const rank = topActivity.rank;
+  const unit = metric.unit;
+  const scannedActivityCount = structuredContent.scannedActivityCount;
+  if (typeof startTime !== 'string'
+    || !Number.isFinite(Date.parse(startTime))
+    || typeof value !== 'number'
+    || !Number.isFinite(value)) {
+    return null;
+  }
+  const facts: AssistantEvidenceFact[] = [];
+  const addFact = (label: string, factValue: string | number): void => {
+    facts.push(normalizeAssistantEvidenceFact({
+      label,
+      value: typeof factValue === 'number'
+        ? formatFactValue(label, factValue)
+        : truncate(factValue, 160),
+    }));
+  };
+  if (typeof activityType === 'string' && activityType.trim()) {
+    addFact('Activity Type', activityType);
+  }
+  const formattedValue = formatFactValue('value', value);
+  addFact(
+    'Value',
+    typeof unit === 'string' && unit.trim()
+      ? `${formattedValue} ${truncate(unit, 20)}`
+      : formattedValue,
+  );
+  addFact('Start Time', startTime);
+  if (typeof rank === 'number' && Number.isSafeInteger(rank) && rank > 0) {
+    addFact('Rank', rank);
+  }
+  if (typeof scannedActivityCount === 'number'
+    && Number.isSafeInteger(scannedActivityCount)
+    && scannedActivityCount >= 0) {
+    addFact('Scanned Activity Count', scannedActivityCount);
+  }
+  return facts.slice(0, MAX_FACTS);
+}
+
 function parseSafeAppUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 500) {
     return null;
@@ -234,9 +289,13 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
-  const facts: AssistantEvidenceFact[] = [];
+  const facts = tool.name === 'rank_activities_by_metric'
+    ? buildRankingFacts(structuredContent) || []
+    : [];
   const links: AssistantEvidenceLink[] = [];
-  collectFacts(structuredContent, facts, new Set<string>());
+  if (facts.length === 0) {
+    collectFacts(structuredContent, facts, new Set<string>());
+  }
   collectLinks(structuredContent, links, new Set<string>());
   return {
     toolName: tool.name,
