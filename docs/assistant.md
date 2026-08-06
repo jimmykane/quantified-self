@@ -143,14 +143,18 @@ invoking Gemini or consuming another request even after the original messages le
 different text is rejected. Documents from before this field existed derive receipts from their retained user messages
 in memory and persist them on the next write.
 
-The page retains only the opaque request ID in tab-scoped browser storage while the outcome is ambiguous; it never
-stores the prompt there. The server also returns the request ID attached to an active pending lease. After a reload,
-the page polls that owner-only callable with a bounded two-to-five-second progressive interval until the exact turn is
-committed or the lease ends. A 15-second registration grace closes the race where the refreshed page loads just before
-the original callable writes its lease. Permanent authorization or response-contract failures stop polling. The local ID
-is cleared after confirmed completion, authoritative failure, or conversation reset, and an exact ID match is required
-when reconciling a response that may have been lost. This prevents another tab's same-text turn from being mistaken
-for the current request.
+While a send outcome is ambiguous, the page keeps a versioned, bounded resumption record in tab-scoped session storage:
+the question, opaque request ID, IANA timezone, original conversation generation when present, and submission time. This
+lets a refreshed page render the pending question immediately. If the refresh cancelled the HTTP request before the
+server registered its turn, the page resubmits the same question with the same request ID; server idempotency prevents a
+duplicate completed turn or duplicate quota charge. A record older than the four-minute turn lease plus the 30-second
+recovery margin is never sent automatically and is instead restored to the composer. The server also returns the request
+ID attached to an active pending lease. After a reload, the page polls that owner-only callable with a bounded
+two-to-five-second progressive interval until the exact turn is committed or the lease ends. Legacy ID-only records keep
+a 15-second registration grace. Permanent authorization or response-contract failures stop polling. The local resumption
+record is cleared after confirmed completion, authoritative failure, conversation reset, or expiry, and an exact ID match
+is required when reconciling a response that may have been lost. This prevents another tab's same-text turn from being
+mistaken for the current request.
 
 Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a

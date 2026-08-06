@@ -18,6 +18,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   isValidAssistantRequestId,
+  type AssistantChatRequest,
   type AssistantConversation,
   type AssistantMessage,
 } from '@shared/assistant.types';
@@ -36,6 +37,17 @@ const ASSISTANT_PENDING_POLL_BACKOFF_FACTOR = 1.5;
 const ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS = (4 * 60 * 1_000) + 30_000;
 const ASSISTANT_PENDING_REGISTRATION_GRACE_MS = 15_000;
 const ASSISTANT_PENDING_REQUEST_STORAGE_KEY = 'quantified-self.assistant.pending-request-id';
+const ASSISTANT_PENDING_REQUEST_STORAGE_VERSION = 1 as const;
+const ASSISTANT_PENDING_REQUEST_FUTURE_SKEW_MS = 30_000;
+
+interface AssistantPendingRequest extends AssistantChatRequest {
+  storageVersion: typeof ASSISTANT_PENDING_REQUEST_STORAGE_VERSION;
+  submittedAtMs: number;
+}
+
+type RememberedAssistantRequest = AssistantPendingRequest | {
+  requestId: string;
+};
 
 @Component({
   selector: 'app-assistant-page',
@@ -57,7 +69,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
-  private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
+  private readonly retryRequest = signal<AssistantPendingRequest | null>(null);
   private readonly pendingRequestId = signal<string | null>(null);
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
@@ -114,32 +126,63 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
 
   async ngOnInit(): Promise<void> {
-    const rememberedRequestId = this.readRememberedPendingRequestId();
+    const rememberedRequest = this.readRememberedPendingRequest();
+    let requestToResume: AssistantPendingRequest | null = null;
     const [conversationResult, quotaResult] = await Promise.allSettled([
       this.assistantService.getConversationState(),
       this.quotaService.loadQuotaStatus(),
     ]);
     if (conversationResult.status === 'fulfilled') {
-      this.conversation.set(conversationResult.value.conversation);
-      if (conversationResult.value.pendingRequestId) {
-        this.startPendingResponseRecovery(conversationResult.value.pendingRequestId);
-      } else if (rememberedRequestId
-        && !this.hasCompletedRequest(conversationResult.value.conversation, rememberedRequestId)) {
-        this.startPendingResponseRecovery(rememberedRequestId, true);
+      const state = conversationResult.value;
+      this.conversation.set(state.conversation);
+      if (rememberedRequest
+        && this.hasCompletedRequest(state.conversation, rememberedRequest.requestId)) {
+        this.clearRememberedPendingRequest(rememberedRequest.requestId);
+      } else if (state.pendingRequestId) {
+        if (rememberedRequest?.requestId === state.pendingRequestId
+          && this.isResumablePendingRequest(rememberedRequest)) {
+          this.restorePendingUserMessage(rememberedRequest);
+        } else if (rememberedRequest
+          && this.isResumablePendingRequest(rememberedRequest)) {
+          this.promptControl.setValue(rememberedRequest.message);
+          this.clearRememberedPendingRequest(rememberedRequest.requestId);
+        }
+        this.startPendingResponseRecovery(state.pendingRequestId);
+      } else if (rememberedRequest
+        && this.isResumablePendingRequest(rememberedRequest)) {
+        if (this.canResumePendingRequest(rememberedRequest, state.conversation)) {
+          requestToResume = rememberedRequest;
+        } else {
+          this.restoreExpiredPendingRequest(rememberedRequest);
+        }
+      } else if (rememberedRequest) {
+        this.startPendingResponseRecovery(rememberedRequest.requestId, true);
       } else {
-        this.clearRememberedPendingRequestId();
+        this.clearRememberedPendingRequest();
       }
-    } else if (rememberedRequestId
+    } else if (rememberedRequest
       && this.isRetryablePendingStateError(conversationResult.reason)) {
-      this.startPendingResponseRecovery(rememberedRequestId, true);
+      if (this.isResumablePendingRequest(rememberedRequest)
+        && this.isFreshPendingRequest(rememberedRequest)) {
+        requestToResume = rememberedRequest;
+      } else if (this.isResumablePendingRequest(rememberedRequest)) {
+        this.restoreExpiredPendingRequest(rememberedRequest);
+      } else {
+        this.startPendingResponseRecovery(rememberedRequest.requestId, true);
+      }
     } else {
-      this.clearRememberedPendingRequestId(rememberedRequestId ?? undefined);
+      this.clearRememberedPendingRequest(rememberedRequest?.requestId);
       this.errorMessage.set(this.assistantService.getErrorMessage(conversationResult.reason));
     }
     if (quotaResult.status === 'fulfilled') {
       this.quota.set(quotaResult.value);
     }
     this.loadingConversation.set(false);
+    if (requestToResume) {
+      this.retryRequest.set(requestToResume);
+      this.promptControl.setValue(requestToResume.message);
+      void this.sendMessage();
+    }
     if (!this.isEmpty()) {
       this.scrollToConversationEnd();
     }
@@ -182,20 +225,31 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     const activeConversation = this.conversation();
     const hadConversationMessages = this.messages().length > 0;
     const retryRequest = this.retryRequest();
-    const request = retryRequest?.message === text
-      ? retryRequest
+    const request: AssistantPendingRequest = retryRequest?.message === text
+      ? {
+        ...retryRequest,
+        ...(activeConversation?.conversationId
+          ? { conversationId: activeConversation.conversationId }
+          : {}),
+      }
       : {
+        storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
         message: text,
         requestId: globalThis.crypto.randomUUID(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        submittedAtMs: Date.now(),
+        ...(activeConversation?.conversationId
+          ? { conversationId: activeConversation.conversationId }
+          : {}),
       };
     this.retryRequest.set(request);
     this.pendingRequestId.set(request.requestId);
-    this.rememberPendingRequestId(request.requestId);
+    this.rememberPendingRequest(request);
     this.pendingUserMessage.set({
       id: request.requestId,
       role: 'user',
       text,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(request.submittedAtMs).toISOString(),
     });
     this.promptControl.setValue('');
     if (hadConversationMessages) {
@@ -205,16 +259,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const response = await this.assistantService.sendMessage({
         requestId: request.requestId,
         message: text,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-        ...(activeConversation?.conversationId
-          ? { conversationId: activeConversation.conversationId }
+        timeZone: request.timeZone,
+        ...(request.conversationId
+          ? { conversationId: request.conversationId }
           : {}),
       });
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
       this.retryRequest.set(null);
       this.pendingRequestId.set(null);
-      this.clearRememberedPendingRequestId(request.requestId);
+      this.clearRememberedPendingRequest(request.requestId);
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
       let refreshedPendingRequestId: string | null | undefined;
@@ -235,7 +289,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.errorMessage.set(null);
         this.retryRequest.set(null);
         this.pendingRequestId.set(null);
-        this.clearRememberedPendingRequestId(request.requestId);
+        this.clearRememberedPendingRequest(request.requestId);
       } else if (refreshedPendingRequestId === request.requestId) {
         if (refreshedConversation !== undefined) {
           this.conversation.set(refreshedConversation);
@@ -245,7 +299,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       } else {
         this.pendingRequestId.set(null);
         if (refreshedConversation !== undefined) {
-          this.clearRememberedPendingRequestId(request.requestId);
+          this.clearRememberedPendingRequest(request.requestId);
         }
         if (activeConversation !== null
           && refreshedConversation !== undefined
@@ -295,7 +349,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.conversation.set(await this.assistantService.resetConversation());
       this.cancelPendingResponsePoll();
       this.pendingRequestId.set(null);
-      this.clearRememberedPendingRequestId();
+      this.clearRememberedPendingRequest();
       this.retryRequest.set(null);
       this.promptControl.setValue('');
       this.scrollToPageStart();
@@ -350,7 +404,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     awaitingServerRegistration = false,
   ): void {
     this.cancelPendingResponsePoll();
-    this.rememberPendingRequestId(requestId);
+    this.rememberPendingRequestIdIfMissing(requestId);
     this.pendingRequestId.set(requestId);
     this.pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
     this.pendingRecoveryDeadlineMs = Date.now() + ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
@@ -415,7 +469,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     const pendingText = this.pendingUserMessage()?.text;
     this.cancelPendingResponsePoll();
     this.pendingRequestId.set(null);
-    this.clearRememberedPendingRequestId(requestId);
+    this.clearRememberedPendingRequest(requestId);
     this.pendingUserMessage.set(null);
     this.sending.set(false);
     if (this.errorMessage() && pendingText) {
@@ -455,7 +509,22 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     return !(error instanceof AssistantError) || error.code === 'UNAVAILABLE';
   }
 
-  private rememberPendingRequestId(requestId: string): void {
+  private rememberPendingRequest(request: AssistantPendingRequest): void {
+    try {
+      globalThis.sessionStorage?.setItem(
+        ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
+        JSON.stringify(request),
+      );
+    } catch {
+      // Server state still provides recovery when browser storage is unavailable.
+    }
+  }
+
+  private rememberPendingRequestIdIfMissing(requestId: string): void {
+    const rememberedRequest = this.readRememberedPendingRequest();
+    if (rememberedRequest?.requestId === requestId) {
+      return;
+    }
     try {
       globalThis.sessionStorage?.setItem(
         ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
@@ -466,34 +535,124 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  private readRememberedPendingRequestId(): string | null {
+  private readRememberedPendingRequest(): RememberedAssistantRequest | null {
     try {
-      const requestId = globalThis.sessionStorage?.getItem(
+      const storedRequest = globalThis.sessionStorage?.getItem(
         ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
       );
-      if (isValidAssistantRequestId(requestId)) {
-        return requestId;
+      if (isValidAssistantRequestId(storedRequest)) {
+        return { requestId: storedRequest };
       }
-      this.clearRememberedPendingRequestId();
+      if (!storedRequest) {
+        return null;
+      }
+      const parsed = JSON.parse(storedRequest) as unknown;
+      if (!parsed || typeof parsed !== 'object') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      const data = parsed as Partial<AssistantPendingRequest>;
+      const message = typeof data.message === 'string'
+        ? data.message.trim()
+        : '';
+      const timeZone = typeof data.timeZone === 'string'
+        ? data.timeZone.trim()
+        : '';
+      const conversationId = typeof data.conversationId === 'string'
+        ? data.conversationId.trim()
+        : data.conversationId;
+      if (data.storageVersion !== ASSISTANT_PENDING_REQUEST_STORAGE_VERSION
+        || !isValidAssistantRequestId(data.requestId)
+        || !message
+        || message.length > ASSISTANT_MAX_MESSAGE_CHARS
+        || !this.isValidTimeZone(timeZone)
+        || !Number.isFinite(data.submittedAtMs)
+        || Number(data.submittedAtMs) <= 0
+        || (conversationId !== undefined
+          && (typeof conversationId !== 'string'
+            || !conversationId
+            || conversationId.length > 120))) {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      return {
+        storageVersion: ASSISTANT_PENDING_REQUEST_STORAGE_VERSION,
+        requestId: data.requestId,
+        message,
+        timeZone,
+        submittedAtMs: Number(data.submittedAtMs),
+        ...(conversationId ? { conversationId } : {}),
+      };
     } catch {
       // Treat unavailable browser storage as no locally pending request.
+      this.clearRememberedPendingRequest();
     }
     return null;
   }
 
-  private clearRememberedPendingRequestId(expectedRequestId?: string): void {
+  private clearRememberedPendingRequest(expectedRequestId?: string): void {
     try {
       if (expectedRequestId) {
-        const rememberedRequestId = globalThis.sessionStorage?.getItem(
-          ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
-        );
-        if (rememberedRequestId !== expectedRequestId) {
+        const rememberedRequest = this.readRememberedPendingRequest();
+        if (rememberedRequest?.requestId !== expectedRequestId) {
           return;
         }
       }
       globalThis.sessionStorage?.removeItem(ASSISTANT_PENDING_REQUEST_STORAGE_KEY);
     } catch {
       // Browser privacy settings can make tab-scoped storage unavailable.
+    }
+  }
+
+  private isResumablePendingRequest(
+    request: RememberedAssistantRequest,
+  ): request is AssistantPendingRequest {
+    return 'storageVersion' in request;
+  }
+
+  private isFreshPendingRequest(request: AssistantPendingRequest): boolean {
+    const ageMs = Date.now() - request.submittedAtMs;
+    return ageMs >= -ASSISTANT_PENDING_REQUEST_FUTURE_SKEW_MS
+      && ageMs <= ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
+  }
+
+  private canResumePendingRequest(
+    request: AssistantPendingRequest,
+    conversation: AssistantConversation | null,
+  ): boolean {
+    return this.isFreshPendingRequest(request)
+      && request.conversationId === conversation?.conversationId;
+  }
+
+  private restorePendingUserMessage(request: AssistantPendingRequest): void {
+    this.retryRequest.set(request);
+    this.pendingUserMessage.set({
+      id: request.requestId,
+      role: 'user',
+      text: request.message,
+      createdAt: new Date(request.submittedAtMs).toISOString(),
+    });
+  }
+
+  private restoreExpiredPendingRequest(request: AssistantPendingRequest): void {
+    this.clearRememberedPendingRequest(request.requestId);
+    this.retryRequest.set(null);
+    this.pendingUserMessage.set(null);
+    this.promptControl.setValue(request.message);
+    this.errorMessage.set(
+      'Your previous question could not be resumed. It is ready for you to send again.',
+    );
+  }
+
+  private isValidTimeZone(timeZone: string): boolean {
+    if (!timeZone || timeZone.length > 80) {
+      return false;
+    }
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone }).format(0);
+      return true;
+    } catch {
+      return false;
     }
   }
 

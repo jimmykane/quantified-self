@@ -240,6 +240,16 @@ describe('AssistantPageComponent', () => {
           },
         ],
       };
+      sessionStorage.setItem(
+        'quantified-self.assistant.pending-request-id',
+        JSON.stringify({
+          storageVersion: 1,
+          requestId: pendingRequestId,
+          message: 'How am I today?',
+          timeZone: 'Europe/Helsinki',
+          submittedAtMs: Date.now(),
+        }),
+      );
       assistantService.getConversationState.mockReset()
         .mockResolvedValueOnce({
           conversation: pendingConversation,
@@ -254,9 +264,15 @@ describe('AssistantPageComponent', () => {
       fixture.detectChanges();
 
       expect(component.sending()).toBe(true);
+      expect(component.messages().at(-1)).toMatchObject({
+        id: pendingRequestId,
+        role: 'user',
+        text: 'How am I today?',
+      });
       expect(fixture.nativeElement.textContent).toContain(
         'Checking the relevant Quantified Self data',
       );
+      expect(fixture.nativeElement.textContent).toContain('How am I today?');
 
       await vi.advanceTimersByTimeAsync(2_000);
       fixture.detectChanges();
@@ -268,6 +284,116 @@ describe('AssistantPageComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('resubmits and renders a stored question when refresh beats server registration', async () => {
+    const pendingRequestId = 'assistant-request-cancelled-before-registration';
+    const submittedAtMs = Date.now();
+    let resolveSend: ((response: AssistantChatResponse) => void) | undefined;
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: null,
+      pendingRequestId: null,
+    });
+    assistantService.sendMessage.mockReset().mockReturnValueOnce(new Promise(
+      resolve => {
+        resolveSend = resolve;
+      },
+    ));
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 1,
+        requestId: pendingRequestId,
+        message: 'How has my sleep changed?',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs,
+      }),
+    );
+
+    await component.ngOnInit();
+    fixture.detectChanges();
+
+    expect(assistantService.sendMessage).toHaveBeenCalledWith({
+      requestId: pendingRequestId,
+      message: 'How has my sleep changed?',
+      timeZone: 'Europe/Helsinki',
+    });
+    expect(component.sending()).toBe(true);
+    expect(component.messages().at(-1)).toMatchObject({
+      id: pendingRequestId,
+      role: 'user',
+      text: 'How has my sleep changed?',
+    });
+    expect(fixture.nativeElement.textContent).toContain('How has my sleep changed?');
+    expect(JSON.parse(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    ) || '{}')).toMatchObject({ submittedAtMs });
+
+    resolveSend?.(chatResponse);
+    await vi.waitFor(() => expect(component.sending()).toBe(false));
+
+    expect(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    )).toBeNull();
+  });
+
+  it('persists a bounded resumable request only while its result is ambiguous', async () => {
+    let resolveSend: ((response: AssistantChatResponse) => void) | undefined;
+    assistantService.sendMessage.mockReset().mockReturnValueOnce(new Promise(
+      resolve => {
+        resolveSend = resolve;
+      },
+    ));
+    component.promptControl.setValue('How am I today?');
+
+    const sendPromise = component.sendMessage();
+    const storedRequest = JSON.parse(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    ) || '{}') as Record<string, unknown>;
+
+    expect(storedRequest).toMatchObject({
+      storageVersion: 1,
+      requestId: expect.stringMatching(/^[A-Za-z0-9_-]{16,120}$/),
+      message: 'How am I today?',
+      timeZone: expect.any(String),
+      submittedAtMs: expect.any(Number),
+    });
+
+    resolveSend?.(chatResponse);
+    await sendPromise;
+
+    expect(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    )).toBeNull();
+  });
+
+  it('does not automatically resend a stale stored question', async () => {
+    const pendingRequestId = 'assistant-request-stale-before-registration';
+    assistantService.getConversationState.mockReset().mockResolvedValueOnce({
+      conversation: null,
+      pendingRequestId: null,
+    });
+    sessionStorage.setItem(
+      'quantified-self.assistant.pending-request-id',
+      JSON.stringify({
+        storageVersion: 1,
+        requestId: pendingRequestId,
+        message: 'How was my old week?',
+        timeZone: 'Europe/Helsinki',
+        submittedAtMs: Date.now() - (5 * 60 * 1_000),
+      }),
+    );
+
+    await component.ngOnInit();
+
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('How was my old week?');
+    expect(component.errorMessage()).toBe(
+      'Your previous question could not be resumed. It is ready for you to send again.',
+    );
+    expect(sessionStorage.getItem(
+      'quantified-self.assistant.pending-request-id',
+    )).toBeNull();
   });
 
   it('survives a refresh that reaches the server before the pending turn is registered', async () => {
