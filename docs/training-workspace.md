@@ -504,10 +504,12 @@ Failures mark affected snapshots failed, preserve an error, and are rethrown so 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
 
-The route header owns one fixed-height status line above the `Training` title. While any snapshot that backs a visible
-Training surface is missing, queued, processing, building, or stale, that line replaces the normal `28-day training
-analysis` eyebrow instead of inserting a banner into the analytical content. A stale snapshot says that any available
-last completed values remain visible while the replacement finishes. A failed visible snapshot takes precedence,
+The route header owns one fixed-height status line above the `Training` title. When the visible scope is healthy, the
+normal `28-day training analysis` eyebrow includes `Data through <UTC date>` from the validated `training_summary`
+snapshot's `asOfDayMs`; it represents the actual derived-data cutoff, never the browser clock. While any snapshot that
+backs a visible Training surface is missing, queued, processing, building, or stale, the status line replaces that
+eyebrow instead of inserting a banner into the analytical content. A stale snapshot says that any available last
+completed values remain visible while the replacement finishes. A failed visible snapshot takes precedence,
 uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
 visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines and the account-gated
 Power systems surface. The optional imported recovery snapshot participates only while its active `Recovery left`

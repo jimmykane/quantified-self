@@ -16,7 +16,12 @@
             <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
           </div>
         } @else {
-          <p class="training-eyebrow">28-day training analysis</p>
+          <p class="training-eyebrow">
+            <span>28-day training analysis</span>
+            @if (trainingDataAsOfText) {
+              <span class="training-data-as-of">{{ trainingDataAsOfText }}</span>
+            }
+          </p>
         }
       </div>
       <h1 id="training-title">Training</h1>

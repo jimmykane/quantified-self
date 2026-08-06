@@ -300,6 +300,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public hasTrainingPowerSystemsAccess = false;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
+  public trainingDataAsOfText: string | null = null;
   public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
     type: 'pending',
     title: 'Building derived metrics',
@@ -543,6 +544,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.selectedTrainingPowerSystems = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
+    this.trainingDataAsOfText = null;
     this.derivedMetricsRouteStatus = {
       type: 'pending',
       title: 'Building derived metrics',
@@ -1038,7 +1040,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
       const anchorDayMs = selection.windowEndDayMs + TRAINING_DAY_MS;
       return Number.isFinite(anchorDayMs)
-        ? `Event on ${this.formatTrainingBuildDate(anchorDayMs)}`
+        ? `Event on ${this.formatTrainingUtcDate(anchorDayMs)}`
         : 'Historical event';
     }
     return 'Manual historical period';
@@ -1048,10 +1050,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (!Number.isFinite(startDayMs) || !Number.isFinite(endDayMs)) {
       return '';
     }
-    return `${this.formatTrainingBuildDate(startDayMs as number)} – ${this.formatTrainingBuildDate(endDayMs as number)}`;
+    return `${this.formatTrainingUtcDate(startDayMs as number)} – ${this.formatTrainingUtcDate(endDayMs as number)}`;
   }
 
-  private formatTrainingBuildDate(dayMs: number): string {
+  private formatTrainingUtcDate(dayMs: number): string {
     const formatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
@@ -1063,6 +1065,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
+    const trainingSummaryAsOfDayMs = this.derivedState.trainingSummary?.asOfDayMs;
+    this.trainingDataAsOfText = Number.isFinite(trainingSummaryAsOfDayMs)
+      ? `Data through ${this.formatTrainingUtcDate(trainingSummaryAsOfDayMs as number)}`
+      : null;
     const formPoints = this.derivedState.formPoints;
     const currentTrainingState = buildCurrentTrainingStateContext({
       formPoints,

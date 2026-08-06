@@ -75,6 +75,7 @@ describe('TrainingWorkspaceComponent', () => {
   });
 
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
+    const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       formPoints: [],
@@ -88,7 +89,7 @@ describe('TrainingWorkspaceComponent', () => {
       freshnessForecastStatus: 'ready', intensityDistributionStatus: 'ready', efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
       trainingSummary: {
-        asOfDayMs: 0,
+        asOfDayMs: trainingSummaryAsOfDayMs,
         currentWindowDays: 28,
         baselineWindowDays: 84,
         disciplines: [],
@@ -114,6 +115,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(element.querySelector('.training-data-as-of')).toBeNull();
     const feedbackAction = element.querySelector('.training-feedback-action');
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
@@ -180,6 +182,44 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Preparing rolling power capacity');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the validated training-summary cutoff when the route is ready', async () => {
+    const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
+    const derivedState = createRouteReadyDerivedState({
+      trainingSummary: {
+        asOfDayMs: trainingSummaryAsOfDayMs,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    });
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture: ComponentFixture<TrainingWorkspaceComponent> = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const expectedAsOfDate = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(trainingSummaryAsOfDayMs));
+    expect(fixture.nativeElement.querySelector('.training-data-as-of')?.textContent?.trim())
+      .toBe(`Data through ${expectedAsOfDate}`);
   });
 
   it('keeps every route-header action in one compact row through tablet widths', () => {
