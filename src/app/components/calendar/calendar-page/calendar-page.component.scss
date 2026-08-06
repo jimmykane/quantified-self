@@ -3,11 +3,6 @@
 }
 
 .calendar-page {
-  box-sizing: border-box;
-  width: min(100%, 1440px);
-  min-width: 0;
-  margin: 0 auto;
-  padding: 24px clamp(16px, 3vw, 40px) 48px;
   color: var(--mat-sys-on-surface);
 }
 
@@ -231,10 +226,6 @@
 }
 
 @media (max-width: 720px) {
-  .calendar-page {
-    padding-top: 16px;
-  }
-
   .calendar-view-toggle {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

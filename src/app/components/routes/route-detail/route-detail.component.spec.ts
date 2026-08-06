@@ -810,8 +810,12 @@ describe('RouteDetailComponent', () => {
       resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.scss'),
       'utf8',
     );
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.html'),
+      'utf8',
+    );
 
-    expect(styles).toContain('box-sizing: border-box;');
+    expect(template).toContain('class="route-detail-page qs-workspace-page"');
     expect(styles).toContain('.segment-table-wrap');
     expect(styles).toContain('max-height: min(42vh, 520px);');
     expect(styles).toContain('min-width: 900px;');

@@ -7,14 +7,6 @@
   background: var(--mat-sys-surface);
 }
 
-.tools-compare-page {
-  box-sizing: border-box;
-  max-width: 86rem;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
-  width: 100%;
-}
-
 .hero-section {
   display: grid;
   gap: 1.25rem;
@@ -1060,10 +1052,6 @@ mat-paginator {
 }
 
 @include bp.max-768 {
-  .tools-compare-page {
-    padding: 1.25rem 0.875rem 2.5rem;
-  }
-
   h1 {
     font-size: 2.55rem;
   }

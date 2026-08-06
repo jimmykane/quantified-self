@@ -5,10 +5,6 @@
 .route-detail-page {
   display: grid;
   gap: 24px;
-  width: min(1440px, 100%);
-  box-sizing: border-box;
-  margin: 0 auto;
-  padding: 24px;
 }
 
 .route-detail-header {
@@ -401,10 +397,6 @@ h2 {
 }
 
 @media (max-width: 720px) {
-  .route-detail-page {
-    padding: 16px;
-  }
-
   .waypoint-table-wrap,
   .segment-table-wrap {
     max-height: 360px;

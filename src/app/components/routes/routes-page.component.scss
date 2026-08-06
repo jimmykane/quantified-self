@@ -7,14 +7,6 @@
   color: var(--mat-sys-on-surface);
 }
 
-.routes-page {
-  box-sizing: border-box;
-  margin: 0 auto;
-  max-width: 86rem;
-  padding: 1.5rem 1rem 3rem;
-  width: 100%;
-}
-
 .routes-workspace {
   display: flex;
   flex-direction: column;
@@ -467,10 +459,6 @@
 }
 
 @include bp.max-768 {
-  .routes-page {
-    padding: 1.25rem 0.875rem 2.5rem;
-  }
-
   .route-selection-toolbar {
     align-items: stretch;
     display: grid;

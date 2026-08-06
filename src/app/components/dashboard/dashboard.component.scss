@@ -14,10 +14,6 @@
 }
 
 section.component-container {
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: 1rem;
-    box-sizing: border-box;
     animation: fadeIn 0.8s ease-out;
 }
 
@@ -112,10 +108,6 @@ app-event-search {
 }
 
 @media (max-width: 640px) {
-    section.component-container {
-        padding: 0.75rem;
-    }
-
     .dashboard-no-activity__actions {
         align-items: stretch;
         flex-direction: column;

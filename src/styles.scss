@@ -70,6 +70,8 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
   --qs-dashboard-chart-title-font-size: 0.92rem;
   --qs-dashboard-chart-title-font-weight: 600;
   --qs-dashboard-chart-title-line-height: 1.1;
+  --qs-workspace-max-width: 1440px;
+  --qs-workspace-inline-padding: clamp(16px, 3vw, 40px);
 
   --gradient-running: linear-gradient(135deg, #FDD300, #FF9100);
   --gradient-trail-running: linear-gradient(135deg, #c7ef0c, #8bc34a);
@@ -90,6 +92,22 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
   font-size: var(--qs-dashboard-chart-title-font-size);
   font-weight: var(--qs-dashboard-chart-title-font-weight);
   line-height: var(--qs-dashboard-chart-title-line-height);
+}
+
+/* Shared outer shell for authenticated workspaces. */
+.qs-workspace-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--qs-workspace-max-width);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 24px var(--qs-workspace-inline-padding) 48px;
+}
+
+@media (max-width: 720px) {
+  .qs-workspace-page {
+    padding-top: 16px;
+  }
 }
 
 // Include theme styles for core and each component used in your app.
