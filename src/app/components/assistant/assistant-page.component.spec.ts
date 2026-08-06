@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CdkTextareaAutosize } from '@angular/cdk/text-field';
+import { By } from '@angular/platform-browser';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -6,10 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
-import {
-  ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
-  ASSISTANT_PROMPT_EXAMPLES,
-} from '@shared/assistant.prompts';
+import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
   AssistantError,
@@ -128,14 +127,19 @@ describe('AssistantPageComponent', () => {
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
-    expect(fixture.nativeElement.querySelector('mat-hint')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
     const composerFooter = fixture.nativeElement.querySelector('.composer-footer') as HTMLElement;
     expect(composerFooter.textContent)
       .toContain(`0/${component.maxMessageChars}`);
     expect(composerFooter.children).toHaveLength(2);
     expect(composerFooter.textContent).not.toContain('AI can make mistakes');
-    expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
-      .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.placeholder).toBe('Ask about your data…');
+    expect(textarea.getAttribute('aria-label')).toBe('Ask about your data');
+    const autosize = fixture.debugElement.query(By.directive(CdkTextareaAutosize))
+      .injector.get(CdkTextareaAutosize);
+    expect(autosize.minRows).toBe(1);
+    expect(autosize.maxRows).toBe(5);
     const headerActions = Array.from(
       fixture.nativeElement.querySelectorAll('.assistant-header-actions :is(a, button)'),
     ) as HTMLElement[];

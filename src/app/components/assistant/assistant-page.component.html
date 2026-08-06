@@ -108,12 +108,10 @@
       }
       <section class="composer-shell qs-glass-card-panel">
         <form class="composer" (submit)="handleComposerSubmit($event)">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Ask about your data</mat-label>
-            <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
-              (keydown)="handleComposerKeydown($event)"
-              [placeholder]="composerPlaceholder"></textarea>
-          </mat-form-field>
+          <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
+            cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
+            [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+            [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
           <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
             @if (sending()) {
               <mat-spinner diameter="20"></mat-spinner>

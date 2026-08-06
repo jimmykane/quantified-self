@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { TextFieldModule } from '@angular/cdk/text-field';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -19,9 +20,6 @@ import {
   type AssistantMessage,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
-import {
-  ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
-} from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
@@ -38,6 +36,7 @@ import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom
     ReactiveFormsModule,
     RouterModule,
     MaterialModule,
+    TextFieldModule,
   ],
   templateUrl: './assistant-page.component.html',
   styleUrls: ['./assistant-page.component.scss'],
@@ -52,7 +51,7 @@ export class AssistantPageComponent implements OnInit {
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
-  readonly composerPlaceholder = `For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`;
+  readonly composerPlaceholder = 'Ask about your data…';
   readonly promptControl = new FormControl('', {
     nonNullable: true,
     validators: [
