@@ -382,11 +382,13 @@ describe('Assistant callable', () => {
       'user-1',
       expect.objectContaining({ turnId: 'turn-1' }),
     );
+    expect(dependencies.answer).toHaveBeenCalledTimes(2);
+    expect(dependencies.finalizeQuota).toHaveBeenCalledTimes(1);
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
   });
 
-  it('releases a quota reservation when runtime setup fails before billable work', async () => {
-    const { dependencies, store, reservation, conversation } = createDependencies();
+  it('recovers one runtime setup failure without consuming another allowance', async () => {
+    const { dependencies, store, conversation } = createDependencies();
     vi.mocked(dependencies.answer).mockRejectedValueOnce(
       new Error('MCP session setup unavailable'),
     );
@@ -397,23 +399,104 @@ describe('Assistant callable', () => {
       timeZone: 'UTC',
       conversationId: 'conversation-1',
     };
-    await expect(runAssistantChat(request, context, dependencies))
-      .rejects.toMatchObject({ code: 'unavailable' });
+    await expect(runAssistantChat(request, context, dependencies)).resolves.toEqual({
+      conversation,
+      quota,
+      pendingRequestId: null,
+    });
+    expect(dependencies.reserveQuota).toHaveBeenCalledOnce();
+    expect(dependencies.answer).toHaveBeenCalledTimes(2);
+    expect(dependencies.finalizeQuota).toHaveBeenCalledTimes(1);
+    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(store.releaseTurn).not.toHaveBeenCalled();
+  });
 
+  it('releases a quota reservation when both runtime setup attempts fail', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.answer).mockRejectedValue(
+      new Error('MCP session setup unavailable'),
+    );
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(dependencies.answer).toHaveBeenCalledTimes(2);
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
     expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
     expect(store.releaseTurn).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ turnId: 'turn-1' }),
     );
+  });
 
-    await expect(runAssistantChat(request, context, dependencies)).resolves.toEqual({
+  it('retries a failed billable generation under the same finalized allowance', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    vi.mocked(dependencies.answer)
+      .mockImplementationOnce(async input => {
+        await input.onBillableAttempt();
+        throw new Error('invalid model response');
+      });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).resolves.toEqual({
       conversation,
       quota,
       pendingRequestId: null,
     });
-    expect(dependencies.reserveQuota).toHaveBeenCalledTimes(2);
+
+    expect(dependencies.answer).toHaveBeenCalledTimes(2);
     expect(dependencies.finalizeQuota).toHaveBeenCalledTimes(1);
+    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(store.releaseTurn).not.toHaveBeenCalled();
+    expect(store.completeTurn).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry when quota finalization itself fails', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.finalizeQuota).mockRejectedValue(
+      new Error('quota persistence unavailable'),
+    );
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw new Error('should not reach generation');
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(dependencies.answer).toHaveBeenCalledOnce();
+    expect(dependencies.finalizeQuota).toHaveBeenCalledOnce();
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry a permanent callable error from grounded work', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(dependencies.answer).mockRejectedValue(new HttpsError(
+      'permission-denied',
+      'Grounded access denied.',
+    ));
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'permission-denied' });
+
+    expect(dependencies.answer).toHaveBeenCalledOnce();
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledOnce();
   });
 
   it('rejects invalid input before reserving quota', async () => {

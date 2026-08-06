@@ -46,6 +46,7 @@ interface AssistantCallableContext {
 }
 
 const ASSISTANT_PRODUCTION_APP_BASE_URL = 'https://quantified-self.io';
+const ASSISTANT_GROUNDED_ANSWER_ATTEMPT_LIMIT = 2;
 const ASSISTANT_HOSTED_APP_ORIGINS = new Set([
   ASSISTANT_PRODUCTION_APP_BASE_URL,
   'https://beta.quantified-self.io',
@@ -284,6 +285,45 @@ function assertRequestFingerprintMatchesInput(
   }
 }
 
+function isRetryableGroundedAnswerError(error: unknown): boolean {
+  if (error instanceof AssistantConversationStoreError) {
+    return false;
+  }
+  if (!(error instanceof HttpsError)) {
+    return true;
+  }
+  return error.code === 'unavailable'
+    || error.code === 'deadline-exceeded'
+    || error.code === 'internal';
+}
+
+async function answerWithGroundedRetry(
+  answer: AssistantCallableDependencies['answer'],
+  input: Parameters<AssistantCallableDependencies['answer']>[0],
+  canRetry: () => boolean,
+): Promise<AssistantRuntimeResult> {
+  for (
+    let attempt = 1;
+    attempt <= ASSISTANT_GROUNDED_ANSWER_ATTEMPT_LIMIT;
+    attempt += 1
+  ) {
+    try {
+      return await answer(input);
+    } catch (error) {
+      if (attempt >= ASSISTANT_GROUNDED_ANSWER_ATTEMPT_LIMIT
+        || !canRetry()
+        || !isRetryableGroundedAnswerError(error)) {
+        throw error;
+      }
+      logger.warn('[Assistant] Retrying grounded response generation.', {
+        attempt: attempt + 1,
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+  }
+  throw new Error('The Assistant grounded response attempt limit was invalid.');
+}
+
 async function buildExistingRequestResponse(
   uid: string,
   input: AssistantChatRequest,
@@ -408,14 +448,14 @@ export async function runAssistantChat(
       };
     }
     begunTurn = turnStart;
-    const result = await dependencies.answer({
+    const result = await answerWithGroundedRetry(dependencies.answer, {
       uid,
       appBaseUrl: resolveAssistantAppBaseUrl(context),
       prompt: input.message,
       timeZone: input.timeZone,
       history: begunTurn.history,
       onBillableAttempt: finalizeQuotaForBillableAttempt,
-    });
+    }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
     // Production runtime calls this immediately before Gemini or an MCP tool.
     // Retain a defensive completion fallback for injected runtimes: a grounded
     // answer must never be committed without consuming its reserved allowance.

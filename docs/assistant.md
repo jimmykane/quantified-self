@@ -81,8 +81,12 @@ at 4,000 characters. Tool failures, schema failures, budget failures, and ungrou
 than producing an unsupported answer.
 
 Gemini `UNAVAILABLE` responses are treated as transient provider failures. Each model phase retries them at most twice
-with bounded exponential backoff. Other provider statuses are not retried by this policy, and exhausting the retry
-budget still fails the callable without committing an unsupported answer.
+with bounded exponential backoff. If an otherwise recoverable grounded runtime attempt still fails—including a model
+formatting or transient read failure—the callable rebuilds the in-process MCP session and makes one final complete
+grounded attempt. Both attempts share the same idempotent quota boundary, pending-turn lease, and user request: the
+fallback can add provider cost but cannot consume a second user allowance. Permanent callable errors and quota
+finalization failures are not retried. Exhausting the retry budget still fails the callable without committing an
+unsupported answer.
 
 The model receives only:
 
@@ -156,8 +160,10 @@ owner-only callable with a bounded
 two-to-five-second progressive interval until the exact turn is committed or the lease ends. Legacy ID-only records keep
 a 15-second registration grace. Permanent authorization or response-contract failures stop polling. The local resumption
 record is cleared after confirmed completion, authoritative failure, conversation reset, or expiry, and an exact ID match
-is required when reconciling a response that may have been lost. This prevents another tab's same-text turn from being
-mistaken for the current request.
+is required when reconciling a response that may have been lost. When the server authoritatively ends a turn without a
+completed answer, the page restores the exact tab-scoped question to the composer and reports that specific question as
+ready to send again instead of presenting it as an unknown previous request. This prevents another tab's same-text turn
+from being mistaken for the current request.
 
 Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a

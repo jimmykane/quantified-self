@@ -818,6 +818,54 @@ describe('AssistantPageComponent', () => {
     }
   });
 
+  it('restores the exact question when the server ends a turn without an answer', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-generation-failed';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      sessionStorage.setItem(
+        'quantified-self.assistant.pending-request-id',
+        JSON.stringify({
+          storageVersion: 2,
+          uid: 'assistant-user',
+          requestId: pendingRequestId,
+          message: 'How has my sleep changed?',
+          timeZone: 'Europe/Helsinki',
+          submittedAtMs: Date.now(),
+        }),
+      );
+      assistantService.getConversationState.mockReset()
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId,
+        })
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId: null,
+        });
+
+      await component.ngOnInit();
+      expect(component.messages().at(-1)?.text).toBe('How has my sleep changed?');
+
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(component.sending()).toBe(false);
+      expect(component.promptControl.value).toBe('How has my sleep changed?');
+      expect(component.errorMessage()).toBe(
+        'The Assistant could not answer this question. It is ready below to send again.',
+      );
+      expect(component.errorMessage()).not.toContain('previous Assistant request');
+      expect(sessionStorage.getItem(
+        'quantified-self.assistant.pending-request-id',
+      )).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops pending-turn polling when the state read fails permanently', async () => {
     vi.useFakeTimers();
     try {

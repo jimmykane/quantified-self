@@ -471,7 +471,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       } else if (state.pendingRequestId !== null
         || Date.now() >= this.pendingRegistrationDeadlineMs) {
         this.errorMessage.set(
-          'The previous Assistant request did not finish. Please try again.',
+          this.pendingUserMessage()
+            ? 'The Assistant could not answer this question. It is ready below to send again.'
+            : 'The Assistant could not complete the previous question. Please send it again.',
         );
         await this.finishPendingResponseRecovery(requestId);
         return;
