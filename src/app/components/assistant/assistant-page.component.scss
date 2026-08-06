@@ -1,3 +1,5 @@
+@use '@angular/material' as mat;
+
 :host {
   display: block;
   height: calc(100vh - var(--qs-effective-top-offset, 0px));
@@ -220,13 +222,13 @@ h1 {
 .assistant-composer-dock {
   display: grid;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 6px;
   padding-top: 2px;
 }
 
 .composer-shell {
-  --qs-glass-panel-radius: 22px;
-  padding: 12px;
+  --qs-glass-panel-radius: 18px;
+  padding: 8px 10px 7px;
 }
 
 .composer {
@@ -237,17 +239,18 @@ h1 {
 }
 
 .composer mat-form-field {
+  @include mat.form-field-density(-2);
   width: 100%;
 }
 
 .composer-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 7px 5px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  padding: 3px 4px 0;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.69rem;
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
 .assistant-error {
@@ -294,19 +297,19 @@ h1 {
     padding: 14px;
   }
 
-  .composer-shell {
-    padding: 10px;
-  }
-
   .composer {
-    grid-template-columns: minmax(0, 1fr) 48px;
-    gap: 7px;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 6px;
   }
 }
 
 @media (max-width: 430px) {
-  .composer-footer span:last-child {
+  .composer-disclaimer {
     display: none;
+  }
+
+  .composer-footer {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .evidence-item dl {

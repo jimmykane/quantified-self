@@ -128,6 +128,9 @@ describe('AssistantPageComponent', () => {
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
+    expect(fixture.nativeElement.querySelector('mat-hint')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.composer-footer')?.textContent)
+      .toContain(`0/${component.maxMessageChars}`);
     expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
     const headerActions = Array.from(

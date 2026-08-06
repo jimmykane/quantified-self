@@ -113,7 +113,6 @@
             <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
               (keydown)="handleComposerKeydown($event)"
               [placeholder]="composerPlaceholder"></textarea>
-            <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
           </mat-form-field>
           <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
             @if (sending()) {
@@ -125,7 +124,8 @@
         </form>
         <div class="composer-footer">
           <span>{{ quotaText() }}</span>
-          <span>AI can make mistakes</span>
+          <span>{{ promptControl.value.length }}/{{ maxMessageChars }}</span>
+          <span class="composer-disclaimer">AI can make mistakes</span>
         </div>
       </section>
     </footer>
