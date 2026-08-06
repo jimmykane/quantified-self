@@ -3,6 +3,7 @@ import type {
   AssistantEvidenceFact,
   AssistantEvidenceLink,
 } from '../../../shared/assistant.types';
+import { normalizeAssistantEvidenceFact } from '../../../shared/assistant-evidence-display';
 import type {
   AssistantMcpToolDefinition,
   AssistantMcpToolName,
@@ -73,15 +74,23 @@ function formatDurationSeconds(value: number): string {
   return `${roundedSeconds}s`;
 }
 
+function isDurationSecondsField(key: string): boolean {
+  return /(?:duration|sleep).*seconds$/i.test(key);
+}
+
+function isTimestampMillisecondsField(key: string): boolean {
+  return /(?:time|date|day|at)ms$/i.test(key);
+}
+
 function formatFactValue(key: string, value: string | number | boolean): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'number') {
-    if (/(?:duration|sleep).*seconds$/i.test(key)) {
+    if (isDurationSecondsField(key)) {
       return formatDurationSeconds(value);
     }
-    if (/(?:time|date|day|at)ms$/i.test(key) && value > 0) {
+    if (isTimestampMillisecondsField(key) && value > 0) {
       const date = new Date(value);
       if (Number.isFinite(date.getTime())) {
         return date.toISOString();
@@ -125,9 +134,13 @@ function collectFacts(
     }
     if (typeof child === 'string' || typeof child === 'number' || typeof child === 'boolean') {
       const formattedValue = formatFactValue(key, child);
-      const label = humanizeFieldName(key);
+      const fact = normalizeAssistantEvidenceFact({
+        label: humanizeFieldName(key),
+        value: formattedValue,
+      });
+      const { label } = fact;
       if (formattedValue && !seenLabels.has(label)) {
-        facts.push({ label, value: formattedValue });
+        facts.push(fact);
         seenLabels.add(label);
       }
       continue;

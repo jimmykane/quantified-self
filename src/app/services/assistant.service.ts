@@ -10,6 +10,7 @@ import {
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
+import { normalizeAssistantConversationEvidence } from '@shared/assistant-evidence-display';
 import { AppFunctionsService } from './app.functions.service';
 
 export type AssistantErrorCode =
@@ -52,7 +53,10 @@ export class AssistantService {
           validation,
         );
       }
-      return validation.data;
+      return {
+        ...validation.data,
+        conversation: normalizeAssistantConversationEvidence(validation.data.conversation),
+      };
     } catch (error) {
       if (error instanceof AssistantError) {
         throw error;
@@ -77,7 +81,7 @@ export class AssistantService {
           validation,
         );
       }
-      return validation.data;
+      return normalizeAssistantConversationEvidence(validation.data);
     } catch (error) {
       if (error instanceof AssistantError) {
         throw error;
@@ -99,7 +103,7 @@ export class AssistantService {
           validation,
         );
       }
-      return validation.data;
+      return normalizeAssistantConversationEvidence(validation.data);
     } catch (error) {
       if (error instanceof AssistantError) {
         throw error;

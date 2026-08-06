@@ -37,8 +37,8 @@ describe('Assistant evidence', () => {
     expect(evidence.summary).toBe('1 activities returned by Query activities.');
     expect(evidence.facts).toEqual([
       { label: 'Activity Type', value: 'Running' },
-      { label: 'Start Time Ms', value: '2026-08-01T06:00:00.000Z' },
-      { label: 'Duration Seconds', value: '1h 2m' },
+      { label: 'Start Time', value: '2026-08-01T06:00:00.000Z' },
+      { label: 'Duration', value: '1h 2m' },
       { label: 'Average Heart Rate Bpm', value: '142.4' },
     ]);
     expect(evidence.links).toEqual([{
@@ -59,16 +59,20 @@ describe('Assistant evidence', () => {
     }, {
       localDate: '2026-08-03',
       sleep: {
+        startTimeMs: Date.parse('2026-08-03T20:26:00.000Z'),
+        endTimeMs: Date.parse('2026-08-04T06:15:00.000Z'),
         durationSeconds: 29_100,
-        averageHeartRateBpm: 51.24,
+        inBedDurationSeconds: 35_340,
       },
       appUrl: 'https://attacker.example/redirect',
     });
 
     expect(evidence.facts).toEqual([
       { label: 'Local Date', value: '2026-08-03' },
-      { label: 'Duration Seconds', value: '8h 5m' },
-      { label: 'Average Heart Rate Bpm', value: '51.24' },
+      { label: 'Start Time', value: '2026-08-03T20:26:00.000Z' },
+      { label: 'End Time', value: '2026-08-04T06:15:00.000Z' },
+      { label: 'Duration', value: '8h 5m' },
+      { label: 'In Bed Duration', value: '9h 49m' },
     ]);
     expect(evidence.links).toEqual([]);
   });

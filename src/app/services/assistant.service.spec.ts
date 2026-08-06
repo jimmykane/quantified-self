@@ -117,4 +117,37 @@ describe('AssistantService', () => {
     expect(functionsService.call).toHaveBeenNthCalledWith(1, 'getAssistantConversation');
     expect(functionsService.call).toHaveBeenNthCalledWith(2, 'resetAssistantConversation');
   });
+
+  it('cleans legacy storage-unit suffixes from saved evidence labels', async () => {
+    const conversation = {
+      ...response.conversation,
+      messages: response.conversation.messages.map(message => (
+        message.role === 'assistant'
+          ? {
+            ...message,
+            evidence: [{
+              toolName: 'get_daily_report',
+              title: 'Get daily health and training report',
+              summary: 'Grounded in the daily report.',
+              facts: [
+                { label: 'Start Time Ms', value: '2026-08-03T20:26:00.000Z' },
+                { label: 'Duration Seconds', value: '9h 18m' },
+                { label: 'Recovery Time Seconds', value: '3600' },
+              ],
+              links: [],
+            }],
+          }
+          : message
+      )),
+    };
+    functionsService.call.mockResolvedValue({ data: { conversation } });
+
+    const loaded = await service.getConversation();
+
+    expect(loaded?.messages[1].evidence?.[0].facts).toEqual([
+      { label: 'Start Time', value: '2026-08-03T20:26:00.000Z' },
+      { label: 'Duration', value: '9h 18m' },
+      { label: 'Recovery Time Seconds', value: '3600' },
+    ]);
+  });
 });
