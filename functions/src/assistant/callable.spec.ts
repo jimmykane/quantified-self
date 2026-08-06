@@ -54,6 +54,10 @@ function createDependencies() {
   };
   const store: AssistantConversationStore = {
     getActiveConversation: vi.fn().mockResolvedValue(null),
+    getActiveConversationState: vi.fn().mockResolvedValue({
+      conversation: null,
+      pendingRequestId: null,
+    }),
     findCompletedTurn: vi.fn().mockResolvedValue(null),
     beginTurn: vi.fn().mockResolvedValue({
       kind: 'started',
@@ -584,12 +588,25 @@ describe('Assistant callable', () => {
 
   it('maps conversation load and reset failures to a safe callable error', async () => {
     const { store } = createDependencies();
-    vi.mocked(store.getActiveConversation).mockRejectedValue(new Error('firestore detail'));
+    vi.mocked(store.getActiveConversationState).mockRejectedValue(new Error('firestore detail'));
     vi.mocked(store.resetConversation).mockRejectedValue(new Error('firestore detail'));
 
     await expect(runGetAssistantConversation(context, store))
       .rejects.toMatchObject({ code: 'unavailable' });
     await expect(runResetAssistantConversation(context, store))
       .rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('returns the owner-visible pending request identity with the conversation', async () => {
+    const { store, conversation } = createDependencies();
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation,
+      pendingRequestId: REQUEST_ID,
+    });
+
+    await expect(runGetAssistantConversation(context, store)).resolves.toEqual({
+      conversation,
+      pendingRequestId: REQUEST_ID,
+    });
   });
 });

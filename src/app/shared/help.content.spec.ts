@@ -57,6 +57,8 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
     expect(assistantSection?.content).toContain('opaque reference or cursor is rejected');
     expect(assistantSection?.content).toContain('latest six completed turns');
+    expect(assistantSection?.content).toContain('refresh while an answer is in progress');
+    expect(assistantSection?.content).toContain('opaque request ID');
     expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
     expect(assistantSection?.content).toContain('at most four extra minutes');
     expect(assistantSection?.content).toContain('deletes the expired record asynchronously');

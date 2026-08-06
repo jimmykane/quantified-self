@@ -109,7 +109,9 @@ describe('AssistantService', () => {
 
   it('loads and resets the server-owned active conversation', async () => {
     functionsService.call
-      .mockResolvedValueOnce({ data: { conversation: response.conversation } })
+      .mockResolvedValueOnce({
+        data: { conversation: response.conversation, pendingRequestId: requestId },
+      })
       .mockResolvedValueOnce({ data: { conversation: response.conversation } });
 
     await expect(service.getConversation()).resolves.toEqual(response.conversation);
@@ -140,7 +142,9 @@ describe('AssistantService', () => {
           : message
       )),
     };
-    functionsService.call.mockResolvedValue({ data: { conversation } });
+    functionsService.call.mockResolvedValue({
+      data: { conversation, pendingRequestId: null },
+    });
 
     const loaded = await service.getConversation();
 
@@ -149,5 +153,39 @@ describe('AssistantService', () => {
       { label: 'Duration', value: '9h 18m' },
       { label: 'Recovery Time Seconds', value: '3600' },
     ]);
+  });
+
+  it('loads and validates an active pending request identity', async () => {
+    functionsService.call.mockResolvedValue({
+      data: {
+        conversation: response.conversation,
+        pendingRequestId: requestId,
+      },
+    });
+
+    await expect(service.getConversationState()).resolves.toEqual({
+      conversation: response.conversation,
+      pendingRequestId: requestId,
+    });
+
+    functionsService.call.mockResolvedValue({
+      data: {
+        conversation: response.conversation,
+        pendingRequestId: 'unsafe request id',
+      },
+    });
+    await expect(service.getConversationState())
+      .rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
+  it('accepts a conversation response from before pending recovery was deployed', async () => {
+    functionsService.call.mockResolvedValue({
+      data: { conversation: response.conversation },
+    });
+
+    await expect(service.getConversationState()).resolves.toEqual({
+      conversation: response.conversation,
+      pendingRequestId: null,
+    });
   });
 });

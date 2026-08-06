@@ -42,7 +42,8 @@ The callable surface consists of:
   completed user/assistant turn.
 - `getAssistantQuotaStatus`: returns the signed-in user's current Assistant allowance without exposing the server-owned
   usage ledger.
-- `getAssistantConversation`: reads the current server-owned conversation for the signed-in user.
+- `getAssistantConversation`: reads the current server-owned conversation and the opaque request ID of any active
+  pending turn for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation so an older in-flight response cannot
   restore cleared content.
 
@@ -78,6 +79,10 @@ tool calls, seven model turns, 512 KiB of cumulative validated tool output, 1,02
 selection, and 2,048 output tokens for each continuation response per user turn. The final stored answer remains capped
 at 4,000 characters. Tool failures, schema failures, budget failures, and ungrounded responses fail the request rather
 than producing an unsupported answer.
+
+Gemini `UNAVAILABLE` responses are treated as transient provider failures. Each model phase retries them at most twice
+with bounded exponential backoff. Other provider statuses are not retried by this policy, and exhausting the retry
+budget still fails the callable without committing an unsupported answer.
 
 The model receives only:
 
@@ -138,9 +143,13 @@ invoking Gemini or consuming another request even after the original messages le
 different text is rejected. Documents from before this field existed derive receipts from their retained user messages
 in memory and persist them on the next write.
 
-The page retains the request ID only while the outcome is ambiguous, clears it after a confirmed completion or
-authoritative conversation-generation change, and requires an exact ID match when reconciling a response that may
-have been lost. This prevents another tab's same-text turn from being mistaken for the current request.
+The page retains only the opaque request ID in tab-scoped browser storage while the outcome is ambiguous; it never
+stores the prompt there. The server also returns the request ID attached to an active pending lease. After a reload,
+the page polls that owner-only callable until the exact turn is committed or the lease ends. A 15-second registration
+grace closes the race where the refreshed page loads just before the original callable writes its lease. The local ID
+is cleared after confirmed completion, authoritative failure, or conversation reset, and an exact ID match is required
+when reconciling a response that may have been lost. This prevents another tab's same-text turn from being mistaken
+for the current request.
 
 Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a

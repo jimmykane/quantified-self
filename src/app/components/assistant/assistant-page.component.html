@@ -23,7 +23,7 @@
   </header>
 
   <section class="assistant-chat">
-    @if (!loadingConversation() && !isEmpty()) {
+    @if (!loadingConversation() && (!isEmpty() || sending())) {
       <section class="conversation qs-scrollbar" aria-label="Assistant conversation">
         @for (message of messages(); track message.id) {
           <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">

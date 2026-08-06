@@ -3,6 +3,7 @@ import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import { assistantGenkit } from './model';
 import {
   createAssistantRuntime,
+  ASSISTANT_MODEL_RETRY_OPTIONS,
   ASSISTANT_SYSTEM_INSTRUCTIONS,
   ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
   generateAssistantModelAnswer,
@@ -146,6 +147,7 @@ describe('Assistant runtime', () => {
       toolChoice: 'required',
       returnToolRequests: true,
       config: { maxOutputTokens: 1_024 },
+      use: [expect.any(Function)],
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       system: expect.stringContaining(
@@ -154,6 +156,7 @@ describe('Assistant runtime', () => {
       toolChoice: 'auto',
       config: { maxOutputTokens: 2_048 },
       output: { schema: expect.anything() },
+      use: [expect.any(Function)],
       messages: expect.arrayContaining([{
         role: 'tool',
         content: [{
@@ -170,6 +173,13 @@ describe('Assistant runtime', () => {
     const firstTools = (generate.mock.calls[0][0] as { tools: unknown[] }).tools;
     const secondTools = (generate.mock.calls[1][0] as { tools: unknown[] }).tools;
     expect(secondTools[0]).not.toBe(firstTools[0]);
+    expect(ASSISTANT_MODEL_RETRY_OPTIONS).toEqual({
+      maxRetries: 2,
+      statuses: ['UNAVAILABLE'],
+      initialDelayMs: 500,
+      maxDelayMs: 2_000,
+      backoffFactor: 2,
+    });
   });
 
   it('does not mark a request billable when MCP session setup fails', async () => {

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -28,6 +29,12 @@ import {
 } from '../../services/assistant.service';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 
+const ASSISTANT_PENDING_POLL_INTERVAL_MS = 2_000;
+const ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS = (4 * 60 * 1_000) + 30_000;
+const ASSISTANT_PENDING_REGISTRATION_GRACE_MS = 15_000;
+const ASSISTANT_PENDING_REQUEST_STORAGE_KEY = 'quantified-self.assistant.pending-request-id';
+const ASSISTANT_REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16,120}$/;
+
 @Component({
   selector: 'app-assistant-page',
   standalone: true,
@@ -42,13 +49,18 @@ import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom
   styleUrls: ['./assistant-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AssistantPageComponent implements OnInit {
+export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
+  private readonly pendingRequestId = signal<string | null>(null);
+  private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingRecoveryDeadlineMs = 0;
+  private pendingRegistrationDeadlineMs = 0;
+  private destroyed = false;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly composerPlaceholder = 'Ask about your data…';
@@ -99,12 +111,23 @@ export class AssistantPageComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    const rememberedRequestId = this.readRememberedPendingRequestId();
     const [conversationResult, quotaResult] = await Promise.allSettled([
-      this.assistantService.getConversation(),
+      this.assistantService.getConversationState(),
       this.quotaService.loadQuotaStatus(),
     ]);
     if (conversationResult.status === 'fulfilled') {
-      this.conversation.set(conversationResult.value);
+      this.conversation.set(conversationResult.value.conversation);
+      if (conversationResult.value.pendingRequestId) {
+        this.startPendingResponseRecovery(conversationResult.value.pendingRequestId);
+      } else if (rememberedRequestId
+        && !this.hasCompletedRequest(conversationResult.value.conversation, rememberedRequestId)) {
+        this.startPendingResponseRecovery(rememberedRequestId, true);
+      } else {
+        this.clearRememberedPendingRequestId();
+      }
+    } else if (rememberedRequestId) {
+      this.startPendingResponseRecovery(rememberedRequestId, true);
     } else {
       this.errorMessage.set(this.assistantService.getErrorMessage(conversationResult.reason));
     }
@@ -115,6 +138,11 @@ export class AssistantPageComponent implements OnInit {
     if (!this.isEmpty()) {
       this.scrollToConversationEnd();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed = true;
+    this.cancelPendingResponsePoll();
   }
 
   useStarterPrompt(prompt: string): void {
@@ -156,6 +184,8 @@ export class AssistantPageComponent implements OnInit {
         requestId: globalThis.crypto.randomUUID(),
       };
     this.retryRequest.set(request);
+    this.pendingRequestId.set(request.requestId);
+    this.rememberPendingRequestId(request.requestId);
     this.pendingUserMessage.set({
       id: request.requestId,
       role: 'user',
@@ -178,10 +208,15 @@ export class AssistantPageComponent implements OnInit {
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
       this.retryRequest.set(null);
+      this.pendingRequestId.set(null);
+      this.clearRememberedPendingRequestId(request.requestId);
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
+      let refreshedPendingRequestId: string | null | undefined;
       try {
-        refreshedConversation = await this.assistantService.getConversation();
+        const refreshedState = await this.assistantService.getConversationState();
+        refreshedConversation = refreshedState.conversation;
+        refreshedPendingRequestId = refreshedState.pendingRequestId;
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
@@ -194,7 +229,19 @@ export class AssistantPageComponent implements OnInit {
         this.conversation.set(refreshedConversation);
         this.errorMessage.set(null);
         this.retryRequest.set(null);
+        this.pendingRequestId.set(null);
+        this.clearRememberedPendingRequestId(request.requestId);
+      } else if (refreshedPendingRequestId === request.requestId) {
+        if (refreshedConversation !== undefined) {
+          this.conversation.set(refreshedConversation);
+        }
+        this.errorMessage.set(null);
+        this.startPendingResponseRecovery(request.requestId);
       } else {
+        this.pendingRequestId.set(null);
+        if (refreshedConversation !== undefined) {
+          this.clearRememberedPendingRequestId(request.requestId);
+        }
         if (activeConversation !== null
           && refreshedConversation !== undefined
           && refreshedConversation?.conversationId
@@ -221,12 +268,14 @@ export class AssistantPageComponent implements OnInit {
         this.quota.set(null);
       }
     } finally {
-      this.pendingUserMessage.set(null);
-      this.sending.set(false);
-      if (this.isEmpty()) {
-        this.scrollToPageStart();
-      } else {
-        this.scrollToConversationEnd();
+      if (this.pendingRequestId() !== request.requestId) {
+        this.pendingUserMessage.set(null);
+        this.sending.set(false);
+        if (this.isEmpty()) {
+          this.scrollToPageStart();
+        } else {
+          this.scrollToConversationEnd();
+        }
       }
     }
   }
@@ -239,6 +288,9 @@ export class AssistantPageComponent implements OnInit {
     this.errorMessage.set(null);
     try {
       this.conversation.set(await this.assistantService.resetConversation());
+      this.cancelPendingResponsePoll();
+      this.pendingRequestId.set(null);
+      this.clearRememberedPendingRequestId();
       this.retryRequest.set(null);
       this.promptControl.setValue('');
       this.scrollToPageStart();
@@ -286,6 +338,155 @@ export class AssistantPageComponent implements OnInit {
         block: 'start',
       });
     });
+  }
+
+  private startPendingResponseRecovery(
+    requestId: string,
+    awaitingServerRegistration = false,
+  ): void {
+    this.cancelPendingResponsePoll();
+    this.rememberPendingRequestId(requestId);
+    this.pendingRequestId.set(requestId);
+    this.pendingRecoveryDeadlineMs = Date.now() + ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
+    this.pendingRegistrationDeadlineMs = awaitingServerRegistration
+      ? Date.now() + ASSISTANT_PENDING_REGISTRATION_GRACE_MS
+      : 0;
+    this.sending.set(true);
+    this.pendingPollTimer = setTimeout(() => {
+      void this.pollPendingResponse(requestId);
+    }, ASSISTANT_PENDING_POLL_INTERVAL_MS);
+  }
+
+  private async pollPendingResponse(requestId: string): Promise<void> {
+    if (this.destroyed || this.pendingRequestId() !== requestId) {
+      return;
+    }
+    try {
+      const state = await this.assistantService.getConversationState();
+      if (this.destroyed || this.pendingRequestId() !== requestId) {
+        return;
+      }
+      this.conversation.set(state.conversation);
+      if (this.hasCompletedRequest(state.conversation, requestId)) {
+        this.retryRequest.set(null);
+        this.errorMessage.set(null);
+        await this.finishPendingResponseRecovery(requestId);
+        return;
+      }
+      if (state.pendingRequestId === requestId) {
+        this.pendingRegistrationDeadlineMs = 0;
+      } else if (state.pendingRequestId !== null
+        || Date.now() >= this.pendingRegistrationDeadlineMs) {
+        this.errorMessage.set(
+          'The previous Assistant request did not finish. Please try again.',
+        );
+        await this.finishPendingResponseRecovery(requestId);
+        return;
+      }
+    } catch {
+      // A transient status-read failure is retried within the bounded turn lease.
+    }
+    if (this.destroyed || this.pendingRequestId() !== requestId) {
+      return;
+    }
+    if (Date.now() >= this.pendingRecoveryDeadlineMs) {
+      this.errorMessage.set(
+        'The Assistant response is taking too long. Please try again.',
+      );
+      await this.finishPendingResponseRecovery(requestId);
+      return;
+    }
+    this.pendingPollTimer = setTimeout(() => {
+      void this.pollPendingResponse(requestId);
+    }, ASSISTANT_PENDING_POLL_INTERVAL_MS);
+  }
+
+  private async finishPendingResponseRecovery(requestId: string): Promise<void> {
+    if (this.pendingRequestId() !== requestId) {
+      return;
+    }
+    const pendingText = this.pendingUserMessage()?.text;
+    this.cancelPendingResponsePoll();
+    this.pendingRequestId.set(null);
+    this.clearRememberedPendingRequestId(requestId);
+    this.pendingUserMessage.set(null);
+    this.sending.set(false);
+    if (this.errorMessage() && pendingText) {
+      this.promptControl.setValue(pendingText);
+    }
+    try {
+      this.quota.set(await this.quotaService.loadQuotaStatus());
+    } catch {
+      this.quota.set(null);
+    }
+    if (this.isEmpty()) {
+      this.scrollToPageStart();
+    } else {
+      this.scrollToConversationEnd();
+    }
+  }
+
+  private cancelPendingResponsePoll(): void {
+    if (this.pendingPollTimer !== null) {
+      clearTimeout(this.pendingPollTimer);
+      this.pendingPollTimer = null;
+    }
+  }
+
+  private rememberPendingRequestId(requestId: string): void {
+    try {
+      globalThis.sessionStorage?.setItem(
+        ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
+        requestId,
+      );
+    } catch {
+      // Server state still provides recovery when browser storage is unavailable.
+    }
+  }
+
+  private readRememberedPendingRequestId(): string | null {
+    try {
+      const requestId = globalThis.sessionStorage?.getItem(
+        ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
+      );
+      if (requestId && ASSISTANT_REQUEST_ID_PATTERN.test(requestId)) {
+        return requestId;
+      }
+      this.clearRememberedPendingRequestId();
+    } catch {
+      // Treat unavailable browser storage as no locally pending request.
+    }
+    return null;
+  }
+
+  private clearRememberedPendingRequestId(expectedRequestId?: string): void {
+    try {
+      if (expectedRequestId) {
+        const rememberedRequestId = globalThis.sessionStorage?.getItem(
+          ASSISTANT_PENDING_REQUEST_STORAGE_KEY,
+        );
+        if (rememberedRequestId !== expectedRequestId) {
+          return;
+        }
+      }
+      globalThis.sessionStorage?.removeItem(ASSISTANT_PENDING_REQUEST_STORAGE_KEY);
+    } catch {
+      // Browser privacy settings can make tab-scoped storage unavailable.
+    }
+  }
+
+  private hasCompletedRequest(
+    conversation: AssistantConversation | null,
+    requestId: string,
+  ): boolean {
+    if (!conversation) {
+      return false;
+    }
+    const userMessageIndex = conversation.messages.findIndex(
+      message => message.role === 'user' && message.id === requestId,
+    );
+    return userMessageIndex >= 0
+      && conversation.messages[userMessageIndex + 1]?.role === 'assistant';
   }
 
   private isCompletedTurnRecovery(

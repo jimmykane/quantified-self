@@ -469,9 +469,7 @@ export async function runGetAssistantConversation(
 ): Promise<GetAssistantConversationResponse> {
   const uid = requireAuthenticatedUid(context);
   try {
-    return {
-      conversation: await conversationStore.getActiveConversation(uid),
-    };
+    return await conversationStore.getActiveConversationState(uid);
   } catch (error) {
     throw mapAssistantError(error);
   }

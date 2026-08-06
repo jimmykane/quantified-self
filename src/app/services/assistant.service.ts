@@ -66,12 +66,28 @@ export class AssistantService {
   }
 
   async getConversation(): Promise<AssistantConversation | null> {
+    return (await this.getConversationState()).conversation;
+  }
+
+  async getConversationState(): Promise<GetAssistantConversationResponse> {
     try {
       const response = await this.functionsService.call<void, GetAssistantConversationResponse>(
         'getAssistantConversation',
       );
+      const pendingRequestId = (
+        response.data as Partial<GetAssistantConversationResponse>
+      ).pendingRequestId ?? null;
+      if (pendingRequestId !== null
+        && (typeof pendingRequestId !== 'string'
+          || !/^[A-Za-z0-9_-]{16,120}$/.test(pendingRequestId))) {
+        throw new AssistantError(
+          'INTERNAL',
+          'The saved Assistant pending request is invalid.',
+          response.data,
+        );
+      }
       if (response.data.conversation === null) {
-        return null;
+        return { conversation: null, pendingRequestId };
       }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
@@ -81,7 +97,10 @@ export class AssistantService {
           validation,
         );
       }
-      return normalizeAssistantConversationEvidence(validation.data);
+      return {
+        conversation: normalizeAssistantConversationEvidence(validation.data),
+        pendingRequestId,
+      };
     } catch (error) {
       if (error instanceof AssistantError) {
         throw error;

@@ -63,7 +63,7 @@ describe('AssistantPageComponent', () => {
   let fixture: ComponentFixture<AssistantPageComponent>;
   let component: AssistantPageComponent;
   const assistantService = {
-    getConversation: vi.fn(),
+    getConversationState: vi.fn(),
     sendMessage: vi.fn(),
     resetConversation: vi.fn(),
     getErrorMessage: vi.fn(() => 'Friendly error'),
@@ -73,7 +73,11 @@ describe('AssistantPageComponent', () => {
   };
 
   beforeEach(async () => {
-    assistantService.getConversation.mockReset().mockResolvedValue(null);
+    sessionStorage.clear();
+    assistantService.getConversationState.mockReset().mockResolvedValue({
+      conversation: null,
+      pendingRequestId: null,
+    });
     assistantService.sendMessage.mockReset().mockResolvedValue(chatResponse);
     assistantService.resetConversation.mockReset().mockResolvedValue({
       ...chatResponse.conversation,
@@ -184,6 +188,179 @@ describe('AssistantPageComponent', () => {
       .toBeTruthy();
   });
 
+  it('follows an in-flight server turn after refresh until its answer is saved', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-refresh-0001';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      const completedConversation = {
+        ...pendingConversation,
+        messages: [
+          {
+            id: pendingRequestId,
+            role: 'user' as const,
+            text: 'How am I today?',
+            createdAt: '2026-08-03T12:00:00.000Z',
+          },
+          {
+            id: 'assistant-refresh-response',
+            role: 'assistant' as const,
+            text: 'Your refreshed answer is ready.',
+            createdAt: '2026-08-03T12:00:01.000Z',
+            evidence: [],
+          },
+        ],
+      };
+      assistantService.getConversationState.mockReset()
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId,
+        })
+        .mockResolvedValueOnce({
+          conversation: completedConversation,
+          pendingRequestId: null,
+        });
+
+      await component.ngOnInit();
+      fixture.detectChanges();
+
+      expect(component.sending()).toBe(true);
+      expect(fixture.nativeElement.textContent).toContain(
+        'Checking the relevant Quantified Self data',
+      );
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      fixture.detectChanges();
+
+      expect(component.sending()).toBe(false);
+      expect(component.conversation()).toEqual(completedConversation);
+      expect(component.errorMessage()).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Your refreshed answer is ready.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('survives a refresh that reaches the server before the pending turn is registered', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-registration-race';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      const completedConversation = {
+        ...pendingConversation,
+        messages: [
+          {
+            id: pendingRequestId,
+            role: 'user' as const,
+            text: 'How am I today?',
+            createdAt: '2026-08-03T12:00:00.000Z',
+          },
+          {
+            id: 'assistant-registration-race-response',
+            role: 'assistant' as const,
+            text: 'The interrupted answer is ready.',
+            createdAt: '2026-08-03T12:00:01.000Z',
+            evidence: [],
+          },
+        ],
+      };
+      sessionStorage.setItem(
+        'quantified-self.assistant.pending-request-id',
+        pendingRequestId,
+      );
+      assistantService.getConversationState.mockReset()
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId: null,
+        })
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId,
+        })
+        .mockResolvedValueOnce({
+          conversation: completedConversation,
+          pendingRequestId: null,
+        });
+
+      await component.ngOnInit();
+      expect(component.sending()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(component.sending()).toBe(true);
+      expect(component.errorMessage()).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(component.sending()).toBe(false);
+      expect(component.conversation()).toEqual(completedConversation);
+      expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed initial state read for a remembered in-flight request', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingRequestId = 'assistant-request-initial-read-retry';
+      const pendingConversation = {
+        ...chatResponse.conversation,
+        messages: [],
+      };
+      const completedConversation = {
+        ...pendingConversation,
+        messages: [
+          {
+            id: pendingRequestId,
+            role: 'user' as const,
+            text: 'How am I today?',
+            createdAt: '2026-08-03T12:00:00.000Z',
+          },
+          {
+            id: 'assistant-initial-read-retry-response',
+            role: 'assistant' as const,
+            text: 'The recovered answer is ready.',
+            createdAt: '2026-08-03T12:00:01.000Z',
+            evidence: [],
+          },
+        ],
+      };
+      sessionStorage.setItem(
+        'quantified-self.assistant.pending-request-id',
+        pendingRequestId,
+      );
+      assistantService.getConversationState.mockReset()
+        .mockRejectedValueOnce(new Error('temporary state read failure'))
+        .mockResolvedValueOnce({
+          conversation: pendingConversation,
+          pendingRequestId,
+        })
+        .mockResolvedValueOnce({
+          conversation: completedConversation,
+          pendingRequestId: null,
+        });
+
+      await component.ngOnInit();
+
+      expect(component.sending()).toBe(true);
+      expect(component.errorMessage()).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      expect(component.sending()).toBe(false);
+      expect(component.conversation()).toEqual(completedConversation);
+      expect(component.errorMessage()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('opens the explore sheet and inserts a selected example', () => {
     const routeExample = ASSISTANT_PROMPT_EXAMPLES.find(example => (
       example.id === 'saved-cycling-routes'
@@ -227,13 +404,19 @@ describe('AssistantPageComponent', () => {
       component as unknown as { scrollToConversationEnd: () => void },
       'scrollToConversationEnd',
     );
-    assistantService.getConversation.mockResolvedValueOnce(null);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: null,
+      pendingRequestId: null,
+    });
 
     await component.ngOnInit();
 
     expect(scrollSpy).not.toHaveBeenCalled();
 
-    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
     await component.ngOnInit();
 
     expect(scrollSpy).toHaveBeenCalledOnce();
@@ -369,7 +552,10 @@ describe('AssistantPageComponent', () => {
           chatResponse.conversation.messages[1],
         ],
       };
-      assistantService.getConversation.mockResolvedValueOnce(recoveredConversation);
+      assistantService.getConversationState.mockResolvedValueOnce({
+        conversation: recoveredConversation,
+        pendingRequestId: null,
+      });
       throw new Error('network response lost');
     });
     component.promptControl.setValue('How am I today?');
@@ -425,7 +611,10 @@ describe('AssistantPageComponent', () => {
           },
         ],
       };
-      assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+      assistantService.getConversationState.mockResolvedValueOnce({
+        conversation: refreshedConversation,
+        pendingRequestId: null,
+      });
       throw new Error('network response lost');
     });
 
@@ -438,7 +627,10 @@ describe('AssistantPageComponent', () => {
 
   it('does not mistake another completed turn with the same text for its own response', async () => {
     assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
-    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: chatResponse.conversation,
+      pendingRequestId: null,
+    });
     component.promptControl.setValue('How am I today?');
 
     await component.sendMessage();
@@ -476,7 +668,10 @@ describe('AssistantPageComponent', () => {
           },
         ],
       };
-      assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+      assistantService.getConversationState.mockResolvedValueOnce({
+        conversation: refreshedConversation,
+        pendingRequestId: null,
+      });
       throw new Error('network response lost');
     });
     component.promptControl.setValue('How am I today?');
@@ -490,7 +685,7 @@ describe('AssistantPageComponent', () => {
 
   it('reuses one request identifier for an ambiguous retry and replaces it for new text', async () => {
     assistantService.sendMessage.mockRejectedValue(new Error('network unavailable'));
-    assistantService.getConversation.mockRejectedValue(new Error('reconciliation unavailable'));
+    assistantService.getConversationState.mockRejectedValue(new Error('reconciliation unavailable'));
     component.promptControl.setValue('How am I today?');
 
     await component.sendMessage();
@@ -521,7 +716,10 @@ describe('AssistantPageComponent', () => {
         ...chatResponse,
         quota: exhaustedQuota,
       });
-    assistantService.getConversation.mockResolvedValueOnce(createdConversation);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: createdConversation,
+      pendingRequestId: null,
+    });
     quotaService.loadQuotaStatus.mockResolvedValueOnce(exhaustedQuota);
     component.promptControl.setValue('How am I today?');
 
@@ -561,7 +759,10 @@ describe('AssistantPageComponent', () => {
       'CONVERSATION_CHANGED',
       'Conversation changed.',
     ));
-    assistantService.getConversation.mockResolvedValueOnce(replacementConversation);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: replacementConversation,
+      pendingRequestId: null,
+    });
     component.conversation.set(chatResponse.conversation);
     component.promptControl.setValue('Keep this prompt');
 
@@ -570,7 +771,7 @@ describe('AssistantPageComponent', () => {
     expect(component.conversation()).toEqual(replacementConversation);
     expect(component.promptControl.value).toBe('Keep this prompt');
     expect(component.errorMessage()).toContain('It has been refreshed');
-    expect(assistantService.getConversation).toHaveBeenCalledTimes(2);
+    expect(assistantService.getConversationState).toHaveBeenCalledTimes(2);
   });
 
   it('reconciles an authoritative replacement after a generic send failure', async () => {
@@ -580,7 +781,10 @@ describe('AssistantPageComponent', () => {
       messages: [],
     };
     assistantService.sendMessage.mockRejectedValueOnce(new Error('network unavailable'));
-    assistantService.getConversation.mockResolvedValueOnce(replacementConversation);
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: replacementConversation,
+      pendingRequestId: null,
+    });
     component.conversation.set(chatResponse.conversation);
     component.promptControl.setValue('Keep this prompt');
 

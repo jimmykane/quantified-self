@@ -111,6 +111,41 @@ describe('Assistant conversation store', () => {
     expect(conversation?.messages.at(-1)?.text).toBe('Answer 6');
   });
 
+  it('exposes the pending client request only while its turn lease is active', async () => {
+    const harness = createFirestoreHarness();
+    let now = new Date('2026-08-03T12:00:00.000Z');
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => now,
+      createId: () => `generated-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const reset = await store.resetConversation('user-1');
+    const requestId = 'assistant-request-pending-0001';
+
+    await store.beginTurn('user-1', reset.conversationId, requestId);
+
+    await expect(store.getActiveConversationState('user-1')).resolves.toEqual({
+      conversation: expect.objectContaining({
+        conversationId: reset.conversationId,
+      }),
+      pendingRequestId: requestId,
+    });
+
+    now = new Date('2026-08-03T12:04:00.001Z');
+    await expect(store.getActiveConversationState('user-1')).resolves.toEqual({
+      conversation: expect.objectContaining({
+        conversationId: reset.conversationId,
+      }),
+      pendingRequestId: null,
+    });
+  });
+
   it('replays a completed client request without creating another turn lock', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

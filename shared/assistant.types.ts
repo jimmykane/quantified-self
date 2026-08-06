@@ -86,6 +86,7 @@ export type GetAssistantConversationRequest = Record<string, never>;
 
 export interface GetAssistantConversationResponse {
   conversation: AssistantConversation | null;
+  pendingRequestId: string | null;
 }
 
 export type ResetAssistantConversationRequest = Record<string, never>;

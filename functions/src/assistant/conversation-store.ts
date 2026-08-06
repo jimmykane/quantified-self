@@ -22,7 +22,13 @@ const ASSISTANT_REQUEST_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
 
 interface AssistantPendingTurn {
   id: string;
+  requestId: string | null;
   expiresAtMs: number;
+}
+
+export interface AssistantActiveConversationState {
+  conversation: AssistantConversation | null;
+  pendingRequestId: string | null;
 }
 
 interface AssistantReplayReceipt {
@@ -76,6 +82,7 @@ export class AssistantConversationStoreError extends Error {
 
 export interface AssistantConversationStore {
   getActiveConversation: (uid: string) => Promise<AssistantConversation | null>;
+  getActiveConversationState: (uid: string) => Promise<AssistantActiveConversationState>;
   findCompletedTurn: (
     uid: string,
     expectedConversationId: string | undefined,
@@ -220,6 +227,10 @@ function parseStoredConversation(
         + ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS
       ? {
         id: data.pendingTurn.id,
+        requestId: typeof data.pendingTurn.requestId === 'string'
+          && /^[A-Za-z0-9_-]{16,120}$/.test(data.pendingTurn.requestId)
+          ? data.pendingTurn.requestId
+          : null,
         expiresAtMs: data.pendingTurn.expiresAtMs,
       }
       : null;
@@ -323,31 +334,45 @@ export function createAssistantConversationStore(
     ...overrides,
   };
 
+  const getActiveConversationState = async (
+    uid: string,
+  ): Promise<AssistantActiveConversationState> => {
+    const db = dependencies.db();
+    const conversationRef = getConversationRef(db, uid);
+    return db.runTransaction(async (transaction) => {
+      const nowMs = dependencies.now().getTime();
+      const deletionGuard = await dependencies.getDeletionGuard(
+        db,
+        transaction,
+        uid,
+        nowMs,
+      );
+      if (deletionGuard.shouldSkip) {
+        return { conversation: null, pendingRequestId: null };
+      }
+      const snapshot = await transaction.get(conversationRef);
+      const conversation = snapshot.exists
+        ? parseStoredConversation(snapshot.data(), nowMs)
+        : null;
+      if (!conversation || conversation.expireAt.toMillis() <= nowMs) {
+        return { conversation: null, pendingRequestId: null };
+      }
+      return {
+        conversation: toPublicConversation(conversation),
+        pendingRequestId: conversation.pendingTurn
+          && conversation.pendingTurn.expiresAtMs > nowMs
+          ? conversation.pendingTurn.requestId
+          : null,
+      };
+    });
+  };
+
   return {
-    getActiveConversation: async (uid) => {
-      const db = dependencies.db();
-      const conversationRef = getConversationRef(db, uid);
-      return db.runTransaction(async (transaction) => {
-        const nowMs = dependencies.now().getTime();
-        const deletionGuard = await dependencies.getDeletionGuard(
-          db,
-          transaction,
-          uid,
-          nowMs,
-        );
-        if (deletionGuard.shouldSkip) {
-          return null;
-        }
-        const snapshot = await transaction.get(conversationRef);
-        const conversation = snapshot.exists
-          ? parseStoredConversation(snapshot.data(), nowMs)
-          : null;
-        if (!conversation || conversation.expireAt.toMillis() <= nowMs) {
-          return null;
-        }
-        return toPublicConversation(conversation);
-      });
-    },
+    getActiveConversation: async (uid) => (
+      await getActiveConversationState(uid)
+    ).conversation,
+
+    getActiveConversationState,
 
     findCompletedTurn: async (uid, expectedConversationId, requestId) => {
       const db = dependencies.db();
@@ -441,6 +466,7 @@ export function createAssistantConversationStore(
           )),
           pendingTurn: {
             id: turnId,
+            requestId: requestId ?? null,
             expiresAtMs: nowMs + ASSISTANT_PENDING_TURN_TTL_MS,
           },
         };

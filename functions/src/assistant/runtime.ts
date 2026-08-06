@@ -1,4 +1,5 @@
 import { z } from 'genkit';
+import { retry } from 'genkit/model/middleware';
 import {
   ASSISTANT_MAX_RESPONSE_CHARS,
   type AssistantEvidence,
@@ -24,6 +25,13 @@ const ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL = ASSISTANT_MAX_TOOL_CALLS_PER_TUR
 const ASSISTANT_MAX_CUMULATIVE_TOOL_OUTPUT_BYTES = 512 * 1024;
 const ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS = 1_024;
 const ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS = 2_048;
+export const ASSISTANT_MODEL_RETRY_OPTIONS = {
+  maxRetries: 2,
+  statuses: ['UNAVAILABLE'],
+  initialDelayMs: 500,
+  maxDelayMs: 2_000,
+  backoffFactor: 2,
+} satisfies NonNullable<Parameters<typeof retry>[0]>;
 const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
   'query_measurements',
   'query_metric',
@@ -259,6 +267,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     config: {
       maxOutputTokens: ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS,
     },
+    use: [retry(ASSISTANT_MODEL_RETRY_OPTIONS)],
   });
   if (initialResponse.toolRequests.length === 0) {
     throw new Error('The Assistant model did not select a grounding tool.');
@@ -298,6 +307,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       maxOutputTokens: ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS,
     },
     output: { schema: AssistantModelOutputSchema },
+    use: [retry(ASSISTANT_MODEL_RETRY_OPTIONS)],
   });
   const parsed = AssistantModelOutputSchema.safeParse(output);
   if (!parsed.success) {
