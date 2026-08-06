@@ -25,6 +25,7 @@ import {
   TrainingWorkspaceComponent,
 } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -69,7 +70,7 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
-      imports: [MatMenuModule, MatTooltipModule],
+      imports: [MatMenuModule, MatTooltipModule, PageHeaderComponent],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -115,7 +116,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(element.querySelector('.training-page-subtitle')).toBeNull();
+    expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
     const feedbackAction = element.querySelector('.training-feedback-action');
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
@@ -221,10 +222,11 @@ describe('TrainingWorkspaceComponent', () => {
       timeZone: 'UTC',
     }).format(new Date(trainingSummaryAsOfDayMs));
     const title = fixture.nativeElement.querySelector('#training-title');
-    const subtitle = fixture.nativeElement.querySelector('.training-page-subtitle');
+    const subtitle = fixture.nativeElement.querySelector('.qs-page-header__subtitle');
     expect(subtitle?.textContent?.trim())
       .toBe(`Data through ${expectedAsOfDate}`);
-    expect(subtitle?.previousElementSibling).toBe(title);
+    expect(subtitle?.previousElementSibling?.classList).toContain('qs-page-header__title-row');
+    expect(subtitle?.previousElementSibling?.querySelector('#training-title')).toBe(title);
   });
 
   it('keeps every route-header action in one compact row through tablet widths', () => {

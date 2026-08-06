@@ -44,11 +44,6 @@ h1 {
   letter-spacing: 0;
 }
 
-.workspace-header h1 {
-  font-size: 2rem;
-  line-height: 1.12;
-}
-
 h2 {
   margin-bottom: 0.5rem;
   font-size: 2.35rem;
@@ -141,18 +136,7 @@ h2 {
 }
 
 .workspace-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: flex-end;
-  justify-content: space-between;
   padding: 0.75rem 0 0.25rem;
-}
-
-.workspace-title-block {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
 }
 
 .workspace-header-actions {
@@ -1086,23 +1070,6 @@ mat-paginator {
 
   h2 {
     font-size: 1.85rem;
-  }
-
-  .workspace-header h1 {
-    font-size: 1.65rem;
-  }
-
-  .workspace-header {
-    align-items: stretch;
-  }
-
-  .workspace-title-block,
-  .workspace-header-actions {
-    width: 100%;
-  }
-
-  .workspace-header-actions {
-    justify-content: flex-start;
   }
 
   .upload-composer,

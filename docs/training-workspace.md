@@ -159,10 +159,10 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav. Its route header includes a Feedback action that opens the
-configured support email with a Training-specific subject, plus direct **Calendar** and **Dashboard** route actions.
-Dashboard offers **Open Training** and **Calendar** route actions, but does not add curated Training snapshots as default
-Dashboard dependencies or configurable tiles.
+Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
+primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
+**Calendar** and **Dashboard** route actions. Dashboard offers **Open Training** and **Calendar** route actions, but does
+not add curated Training snapshots as default Dashboard dependencies or configurable tiles.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
@@ -504,13 +504,13 @@ Failures mark affected snapshots failed, preserve an error, and are rethrown so 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
 
-The route header owns one fixed-height status line above the `Training` title. When the visible scope is healthy, the
+The shared route header owns one stable context line above the `Training` title. When the visible scope is healthy, the
 normal `28-day training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC
 date>` subtitle appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
 represents the actual derived-data cutoff, never the browser clock. While any snapshot that backs a visible Training
-surface is missing, queued, processing, building, or stale, the status line replaces that eyebrow instead of inserting
-a banner into the analytical content. A stale snapshot says that any available last completed values remain visible
-while the replacement finishes. A failed visible snapshot takes precedence,
+surface is missing, queued, processing, building, or stale, the projected status context replaces that eyebrow instead
+of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
+remain visible while the replacement finishes. A failed visible snapshot takes precedence,
 uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
 visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines and the account-gated
 Power systems surface. The optional imported recovery snapshot participates only while its active `Recovery left`

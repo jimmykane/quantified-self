@@ -1,11 +1,7 @@
 <main class="calendar-page" aria-labelledby="calendar-page-title">
-  <header class="calendar-page-header">
-    <div class="calendar-page-heading">
-      <mat-icon aria-hidden="true">calendar_month</mat-icon>
-      <h1 id="calendar-page-title">Calendar</h1>
-    </div>
-
-    <mat-button-toggle-group class="calendar-view-toggle" aria-label="Calendar view"
+  <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title">
+    <mat-icon pageHeaderLeading aria-hidden="true">calendar_month</mat-icon>
+    <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
       hideSingleSelectionIndicator [value]="routeState().view"
       (change)="selectView($event.value)">
       @for (option of viewOptions; track option.value) {
@@ -17,7 +13,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
-  </header>
+  </app-page-header>
 
   <nav class="calendar-period-navigation" aria-label="Calendar period navigation">
     <button mat-icon-button type="button" appHapticTap matTooltip="Previous {{ routeState().view }}"

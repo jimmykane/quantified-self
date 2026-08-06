@@ -136,22 +136,6 @@
 .settings-page-header {
     max-width: 760px;
     margin: 0 0 28px;
-
-    h1 {
-        margin: 0 0 6px;
-        color: var(--mat-sys-on-surface);
-        font-size: 2rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        line-height: 1.12;
-    }
-
-    p {
-        margin: 0;
-        color: var(--mat-sys-on-surface-variant);
-        font-size: 1rem;
-        line-height: 1.5;
-    }
 }
 
 .settings-panel-section {
@@ -461,14 +445,7 @@
     }
 
     .settings-page-header {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        margin: -1px;
-        padding: 0;
-        clip-path: inset(50%);
-        white-space: nowrap;
+        margin-bottom: 20px;
     }
 
     .settings-panel-header {

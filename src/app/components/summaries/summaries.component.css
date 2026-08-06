@@ -184,49 +184,9 @@
   min-width: 0;
 }
 
-.dashboard-summary-header {
-  flex-wrap: nowrap;
-  min-height: 48px;
-}
-
-.dashboard-summary-header-actions-only {
-  justify-content: flex-end;
-}
-
-.dashboard-section-title-block {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.dashboard-section-title-block > mat-icon {
-  color: var(--mat-sys-primary);
-  flex: 0 0 auto;
-}
-
 .dashboard-today-calendar-button {
   color: var(--mat-sys-primary);
   flex: 0 0 auto;
-}
-
-.dashboard-derived-metrics-status {
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-
-.dashboard-derived-metrics-status > mat-icon {
-  flex: 0 0 auto;
-}
-
-.dashboard-derived-metrics-status.warning > mat-icon {
-  color: var(--mat-sys-error);
-}
-
-.dashboard-derived-metrics-status h2 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dashboard-section-title-copy {
@@ -242,24 +202,11 @@
   margin: 0;
 }
 
-.dashboard-section-subtitle {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.82rem;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .dashboard-section-actions {
   align-items: center;
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
-}
-
-.dashboard-summary-header .dashboard-section-actions {
-  margin-left: 0;
 }
 
 .dashboard-manager-button {
@@ -397,10 +344,6 @@ section {
 @media (max-width: 767px) {
   .dashboard-section-header {
     gap: 0.75rem;
-  }
-
-  .dashboard-section-subtitle {
-    font-size: 0.76rem;
   }
 
   .dashboard-manager-button-desktop {

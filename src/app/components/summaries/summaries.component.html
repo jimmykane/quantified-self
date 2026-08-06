@@ -1,40 +1,23 @@
 @if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
 <section class="pie">
   @if (showTodaySummary || showActions || derivedMetricsBanner) {
-  <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary && !derivedMetricsBanner"
-    [attr.aria-labelledby]="derivedMetricsBanner ? 'dashboard-derived-metrics-status-title' : (showTodaySummary ? 'dashboard-today-title' : null)"
-    [attr.aria-label]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
-    @if (derivedMetricsBanner) {
-    <div
-      class="dashboard-section-title-block dashboard-derived-metrics-status"
-      [class.warning]="derivedMetricsBanner.type === 'warning'"
-      [attr.role]="derivedMetricsBanner.type === 'warning' ? 'alert' : 'status'">
-      @if (derivedMetricsBanner.type === 'pending') {
-      <mat-icon aria-hidden="true">sync</mat-icon>
-      } @else {
-      <mat-icon aria-hidden="true">error_outline</mat-icon>
-      }
-      <div class="dashboard-section-title-copy">
-        <h2 id="dashboard-derived-metrics-status-title">{{ derivedMetricsBanner.title }}</h2>
-        <div class="dashboard-section-subtitle">{{ derivedMetricsBanner.description }}</div>
-      </div>
-    </div>
-    } @else if (showTodaySummary) {
-    <div class="dashboard-section-title-block">
-      <button mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
+  <app-page-header
+    class="dashboard-summary-header"
+    variant="compact"
+    [title]="derivedMetricsBanner ? derivedMetricsBanner.title : (showTodaySummary ? 'Today' : null)"
+    [titleId]="derivedMetricsBanner ? 'dashboard-derived-metrics-status-title' : (showTodaySummary ? 'dashboard-today-title' : null)"
+    [headingLevel]="2"
+    [subtitle]="derivedMetricsBanner ? derivedMetricsBanner.description : (showTodaySummary ? todayDateSubtitle : null)"
+    [status]="derivedMetricsBanner?.type || null"
+    [ariaLabel]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
+    @if (!derivedMetricsBanner && showTodaySummary) {
+      <button pageHeaderLeading mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
         aria-label="Open this month's activity calendar" matTooltip="Open calendar" (click)="openDashboardCalendar()">
         <mat-icon aria-hidden="true">today</mat-icon>
       </button>
-      <div class="dashboard-section-title-copy">
-        <h2 id="dashboard-today-title">Today</h2>
-        <div class="dashboard-section-subtitle">
-          {{ todayDateSubtitle }}
-        </div>
-      </div>
-    </div>
     }
     @if (showActions || derivedMetricsBanner?.showRetry) {
-    <div class="dashboard-section-actions">
+    <div pageHeaderActions class="dashboard-section-actions">
       @if (derivedMetricsBanner?.showRetry) {
       <button mat-stroked-button type="button" class="dashboard-derived-metrics-retry" appHapticTap
         aria-label="Retry derived metrics update"
@@ -60,7 +43,7 @@
       }
     </div>
     }
-  </div>
+  </app-page-header>
   }
   @if (showTodaySummary) {
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">

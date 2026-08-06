@@ -26,6 +26,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -156,6 +157,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
+      imports: [PageHeaderComponent],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
@@ -254,7 +256,7 @@ describe('SummariesComponent', () => {
       data: { user: component.user },
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(dashboardHeader?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
     expect(dashboardHeader?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
     expect(dashboardHeader?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
@@ -655,8 +657,9 @@ describe('SummariesComponent', () => {
     const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
     expect(component.showTodaySummary).toBe(false);
     expect(dashboardHeader).not.toBeNull();
-    expect(dashboardHeader?.classList.contains('dashboard-summary-header-actions-only')).toBe(true);
-    expect(dashboardHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    const sharedHeader = dashboardHeader?.querySelector('.qs-page-header');
+    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(true);
+    expect(sharedHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
     expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
@@ -2217,7 +2220,7 @@ describe('SummariesComponent', () => {
 
     fixture.detectChanges();
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const status = nativeElement.querySelector('.dashboard-derived-metrics-status');
+    const status = nativeElement.querySelector('.qs-page-header--status');
     const statusHeader = status?.closest('.dashboard-summary-header');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();

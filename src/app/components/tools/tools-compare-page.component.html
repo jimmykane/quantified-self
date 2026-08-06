@@ -98,14 +98,14 @@
     </div>
   </section>
   } @else if (showSignedInWorkspace()) {
-  <section class="signed-in-workspace">
-    <header class="workspace-header" aria-labelledby="tools-compare-workspace-title">
-      <div class="workspace-title-block">
-        <p class="eyebrow">Tools / Compare</p>
-        <h1 id="tools-compare-workspace-title">{{ showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files' }}</h1>
-      </div>
+  <section class="signed-in-workspace" aria-labelledby="tools-compare-workspace-title">
+    <app-page-header
+      class="workspace-header"
+      [title]="showSavedComparisonsFirst ? 'Saved comparisons' : 'Compare files'"
+      titleId="tools-compare-workspace-title"
+      eyebrow="Tools / Compare">
       @if (comparisonDeviceColorItems().length > 0) {
-      <div class="workspace-header-actions">
+      <div pageHeaderActions class="workspace-header-actions">
         <button
           mat-stroked-button
           type="button"
@@ -117,7 +117,7 @@
         </button>
       </div>
       }
-    </header>
+    </app-page-header>
 
     @if (isSignedInProfileLoading()) {
     <div class="profile-loading-state" aria-label="Loading account">

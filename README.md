@@ -201,6 +201,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [Read-only MCP server](docs/mcp-server.md)

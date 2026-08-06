@@ -1,30 +1,26 @@
 <main class="training-workspace" aria-labelledby="training-title">
-  <header class="training-page-header">
-    <div>
-      <div class="training-page-kicker">
-        @if (derivedMetricsRouteStatus) {
-          <div
-            class="training-derived-metrics-status"
-            [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
-            [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'"
-            [attr.aria-label]="derivedMetricsRouteStatus.title + '. ' + derivedMetricsRouteStatus.description">
-            @if (derivedMetricsRouteStatus.type === 'pending') {
-              <mat-icon aria-hidden="true">sync</mat-icon>
-            } @else {
-              <mat-icon aria-hidden="true">error_outline</mat-icon>
-            }
-            <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
-          </div>
+  <app-page-header
+    class="training-page-header"
+    title="Training"
+    titleId="training-title"
+    [eyebrow]="derivedMetricsRouteStatus ? null : '28-day training analysis'"
+    [subtitle]="derivedMetricsRouteStatus ? null : trainingDataAsOfText">
+    @if (derivedMetricsRouteStatus) {
+      <div
+        pageHeaderContext
+        class="training-derived-metrics-status"
+        [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
+        [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'"
+        [attr.aria-label]="derivedMetricsRouteStatus.title + '. ' + derivedMetricsRouteStatus.description">
+        @if (derivedMetricsRouteStatus.type === 'pending') {
+          <mat-icon aria-hidden="true">sync</mat-icon>
         } @else {
-          <p class="training-eyebrow">28-day training analysis</p>
+          <mat-icon aria-hidden="true">error_outline</mat-icon>
         }
+        <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
       </div>
-      <h1 id="training-title">Training</h1>
-      @if (!derivedMetricsRouteStatus && trainingDataAsOfText) {
-        <div class="training-page-subtitle">{{ trainingDataAsOfText }}</div>
-      }
-    </div>
-    <div class="training-page-actions">
+    }
+    <div pageHeaderActions class="training-page-actions">
       @if (derivedMetricsRouteStatus?.showRetry) {
         <button
           mat-stroked-button
@@ -77,7 +73,7 @@
         <span class="training-dashboard-action-label">Dashboard</span>
       </a>
     </div>
-  </header>
+  </app-page-header>
 
   @if (isLoading) {
     <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>

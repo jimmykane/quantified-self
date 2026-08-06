@@ -23,42 +23,7 @@
 }
 
 .routes-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: flex-end;
-  justify-content: space-between;
   padding: 0.75rem 0 0.25rem;
-}
-
-.routes-title-block {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.eyebrow {
-  color: var(--mat-sys-primary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.routes-title-block h1 {
-  font-size: 2rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.12;
-  margin: 0;
-}
-
-.routes-page-copy {
-  color: var(--mat-sys-on-surface-variant, var(--qs-secondary-text-color, rgba(0, 0, 0, 0.62)));
-  line-height: 1.55;
-  margin: 0;
-  max-width: 44rem;
 }
 
 .routes-header-actions {
@@ -504,19 +469,6 @@
 @include bp.max-768 {
   .routes-page {
     padding: 1.25rem 0.875rem 2.5rem;
-  }
-
-  .routes-header {
-    align-items: stretch;
-  }
-
-  .routes-title-block,
-  .routes-header-actions {
-    width: 100%;
-  }
-
-  .routes-header-actions {
-    justify-content: flex-start;
   }
 
   .route-selection-toolbar {

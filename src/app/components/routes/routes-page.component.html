@@ -1,13 +1,13 @@
 @if (user(); as currentUser) {
-<main class="routes-page">
+<main class="routes-page" aria-labelledby="routes-page-title">
   <section class="routes-workspace">
-    <header class="routes-header" aria-labelledby="routes-page-title">
-      <div class="routes-title-block">
-        <p class="eyebrow">Tools / Routes</p>
-        <h1 id="routes-page-title">Routes</h1>
-        <p class="routes-page-copy">Saved FIT and GPX route files with original source downloads.</p>
-      </div>
-      <div class="routes-header-actions">
+    <app-page-header
+      class="routes-header"
+      title="Routes"
+      titleId="routes-page-title"
+      eyebrow="Tools / Routes"
+      subtitle="Saved FIT and GPX route files with original source downloads.">
+      <div pageHeaderActions class="routes-header-actions">
         <app-upload-routes
           [user]="currentUser"
           [promptAction]="true"
@@ -16,7 +16,7 @@
           uploadLabel="Upload route">
         </app-upload-routes>
       </div>
-    </header>
+    </app-page-header>
 
     @if (suuntoRouteCatchUpPrompt(); as prompt) {
     <section class="routes-prompt" aria-label="Import existing Suunto routes prompt">
