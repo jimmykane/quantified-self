@@ -1046,8 +1046,15 @@ describe('AssistantPageComponent', () => {
     }));
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Your readiness is 72 today.');
-    expect(text).toContain('1 grounded result');
+    expect(text).toContain('Data used');
+    expect(fixture.nativeElement.querySelector('.evidence-count')?.textContent.trim()).toBe('1');
     expect(text).toContain('Get daily report');
+    const evidenceCard = fixture.nativeElement.querySelector('.evidence-item') as HTMLElement;
+    expect(evidenceCard.tagName).toBe('MAT-CARD');
+    expect(evidenceCard.querySelector('.evidence-source-copy strong')?.textContent)
+      .toContain('Get daily report');
+    expect(evidenceCard.querySelector('.evidence-source-copy > span')?.textContent)
+      .toContain('Grounded in Get daily report.');
     expect(text).toContain('19 of 20 remaining');
   });
 

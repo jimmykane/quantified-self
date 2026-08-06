@@ -53,37 +53,45 @@
             @if (message.evidence?.length) {
               <details class="evidence-panel">
                 <summary>
-                  <mat-icon>fact_check</mat-icon>
-                  {{ message.evidence?.length }} grounded {{ message.evidence?.length === 1 ? 'result' : 'results' }}
+                  <mat-icon aria-hidden="true">verified</mat-icon>
+                  <span>Data used</span>
+                  <span class="evidence-count">{{ message.evidence?.length }}</span>
                 </summary>
                 <div class="evidence-list">
                   @for (evidence of message.evidence; track $index) {
-                    <section class="evidence-item">
-                      <header>
-                        <strong>{{ evidence.title }}</strong>
-                        <span>{{ evidence.summary }}</span>
-                      </header>
-                      @if (evidence.facts.length) {
-                        <dl>
-                          @for (fact of evidence.facts; track fact.label) {
-                            <div>
-                              <dt>{{ fact.label }}</dt>
-                              <dd>{{ fact.value }}</dd>
-                            </div>
-                          }
-                        </dl>
-                      }
-                      @if (evidence.links.length) {
-                        <div class="evidence-links">
-                          @for (link of evidence.links; track link.url) {
-                            <a mat-button [href]="link.url" target="_blank" rel="noopener">
-                              <mat-icon>open_in_new</mat-icon>
-                              {{ link.label }}
-                            </a>
-                          }
-                        </div>
-                      }
-                    </section>
+                    <mat-card appearance="outlined" class="evidence-item">
+                      <mat-card-content>
+                        <header class="evidence-item-header">
+                          <span class="evidence-source-icon" aria-hidden="true">
+                            <mat-icon>database</mat-icon>
+                          </span>
+                          <span class="evidence-source-copy">
+                            <strong>{{ evidence.title }}</strong>
+                            <span>{{ evidence.summary }}</span>
+                          </span>
+                        </header>
+                        @if (evidence.facts.length) {
+                          <dl>
+                            @for (fact of evidence.facts; track fact.label) {
+                              <div>
+                                <dt>{{ fact.label }}</dt>
+                                <dd>{{ fact.value }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        }
+                        @if (evidence.links.length) {
+                          <div class="evidence-links">
+                            @for (link of evidence.links; track link.url) {
+                              <a mat-button [href]="link.url" target="_blank" rel="noopener">
+                                <mat-icon>open_in_new</mat-icon>
+                                {{ link.label }}
+                              </a>
+                            }
+                          </div>
+                        }
+                      </mat-card-content>
+                    </mat-card>
                   }
                 </div>
               </details>
