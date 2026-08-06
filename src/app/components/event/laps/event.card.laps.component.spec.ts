@@ -5,14 +5,18 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
+    ActivityTypes,
     DataDuration,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    EventImporterJSON,
     EventInterface,
+    FileType,
     LapInterface,
     LapTypes,
+    Privacy,
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { readFileSync } from 'node:fs';
@@ -141,6 +145,58 @@ describe('EventCardLapsComponent', () => {
         expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataPaceAvg.type);
         expect(component.getColumns(activity, LapTypes.Manual)).not.toContain(DataSpeedAvg.type);
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataPaceAvg.type]).toBe('05:00 min/km');
+    });
+
+    it('shows pace for persisted speed-only laps after Sports Lib JSON hydration', () => {
+        const hydratedEvent = EventImporterJSON.getEventFromJSON({
+            name: 'speed-only laps',
+            startDate: 0,
+            endDate: 2000,
+            srcFileType: FileType.FIT,
+            description: null,
+            isMerge: false,
+            privacy: Privacy.Private,
+            powerCurve: null,
+            stats: {},
+            activities: [{
+                name: null,
+                startDate: 0,
+                endDate: 2000,
+                type: ActivityTypes.Running,
+                powerMeter: false,
+                trainer: false,
+                powerCurve: null,
+                stats: {},
+                streams: [],
+                laps: [4, 5].map((averageSpeed, index) => ({
+                    lapId: index + 1,
+                    startDate: index * 1000,
+                    endDate: (index + 1) * 1000,
+                    startIndex: null,
+                    endIndex: null,
+                    type: LapTypes.Manual,
+                    stats: { [DataSpeedAvg.type]: averageSpeed },
+                })),
+                creator: { name: 'test', devices: [] },
+                intensityZones: [],
+                events: [],
+            }],
+        });
+        const activity = hydratedEvent.getFirstActivity();
+        component.event = hydratedEvent;
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataPaceAvg.type);
+        const rows = component.getDataSource(activity, LapTypes.Manual)?.data;
+        expect(rows?.[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataPaceAvg.type]: '03:45 min/km',
+        });
+        expect(rows?.[1]).toMatchObject({ '#': 1, [DataPaceAvg.type]: '04:10 min/km' });
+        expect(rows?.[2]).toMatchObject({ '#': 2, [DataPaceAvg.type]: '03:20 min/km' });
     });
 
     it('shows unit-aware metric averages directly below the table header', () => {
