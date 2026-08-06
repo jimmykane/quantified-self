@@ -48,6 +48,14 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
     toolWorkflow: ['list_activity_types', 'list_routes'],
     routingHint: 'Discover the canonical cycling activity types, then list the newest matching saved-route summaries without requesting location, geometry, or waypoints.',
   },
+  {
+    id: 'biggest-mtb-jump',
+    prompt: 'What was my biggest MTB jump?',
+    shortLabel: 'Biggest MTB jump',
+    icon: 'terrain',
+    toolWorkflow: ['list_activity_types', 'list_metrics', 'rank_activities_by_metric', 'list_activity_jumps'],
+    routingHint: 'Discover every canonical type in the Mountain Biking group and resolve Maximum Jump Distance, rank those activities across all available history, then paginate the winning activity jumps as needed and report the largest returned distance. Never substitute jump count or an activity-page sample for the ranking.',
+  },
 ] as const satisfies readonly AssistantPromptExample[];
 
 export type AssistantPublishedPromptExample =

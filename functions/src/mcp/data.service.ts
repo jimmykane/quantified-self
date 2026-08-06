@@ -463,9 +463,10 @@ export interface McpDataServiceDependencies {
   ) => Promise<boolean>;
   fetchActivityRankingDocuments: (
     uid: string,
-    startTimeMs: number,
-    endTimeMs: number,
+    startTimeMs: number | undefined,
+    endTimeMs: number | undefined,
     metricType: string,
+    activityTypes: readonly string[],
     limit: number,
     cursor?: unknown,
   ) => Promise<RawDocument[]>;
@@ -871,17 +872,30 @@ const defaultDependencies: McpDataServiceDependencies = {
     startTimeMs,
     endTimeMs,
     metricType,
+    activityTypes,
     limit,
     cursor,
   ) => {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
-      .collection('activities')
-      .where('eventStartDate', '>=', new Date(startTimeMs))
-      .where('eventStartDate', '<=', new Date(endTimeMs))
-      .orderBy('eventStartDate', 'desc')
-      .orderBy(FieldPath.documentId(), 'desc')
+      .collection('activities') as admin.firestore.Query;
+    if (startTimeMs !== undefined && endTimeMs !== undefined) {
+      query = query
+        .where('eventStartDate', '>=', new Date(startTimeMs))
+        .where('eventStartDate', '<=', new Date(endTimeMs))
+        .orderBy('eventStartDate', 'desc')
+        .orderBy(FieldPath.documentId(), 'desc');
+    } else if (activityTypes.length > 0) {
+      query = query
+        .where('type', 'in', activityTypes)
+        .orderBy(FieldPath.documentId(), 'desc');
+    } else {
+      query = query
+        .orderBy('eventStartDate', 'desc')
+        .orderBy(FieldPath.documentId(), 'desc');
+    }
+    query = query
       .limit(limit)
       .select(
         'eventID',
@@ -2319,7 +2333,10 @@ function resolveRelativeActivityRange(
 
 function resolveActivityListQuery(
   dependencies: Pick<McpDataServiceDependencies, 'now'>,
-  input: ListActivitiesInput,
+  input: Omit<
+    ListActivitiesInput,
+    'appBaseUrl' | 'includeLocation' | 'limit'
+  >,
 ): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -3886,8 +3903,8 @@ export interface RankActivitiesByMetricInput {
   uid: string;
   connectionId: string;
   metric: string;
-  startTimeMs: number;
-  endTimeMs: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
   activityTypes?: readonly string[];
   order: 'highest' | 'lowest';
   limit?: number;
@@ -4699,7 +4716,7 @@ async function fetchBoundedActivityRankingDocuments(
   dependencies: McpDataServiceDependencies,
   input: Pick<
     RankActivitiesByMetricInput,
-    'uid' | 'startTimeMs' | 'endTimeMs'
+    'uid' | 'startTimeMs' | 'endTimeMs' | 'activityTypes'
   >,
   metricType: string,
 ): Promise<RawDocument[]> {
@@ -4717,13 +4734,14 @@ async function fetchBoundedActivityRankingDocuments(
       input.startTimeMs,
       input.endTimeMs,
       metricType,
+      input.activityTypes || [],
       pageLimit,
       cursor,
     );
     if (page.length > pageLimit) {
       throw new McpDataError(
         'query_too_large',
-        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
       );
     }
     for (const document of page) {
@@ -4734,7 +4752,7 @@ async function fetchBoundedActivityRankingDocuments(
       if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
         throw new McpDataError(
           'query_too_large',
-          'The ranking query contains too much activity metric data. Narrow the date range.',
+          'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
         );
       }
       documents.push({
@@ -4744,7 +4762,7 @@ async function fetchBoundedActivityRankingDocuments(
       if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
         throw new McpDataError(
           'query_too_large',
-          `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+          `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
         );
       }
     }
@@ -4765,7 +4783,7 @@ async function rankActivitiesByMetric(
   dependencies: McpDataServiceDependencies,
   input: RankActivitiesByMetricInput,
 ) {
-  validateBoundedRange(input.startTimeMs, input.endTimeMs);
+  const { query } = resolveActivityListQuery(dependencies, input);
   const metric = resolveSportsLibNumericMetric(input.metric);
   if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
     throw new McpDataError(
@@ -4779,11 +4797,15 @@ async function rankActivitiesByMetric(
       'Ranking order must be highest or lowest.',
     );
   }
-  const activityTypes = resolveActivityTypes(input.activityTypes).map(String);
   const limit = Math.min(25, Math.max(1, Math.floor(input.limit || 10)));
   const documents = await fetchBoundedActivityRankingDocuments(
     dependencies,
-    input,
+    {
+      uid: input.uid,
+      startTimeMs: query.startTimeMs,
+      endTimeMs: query.endTimeMs,
+      activityTypes: query.activityTypes,
+    },
     metric.type,
   );
   const candidates = documents.flatMap((document) => {
@@ -4803,13 +4825,13 @@ async function rankActivitiesByMetric(
       !isValidFirestoreDocumentId(document.id)
       || !isValidFirestoreDocumentId(eventId)
       || sortTimeMs === null
-      || sortTimeMs < input.startTimeMs
-      || sortTimeMs > input.endTimeMs
+      || (query.startTimeMs !== undefined && sortTimeMs < query.startTimeMs)
+      || (query.endTimeMs !== undefined && sortTimeMs > query.endTimeMs)
       || startTimeMs === null
       || endTimeMs === null
       || endTimeMs < startTimeMs
       || value === null
-      || !activityTypeMatches(activityType, activityTypes)
+      || !activityTypeMatches(activityType, query.activityTypes)
     ) {
       return [];
     }

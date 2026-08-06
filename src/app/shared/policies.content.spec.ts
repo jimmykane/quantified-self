@@ -77,6 +77,9 @@ describe('MCP client access policy', () => {
       'excludes precise latitude/longitude and first-class body-measurement metrics',
     );
     expect(content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
+    expect(content).toContain('processing-bounded all-history scan');
+    expect(content).toContain('Oversized rankings fail instead of returning a partial result');
+    expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
     expect(content).toContain('Body-measurement permission');
     expect(content).toContain('Activity locations depend on activity details');

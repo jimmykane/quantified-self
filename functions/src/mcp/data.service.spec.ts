@@ -10,6 +10,7 @@ import {
   DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
+  DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
   DataPowerAvg,
@@ -1040,6 +1041,7 @@ describe('MCP data service', () => {
       Date.parse('2026-07-01T00:00:00.000Z'),
       Date.parse('2026-07-04T00:00:00.000Z'),
       DataAscent.type,
+      [ActivityTypes.Running],
       25,
       undefined,
     );
@@ -1078,6 +1080,67 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+  });
+
+  it('ranks all available matching activity history without returning a partial scan', async () => {
+    const mountainBikeActivity = activityDocument({
+      eventID: 'event-mtb-1',
+      eventStartDate: Date.parse('2024-05-01T08:00:00.000Z'),
+      type: ActivityTypes.MountainBiking,
+      startDate: Date.parse('2024-05-01T08:00:00.000Z'),
+      endDate: Date.parse('2024-05-01T09:00:00.000Z'),
+      stats: {
+        [DataJumpDistanceMax.type]: 8.4,
+        providerPayload: 'private-provider-data',
+      },
+    });
+    mountainBikeActivity.id = 'activity-mtb-1';
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
+      mountainBikeActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+
+    const result = await service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityTypes: [ActivityTypes.MountainBiking],
+      order: 'highest',
+      limit: 1,
+    });
+
+    expect(result).toMatchObject({
+      metric: { type: DataJumpDistanceMax.type },
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityType: ActivityTypes.MountainBiking,
+        value: 8.4,
+      }],
+    });
+    expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      DataJumpDistanceMax.type,
+      [ActivityTypes.MountainBiking],
+      25,
+      undefined,
+    );
+    expect(JSON.stringify(result)).not.toContain('private-provider-data');
+
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockClear();
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      startTimeMs: Date.parse('2026-01-01T00:00:00.000Z'),
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
   });
 
   it('finds activities by exact start or end position without geocoding coordinates', async () => {

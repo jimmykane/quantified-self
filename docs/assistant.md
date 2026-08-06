@@ -115,6 +115,12 @@ Assistant examples are therefore the only conversational prompt catalog that nee
 phase receives fresh dynamic Genkit action objects so their request-local registries do not produce
 duplicate-registration errors during discovery-and-answer workflows.
 
+The published MTB example also locks the Assistant to the shared MCP superlative workflow: discover every canonical
+Mountain Biking activity type and the Sports Lib maximum-jump metric, rank matching activities across the requested
+range or all available history, then inspect the winning activity's coordinate-redacted jump records. This is the same
+path available to external MCP clients. It never substitutes `jumpCount` or a newest-first sample for jump quality, and
+an over-budget all-history scan fails instead of being described as an all-time result.
+
 ## Grounded evidence
 
 The model writes only the answer. Evidence shown in the UI is generated deterministically from validated tool results,

@@ -401,7 +401,7 @@ The analytics and map entries follow the
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
-| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over a bounded date range |
+| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over an explicit bounded range or a bounded all-history scan |
 | `get_sleep_trend` | `sleep:read` | One-call sleep duration, score, stage, HRV, and other safe aggregate-vital coverage and trend |
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
@@ -590,8 +590,20 @@ catalog; the source file is not downloaded or parsed. Coordinates and raw detail
 
 `rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
 the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
-value/start-time/document ordering. Its range scan reuses the existing single-field `eventStartDate` ordering plus the
-document-ID tie-break, so it requires no new composite index. First-class body measurements remain excluded.
+value/start-time/document ordering. Callers can provide a paired explicit range of at most 366 days or omit both dates
+to scan all available history. Both modes retain the 2,000-document, cumulative-byte, and response budgets; an
+over-budget scan fails with `query_too_large` instead of returning a partial ranking that could be mistaken for a true
+record. Explicit ranges reuse the single-field `eventStartDate` ordering plus the document-ID tie-break. An unbounded
+ranking with activity filters pushes the canonical types into the Firestore `in` filter and pages by document ID, so
+the processing bound applies to the relevant sport family instead of all account activities. Both shapes use existing
+single-field indexes and require no new composite index. First-class body measurements remain excluded.
+
+MTB jump superlatives reuse this generic metric path rather than introducing a second jump-ranking store or tool.
+Discover every canonical type in the Mountain Biking group and the corresponding Sports Lib maximum metric:
+`Maximum Jump Distance` for biggest/longest, `Maximum Jump Height` for highest, `Maximum Jump Hang Time` for airtime,
+`Maximum Jump Speed` for fastest, or `Maximum Jump Score` for an explicit score request. Rank the matching activities,
+then paginate `list_activity_jumps` for the winner and verify the exact returned jump field. `jumpCount` is availability
+and volume evidence only; it never ranks jump quality.
 
 ## First-class body measurements
 

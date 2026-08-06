@@ -145,6 +145,37 @@ const MCP_ACTIVITY_LIST_INPUT_SCHEMA = z.object({
     },
   ],
 });
+const MCP_ACTIVITY_RANKING_INPUT_SCHEMA = z.object({
+  metric: z.string().min(1).max(160),
+  start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+  end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+  activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+  order: z.enum(['highest', 'lowest']).default('highest'),
+  limit: z.number().int().min(1).max(25).default(10),
+}).superRefine((input, context) => {
+  if ((input.start === undefined) !== (input.end === undefined)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Provide both start and end for an explicit date range, or omit both for all available history.',
+    });
+  }
+}).meta({
+  oneOf: [
+    {
+      title: 'Explicit date range',
+      required: ['start', 'end'],
+    },
+    {
+      title: 'All available history',
+      not: {
+        anyOf: [
+          { required: ['start'] },
+          { required: ['end'] },
+        ],
+      },
+    },
+  ],
+});
 const MCP_NEARBY_ACTIVITY_INPUT_SCHEMA = z.object({
   location: MCP_NEARBY_LOCATION_SCHEMA,
   radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
@@ -520,7 +551,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
     instructions.push(
-      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric.',
+      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, include every canonical type in the Mountain Biking group and rank by the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric, then paginate list_activity_jumps for the top activity and verify the exact jump field. Never rank jump quality by jumpCount.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -1226,15 +1257,8 @@ export function createMcpServer(
 
     server.registerTool('rank_activities_by_metric', {
       title: 'Rank activities by metric',
-      description: 'Rank up to 25 activities by one metric.',
-      inputSchema: {
-        metric: z.string().min(1).max(160),
-        start: MCP_ISO_DATE_TIME_SCHEMA,
-        end: MCP_ISO_DATE_TIME_SCHEMA,
-        activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
-        order: z.enum(['highest', 'lowest']).default('highest'),
-        limit: z.number().int().min(1).max(25).default(10),
-      },
+      description: 'Rank activities by one persisted metric over a range or all history; oversized scans fail rather than return partial results. For jump superlatives, rank a Maximum Jump metric, then inspect the winner with list_activity_jumps.',
+      inputSchema: MCP_ACTIVITY_RANKING_INPUT_SCHEMA,
       outputSchema: outputSchemas.rank_activities_by_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1243,8 +1267,12 @@ export function createMcpServer(
         uid: auth.uid,
         connectionId: auth.connectionId,
         metric: input.metric,
-        startTimeMs: parseMcpDateTime(input.start, 'start'),
-        endTimeMs: parseMcpDateTime(input.end, 'end'),
+        startTimeMs: input.start === undefined
+          ? undefined
+          : parseMcpDateTime(input.start, 'start'),
+        endTimeMs: input.end === undefined
+          ? undefined
+          : parseMcpDateTime(input.end, 'end'),
         activityTypes: input.activityTypes,
         order: input.order,
         limit: input.limit,

@@ -764,10 +764,20 @@ describe('MCP HTTP scope enforcement', () => {
       const tools = (await client.listTools()).tools;
       const queryActivities = tools
         .find(tool => tool.name === 'query_activities');
+      const rankActivities = tools
+        .find(tool => tool.name === 'rank_activities_by_metric');
       const listActivityTypes = tools
         .find(tool => tool.name === 'list_activity_types');
       const inputSchema = queryActivities?.inputSchema as {
         properties?: Record<string, Record<string, unknown>>;
+        oneOf?: Array<{
+          title?: string;
+          required?: string[];
+          not?: unknown;
+        }>;
+        required?: string[];
+      } | undefined;
+      const rankingInputSchema = rankActivities?.inputSchema as {
         oneOf?: Array<{
           title?: string;
           required?: string[];
@@ -794,6 +804,8 @@ describe('MCP HTTP scope enforcement', () => {
         'Use get_activity_overview before granular activity reads',
       );
       expect(instructions).toContain('rank_activities_by_metric');
+      expect(instructions).toContain('Maximum Jump Distance');
+      expect(instructions).toContain('Never rank jump quality by jumpCount');
       expect(listActivityTypes).toBeDefined();
       expect(queryActivities?.description).toContain('relativePeriod/timeZone');
       expect(queryActivities?.description).toContain('unbounded history');
@@ -828,6 +840,16 @@ describe('MCP HTTP scope enforcement', () => {
         'timeZone',
       ]);
       expect(inputSchema?.oneOf?.[2]?.not).toBeDefined();
+      expect(rankActivities?.description).toContain('all history');
+      expect(rankActivities?.description).toContain('Maximum Jump metric');
+      expect(rankingInputSchema?.required || []).not.toContain('start');
+      expect(rankingInputSchema?.required || []).not.toContain('end');
+      expect(rankingInputSchema?.oneOf?.map(option => option.title)).toEqual([
+        'Explicit date range',
+        'All available history',
+      ]);
+      expect(rankingInputSchema?.oneOf?.[0]?.required).toEqual(['start', 'end']);
+      expect(rankingInputSchema?.oneOf?.[1]?.not).toBeDefined();
 
       const partialRange = await client.callTool({
         name: 'query_activities',
@@ -863,6 +885,18 @@ describe('MCP HTTP scope enforcement', () => {
       expect(combinedModes.isError).toBe(true);
       expect(JSON.stringify(combinedModes)).toContain(
         'Choose exactly one date mode',
+      );
+
+      const partialRankingRange = await client.callTool({
+        name: 'rank_activities_by_metric',
+        arguments: {
+          metric: 'Maximum Jump Distance',
+          start: '2026-07-27T00:00:00.000+03:00',
+        },
+      });
+      expect(partialRankingRange.isError).toBe(true);
+      expect(JSON.stringify(partialRankingRange)).toContain(
+        'Provide both start and end',
       );
     } finally {
       await client.close();

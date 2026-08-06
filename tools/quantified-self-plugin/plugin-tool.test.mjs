@@ -1004,7 +1004,7 @@ test('CLI rejects app IDs passed as npm-visible command-line arguments', async (
 test('bundled skills cover focused workflows without copying the live tool catalog', async () => {
   const expectedMarkers = new Map([
     ['analyze-quantified-self', /Cross-Domain Workflow/],
-    ['analyze-quantified-self-activity', /whole-activity downsampling/],
+    ['analyze-quantified-self-activity', /Maximum Jump Distance/],
     ['analyze-quantified-self-measurements', /first-class recorded measurements/],
     ['analyze-quantified-self-sleep', /normalized sleep summaries/],
     ['analyze-quantified-self-training', /live metric catalog/],

@@ -1218,9 +1218,9 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
   },
   rank_activities_by_metric: {
-    metric: 'Distance',
-    start: '2026-07-01T00:00:00.000Z',
-    end: '2026-07-02T00:00:00.000Z',
+    metric: 'Maximum Jump Distance',
+    activityTypes: ['Mountain Biking'],
+    limit: 1,
   },
   list_routes: {
     activityTypes: ['Running'],

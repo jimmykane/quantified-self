@@ -65,6 +65,8 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('at most four extra minutes');
     expect(assistantSection?.content).toContain('deletes the expired record asynchronously');
     expect(assistantSection?.content).toContain('no access to coordinate fields');
+    expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
+    expect(assistantSection?.content).toContain('instead of comparing jump counts');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
     expect(assistantSection?.links).toContainEqual({
       label: 'MCP Connections',
@@ -94,6 +96,9 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(dataAndPrivacySection?.content).toContain('same-provider baseline medians');
+    expect(dataAndPrivacySection?.content).toContain('processing-bounded all-history scan');
+    expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
+    expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-baseline states');
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');

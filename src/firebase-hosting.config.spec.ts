@@ -259,8 +259,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-05');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-06');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-08-06');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');

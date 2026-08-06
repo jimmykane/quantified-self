@@ -95,6 +95,8 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('canonical Sports Lib activity types')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('latest run')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('explicit IANA timezone')))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('processing-bounded all-history scan')))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('maximum-jump metric')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('route-name text')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
@@ -111,6 +113,9 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Saved-route summaries')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.copy.includes('maximum-jump metric'))
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.copy.includes('coordinate fields, saved bounds, geometry, and waypoints stay unavailable'))
