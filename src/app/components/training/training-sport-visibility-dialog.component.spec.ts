@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { TrainingVisibleDiscipline } from '@shared/derived-metrics';
 import { TrainingSportVisibilityDialogComponent } from './training-sport-visibility-dialog.component';
 
 function createComponent(
   isAutomatic = true,
-  visibleDisciplines: ('running' | 'cycling' | 'swimming')[] = ['cycling'],
+  visibleDisciplines: TrainingVisibleDiscipline[] = ['cycling'],
 ) {
   const dialogRef = { close: vi.fn() };
   const functionsService = { call: vi.fn().mockResolvedValue({ data: { accepted: true } }) };
@@ -45,15 +46,15 @@ describe('TrainingSportVisibilityDialogComponent', () => {
     expect(component.errorMessage).toBeNull();
   });
 
-  it('offers Swimming as an independent persisted selection', async () => {
+  it('offers every registered family as an independent persisted selection', async () => {
     const { component, functionsService } = createComponent(false, ['cycling']);
 
     component.setDisciplineSelected('cycling', false);
-    component.setDisciplineSelected('swimming', true);
+    component.setDisciplineSelected('rowing', true);
     await component.save();
 
     expect(functionsService.call).toHaveBeenCalledWith('setTrainingVisibleDisciplines', {
-      visibleDisciplines: ['swimming'],
+      visibleDisciplines: ['rowing'],
     });
   });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRAINING_DISCIPLINES, type TrainingDiscipline } from '@shared/training-disciplines';
 import {
   formatTrainingVisibleDisciplinesActivityLabel,
   formatTrainingVisibleDisciplinesAccessibleLabel,
@@ -9,7 +10,7 @@ import {
   resolveTrainingSportVisibility,
 } from './training-sport-visibility.helper';
 
-function summary(runningActivities: number, cyclingActivities: number, swimmingActivities = 0) {
+function summary(activityCounts: Partial<Record<TrainingDiscipline, number>>) {
   const window = (activityCount: number) => ({
     periodDays: 28,
     windowStartDayMs: 1,
@@ -24,69 +25,81 @@ function summary(runningActivities: number, cyclingActivities: number, swimmingA
     asOfDayMs: 2,
     currentWindowDays: 28,
     baselineWindowDays: 84,
-    disciplines: [
-      { discipline: 'running' as const, current28d: window(runningActivities), baseline28d: window(20) },
-      { discipline: 'cycling' as const, current28d: window(cyclingActivities), baseline28d: window(20) },
-      { discipline: 'swimming' as const, current28d: window(swimmingActivities), baseline28d: window(20) },
-    ],
+    disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+      discipline,
+      current28d: window(activityCounts[discipline] || 0),
+      baseline28d: window(20),
+    })),
   };
 }
 
 describe('resolveTrainingSportVisibility', () => {
-  it('keeps supported sport presentation complete and canonically ordered', () => {
-    expect(TRAINING_VISIBLE_DISCIPLINE_OPTIONS).toEqual([
-      { discipline: 'running', label: 'Running', details: 'Build, training mix, capacity, and power curve' },
-      { discipline: 'cycling', label: 'Cycling', details: 'Road, indoor, virtual, e-bike, and mountain biking' },
-      { discipline: 'swimming', label: 'Swimming', details: 'Pool and open-water build, pace, and comparable SWOLF' },
+  it('derives complete, canonically ordered presentation from the sport registry', () => {
+    expect(TRAINING_VISIBLE_DISCIPLINE_OPTIONS.map(({ discipline, label }) => ({ discipline, label }))).toEqual([
+      { discipline: 'running', label: 'Running' },
+      { discipline: 'cycling', label: 'Cycling' },
+      { discipline: 'swimming', label: 'Swimming' },
+      { discipline: 'rowing', label: 'Rowing' },
+      { discipline: 'walking-hiking', label: 'Walking & Hiking' },
+      { discipline: 'nordic-skiing', label: 'Nordic Skiing' },
+      { discipline: 'strength', label: 'Strength' },
+      { discipline: 'paddling', label: 'Paddling' },
     ]);
-    expect(formatTrainingVisibleDisciplinesLabel(['running', 'cycling'])).toBe('Running + Cycling');
+    expect(formatTrainingVisibleDisciplinesLabel(['rowing', 'strength'])).toBe('Rowing + Strength');
     expect(formatTrainingVisibleDisciplinesScopeLabel(['cycling'])).toBe('Cycling/MTB');
-    expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'swimming'])).toBe('Running and Swimming');
-    expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'cycling', 'swimming']))
-      .toBe('Running, Cycling/MTB, and Swimming');
-    expect(formatTrainingVisibleDisciplinesActivityLabel(['running'])).toBe('running workouts');
-    expect(formatTrainingVisibleDisciplinesActivityLabel(['running', 'cycling']))
-      .toBe('running or cycling workouts');
-    expect(formatTrainingVisibleDisciplinesCompactLabel(['running', 'cycling', 'swimming'])).toBe('All 3');
+    expect(formatTrainingVisibleDisciplinesScopeLabel(['walking-hiking', 'nordic-skiing']))
+      .toBe('Walking/Hiking and Nordic Skiing');
+    expect(formatTrainingVisibleDisciplinesScopeLabel([])).toBe('No sport-specific');
+    expect(formatTrainingVisibleDisciplinesActivityLabel(['rowing'])).toBe('rowing workouts');
+    expect(formatTrainingVisibleDisciplinesCompactLabel([...TRAINING_DISCIPLINES])).toBe('All sports');
+    expect(formatTrainingVisibleDisciplinesCompactLabel([])).toBe('No sports');
     expect(formatTrainingVisibleDisciplinesCompactLabel(['running', 'swimming'])).toBe('2 sports');
-    expect(formatTrainingVisibleDisciplinesAccessibleLabel(['cycling', 'swimming'], false))
-      .toBe('Choose sports shown. Fixed selection: Cycling + Swimming.');
+    expect(formatTrainingVisibleDisciplinesAccessibleLabel(['rowing', 'paddling'], false))
+      .toBe('Choose sports shown. Fixed selection: Rowing + Paddling.');
+    expect(formatTrainingVisibleDisciplinesAccessibleLabel([], true))
+      .toBe('Choose sports shown. Automatic selection: no sport-specific cards.');
   });
 
   it('honors a valid explicit selection regardless of recent activity', () => {
-    expect(resolveTrainingSportVisibility(['cycling'], summary(12, 0), true, {})).toEqual({
-      disciplines: ['cycling'],
+    expect(resolveTrainingSportVisibility(['strength'], summary({ running: 12 }), true, {})).toEqual({
+      disciplines: ['strength'],
       isAutomatic: false,
     });
   });
 
-  it('uses only current 28-day activity for automatic visibility', () => {
-    expect(resolveTrainingSportVisibility(undefined, summary(0, 7), true, {})).toEqual({
-      disciplines: ['cycling'],
+  it('uses all current 28-day sport families for automatic visibility', () => {
+    expect(resolveTrainingSportVisibility(undefined, summary({ rowing: 7, 'walking-hiking': 4 }), true, {})).toEqual({
+      disciplines: ['rowing', 'walking-hiking'],
       isAutomatic: true,
     });
   });
 
   it('keeps a sport visible automatically when it has a valid saved benchmark', () => {
-    expect(resolveTrainingSportVisibility(undefined, summary(0, 4), true, {
-      running: { mode: 'period', durationWeeks: 12, endDayMs: 1_700_000_000_000 },
+    expect(resolveTrainingSportVisibility(undefined, summary({ cycling: 4 }), true, {
+      paddling: { mode: 'period', durationWeeks: 12, endDayMs: 1_700_000_000_000 },
     })).toEqual({
-      disciplines: ['running', 'cycling'],
+      disciplines: ['cycling', 'paddling'],
+      isAutomatic: true,
+    });
+    expect(resolveTrainingSportVisibility(undefined, null, false, {
+      rowing: { mode: 'event', durationWeeks: 12, eventId: 'benchmark-event' },
+    })).toEqual({
+      disciplines: ['rowing'],
       isAutomatic: true,
     });
   });
 
-  it('falls back to automatic mode for invalid preferences and to both sports when inference is unavailable or empty', () => {
-    expect(resolveTrainingSportVisibility(['rowing'], summary(3, 0), true, {})).toEqual({
+  it('shows no sport-specific cards while automatic evidence is unavailable or empty', () => {
+    expect(resolveTrainingSportVisibility(['not-a-sport'], summary({ running: 3 }), true, {})).toEqual({
       disciplines: ['running'],
       isAutomatic: true,
     });
-    expect(resolveTrainingSportVisibility(undefined, summary(3, 0), false, {})).toEqual({
-      disciplines: ['running', 'cycling', 'swimming'],
+    expect(resolveTrainingSportVisibility(undefined, summary({ running: 3 }), false, {})).toEqual({
+      disciplines: [],
       isAutomatic: true,
     });
-    expect(resolveTrainingSportVisibility(undefined, summary(0, 0), true, {})).toEqual({
-      disciplines: ['running', 'cycling', 'swimming'],
+    expect(resolveTrainingSportVisibility(undefined, summary({}), true, {})).toEqual({
+      disciplines: [],
       isAutomatic: true,
     });
   });

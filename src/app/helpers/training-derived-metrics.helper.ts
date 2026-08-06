@@ -17,6 +17,7 @@ import {
   type DerivedTrainingExplanationWindowMetrics,
   type DerivedTrainingReadinessMetricPayload,
 } from '@shared/derived-metrics';
+import { TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '@shared/training-readiness-metric';
 
 type UnknownRecord = Record<string, unknown>;
@@ -28,9 +29,7 @@ const DURABILITY_SCOPES: readonly DerivedTrainingDurabilityScope[] = [
   'open-water-swimming',
 ];
 const EXPLANATION_SPORTS: readonly DerivedTrainingExplanationSportBucket[] = [
-  'running',
-  'cycling',
-  'swimming',
+  ...TRAINING_DISCIPLINES,
   'other',
   'unclassified',
 ];
@@ -69,7 +68,7 @@ export function resolveTrainingExplanationMetricPayload(
       const trainingStressScore = nonNegativeNumber(contributor?.trainingStressScore);
       const loadSharePercent = percentage(contributor?.loadSharePercent);
       const label = nullableString(contributor?.label);
-      const childComposition = normalizeSportLoads(contributor?.childComposition);
+      const childComposition = normalizeSportLoads(contributor?.childComposition, false);
       if (
         !contributor
         || !eventId
@@ -190,13 +189,17 @@ function normalizeExplanationWindowMetrics(value: unknown): DerivedTrainingExpla
   const childLoadActivityCount = nonNegativeInteger(source?.childLoadActivityCount);
   const childTrainingStressScore = nullableNonNegativeNumber(source?.childTrainingStressScore);
   const childLoadCoverage = normalizeLoadCoverage(source?.childLoadCoverage);
-  const sportLoads = normalizeSportLoads(source?.sportLoads);
+  const sportLoads = normalizeSportLoads(source?.sportLoads, true);
   const rhythms = Array.isArray(source?.rhythms) ? source.rhythms.map(normalizeRhythm) : [];
+  const rhythmDisciplines = new Set(rhythms.flatMap(rhythm => rhythm ? [rhythm.discipline] : []));
   if (
     !source || parentEventCount === null || parentLoadEventCount === null || parentTrainingStressScore === undefined
     || !parentLoadCoverage || childActivityCount === null || childLoadActivityCount === null
     || childTrainingStressScore === undefined || !childLoadCoverage || !sportLoads
     || rhythms.some(rhythm => rhythm === null)
+    || rhythms.length !== TRAINING_DISCIPLINES.length
+    || rhythmDisciplines.size !== TRAINING_DISCIPLINES.length
+    || TRAINING_DISCIPLINES.some(discipline => !rhythmDisciplines.has(discipline))
   ) {
     return null;
   }
@@ -225,7 +228,10 @@ function normalizeLoadCoverage(value: unknown): DerivedTrainingExplanationLoadCo
   return { totalCount, loadedCount, classifiedCount, unclassifiedCount, ratio };
 }
 
-function normalizeSportLoads(value: unknown): DerivedTrainingExplanationSportLoad[] | null {
+function normalizeSportLoads(
+  value: unknown,
+  requireComplete: boolean,
+): DerivedTrainingExplanationSportLoad[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -246,7 +252,18 @@ function normalizeSportLoads(value: unknown): DerivedTrainingExplanationSportLoa
     }
     return { sport: sport as DerivedTrainingExplanationSportBucket, label, activityCount, loadActivityCount, trainingStressScore, loadSharePercent };
   });
-  return loads.some(load => load === null) ? null : loads as DerivedTrainingExplanationSportLoad[];
+  const sports = new Set(loads.flatMap(load => load ? [load.sport] : []));
+  if (
+    loads.some(load => load === null)
+    || sports.size !== loads.length
+    || (requireComplete && (
+      loads.length !== EXPLANATION_SPORTS.length
+      || EXPLANATION_SPORTS.some(sport => !sports.has(sport))
+    ))
+  ) {
+    return null;
+  }
+  return loads as DerivedTrainingExplanationSportLoad[];
 }
 
 function normalizeRhythm(value: unknown): DerivedTrainingExplanationRhythm | null {

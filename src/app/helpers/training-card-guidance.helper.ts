@@ -2,6 +2,10 @@ import type {
   DashboardTrainingBuildComparisonDiscipline,
   DashboardTrainingDisciplineSummary,
 } from './dashboard-derived-metrics.helper';
+import type {
+  TrainingSportIntensityPolicy,
+  TrainingSportLoadPolicy,
+} from '@shared/training-disciplines';
 import { formatSleepDuration } from './dashboard-sleep-chart.helper';
 
 export interface TrainingCardGuidanceViewModel {
@@ -12,6 +16,7 @@ export interface TrainingCardGuidanceViewModel {
 
 export function buildTrainingBuildGuidance(
   source: DashboardTrainingBuildComparisonDiscipline | null | undefined,
+  loadPolicy: TrainingSportLoadPolicy = 'recorded',
 ): TrainingCardGuidanceViewModel | null {
   const current = source?.current;
   const benchmark = source?.benchmark;
@@ -25,6 +30,7 @@ export function buildTrainingBuildGuidance(
     benchmark.activityCount,
     current.trainingStressScoreEventCount,
     benchmark.trainingStressScoreEventCount,
+    loadPolicy,
   );
   const hasComparableIntensity = current.intensitySourceEventCount >= 3
     && benchmark.intensitySourceEventCount >= 3;
@@ -44,7 +50,15 @@ export function buildTrainingBuildGuidance(
 export function buildTrainingMixGuidance(
   summary: DashboardTrainingDisciplineSummary,
   label: string,
+  intensityPolicy: TrainingSportIntensityPolicy = 'zones',
 ): TrainingCardGuidanceViewModel {
+  if (intensityPolicy === 'volume-only') {
+    return {
+      conclusionText: `${label} is summarized by recorded volume and context-specific metrics.`,
+      evidenceText: 'Evidence quality: recorded activity summaries; zone intensity is intentionally omitted and never inferred.',
+      nextStepText: null,
+    };
+  }
   const currentTotal = resolveZoneSeconds(summary.current28d);
   const baselineTotal = resolveZoneSeconds(summary.baseline28d);
   if (currentTotal <= 0 || baselineTotal <= 0) {
@@ -117,8 +131,12 @@ function buildBuildEvidence(
   benchmarkWorkoutCount: number,
   currentTssWorkoutCount: number,
   benchmarkTssWorkoutCount: number,
+  loadPolicy: TrainingSportLoadPolicy,
 ): string {
   const workoutText = `${formatCount(currentWorkoutCount, 'current')} and ${formatCount(benchmarkWorkoutCount, 'reference')}`;
+  if (loadPolicy === 'volume-only') {
+    return `Evidence quality: ${workoutText}; TSS is intentionally omitted for this context.`;
+  }
   if (currentTssWorkoutCount === 0 && benchmarkTssWorkoutCount === 0) {
     return `Evidence quality: ${workoutText}; neither window has recorded TSS.`;
   }

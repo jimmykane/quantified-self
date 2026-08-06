@@ -11,6 +11,7 @@ import type {
   TrainingBuildBenchmarkSelection,
   TrainingBuildDurationWeeks,
 } from '@shared/derived-metrics';
+import { getTrainingSportDefinition } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
 import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
@@ -85,9 +86,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     private readonly snackBar: MatSnackBar,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
-    this.disciplineLabel = data.discipline === 'running'
-      ? 'running'
-      : data.discipline === 'cycling' ? 'cycling' : 'swimming';
+    this.disciplineLabel = (getTrainingSportDefinition(data.discipline)?.label || data.discipline).toLowerCase();
     const selection = data.selection;
     this.durationWeeks = selection?.durationWeeks || 12;
     this.mode = selection?.mode === 'period' ? 'period' : 'event';
