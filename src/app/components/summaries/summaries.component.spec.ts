@@ -198,6 +198,9 @@ describe('SummariesComponent', () => {
     expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
     expect(trainingLink.textContent).toContain('Open Training');
     expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
+    const template = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html'), 'utf8');
+    expect(template).toContain('<a mat-button class="dashboard-training-link"');
+    expect(template).not.toContain('<a mat-stroked-button class="dashboard-training-link"');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
   });
 

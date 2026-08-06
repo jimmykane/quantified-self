@@ -1290,8 +1290,9 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
-- Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
-  keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
+- Responsive icon-only Training actions use plain Material buttons rather than outlined containers, hide only their
+  projected text label, and reset Material's icon-and-text margins. This keeps their visible icons consistent with
+  Dashboard header actions while preserving Material focus, ripple, and touch-target elements.
 - Readiness history and body-weight trend use compact ECharts canvases inside their parent card surfaces rather than
   nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
   the detail readable without being cropped by the card.

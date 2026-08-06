@@ -126,6 +126,16 @@ describe('TrainingWorkspaceComponent', () => {
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
     expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('All 3');
+    const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
+    for (const actionClass of [
+      'training-sport-visibility-action',
+      'training-feedback-action',
+      'training-calendar-action',
+      'training-dashboard-action',
+    ]) {
+      expect(template).toMatch(new RegExp(`<[^>]+mat-button[^>]+class="${actionClass}"`, 's'));
+      expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
+    }
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
