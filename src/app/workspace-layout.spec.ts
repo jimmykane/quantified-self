@@ -6,6 +6,7 @@ const root = process.cwd();
 
 const workspaceRoots = [
   ['Dashboard', 'src/app/components/dashboard/dashboard.component.html', 'component-container qs-workspace-page'],
+  ['Event details', 'src/app/components/event/event.card.component.html', 'event-dashboard-container qs-workspace-page'],
   ['Calendar', 'src/app/components/calendar/calendar-page/calendar-page.component.html', 'calendar-page qs-workspace-page'],
   ['Training', 'src/app/components/training/training-workspace.component.html', 'training-workspace qs-workspace-page'],
   ['Routes', 'src/app/components/routes/routes-page.component.html', 'routes-page qs-workspace-page'],

@@ -7,11 +7,6 @@
   flex-direction: column;
   position: relative;
   gap: 0.5rem;
-  /* Tight gap between sections */
-  padding: 16px;
-  max-width: 1600px;
-  /* Cap width for ultra-wide screens */
-  margin: 0 auto;
 }
 
 .shared-event-state {
