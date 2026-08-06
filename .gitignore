@@ -68,7 +68,7 @@ src/assets/fonts/
 #Lisences
 licenses.json
 
-# SSL certificates (generate locally with mkcert)
+# SSL certificates (generate locally; never commit)
 /certs
 functions/.env
 src/environments/mapbox-token.local.ts
