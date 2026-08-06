@@ -85,6 +85,7 @@ export interface AssistantChatRequest {
 export interface AssistantChatResponse {
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
+  pendingRequestId: string | null;
 }
 
 export type GetAssistantConversationRequest = Record<string, never>;

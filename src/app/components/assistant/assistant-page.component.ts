@@ -296,9 +296,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       });
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
-      this.retryRequest.set(null);
-      this.pendingRequestId.set(null);
-      this.clearRememberedPendingRequest(request.requestId);
+      if (response.pendingRequestId === request.requestId) {
+        this.errorMessage.set(null);
+        this.startPendingResponseRecovery(request.requestId);
+      } else {
+        this.retryRequest.set(null);
+        this.pendingRequestId.set(null);
+        this.clearRememberedPendingRequest(request.requestId);
+      }
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
       let refreshedPendingRequestId: string | null | undefined;

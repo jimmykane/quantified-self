@@ -146,6 +146,62 @@ describe('Assistant conversation store', () => {
     });
   });
 
+  it('recognizes only an identical request as the already-running turn', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `generated-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const requestId = 'assistant-request-pending-duplicate';
+    const requestFingerprint = createAssistantRequestFingerprint(
+      requestId,
+      'How am I today?',
+    );
+    const begun = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      undefined,
+      requestId,
+      requestFingerprint,
+    ));
+
+    await expect(store.beginTurn(
+      'user-1',
+      begun.conversationId,
+      requestId,
+      requestFingerprint,
+    )).resolves.toEqual({
+      kind: 'pending',
+      conversation: expect.objectContaining({
+        conversationId: begun.conversationId,
+      }),
+      requestFingerprint,
+    });
+
+    await expect(store.beginTurn(
+      'user-1',
+      begun.conversationId,
+      requestId,
+      createAssistantRequestFingerprint(requestId, 'A different question'),
+    )).rejects.toMatchObject({ code: 'request_id_conflict' });
+
+    await expect(store.beginTurn(
+      'user-1',
+      begun.conversationId,
+      'assistant-request-different-pending',
+      createAssistantRequestFingerprint(
+        'assistant-request-different-pending',
+        'How am I today?',
+      ),
+    )).rejects.toMatchObject({ code: 'turn_in_progress' });
+  });
+
   it('replays a completed client request without creating another turn lock', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

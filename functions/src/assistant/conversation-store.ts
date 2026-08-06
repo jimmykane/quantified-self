@@ -24,6 +24,7 @@ const ASSISTANT_REQUEST_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
 interface AssistantPendingTurn {
   id: string;
   requestId: string | null;
+  requestFingerprint: string | null;
   expiresAtMs: number;
 }
 
@@ -62,7 +63,16 @@ export interface ReplayedAssistantTurn {
   requestFingerprint: string;
 }
 
-export type AssistantTurnStart = BegunAssistantTurn | ReplayedAssistantTurn;
+export interface PendingAssistantTurn {
+  kind: 'pending';
+  conversation: AssistantConversation;
+  requestFingerprint: string;
+}
+
+export type AssistantTurnStart =
+  | BegunAssistantTurn
+  | ReplayedAssistantTurn
+  | PendingAssistantTurn;
 
 export type AssistantConversationStoreErrorCode =
   | 'user_deleted'
@@ -93,6 +103,7 @@ export interface AssistantConversationStore {
     uid: string,
     expectedConversationId?: string,
     requestId?: string,
+    requestFingerprint?: string,
   ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
@@ -230,6 +241,12 @@ function parseStoredConversation(
         id: data.pendingTurn.id,
         requestId: isValidAssistantRequestId(data.pendingTurn.requestId)
           ? data.pendingTurn.requestId
+          : null,
+        requestFingerprint: typeof data.pendingTurn.requestFingerprint === 'string'
+          && ASSISTANT_REQUEST_FINGERPRINT_PATTERN.test(
+            data.pendingTurn.requestFingerprint,
+          )
+          ? data.pendingTurn.requestFingerprint
           : null,
         expiresAtMs: data.pendingTurn.expiresAtMs,
       }
@@ -414,7 +431,12 @@ export function createAssistantConversationStore(
       });
     },
 
-    beginTurn: async (uid, expectedConversationId, requestId) => {
+    beginTurn: async (
+      uid,
+      expectedConversationId,
+      requestId,
+      requestFingerprint,
+    ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
       return db.runTransaction(async (transaction) => {
@@ -451,6 +473,22 @@ export function createAssistantConversationStore(
         }
         if (conversation.pendingTurn
           && conversation.pendingTurn.expiresAtMs > nowMs) {
+          if (requestId
+            && requestFingerprint
+            && conversation.pendingTurn.requestId === requestId
+            && conversation.pendingTurn.requestFingerprint) {
+            if (conversation.pendingTurn.requestFingerprint !== requestFingerprint) {
+              throw new AssistantConversationStoreError(
+                'request_id_conflict',
+                'The Assistant request identifier is already running with a different message.',
+              );
+            }
+            return {
+              kind: 'pending',
+              conversation: toPublicConversation(conversation),
+              requestFingerprint,
+            };
+          }
           throw new AssistantConversationStoreError(
             'turn_in_progress',
             'Another Assistant response is still in progress.',
@@ -467,6 +505,11 @@ export function createAssistantConversationStore(
           pendingTurn: {
             id: turnId,
             requestId: requestId ?? null,
+            requestFingerprint: requestId
+              && requestFingerprint
+              && ASSISTANT_REQUEST_FINGERPRINT_PATTERN.test(requestFingerprint)
+              ? requestFingerprint
+              : null,
             expiresAtMs: nowMs + ASSISTANT_PENDING_TURN_TTL_MS,
           },
         };

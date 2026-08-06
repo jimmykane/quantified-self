@@ -49,12 +49,33 @@ function buildResponse(): AssistantChatResponse {
       isEligible: true,
       blockedReason: null,
     },
+    pendingRequestId: null,
   };
 }
 
 describe('Assistant response contract', () => {
   it('accepts a complete bounded response', () => {
     expect(validateAssistantChatResponse(buildResponse()).ok).toBe(true);
+  });
+
+  it('accepts a valid pending request identity and rejects missing or malformed state', () => {
+    const pending = buildResponse();
+    pending.pendingRequestId = 'assistant-request-pending-0001';
+    expect(validateAssistantChatResponse(pending).ok).toBe(true);
+
+    const missing = buildResponse() as unknown as Record<string, unknown>;
+    delete missing.pendingRequestId;
+    expect(validateAssistantChatResponse(missing)).toMatchObject({
+      ok: false,
+      reason: 'invalid_pending_request_id',
+    });
+
+    const malformed = buildResponse();
+    malformed.pendingRequestId = 'invalid';
+    expect(validateAssistantChatResponse(malformed)).toMatchObject({
+      ok: false,
+      reason: 'invalid_pending_request_id',
+    });
   });
 
   it('rejects stored user messages beyond the request limit', () => {

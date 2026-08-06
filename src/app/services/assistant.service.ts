@@ -54,6 +54,14 @@ export class AssistantService {
           validation,
         );
       }
+      if (validation.data.pendingRequestId !== null
+        && validation.data.pendingRequestId !== request.requestId) {
+        throw new AssistantError(
+          'INTERNAL',
+          'The Assistant returned a pending state for a different request.',
+          validation.data,
+        );
+      }
       return {
         ...validation.data,
         conversation: normalizeAssistantConversationEvidence(validation.data.conversation),

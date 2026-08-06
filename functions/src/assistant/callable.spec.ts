@@ -217,6 +217,7 @@ describe('Assistant callable', () => {
     }, context, dependencies)).resolves.toEqual({
       conversation,
       quota,
+      pendingRequestId: null,
     });
 
     expect(dependencies.assertLegalAccess).toHaveBeenCalledWith('user-1');
@@ -225,6 +226,7 @@ describe('Assistant callable', () => {
       'user-1',
       'conversation-1',
       REQUEST_ID,
+      createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
     );
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
@@ -281,6 +283,33 @@ describe('Assistant callable', () => {
     expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
     expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges an identical in-flight retry without returning an HTTP conflict', async () => {
+    const { dependencies, store, reservation, conversation } = createDependencies();
+    vi.mocked(store.beginTurn).mockResolvedValue({
+      kind: 'pending',
+      conversation,
+      requestFingerprint: createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'How am I today?',
+      ),
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).resolves.toEqual({
+      conversation,
+      quota,
+      pendingRequestId: REQUEST_ID,
+    });
+
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(store.releaseTurn).not.toHaveBeenCalled();
   });
 
   it('does not acquire a turn lock when quota cannot be reserved', async () => {
@@ -346,6 +375,7 @@ describe('Assistant callable', () => {
     await expect(runAssistantChat(request, context, dependencies)).resolves.toEqual({
       conversation,
       quota,
+      pendingRequestId: null,
     });
     expect(dependencies.reserveQuota).toHaveBeenCalledTimes(2);
     expect(dependencies.finalizeQuota).toHaveBeenCalledTimes(1);
@@ -420,6 +450,7 @@ describe('Assistant callable', () => {
     }, context, dependencies)).resolves.toEqual({
       conversation: completedConversation,
       quota: exhaustedQuota,
+      pendingRequestId: null,
     });
 
     expect(dependencies.getQuotaStatus).toHaveBeenCalledWith('user-1');
@@ -469,6 +500,7 @@ describe('Assistant callable', () => {
     }, context, dependencies)).resolves.toEqual({
       conversation: completedConversation,
       quota: exhaustedQuota,
+      pendingRequestId: null,
     });
 
     expect(store.findCompletedTurn).toHaveBeenCalledTimes(2);
@@ -492,7 +524,11 @@ describe('Assistant callable', () => {
       requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
-    }, context, dependencies)).resolves.toEqual({ conversation, quota });
+    }, context, dependencies)).resolves.toEqual({
+      conversation,
+      quota,
+      pendingRequestId: null,
+    });
 
     expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
     expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);

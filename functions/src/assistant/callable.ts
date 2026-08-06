@@ -268,11 +268,11 @@ function mapAssistantError(error: unknown): HttpsError {
   );
 }
 
-function assertReplayMatchesInput(
-  replayedTurn: ReplayedAssistantTurn,
+function assertRequestFingerprintMatchesInput(
+  requestState: Pick<ReplayedAssistantTurn, 'requestFingerprint'>,
   input: AssistantChatRequest,
 ): void {
-  if (replayedTurn.requestFingerprint !== createAssistantRequestFingerprint(
+  if (requestState.requestFingerprint !== createAssistantRequestFingerprint(
     input.requestId,
     input.message,
   )) {
@@ -290,13 +290,14 @@ async function buildReplayResponse(
   quotaRoleContext: AssistantUserRoleContext | null,
   dependencies: AssistantCallableDependencies,
 ): Promise<AssistantChatResponse> {
-  assertReplayMatchesInput(replayedTurn, input);
+  assertRequestFingerprintMatchesInput(replayedTurn, input);
   const quota = quotaRoleContext
     ? await dependencies.getQuotaStatus(uid, quotaRoleContext)
     : await dependencies.getQuotaStatus(uid);
   return {
     conversation: replayedTurn.conversation,
     quota,
+    pendingRequestId: null,
   };
 }
 
@@ -375,14 +376,26 @@ export async function runAssistantChat(
       uid,
       input.conversationId,
       input.requestId,
+      createAssistantRequestFingerprint(input.requestId, input.message),
     );
     if (turnStart.kind === 'replayed') {
-      assertReplayMatchesInput(turnStart, input);
+      assertRequestFingerprintMatchesInput(turnStart, input);
       const quota = await dependencies.releaseQuota(reservation);
       reservation = null;
       return {
         conversation: turnStart.conversation,
         quota,
+        pendingRequestId: null,
+      };
+    }
+    if (turnStart.kind === 'pending') {
+      assertRequestFingerprintMatchesInput(turnStart, input);
+      const quota = await dependencies.releaseQuota(reservation);
+      reservation = null;
+      return {
+        conversation: turnStart.conversation,
+        quota,
+        pendingRequestId: input.requestId,
       };
     }
     begunTurn = turnStart;
@@ -422,7 +435,11 @@ export async function runAssistantChat(
       assistantMessage,
     );
     begunTurn = null;
-    return { conversation, quota: finalizedQuota };
+    return {
+      conversation,
+      quota: finalizedQuota,
+      pendingRequestId: null,
+    };
   } catch (error) {
     if (begunTurn) {
       try {

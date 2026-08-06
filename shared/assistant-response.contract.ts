@@ -4,6 +4,7 @@ import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   ASSISTANT_MAX_RESPONSE_CHARS,
   ASSISTANT_MAX_STORED_MESSAGES,
+  isValidAssistantRequestId,
   type AssistantChatResponse,
   type AssistantConversation,
   type AssistantEvidence,
@@ -161,12 +162,16 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
-  if (!hasOnlyKeys(value, ['conversation', 'quota'])) {
+  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
   const conversation = validateAssistantConversation(value.conversation);
   if (conversation.ok === false) {
     return { ok: false, reason: conversation.reason };
+  }
+  if (value.pendingRequestId !== null
+    && !isValidAssistantRequestId(value.pendingRequestId)) {
+    return { ok: false, reason: 'invalid_pending_request_id' };
   }
   const quota = value.quota;
   if (!isRecord(quota)

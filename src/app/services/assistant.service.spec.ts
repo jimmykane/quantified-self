@@ -38,6 +38,7 @@ const response: AssistantChatResponse = {
     isEligible: true,
     blockedReason: null,
   },
+  pendingRequestId: null,
 };
 const requestId = 'assistant-request-0001';
 
@@ -82,6 +83,27 @@ describe('AssistantService', () => {
       },
     });
 
+    await expect(service.sendMessage({
+      requestId,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
+  it('accepts only a pending acknowledgement for the request being sent', async () => {
+    functionsService.call.mockResolvedValueOnce({
+      data: { ...response, pendingRequestId: requestId },
+    });
+
+    await expect(service.sendMessage({
+      requestId,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    })).resolves.toMatchObject({ pendingRequestId: requestId });
+
+    functionsService.call.mockResolvedValueOnce({
+      data: { ...response, pendingRequestId: 'assistant-request-different-0001' },
+    });
     await expect(service.sendMessage({
       requestId,
       message: 'How am I today?',

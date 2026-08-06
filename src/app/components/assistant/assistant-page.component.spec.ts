@@ -60,6 +60,7 @@ const chatResponse: AssistantChatResponse = {
     isEligible: true,
     blockedReason: null,
   },
+  pendingRequestId: null,
 };
 
 describe('AssistantPageComponent', () => {
@@ -343,7 +344,20 @@ describe('AssistantPageComponent', () => {
       'quantified-self.assistant.pending-request-id',
     ) || '{}')).toMatchObject({ submittedAtMs });
 
-    resolveSend?.(chatResponse);
+    resolveSend?.({
+      ...chatResponse,
+      conversation: {
+        ...chatResponse.conversation,
+        messages: [
+          {
+            ...chatResponse.conversation.messages[0],
+            id: pendingRequestId,
+            text: 'How has my sleep changed?',
+          },
+          chatResponse.conversation.messages[1],
+        ],
+      },
+    });
     await vi.waitFor(() => expect(component.sending()).toBe(false));
 
     expect(sessionStorage.getItem(
@@ -351,7 +365,7 @@ describe('AssistantPageComponent', () => {
     )).toBeNull();
   });
 
-  it('polls the original turn when the resumed request loses the registration race', async () => {
+  it('polls the original turn without a conflict when a resumed request loses registration', async () => {
     vi.useFakeTimers();
     try {
       const pendingRequestId = 'assistant-request-original-won-registration';
@@ -371,17 +385,15 @@ describe('AssistantPageComponent', () => {
           chatResponse.conversation.messages[1],
         ],
       };
-      assistantService.sendMessage.mockReset().mockRejectedValueOnce(
-        new Error('the original request owns the turn'),
-      );
+      assistantService.sendMessage.mockReset().mockResolvedValueOnce({
+        ...chatResponse,
+        conversation: pendingConversation,
+        pendingRequestId,
+      });
       assistantService.getConversationState.mockReset()
         .mockResolvedValueOnce({
           conversation: null,
           pendingRequestId: null,
-        })
-        .mockResolvedValueOnce({
-          conversation: pendingConversation,
-          pendingRequestId,
         })
         .mockResolvedValueOnce({
           conversation: completedConversation,
@@ -400,13 +412,16 @@ describe('AssistantPageComponent', () => {
       );
 
       await component.ngOnInit();
-      await vi.waitFor(() => {
-        expect(assistantService.getConversationState).toHaveBeenCalledTimes(2);
-      });
 
       expect(component.sending()).toBe(true);
       expect(component.errorMessage()).toBeNull();
       expect(component.messages().at(-1)?.text).toBe('How has my sleep changed?');
+      expect(assistantService.sendMessage).toHaveBeenCalledWith({
+        requestId: pendingRequestId,
+        message: 'How has my sleep changed?',
+        timeZone: 'Europe/Helsinki',
+      });
+      expect(assistantService.getConversationState).toHaveBeenCalledOnce();
 
       await vi.advanceTimersByTimeAsync(2_000);
 
