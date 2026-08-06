@@ -508,7 +508,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
-      { data: { user: this.user } },
+      {
+        data: { user: this.user },
+        panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
+      },
     );
   }
 

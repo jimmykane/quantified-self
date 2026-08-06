@@ -254,6 +254,7 @@ describe('SummariesComponent', () => {
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
       data: { user: component.user },
+      panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);

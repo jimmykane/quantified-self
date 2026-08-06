@@ -18,16 +18,10 @@
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
-  padding: 16px;
+  padding: 0;
   overflow-y: auto;
 }
 
 app-activity-calendar-tile {
   min-height: 272px;
-}
-
-@media (max-width: 959.98px) {
-  .calendar-month-picker-content {
-    padding: 8px;
-  }
 }

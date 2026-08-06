@@ -665,6 +665,11 @@ mat-table {
   overflow: hidden;
 }
 
+/* The dashboard month picker is dense; its header and calendar tile own their spacing. */
+.cdk-overlay-pane.qs-calendar-month-picker-sheet .mat-bottom-sheet-container {
+  padding: 0 !important;
+}
+
 /* Normalize custom wrapper usage so inner content can own scrolling. */
 .mat-bottom-sheet-container>.bottom-sheet-container {
   flex: 1 1 auto;

@@ -48,6 +48,6 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(styles).toMatch(/:host\s*\{[^}]*display:\s*flex[^}]*min-height:\s*0/s);
     expect(styles).toMatch(/\.calendar-month-picker-bottom-sheet\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s);
     expect(styles).toMatch(/\.calendar-month-picker-content\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s);
-    expect(styles).toMatch(/@media \(max-width: 959\.98px\)\s*\{[^}]*\.calendar-month-picker-content\s*\{[^}]*padding:\s*8px;/s);
+    expect(styles).toMatch(/\.calendar-month-picker-content\s*\{[^}]*padding:\s*0;[^}]*overflow-y:\s*auto/s);
   });
 });
