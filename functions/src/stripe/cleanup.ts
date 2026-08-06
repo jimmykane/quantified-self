@@ -24,6 +24,7 @@ import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 /**
  * Cloud Function: cleanupStripeCustomer
@@ -66,10 +67,10 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 export const cleanupStripeCustomer = onCall({
 
     region: FUNCTIONS_MANIFEST.cleanupStripeCustomer.region,
+    secrets: FUNCTION_SECRET_BINDINGS.cleanupStripeCustomer,
     cors: ALLOWED_CORS_ORIGINS,
     minInstances: 0,
     maxInstances: 10,
-    // secrets: ['STRIPE_API_KEY'] // Using process.env from .env file instead
 }, async (request) => {
     // 1. Auth Check
     if (!request.auth) {

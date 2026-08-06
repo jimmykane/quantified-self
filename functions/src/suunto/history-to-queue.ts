@@ -7,6 +7,7 @@ import { SERVICE_NAME } from './constants';
 import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface HistoryToQueueRequest {
   startDate: string;
@@ -23,6 +24,7 @@ interface HistoryToQueueResponse {
  */
 export const addSuuntoAppHistoryToQueue = onCall({
   region: FUNCTIONS_MANIFEST.addSuuntoAppHistoryToQueue.region,
+  secrets: FUNCTION_SECRET_BINDINGS.addSuuntoAppHistoryToQueue,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   maxInstances: 10

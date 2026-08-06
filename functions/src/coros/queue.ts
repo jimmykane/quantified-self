@@ -7,6 +7,7 @@ import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
 import { config } from '../config';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const SUCCESS_RESPONSE = {
   'message': 'ok',
@@ -37,6 +38,7 @@ function countMissingFitUrls(workouts: any[]): number {
 export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
+  secrets: FUNCTION_SECRET_BINDINGS.insertCOROSAPIWorkoutDataToQueue,
 }).https.onRequest(async (req, res) => {
   if (!req.get('Client') || !req.get('Secret')) {
     logger.info(`No client or secret ${req.method}`);

@@ -36,6 +36,7 @@ import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 
@@ -240,6 +241,7 @@ async function findAndLinkStripeCustomerByEmail(
  */
 export const restoreUserClaims = onCall({
     region: FUNCTIONS_MANIFEST.restoreUserClaims.region,
+    secrets: FUNCTION_SECRET_BINDINGS.restoreUserClaims,
     cors: ALLOWED_CORS_ORIGINS
 }, async (request) => {
     if (!request.auth) {
@@ -470,6 +472,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
  */
 export const linkExistingStripeCustomer = onCall({
     region: FUNCTIONS_MANIFEST.linkExistingStripeCustomer.region,
+    secrets: FUNCTION_SECRET_BINDINGS.linkExistingStripeCustomer,
     cors: ALLOWED_CORS_ORIGINS
 }, async (request) => {
     if (!request.auth) {

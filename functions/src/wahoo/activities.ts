@@ -31,6 +31,7 @@ import {
   ProviderOperationError,
 } from '../shared/provider-operation-error';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -399,6 +400,7 @@ async function requireWahooActivityUploadAccess(request: { auth?: { uid: string 
 
 export const importActivityToWahooAPI = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToWahooAPI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importActivityToWahooAPI,
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 120,
   maxInstances: 10,
@@ -432,6 +434,7 @@ export const importActivityToWahooAPI = onCall({
 
 export const getWahooAPIWorkoutFileUploadStatus = onCall({
   region: FUNCTIONS_MANIFEST.getWahooAPIWorkoutFileUploadStatus.region,
+  secrets: FUNCTION_SECRET_BINDINGS.getWahooAPIWorkoutFileUploadStatus,
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 60,
   maxInstances: 10,

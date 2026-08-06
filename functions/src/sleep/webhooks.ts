@@ -18,6 +18,7 @@ import {
 } from './provider-flags';
 import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -209,6 +210,7 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
 export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWith({
     timeoutSeconds: 60,
     memory: '256MB',
+    secrets: FUNCTION_SECRET_BINDINGS.receiveSuuntoAppSleepData,
 }).https.onRequest(async (req, res) => {
     if (!isSleepProviderEnabled(SLEEP_PROVIDERS.SuuntoApp)) {
         logger.info(`[SleepSync][Suunto] Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; ignoring sleep webhook`);

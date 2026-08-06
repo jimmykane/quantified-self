@@ -20,6 +20,7 @@ import {
   PendingServiceDisconnectRootData,
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -336,6 +337,7 @@ async function retryPendingDisconnectRoot(
 
 export const retryPendingServiceDisconnects = onSchedule({
   region: 'europe-west2',
+  secrets: FUNCTION_SECRET_BINDINGS.retryPendingServiceDisconnects,
   schedule: 'every 30 minutes',
   timeoutSeconds: 300,
   memory: '512MiB',

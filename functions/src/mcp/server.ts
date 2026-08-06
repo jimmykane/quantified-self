@@ -33,6 +33,7 @@ import {
   McpOutputSchemaRegistry,
   PublicMcpToolName,
 } from './tool-output-schemas';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -1586,6 +1587,7 @@ export function parseMcpBearerToken(value: unknown): string | null {
 
 export const mcpApi = onRequest({
   region: 'europe-west2',
+  secrets: FUNCTION_SECRET_BINDINGS.mcpApi,
   cors: false,
   timeoutSeconds: 120,
   memory: '512MiB',

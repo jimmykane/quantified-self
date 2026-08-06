@@ -52,6 +52,7 @@ import {
     isServiceDisconnectPendingForUser,
 } from '../service-disconnect-pending';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
     getCanonicalEndingSubscription,
     getGracePeriodUntilFromSubscriptionPeriodEnd,
@@ -167,6 +168,7 @@ const hasActiveDeletionMarker = async (
  */
 export const onSubscriptionUpdated = onDocumentWritten({
     document: 'customers/{uid}/subscriptions/{subscriptionId}',
+    secrets: FUNCTION_SECRET_BINDINGS.onSubscriptionUpdated,
     region: 'europe-west3',
     memory: '512MiB',
     concurrency: 5,

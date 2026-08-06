@@ -8,6 +8,7 @@ import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { RouteDeliverySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { processRouteDeliverySyncQueueItem } from '../route-delivery-sync/process-queue-item';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface RouteDeliverySyncTaskPayload {
     queueItemId: string;
@@ -15,6 +16,7 @@ interface RouteDeliverySyncTaskPayload {
 
 export const processRouteDeliverySyncTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    secrets: FUNCTION_SECRET_BINDINGS.processRouteDeliverySyncTask,
     memory: '1GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',

@@ -47,14 +47,16 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('firebase-functions/v1', async () => {
     const actual = await vi.importActual('firebase-functions/v1');
+    const region = () => ({
+        https: {
+            onCall: (handler: any) => handler,
+            onRequest: (handler: any) => handler
+        }
+    });
     return {
         ...actual,
-        region: () => ({
-            https: {
-                onCall: (handler: any) => handler,
-                onRequest: (handler: any) => handler
-            }
-        })
+        region,
+        runWith: () => ({ region }),
     };
 });
 

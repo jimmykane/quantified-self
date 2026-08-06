@@ -52,6 +52,7 @@ import {
 } from '../shared/provider-operation-error';
 import { RouteProviderAcceptanceHandler } from '../routes/provider-acceptance';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export interface SuuntoRouteUploadTokenRef {
   id: string;
@@ -815,6 +816,7 @@ export async function uploadGPXRouteToSuuntoApp(
  */
 export const importRouteToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToSuuntoApp.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importRouteToSuuntoApp,
   cors: ALLOWED_CORS_ORIGINS,
   ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
 }, async (request) => {

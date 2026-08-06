@@ -7,6 +7,7 @@ import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { markQueueItemSkipped, QUEUE_SKIPPED_REASONS, QueueResult } from '../queue-utils';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 /**
  * Task worker that processes a single workout queue item.
@@ -15,6 +16,7 @@ import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
  */
 export const processWorkoutTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    secrets: FUNCTION_SECRET_BINDINGS.processWorkoutTask,
     memory: '1GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',

@@ -12,6 +12,7 @@ import { getTokenData } from '../tokens';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 import { getCOROSUserId } from './auth/api';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const COROS_UPLOAD_SUCCESS_CODE = '0000';
 const COROS_UPLOAD_DUPLICATE_CODE = '5082';
@@ -245,6 +246,7 @@ export async function uploadActivityFileToCOROS(userID: string, fileBuffer: Buff
 
 export const importActivityToCOROSAPI = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToCOROSAPI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importActivityToCOROSAPI,
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 300,
   maxInstances: 10,

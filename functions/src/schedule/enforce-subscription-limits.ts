@@ -16,6 +16,7 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const USER_PROCESS_BATCH_SIZE = 10;
 const USER_SCAN_PAGE_SIZE = 500;
@@ -32,6 +33,7 @@ const SERVICES_TO_DEAUTHORIZE: ReadonlyArray<ServiceNames> = [
  */
 export const enforceSubscriptionLimits = onSchedule({
     region: 'europe-west2',
+    secrets: FUNCTION_SECRET_BINDINGS.enforceSubscriptionLimits,
     schedule: 'every 24 hours',
     memory: '1GiB',
     timeoutSeconds: 540,

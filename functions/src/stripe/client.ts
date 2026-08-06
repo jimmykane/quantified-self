@@ -11,9 +11,8 @@
  * - **Dynamic Import**: Uses `await import('stripe')` to defer loading until needed
  *
  * ## Environment Variables
- * The client looks for the Stripe API key in the following order:
- * 1. `STRIPE_API_KEY` - Primary environment variable (set via `.env` or Secret Manager)
- * 2. `STRIPE_SECRET_KEY` - Fallback for alternative naming conventions
+ * The client reads `STRIPE_SECRET_KEY`, which deployed Functions receive only
+ * when their declaration binds the matching Secret Manager parameter.
  *
  * ## Usage
  * ```typescript
@@ -53,7 +52,7 @@ let stripeInstance: Stripe | undefined;
  * issues when the types package is out of sync with the desired version.
  *
  * @returns A Promise resolving to the initialized Stripe client
- * @throws Error if neither `STRIPE_API_KEY` nor `STRIPE_SECRET_KEY` environment variable is set
+ * @throws Error if `STRIPE_SECRET_KEY` is not available to the invocation
  *
  * @example
  * ```typescript
@@ -63,21 +62,9 @@ let stripeInstance: Stripe | undefined;
  */
 export async function getStripe() {
     if (!stripeInstance) {
-        // Use the secret from environment or parameter store
-        // Note: The extension usually stores it in specific secrets, but for shared usage
-        // we might rely on process.env.STRIPE_API_KEY if available, or fetch it.
-        // The standard extension installation puts the key in `firestore-stripe-payments-STRIPE_API_KEY`
-        // which helper libraries might not auto-pick up unless we use the `stripe` package directly.
-        // Let's try to load it from the defineSecret or fallback to standard env vars.
-
-        // For simplicity and matching typical setups, we assume STRIPE_API_KEY is available 
-        // via `process.env` if set in .env files or via Secret Manager if bound.
-        // If your project uses the extension, the key is strictly inside the secret.
-
-        // We will try to instantiate with the key.
-        const stripeKey = process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY;
+        const stripeKey = process.env.STRIPE_SECRET_KEY;
         if (!stripeKey) {
-            throw new Error('Stripe API Key is missing. Check environment variables.');
+            throw new Error('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
         }
 
         const { default: Stripe } = await import('stripe');

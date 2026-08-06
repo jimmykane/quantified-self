@@ -32,14 +32,13 @@ describe('Stripe Client', () => {
     });
 
     it('should throw an error if no API key is provided', async () => {
-        delete process.env.STRIPE_API_KEY;
         delete process.env.STRIPE_SECRET_KEY;
 
-        await expect(getStripe()).rejects.toThrow('Stripe API Key is missing. Check environment variables.');
+        await expect(getStripe()).rejects.toThrow('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
     });
 
-    it('should initialize Stripe with STRIPE_API_KEY', async () => {
-        process.env.STRIPE_API_KEY = 'sk_test_123';
+    it('should initialize Stripe with the bound STRIPE_SECRET_KEY', async () => {
+        process.env.STRIPE_SECRET_KEY = 'sk_test_123';
 
         const stripe = await getStripe();
         expect(stripe).toBeDefined();
@@ -49,16 +48,8 @@ describe('Stripe Client', () => {
         expect((stripe as any).config).toEqual({ apiVersion: '2024-04-10' });
     });
 
-    it('should initialize Stripe with STRIPE_SECRET_KEY fallback', async () => {
-        delete process.env.STRIPE_API_KEY;
-        process.env.STRIPE_SECRET_KEY = 'sk_test_fallback';
-
-        const stripe = await getStripe();
-        expect((stripe as any).apiKey).toBe('sk_test_fallback');
-    });
-
     it('should return a singleton instance', async () => {
-        process.env.STRIPE_API_KEY = 'sk_test_singleton';
+        process.env.STRIPE_SECRET_KEY = 'sk_test_singleton';
 
         const instance1 = await getStripe();
         const instance2 = await getStripe();
@@ -75,7 +66,7 @@ describe('Stripe Client', () => {
         expect(instance).toBe(mockInstance);
 
         // Should ignore env vars regarding missing key if instance is already set
-        delete process.env.STRIPE_API_KEY;
+        delete process.env.STRIPE_SECRET_KEY;
         await expect(getStripe()).resolves.toBe(mockInstance);
     });
 });

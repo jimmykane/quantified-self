@@ -7,6 +7,7 @@ import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processSleepSyncQueueItem } from '../sleep/queue';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface SleepSyncTaskPayload {
     queueItemId: string;
@@ -14,6 +15,7 @@ interface SleepSyncTaskPayload {
 
 export const processSleepSyncTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    secrets: FUNCTION_SECRET_BINDINGS.processSleepSyncTask,
     memory: '1GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',

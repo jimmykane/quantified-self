@@ -33,6 +33,7 @@ import {
   type ReplayedAssistantTurn,
 } from './conversation-store';
 import { assistantRuntime, type AssistantRuntimeResult } from './runtime';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface AssistantCallableContext {
   auth?: {
@@ -557,6 +558,7 @@ export async function runResetAssistantConversation(
 
 export const ASSISTANT_CALLABLE_OPTIONS = {
   region: FUNCTIONS_MANIFEST.assistantChat.region,
+  secrets: FUNCTION_SECRET_BINDINGS.assistantChat,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
   memory: '2GiB' as const,
