@@ -328,6 +328,21 @@ describe('Assistant runtime', () => {
       });
 
       expect(result.toolNames).toEqual(example.toolWorkflow);
+      const discoveryTools = new Set([
+        'list_activity_types',
+        'list_measurement_types',
+        'list_metrics',
+        'list_training_metrics',
+        'list_sleep_vitals',
+      ]);
+      const substantiveToolNames = example.toolWorkflow.filter(
+        toolName => !discoveryTools.has(toolName),
+      );
+      expect(result.evidence.map(item => item.toolName)).toEqual(
+        substantiveToolNames.length > 0
+          ? substantiveToolNames
+          : example.toolWorkflow,
+      );
       expect(callTool.mock.calls.map(([toolName]) => toolName))
         .toEqual(example.toolWorkflow);
       expect(close).toHaveBeenCalledOnce();

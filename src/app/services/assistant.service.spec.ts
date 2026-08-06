@@ -168,6 +168,7 @@ describe('AssistantService', () => {
                 { label: 'End Time', value: '2026-08-04T06:15:00.000Z' },
                 { label: 'Duration Seconds', value: '9h 18m' },
                 { label: 'Recovery Time Seconds', value: '3600' },
+                { label: 'Activity Group', value: 'unspecified_group' },
               ],
               links: [],
             }],
@@ -196,6 +197,49 @@ describe('AssistantService', () => {
       },
       { label: 'Duration', value: '9h 18m' },
       { label: 'Recovery Time Seconds', value: '3600' },
+      { label: 'Activity Group', value: 'Unspecified' },
+    ]);
+  });
+
+  it('removes saved catalog discovery cards when substantive evidence exists', async () => {
+    const conversation = {
+      ...response.conversation,
+      messages: response.conversation.messages.map(message => (
+        message.role === 'assistant'
+          ? {
+            ...message,
+            evidence: [
+              {
+                toolName: 'list_activity_types',
+                title: 'List activity types',
+                summary: '130 activity types returned.',
+                facts: [
+                  { label: 'Activity Group', value: 'unspecified_group' },
+                ],
+                links: [],
+              },
+              {
+                toolName: 'rank_activities_by_metric',
+                title: 'Rank activities by metric',
+                summary: '10 ranked activities returned.',
+                facts: [
+                  { label: 'Value', value: '10.41 m' },
+                ],
+                links: [],
+              },
+            ],
+          }
+          : message
+      )),
+    };
+    functionsService.call.mockResolvedValue({
+      data: { conversation, pendingRequestId: null },
+    });
+
+    const loaded = await service.getConversation();
+
+    expect(loaded?.messages[1].evidence).toEqual([
+      expect.objectContaining({ toolName: 'rank_activities_by_metric' }),
     ]);
   });
 

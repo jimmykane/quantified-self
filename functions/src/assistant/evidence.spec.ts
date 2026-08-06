@@ -1,5 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildAssistantEvidence } from './evidence';
+import {
+  buildAssistantEvidence,
+  buildAssistantEvidenceList,
+} from './evidence';
+import type { AssistantMcpToolDefinition } from './mcp-session';
+
+const evidenceTools = [
+  {
+    name: 'list_activity_types',
+    title: 'List activity types',
+    description: 'List canonical activity types.',
+    inputSchema: { type: 'object' },
+  },
+  {
+    name: 'rank_activities_by_metric',
+    title: 'Rank activities by metric',
+    description: 'Rank matching activities.',
+    inputSchema: { type: 'object' },
+  },
+] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
   afterEach(() => {
@@ -108,6 +127,61 @@ describe('Assistant evidence', () => {
       { label: 'Scanned Activity Count', value: '795' },
     ]);
     expect(JSON.stringify(evidence)).not.toContain('opaque-ranking-ref');
+  });
+
+  it('omits catalog discovery when a substantive result grounds the answer', () => {
+    const evidence = buildAssistantEvidenceList(evidenceTools, [
+      {
+        name: 'list_activity_types',
+        structuredContent: {
+          activityTypeCount: 130,
+          activityTypes: [{
+            activityType: 'Adventure Racing',
+            activityGroup: 'unspecified_group',
+            indoor: false,
+          }],
+        },
+      },
+      {
+        name: 'rank_activities_by_metric',
+        structuredContent: {
+          activities: [{
+            rank: 1,
+            startTime: '2026-07-31T07:50:22.000Z',
+            activityType: 'Downhill Cycling',
+            value: 10.41,
+          }],
+          metric: { unit: 'm' },
+          scannedActivityCount: 795,
+        },
+      },
+    ]);
+
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0]).toMatchObject({
+      toolName: 'rank_activities_by_metric',
+      facts: expect.arrayContaining([
+        { label: 'Value', value: '10.41 m' },
+      ]),
+    });
+  });
+
+  it('retains standalone discovery evidence with human-readable enum values', () => {
+    const [evidence] = buildAssistantEvidenceList(evidenceTools, [{
+      name: 'list_activity_types',
+      structuredContent: {
+        activityTypeCount: 130,
+        activityTypes: [{
+          activityType: 'Adventure Racing',
+          activityGroup: 'unspecified_group',
+          indoor: false,
+        }],
+      },
+    }]);
+
+    expect(evidence.facts).toEqual(expect.arrayContaining([
+      { label: 'Activity Group', value: 'Unspecified' },
+    ]));
   });
 
   it('shows route-summary evidence without leaking references or geography', () => {

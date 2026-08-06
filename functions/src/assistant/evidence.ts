@@ -3,7 +3,10 @@ import type {
   AssistantEvidenceFact,
   AssistantEvidenceLink,
 } from '../../../shared/assistant.types';
-import { normalizeAssistantEvidenceFact } from '../../../shared/assistant-evidence-display';
+import {
+  isAssistantDiscoveryEvidenceToolName,
+  normalizeAssistantEvidenceFact,
+} from '../../../shared/assistant-evidence-display';
 import type {
   AssistantMcpToolDefinition,
   AssistantMcpToolName,
@@ -316,7 +319,15 @@ export function buildAssistantEvidenceList(
   invocations: readonly AssistantToolInvocation[],
 ): AssistantEvidence[] {
   const toolsByName = new Map(tools.map(tool => [tool.name, tool]));
-  return invocations.slice(-6).flatMap((invocation) => {
+  const hasSubstantiveResult = invocations.some(
+    invocation => !isAssistantDiscoveryEvidenceToolName(invocation.name),
+  );
+  const visibleInvocations = hasSubstantiveResult
+    ? invocations.filter(
+      invocation => !isAssistantDiscoveryEvidenceToolName(invocation.name),
+    )
+    : invocations;
+  return visibleInvocations.slice(-6).flatMap((invocation) => {
     const tool = toolsByName.get(invocation.name);
     return tool
       ? [buildAssistantEvidence(tool, invocation.structuredContent)]

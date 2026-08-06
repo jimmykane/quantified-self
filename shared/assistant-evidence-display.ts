@@ -2,9 +2,41 @@ import type {
   AssistantConversation,
   AssistantEvidenceFact,
 } from './assistant.types';
+import {
+  getActivityTypeGroupLabel,
+  resolveActivityTypeGroup,
+} from './activity-type-group.metadata';
 
 const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const DISPLAY_DURATION_PATTERN = /^(?:\d+h(?: \d+m)?|\d+m|\d+s)$/;
+const ENUM_LIKE_VALUE_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)+$/;
+const ENUM_LIKE_LABEL_PATTERN = /(?:^|\s)(?:type|group|status|state|kind|category|mode|order|unit system)$/i;
+const ASSISTANT_DISCOVERY_EVIDENCE_TOOL_NAMES = new Set([
+  'list_activity_types',
+  'list_measurement_types',
+  'list_metrics',
+  'list_training_metrics',
+  'list_sleep_vitals',
+]);
+
+export function isAssistantDiscoveryEvidenceToolName(toolName: string): boolean {
+  return ASSISTANT_DISCOVERY_EVIDENCE_TOOL_NAMES.has(toolName);
+}
+
+function formatEnumLikeValue(label: string, value: string): string {
+  if (/(?:^|\s)activity group$/i.test(label)) {
+    const activityGroup = resolveActivityTypeGroup(value);
+    if (activityGroup) {
+      return getActivityTypeGroupLabel(activityGroup);
+    }
+  }
+  if (!ENUM_LIKE_LABEL_PATTERN.test(label)
+    || !ENUM_LIKE_VALUE_PATTERN.test(value)) {
+    return value;
+  }
+  const humanized = value.replace(/_/g, ' ');
+  return `${humanized[0].toUpperCase()}${humanized.slice(1)}`;
+}
 
 function formatTimestampForDisplay(value: string): string {
   if (!ISO_TIMESTAMP_PATTERN.test(value)) {
@@ -37,7 +69,10 @@ export function normalizeAssistantEvidenceFact(
   } else if (/\s+Seconds$/i.test(label) && DISPLAY_DURATION_PATTERN.test(fact.value)) {
     label = label.replace(/\s+Seconds$/i, '');
   }
-  return label === fact.label ? fact : { ...fact, label };
+  const value = formatEnumLikeValue(label, fact.value);
+  return label === fact.label && value === fact.value
+    ? fact
+    : { ...fact, label, value };
 }
 
 export function normalizeAssistantConversationEvidence(
@@ -48,19 +83,30 @@ export function normalizeAssistantConversationEvidence(
     if (!message.evidence?.length) {
       return message;
     }
-    const evidence = message.evidence.map((item) => {
+    const hasSubstantiveEvidence = message.evidence.some(
+      item => !isAssistantDiscoveryEvidenceToolName(item.toolName),
+    );
+    const visibleEvidence = hasSubstantiveEvidence
+      ? message.evidence.filter(
+        item => !isAssistantDiscoveryEvidenceToolName(item.toolName),
+      )
+      : message.evidence;
+    const evidence = visibleEvidence.map((item) => {
       const facts = item.facts.map((fact) => {
         const normalized = normalizeAssistantEvidenceFactForDisplay(fact);
-        changed ||= normalized !== fact;
         return normalized;
       });
       return facts.some((fact, index) => fact !== item.facts[index])
         ? { ...item, facts }
         : item;
     });
-    return evidence.some((item, index) => item !== message.evidence?.[index])
-      ? { ...message, evidence }
-      : message;
+    const messageChanged = visibleEvidence.length !== message.evidence.length
+      || evidence.some((item, index) => item !== visibleEvidence[index]);
+    if (!messageChanged) {
+      return message;
+    }
+    changed = true;
+    return { ...message, evidence };
   });
   return changed ? { ...conversation, messages } : conversation;
 }
