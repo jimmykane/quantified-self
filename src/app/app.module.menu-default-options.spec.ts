@@ -55,6 +55,7 @@ describe('AppModule menu defaults', () => {
     expect(styles).toContain('--mat-dialog-container-color: var(--qs-overlay-surface);');
     expect(styles).toContain('--mat-menu-container-color: var(--qs-overlay-surface);');
     expect(styles).toContain('--mat-select-panel-background-color: var(--qs-overlay-surface);');
+    expect(styles).toMatch(/@media \(max-width: 959\.98px\)\s*\{[^}]*\.cdk-overlay-pane\.qs-bottom-sheet-container \.mat-bottom-sheet-container\s*\{[^}]*width:\s*calc\(100vw - 16px\);/s);
     expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*Documented Material overlay exception/s);
     expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*border:\s*1px solid var\(--qs-glass-panel-border\);/s);
     expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*box-shadow:\s*var\(--qs-glass-panel-shadow\) !important;/s);

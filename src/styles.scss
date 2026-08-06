@@ -687,10 +687,12 @@ mat-table {
   }
 }
 
-@media (max-width: 599.98px) {
+/* Keep mobile-sized sheets wide through Material's medium breakpoint. */
+@media (max-width: 959.98px) {
   .cdk-overlay-pane.qs-bottom-sheet-container .mat-bottom-sheet-container {
-    min-width: 100%;
-    width: 100%;
+    min-width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
   }
 }
 
