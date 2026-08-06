@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ActivityInterface,
   DataCadence,
@@ -76,9 +76,34 @@ describe('PerformanceCurveDataService', () => {
     expect(service.getAvailability([])).toEqual({
       hasPowerCurve: false,
       hasDurability: false,
+      durabilityOutputUnavailable: false,
       hasCadencePower: false,
       hasAny: false,
     });
+  });
+
+  it('keeps a missing-output durability state out of the chart tabs', () => {
+    const activity = createActivity({ id: 'a1', type: 'Cycling' });
+    const durabilitySpy = vi.spyOn(service, 'buildDurabilitySeriesWithMarkerSource').mockReturnValue({
+      renderSeries: [],
+      markerSourceSeries: [],
+      activitySummaries: [{
+        activity,
+        activityId: 'a1',
+        label: 'Cycling',
+        summary: { eligibility: { reason: 'missing-output' } } as any,
+        eligibilityLabel: 'Missing supported output data',
+      }],
+    });
+
+    const availability = service.getAvailability([activity]);
+
+    expect(availability).toMatchObject({
+      hasDurability: false,
+      durabilityOutputUnavailable: true,
+      hasAny: true,
+    });
+    durabilitySpy.mockRestore();
   });
 
   it('should return power-curve availability when power points exist', () => {

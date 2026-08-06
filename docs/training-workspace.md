@@ -1262,6 +1262,9 @@ viewports continue to show the summary by default. The event summary translates 
 implementation labels such as `decoupling`, `paired coverage`, or `qualifying data`: it states whether a steady-effort
 comparison is available, the total duration and matched output/heart-rate duration after warm-up and cool-down exclusion,
 then narrates the second-half change in output relative to heart rate, output retained, and average heart-rate change.
+When every supported selected activity has only `missing-output` evidence and no timeline can render, Event Details hides
+the Durability tab and shows a compact data-requirements notice instead. Other ineligible states keep the tab because their
+per-activity eligibility explanation remains useful.
 For cycling, a positive stored decoupling becomes “Power relative to heart rate was <n>% lower in the second half.” The
 event durability ECharts grid reserves explicit left and bottom insets for numeric axis labels; do not rely only on
 automatic outer-bound containment, which can crop the leading digit on narrow plot hosts.

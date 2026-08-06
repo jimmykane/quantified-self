@@ -117,6 +117,10 @@ export class EventCardComponent implements OnInit {
     this.performanceCurveAvailability().hasDurability
   );
 
+  public durabilityOutputUnavailableFlag = computed(() =>
+    this.performanceCurveAvailability().durabilityOutputUnavailable
+  );
+
   public hasCadencePowerFlag = computed(() =>
     this.performanceCurveAvailability().hasCadencePower
   );

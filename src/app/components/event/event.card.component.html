@@ -25,6 +25,7 @@
       <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
         [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
         [hasPowerCurve]="hasPowerCurveFlag()" [hasDurability]="hasDurabilityFlag()"
+        [durabilityOutputUnavailable]="durabilityOutputUnavailableFlag()"
         [hasCadencePower]="hasCadencePowerFlag()">
       </app-event-performance-charts>
     </div>

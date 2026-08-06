@@ -190,6 +190,7 @@ describe('EventCardComponent', () => {
             getAvailability: vi.fn().mockReturnValue({
                 hasPowerCurve: false,
                 hasDurability: false,
+                durabilityOutputUnavailable: false,
                 hasCadencePower: false,
                 hasAny: false,
             }),
@@ -565,6 +566,23 @@ describe('EventCardComponent', () => {
 
     it('should compute hasDurabilityFlag as false when no durability data exists', () => {
         expect(component.hasDurabilityFlag()).toBe(false);
+    });
+
+    it('keeps the performance area available to explain missing durability output', () => {
+        mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+            hasPowerCurve: false,
+            hasDurability: false,
+            durabilityOutputUnavailable: true,
+            hasCadencePower: false,
+            hasAny: true,
+        });
+        component.selectedActivitiesInstant.set([{ ...mockActivity }]);
+        fixture.detectChanges();
+
+        expect(component.hasDurabilityFlag()).toBe(false);
+        expect(component.durabilityOutputUnavailableFlag()).toBe(true);
+        expect(component.hasPerformanceChartsFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
     });
 
     it('should compute hasCadencePowerFlag as false when no cadence-power data exists', () => {
