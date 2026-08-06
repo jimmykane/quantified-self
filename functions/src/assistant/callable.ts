@@ -35,7 +35,12 @@ import {
   type BegunAssistantTurn,
   type ReplayedAssistantTurn,
 } from './conversation-store';
-import { assistantRuntime, type AssistantRuntimeResult } from './runtime';
+import {
+  assistantRuntime,
+  getAssistantRuntimeErrorReason,
+  getAssistantRuntimeErrorToolName,
+  type AssistantRuntimeResult,
+} from './runtime';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface AssistantCallableContext {
@@ -310,11 +315,28 @@ function isRetryableGroundedAnswerError(error: unknown): boolean {
     return false;
   }
   if (!(error instanceof HttpsError)) {
+    const genkitStatus = getGenkitErrorStatus(error);
+    if (genkitStatus) {
+      return genkitStatus === 'UNAVAILABLE'
+        || genkitStatus === 'DEADLINE_EXCEEDED'
+        || genkitStatus === 'RESOURCE_EXHAUSTED'
+        || genkitStatus === 'ABORTED'
+        || genkitStatus === 'INTERNAL';
+    }
     return true;
   }
   return error.code === 'unavailable'
     || error.code === 'deadline-exceeded'
     || error.code === 'internal';
+}
+
+function getGenkitErrorStatus(error: unknown): string | null {
+  if (!(error instanceof Error)
+    || error.name !== 'GenkitError'
+    || typeof (error as Error & { status?: unknown }).status !== 'string') {
+    return null;
+  }
+  return (error as Error & { status: string }).status;
 }
 
 async function answerWithGroundedRetry(
@@ -338,6 +360,9 @@ async function answerWithGroundedRetry(
       logger.warn('[Assistant] Retrying grounded response generation.', {
         attempt: attempt + 1,
         errorName: error instanceof Error ? error.name : 'unknown',
+        errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
+        errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
+        toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
       });
     }
   }
@@ -536,6 +561,9 @@ export async function runAssistantChat(
     if (mappedError.code === 'unavailable') {
       logger.error('[Assistant] Grounded response generation failed.', {
         errorName: error instanceof Error ? error.name : 'unknown',
+        errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
+        errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
+        toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
       });
     }
     throw mappedError;

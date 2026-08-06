@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
-import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
+import {
+  ASSISTANT_PROMPT_EXAMPLES,
+  findAssistantPromptExample,
+} from '../../../shared/assistant.prompts';
 import { assistantGenkit } from './model';
 import {
   createAssistantRuntime,
@@ -10,6 +13,8 @@ import {
   ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
   ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS,
   generateAssistantModelAnswer,
+  getAssistantRuntimeErrorReason,
+  getAssistantRuntimeErrorToolName,
   type AssistantRuntimeTool,
 } from './runtime';
 import type {
@@ -70,10 +75,10 @@ describe('Assistant runtime', () => {
       'Do not repeat opaque references',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
-      'use the required structured response envelope',
+      'return exactly one JSON object',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
-      'plain text, not Markdown or nested JSON, in its answer field',
+      'plain text, not Markdown or nested JSON, in the answer field',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).not.toContain('Do not output JSON');
     expect(ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS).toContain(
@@ -89,7 +94,10 @@ describe('Assistant runtime', () => {
       'MTB jump coordinates',
     );
     expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
-      'authoritative activity ranking first',
+      'first use list_activity_types',
+    );
+    expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
+      'rank Maximum Jump Distance',
     );
     expect(ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS).toContain(
       'list_activity_jumps',
@@ -131,6 +139,21 @@ describe('Assistant runtime', () => {
     expect(example?.routingHint).toContain('unless the user explicitly asks for subrecord details');
   });
 
+  it('routes natural MTB record-jump wording through the authoritative workflow', () => {
+    expect(findAssistantPromptExample(
+      'Where on the map was my biggest MTB jump?',
+    )?.id).toBe('biggest-mtb-jump');
+    expect(findAssistantPromptExample(
+      'Which route had my longest mountain bike jump?',
+    )?.toolWorkflow).toEqual([
+      'list_activity_types',
+      'rank_activities_by_metric',
+    ]);
+    expect(findAssistantPromptExample(
+      'Show my latest road cycling activity.',
+    )).toBeNull();
+  });
+
   it('requires an initial tool request and then permits a final model answer', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',
@@ -163,10 +186,11 @@ describe('Assistant runtime', () => {
         ],
       } as never)
       .mockResolvedValueOnce({
-        output: {
+        toolRequests: [],
+        text: JSON.stringify({
           answer: 'Your readiness is 72 today.',
           visuals: { chart: null, map: null },
-        },
+        }),
       } as never);
 
     await expect(generateAssistantModelAnswer({
@@ -194,11 +218,11 @@ describe('Assistant runtime', () => {
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       system: expect.stringContaining(
-        'plain text, not Markdown or nested JSON, in its answer field',
+        'plain text, not Markdown or nested JSON, in the answer field',
       ),
       toolChoice: 'auto',
+      returnToolRequests: true,
       config: { maxOutputTokens: 2_048 },
-      output: { schema: expect.anything() },
       use: [expect.any(Function)],
       messages: expect.arrayContaining([{
         role: 'tool',
@@ -211,6 +235,7 @@ describe('Assistant runtime', () => {
         }],
       }]),
     }));
+    expect(generate.mock.calls[1][0]).not.toHaveProperty('output');
     const secondRequest = generate.mock.calls[1][0] as { messages: Array<{ role: string }> };
     expect(secondRequest.messages.some(message => message.role === 'system')).toBe(false);
     const firstTools = (generate.mock.calls[0][0] as { tools: unknown[] }).tools;
@@ -223,6 +248,209 @@ describe('Assistant runtime', () => {
       maxDelayMs: 2_000,
       backoffFactor: 2,
     });
+  });
+
+  it('rejects non-JSON final model text without enabling provider JSON mode', async () => {
+    const tool: AssistantRuntimeTool = {
+      name: 'get_daily_report',
+      description: 'Return today facts.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({ readiness: { score: 72 } }),
+    };
+    const generate = vi.spyOn(assistantGenkit, 'generate')
+      .mockResolvedValueOnce({
+        toolRequests: [{
+          toolRequest: {
+            name: 'get_daily_report',
+            input: {},
+            ref: 'tool-1',
+          },
+        }],
+        messages: [{
+          role: 'model',
+          content: [{
+            toolRequest: {
+              name: 'get_daily_report',
+              input: {},
+              ref: 'tool-1',
+            },
+          }],
+        }],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [],
+        text: '{"answer":"Your readiness is 72 today."}\nextra text',
+      } as never);
+
+    await expect(generateAssistantModelAnswer({
+      currentTime: '2026-08-03T12:00:00.000Z',
+      timeZone: 'Europe/Helsinki',
+      prompt: 'How am I today?',
+      history: [],
+      mcpInstructions: 'Use current data.',
+      tools: [tool],
+      publishedExample: null,
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+    })).rejects.toThrow('The Assistant model returned invalid JSON.');
+
+    expect(generate.mock.calls[1][0]).not.toHaveProperty('output');
+  });
+
+  it('classifies only safe, server-owned runtime failures for diagnostics', () => {
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The Assistant model returned invalid JSON.'),
+    )).toBe('invalid_model_json');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The Assistant did not complete the published weight workflow.'),
+    )).toBe('published_workflow_incomplete');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The query_measurements tool could not complete the request.'),
+    )).toBe('mcp_tool_failed');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('Provider included user-controlled text here.'),
+    )).toBeNull();
+  });
+
+  it('classifies MCP execution failures without exposing their message', async () => {
+    const { session } = createSession();
+    session.callTool = vi.fn().mockRejectedValue(
+      new Error('User-controlled provider message'),
+    );
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: vi.fn(async ({ tools }) => {
+        await tools[0].execute({ timeZone: 'UTC' });
+        return {
+          answer: 'This is not reached.',
+          visualRequest: { chart: null, map: null },
+        };
+      }),
+    });
+
+    let caught: unknown;
+    try {
+      await runtime.answer({
+        uid: 'user-1',
+        appBaseUrl: 'https://quantified-self.io',
+        prompt: 'How am I today?',
+        timeZone: 'UTC',
+        history: [],
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(getAssistantRuntimeErrorReason(caught)).toBe('mcp_tool_failed');
+    expect(getAssistantRuntimeErrorToolName(caught)).toBe('get_daily_report');
+    expect(caught).not.toHaveProperty('message', 'User-controlled provider message');
+  });
+
+  it('preserves signed model tool requests across sequential continuations', async () => {
+    const firstTool: AssistantRuntimeTool = {
+      name: 'list_measurement_types',
+      description: 'List measurement types.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({ measurementTypes: ['weight'] }),
+    };
+    const secondTool: AssistantRuntimeTool = {
+      name: 'query_measurements',
+      description: 'Query measurements.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({ measurements: [{ value: 75 }] }),
+    };
+    const firstSignedRequest = {
+      role: 'model' as const,
+      content: [{
+        toolRequest: {
+          name: 'list_measurement_types',
+          input: {},
+          ref: 'tool-1',
+        },
+        metadata: { thoughtSignature: 'signed-first-request' },
+      }],
+    };
+    const secondSignedRequest = {
+      role: 'model' as const,
+      content: [{
+        toolRequest: {
+          name: 'query_measurements',
+          input: { type: 'weight' },
+          ref: 'tool-2',
+        },
+        metadata: { thoughtSignature: 'signed-second-request' },
+      }],
+    };
+    const generate = vi.spyOn(assistantGenkit, 'generate')
+      .mockResolvedValueOnce({
+        toolRequests: [{
+          toolRequest: {
+            name: 'list_measurement_types',
+            input: {},
+            ref: 'tool-1',
+          },
+        }],
+        messages: [
+          { role: 'user', content: [{ text: 'question' }] },
+          firstSignedRequest,
+        ],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [{
+          toolRequest: {
+            name: 'query_measurements',
+            input: { type: 'weight' },
+            ref: 'tool-2',
+          },
+        }],
+        messages: [
+          { role: 'user', content: [{ text: 'question' }] },
+          firstSignedRequest,
+          {
+            role: 'tool',
+            content: [{
+              toolResponse: {
+                name: 'list_measurement_types',
+                ref: 'tool-1',
+                output: { measurementTypes: ['weight'] },
+              },
+            }],
+          },
+          secondSignedRequest,
+        ],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [],
+        text: JSON.stringify({
+          answer: 'Your latest recorded weight is 75 kg.',
+          visuals: { chart: null, map: null },
+        }),
+      } as never);
+
+    await expect(generateAssistantModelAnswer({
+      currentTime: '2026-08-03T12:00:00.000Z',
+      timeZone: 'Europe/Helsinki',
+      prompt: 'What is my latest weight?',
+      history: [],
+      mcpInstructions: 'Use current data.',
+      tools: [firstTool, secondTool],
+      publishedExample: null,
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toEqual({
+      answer: 'Your latest recorded weight is 75 kg.',
+      visualRequest: { chart: null, map: null },
+    });
+
+    const secondMessages = (generate.mock.calls[1][0] as {
+      messages: Array<{ role: string; content: unknown[] }>;
+    }).messages;
+    expect(secondMessages).toContainEqual(firstSignedRequest);
+    const thirdMessages = (generate.mock.calls[2][0] as {
+      messages: Array<{ role: string; content: unknown[] }>;
+    }).messages;
+    expect(thirdMessages).toContainEqual(firstSignedRequest);
+    expect(thirdMessages).toContainEqual(secondSignedRequest);
+    expect(generate.mock.calls[1][0]).not.toHaveProperty('maxTurns');
+    expect(generate.mock.calls[2][0]).not.toHaveProperty('maxTurns');
   });
 
   it('does not mark a request billable when MCP session setup fails', async () => {
@@ -701,6 +929,113 @@ describe('Assistant runtime', () => {
 
     expect(callTool).toHaveBeenCalledWith('get_daily_report', {
       timeZone: 'America/New_York',
+    });
+  });
+
+  it('normalizes model-friendly measurement aliases and local dates at the MCP boundary', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        measurementType: { id: 'body_weight' },
+        points: [],
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use body measurements.',
+      tools: [{
+        name: 'query_measurements',
+        title: 'Query body measurement history',
+        description: 'Query recorded body measurements.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            measurementType: { type: 'string' },
+            start: { type: 'string' },
+            end: { type: 'string' },
+            timeZone: { type: 'string' },
+          },
+          required: ['measurementType', 'start', 'end', 'timeZone'],
+        },
+      }],
+      callTool,
+      close,
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({
+          measurementType: 'weight',
+          start: '2026-07-08',
+          end: '2026-08-06',
+        });
+        return 'No recorded weights were found in that range.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show my weight trend.',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(callTool).toHaveBeenCalledWith('query_measurements', {
+      measurementType: 'body_weight',
+      start: '2026-07-07T21:00:00.000Z',
+      end: '2026-08-06T20:59:59.999Z',
+      timeZone: 'Europe/Helsinki',
+    });
+  });
+
+  it('normalizes model-friendly Sports Lib ranking metric and group names', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        metric: { type: 'Maximum Jump Distance' },
+        activities: [],
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use authoritative activity ranking.',
+      tools: [{
+        name: 'rank_activities_by_metric',
+        title: 'Rank activities by metric',
+        description: 'Rank all matching activities.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            metric: { type: 'string' },
+            activityGroup: { type: 'string' },
+          },
+          required: ['metric'],
+        },
+      }],
+      callTool,
+      close,
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({
+          metric: 'maximum jump distance',
+          activityGroup: 'Mountain Biking',
+        });
+        return 'No ranked MTB jump was found.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Rank mountain biking jump distances.',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(callTool).toHaveBeenCalledWith('rank_activities_by_metric', {
+      metric: 'Maximum Jump Distance',
+      activityGroup: 'mountain_biking_group',
     });
   });
 

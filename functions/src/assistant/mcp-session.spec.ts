@@ -164,6 +164,23 @@ describe('Assistant MCP session', () => {
       expect(session.tools.find(
         tool => tool.name === 'search_activities_near_location',
       )?.description).toContain('Mapbox');
+      const nearbySchema = session.tools.find(
+        tool => tool.name === 'search_activities_near_location',
+      )?.inputSchema;
+      expect(nearbySchema).not.toHaveProperty('oneOf');
+      expect(nearbySchema?.properties).toMatchObject({
+        location: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            latitudeDegrees: { type: 'number' },
+            longitudeDegrees: { type: 'number' },
+          },
+        },
+      });
+      expect(
+        (nearbySchema?.properties as Record<string, unknown>)?.location,
+      ).not.toHaveProperty('anyOf');
       const chartSchema = session.tools
         .find(tool => tool.name === 'get_activity_chart_data')?.inputSchema;
       expect(chartSchema?.properties).toHaveProperty('includeLocation');

@@ -124,6 +124,17 @@ selection, and 2,048 output tokens for each continuation response per user turn.
 at 4,000 characters. Tool failures, schema failures, budget failures, and ungrounded responses fail the request rather
 than producing an unsupported answer.
 
+The final tool-capable Gemini continuation returns a strict JSON text envelope that the server parses and validates
+against the private answer-and-visual schema. The Google GenAI adapter's provider-constrained JSON mode is deliberately
+not enabled for this phase because it is incompatible with the still-available MCP tools. Surrounding text, Markdown
+fences, unknown fields, invalid source IDs, and unsupported visual selections fail closed.
+
+Tool continuations are driven explicitly so the complete provider-returned model messages—including Gemini 3 thought
+signatures—are replayed unchanged before the validated tool responses. At the Assistant boundary, model-friendly
+measurement names, Sports Lib metric and activity-group labels, and local date-only measurement ranges are normalized
+before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
+accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
+
 Gemini `UNAVAILABLE` responses are treated as transient provider failures. Each model phase retries them at most twice
 with bounded exponential backoff. If an otherwise recoverable grounded runtime attempt still fails—including a model
 formatting or transient read failure—the callable rebuilds the in-process MCP session and makes one final complete

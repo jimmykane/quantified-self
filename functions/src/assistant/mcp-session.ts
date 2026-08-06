@@ -91,12 +91,52 @@ function projectAssistantInputSchema(
   inputSchema: AssistantMcpToolDefinition['inputSchema'],
   activityLocationEnabled: boolean,
 ): AssistantMcpToolDefinition['inputSchema'] {
-  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
-    return inputSchema;
+  let projectedSchema = inputSchema;
+  if (name === 'search_activities_near_location') {
+    const properties = inputSchema.properties;
+    if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+      const schemaWithoutExclusiveRangeMetadata = { ...inputSchema };
+      delete schemaWithoutExclusiveRangeMetadata.oneOf;
+      projectedSchema = {
+        ...schemaWithoutExclusiveRangeMetadata,
+        properties: {
+          ...(properties as Record<string, unknown>),
+          // Gemini function declarations accept a narrower JSON Schema subset
+          // than MCP. Keep the authoritative MCP union at execution time, but
+          // present the model with one object whose description states the
+          // same mutually exclusive location modes.
+          location: {
+            type: 'object',
+            description: 'Provide either query alone, or both latitudeDegrees and longitudeDegrees. Do not combine place text with coordinates.',
+            properties: {
+              query: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 200,
+              },
+              latitudeDegrees: {
+                type: 'number',
+                minimum: -90,
+                maximum: 90,
+              },
+              longitudeDegrees: {
+                type: 'number',
+                minimum: -180,
+                maximum: 180,
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+      };
+    }
   }
-  const properties = inputSchema.properties;
+  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
+    return projectedSchema;
+  }
+  const properties = projectedSchema.properties;
   if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
-    return inputSchema;
+    return projectedSchema;
   }
   const coordinateFreeProperties = {
     ...(properties as Record<string, unknown>),
@@ -104,11 +144,11 @@ function projectAssistantInputSchema(
   delete coordinateFreeProperties.includeLocation;
   delete coordinateFreeProperties.maxLocationPoints;
   return {
-    ...inputSchema,
+    ...projectedSchema,
     properties: coordinateFreeProperties,
-    ...(Array.isArray(inputSchema.required)
+    ...(Array.isArray(projectedSchema.required)
       ? {
-          required: inputSchema.required.filter(field => (
+          required: projectedSchema.required.filter(field => (
             field !== 'includeLocation' && field !== 'maxLocationPoints'
           )),
         }

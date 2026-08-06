@@ -71,11 +71,23 @@ function normalizeExamplePrompt(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function isMtbRecordJumpPrompt(value: string): boolean {
+  return /\b(?:biggest|longest|maximum|max|record)\b/u.test(value)
+    && /\b(?:mtb|mountain bike|mountain biking)\b/u.test(value)
+    && /\bjumps?\b/u.test(value);
+}
+
 export function findAssistantPromptExample(
   prompt: string,
 ): AssistantPublishedPromptExample | null {
   const normalizedPrompt = normalizeExamplePrompt(prompt);
-  return ASSISTANT_PROMPT_EXAMPLES.find(
+  const exactExample = ASSISTANT_PROMPT_EXAMPLES.find(
     example => normalizeExamplePrompt(example.prompt) === normalizedPrompt,
-  ) || null;
+  );
+  if (exactExample) {
+    return exactExample;
+  }
+  return isMtbRecordJumpPrompt(normalizedPrompt)
+    ? ASSISTANT_PROMPT_EXAMPLES.find(example => example.id === 'biggest-mtb-jump') || null
+    : null;
 }

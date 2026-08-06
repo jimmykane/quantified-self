@@ -23,6 +23,10 @@ import {
   type AssistantMcpToolName,
 } from './mcp-session';
 import {
+  applyAssistantToolDefaults,
+  assistantToolUsesDefaultTimeZone,
+} from './tool-input';
+import {
   createAssistantVisualSource,
   resolveAssistantVisuals,
   type AssistantVisualRequest,
@@ -41,14 +45,6 @@ export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   maxDelayMs: 2_000,
   backoffFactor: 2,
 } satisfies NonNullable<Parameters<typeof retry>[0]>;
-const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
-  'query_measurements',
-  'query_metric',
-  'query_metrics',
-  'get_sleep_trend',
-  'get_today_readiness',
-  'get_daily_report',
-]);
 
 const AssistantModelOutputSchema = z.object({
   answer: z.string().trim().min(1).max(ASSISTANT_MAX_RESPONSE_CHARS),
@@ -67,6 +63,25 @@ const AssistantModelOutputSchema = z.object({
 export interface AssistantModelGenerationResult {
   answer: string;
   visualRequest: AssistantVisualRequest;
+}
+
+class AssistantRuntimeStageError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly cause: unknown,
+    readonly toolName: AssistantMcpToolName | null = null,
+  ) {
+    super(`The Assistant ${reason} stage failed.`);
+    this.name = 'AssistantRuntimeStageError';
+  }
+}
+
+export function getAssistantRuntimeErrorToolName(
+  error: unknown,
+): AssistantMcpToolName | null {
+  return error instanceof AssistantRuntimeStageError
+    ? error.toolName
+    : null;
 }
 
 export interface AssistantRuntimeTool {
@@ -130,7 +145,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
   'Some tool results include a server-owned assistantVisualization descriptor. When a chart or map would materially clarify the answer, request at most one chart and one map using only a supplied sourceId and chart series key; otherwise return null for that visual. Never invent a sourceId or series key, put a sourceId in the answer, request a map without a map descriptor, or choose a visual merely for decoration.',
-  'For the final model response, use the required structured response envelope and put only plain text, not Markdown or nested JSON, in its answer field. Populate its visuals field only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
+  'For the final model response, return exactly one JSON object and no Markdown fence or surrounding text. Use this shape: {"answer":"plain text","visuals":{"chart":null,"map":null}}. A non-null chart must contain only sourceId, seriesKeys, and chartType; a non-null map must contain only sourceId. Put only plain text, not Markdown or nested JSON, in the answer field. Populate visuals only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
   'This is fitness information, not medical advice. Recommend professional care when the user describes urgent or concerning symptoms.',
 ].join(' ');
 
@@ -146,7 +161,7 @@ export const ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS = [
   'The user explicitly enabled precise activity locations for this chat.',
   'Exact activity start/end positions, MTB jump coordinates, and nearby activity search are available.',
   'Use coordinate-bearing activity data only when it is relevant to the user\'s location, nearby-search, map, trail, or jump-location question.',
-  'For where-was-my-record-jump questions, use the authoritative activity ranking first, then inspect that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
+  'For where-was-my-record-jump questions, first use list_activity_types to discover the exact Mountain Biking activityGroup, then rank Maximum Jump Distance across that server-expanded group, then inspect only that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
   'A place-name nearby search sends only the supplied location text to Mapbox; direct-coordinate searches do not use Mapbox.',
   'For a requested activity breadcrumb or satellite map, call get_activity_chart_data with includeLocation true only after identifying the relevant activity.',
   'Saved-route bounds, route geometry, route waypoints, original files, write actions, and dashboard settings remain unavailable.',
@@ -163,22 +178,11 @@ function asToolInput(value: unknown): Record<string, unknown> {
   throw new Error('The Assistant model returned invalid tool input.');
 }
 
-function applyAssistantToolDefaults(
-  toolName: AssistantMcpToolName,
-  toolInput: Record<string, unknown>,
-  timeZone: string,
-): Record<string, unknown> {
-  return ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES.has(toolName)
-    && toolInput.timeZone === undefined
-    ? { ...toolInput, timeZone }
-    : toolInput;
-}
-
 function buildAssistantModelInputSchema(
   toolName: AssistantMcpToolName,
   inputJsonSchema: AssistantRuntimeTool['inputJsonSchema'],
 ): AssistantRuntimeTool['inputJsonSchema'] {
-  if (!ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES.has(toolName)
+  if (!assistantToolUsesDefaultTimeZone(toolName)
     || !Array.isArray(inputJsonSchema.required)
     || !inputJsonSchema.required.includes('timeZone')) {
     return inputJsonSchema;
@@ -311,6 +315,81 @@ function assertPublishedExampleWorkflowCompleted(
   }
 }
 
+function parseAssistantModelText(value: string): AssistantModelGenerationResult {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value.trim());
+  } catch {
+    throw new Error('The Assistant model returned invalid JSON.');
+  }
+  const parsed = AssistantModelOutputSchema.safeParse(decoded);
+  if (!parsed.success) {
+    throw new Error('The Assistant model returned an invalid response.');
+  }
+  return {
+    answer: parsed.data.answer,
+    visualRequest: parsed.data.visuals,
+  };
+}
+
+export function getAssistantRuntimeErrorReason(error: unknown): string | null {
+  if (error instanceof AssistantRuntimeStageError) {
+    return error.reason;
+  }
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  switch (error.message) {
+    case 'The Assistant model returned invalid tool input.':
+      return 'invalid_model_tool_input';
+    case 'The Assistant tool projection was not an object.':
+      return 'invalid_tool_projection';
+    case 'The Assistant tool projection used a reserved visual field.':
+      return 'reserved_visual_field';
+    case 'The Assistant model returned invalid JSON.':
+      return 'invalid_model_json';
+    case 'The Assistant model returned an invalid response.':
+      return 'invalid_model_response';
+    case 'The Assistant model did not select a grounding tool.':
+      return 'missing_grounding_tool';
+    case 'The Assistant model exceeded the initial tool-call budget.':
+    case 'The Assistant model exceeded the cumulative tool-call budget.':
+    case 'The Assistant model exceeded the continuation-turn budget.':
+    case 'The Assistant tool-call budget was exceeded.':
+      return 'tool_budget_exceeded';
+    case 'The Assistant model selected an unavailable tool.':
+      return 'unavailable_model_tool';
+    case 'The Assistant cumulative tool-output budget was exceeded.':
+      return 'tool_output_budget_exceeded';
+    case 'The Assistant response was not grounded in current account data.':
+      return 'ungrounded_response';
+    case 'The Assistant response included a protected tool reference.':
+      return 'protected_reference';
+    case 'The Assistant response included an internal visual source reference.':
+      return 'internal_visual_reference';
+    default:
+      if (error.message.startsWith('The Assistant did not complete the published ')) {
+        return 'published_workflow_incomplete';
+      }
+      if (error.message.startsWith('Assistant example tools are unavailable:')) {
+        return 'example_tools_unavailable';
+      }
+      if (error.message.startsWith('Assistant MCP tools are unavailable:')) {
+        return 'mcp_tools_unavailable';
+      }
+      if (error.message === 'The requested tool is not available to the Assistant.') {
+        return 'mcp_tool_unavailable';
+      }
+      if (/^The [a-z0-9_]+ tool could not complete the request\.$/u.test(error.message)) {
+        return 'mcp_tool_failed';
+      }
+      if (/^The [a-z0-9_]+ tool returned no structured result\.$/u.test(error.message)) {
+        return 'mcp_tool_missing_result';
+      }
+      return null;
+  }
+}
+
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
   const createGenkitTools = () => input.tools.map(tool => assistantGenkit.dynamicTool({
     name: tool.name,
@@ -326,7 +405,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   }));
   const publishedExampleInstructions = input.publishedExample
     ? [
-      `The current question exactly matches the published ${input.publishedExample.id} example.`,
+      `The current question matches the supported intent of the published ${input.publishedExample.id} example.`,
       `Follow its supported tool workflow: ${input.publishedExample.toolWorkflow.join(' then ')}.`,
       input.publishedExample.routingHint,
     ].join(' ')
@@ -363,47 +442,61 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     throw new Error('The Assistant model exceeded the initial tool-call budget.');
   }
   const toolsByName = new Map(input.tools.map(tool => [tool.name, tool]));
-  const toolResponses = [];
-  for (const request of initialResponse.toolRequests) {
-    const tool = toolsByName.get(request.toolRequest.name as AssistantMcpToolName);
-    if (!tool) {
-      throw new Error('The Assistant model selected an unavailable tool.');
+  let response = initialResponse;
+  let cumulativeToolCallCount = 0;
+  for (
+    let continuationTurn = 0;
+    continuationTurn < ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL;
+    continuationTurn += 1
+  ) {
+    if (response.toolRequests.length === 0) {
+      return parseAssistantModelText(response.text);
     }
-    const output = await tool.execute(asToolInput(request.toolRequest.input));
-    toolResponses.push({
-      toolResponse: {
-        name: request.toolRequest.name,
-        ...(request.toolRequest.ref ? { ref: request.toolRequest.ref } : {}),
-        output,
+    cumulativeToolCallCount += response.toolRequests.length;
+    if (cumulativeToolCallCount > ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
+      throw new Error('The Assistant model exceeded the cumulative tool-call budget.');
+    }
+    const toolResponses = [];
+    for (const request of response.toolRequests) {
+      const tool = toolsByName.get(request.toolRequest.name as AssistantMcpToolName);
+      if (!tool) {
+        throw new Error('The Assistant model selected an unavailable tool.');
+      }
+      const output = await tool.execute(asToolInput(request.toolRequest.input));
+      toolResponses.push({
+        toolResponse: {
+          name: request.toolRequest.name,
+          ...(request.toolRequest.ref ? { ref: request.toolRequest.ref } : {}),
+          output,
+        },
+      });
+    }
+    await input.onBillableAttempt();
+    response = await assistantGenkit.generate({
+      system,
+      messages: [
+        // Gemini 3 signs model tool-request parts. Preserve the provider-backed
+        // messages verbatim so every sequential or parallel tool continuation
+        // carries those signatures back to the model.
+        ...response.messages.filter(message => message.role !== 'system'),
+        { role: 'tool' as const, content: toolResponses },
+      ],
+      // Dynamic Genkit actions are attached to a request-local registry.
+      // Create fresh actions for each request instead of registering a prior
+      // request's actions a second time.
+      tools: createGenkitTools(),
+      toolChoice: 'auto',
+      returnToolRequests: true,
+      config: {
+        maxOutputTokens: ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS,
       },
+      use: [retry(ASSISTANT_MODEL_RETRY_OPTIONS)],
     });
   }
-  const { output } = await assistantGenkit.generate({
-    system,
-    messages: [
-      ...initialResponse.messages.filter(message => message.role !== 'system'),
-      { role: 'tool' as const, content: toolResponses },
-    ],
-    // Dynamic Genkit actions are attached to a request-local registry. Reusing
-    // the first-call action objects would attach them twice and emit false
-    // "already registered" errors for every grounded Assistant response.
-    tools: createGenkitTools(),
-    toolChoice: 'auto',
-    maxTurns: ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL,
-    config: {
-      maxOutputTokens: ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS,
-    },
-    output: { schema: AssistantModelOutputSchema },
-    use: [retry(ASSISTANT_MODEL_RETRY_OPTIONS)],
-  });
-  const parsed = AssistantModelOutputSchema.safeParse(output);
-  if (!parsed.success) {
-    throw new Error('The Assistant model returned an invalid response.');
+  if (response.toolRequests.length > 0) {
+    throw new Error('The Assistant model exceeded the continuation-turn budget.');
   }
-  return {
-    answer: parsed.data.answer,
-    visualRequest: parsed.data.visuals,
-  };
+  return parseAssistantModelText(response.text);
 };
 
 const defaultDependencies: AssistantRuntimeDependencies = {
@@ -480,7 +573,12 @@ export function createAssistantRuntime(
               input.timeZone,
             );
             await input.onBillableAttempt?.();
-            const result = await session.callTool(tool.name, resolvedToolInput);
+            let result;
+            try {
+              result = await session.callTool(tool.name, resolvedToolInput);
+            } catch (error) {
+              throw new AssistantRuntimeStageError('mcp_tool_failed', error, tool.name);
+            }
             cumulativeToolOutputBytes += Buffer.byteLength(
               JSON.stringify(result.structuredContent),
               'utf8',
