@@ -611,6 +611,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
+    // ECharts retains axis-tooltip series indices until the next refresh. Clear
+    // that state before replacing series so its delayed tooltip refresh cannot
+    // look up a series that no longer exists.
+    this.hideTooltipBeforeStructuralRefresh(chart);
+
     if (!this.panel) {
       this.seriesByID.clear();
       this.rangeStats = [];
@@ -1504,6 +1509,18 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       chart.dispatchAction({ type: 'hideTip' });
     } catch (error) {
       this.logger.warn('[EventCardChartPanelComponent] Failed to hide tooltip for offscreen panel', error);
+    }
+  }
+
+  private hideTooltipBeforeStructuralRefresh(chart: EChartsType): void {
+    this.activeMarkerTooltipKey = null;
+    try {
+      chart.dispatchAction({
+        type: 'hideTip',
+        escapeConnect: true,
+      });
+    } catch (error) {
+      this.logger.warn('[EventCardChartPanelComponent] Failed to hide tooltip before chart refresh', error);
     }
   }
 
