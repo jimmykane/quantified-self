@@ -43,6 +43,7 @@ For the frontend and the repository's CI-compatible workflow, install:
 - Git.
 - Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
 - npm, which is included with Node.js.
+- [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
 - A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
 
 For Firebase emulators and Rules tests, also install:
@@ -148,6 +149,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
+| Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
 | MCP pre-push checks | `npm run hooks:mcp:pre-push` | Runs the registered-contract gate and focused MCP output/server tests |
 | Local plugin tooling | `npm run plugin:tools` | Installs the isolated pinned Codex CLI dependency |
 | Local plugin setup | `npm run plugin:setup` | Explicitly builds, validates, registers, and installs the configured plugin |

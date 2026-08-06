@@ -1,6 +1,12 @@
 pre-commit:
   parallel: true
   commands:
+    credential-file-names:
+      run: npm run credentials:check-staged-files
+      fail_text: "Credential-like files cannot be committed. Keep local values out of Git and use the documented local templates."
+    gitleaks:
+      run: gitleaks git --pre-commit --staged --redact --no-banner
+      fail_text: "Potential credential detected. Rotate real credentials; use .gitleaksignore only for a reviewed false positive."
     lint-functions:
       glob: "functions/**/*.{ts,js}"
       run: functions/node_modules/.bin/eslint --config functions/eslint.config.js {staged_files} --fix && git add -- {staged_files}

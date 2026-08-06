@@ -16,6 +16,12 @@ Quantified Self deploys backend credentials through Google Cloud Secret Manager 
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 
+## Source-control guardrails
+
+Install the repository hooks with `npm run hooks:install` and install [Gitleaks](https://github.com/gitleaks/gitleaks) locally. Every commit rejects credential-like file names (dotenv, local secret, Runtime Config, service-account, Firebase Admin SDK, and private-key files) and scans staged content for hard-coded credentials. The only allowed local-secret template is the value-free `functions/.secret.local.example`.
+
+CI scans the commits introduced by each push or pull request with a pinned Gitleaks version. It does not re-scan the entire historical repository on every change. A detector finding must be treated as a possible credential exposure: rotate a real value first; add a reviewed fingerprint to `.gitleaksignore` only for a documented false positive.
+
 ## Local emulators and scripts
 
 Copy `functions/.secret.local.example` to `functions/.secret.local` and add development-only values. The destination is ignored by Git and excluded from Function deployment archives.
