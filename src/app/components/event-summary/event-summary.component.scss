@@ -13,6 +13,10 @@
   align-items: stretch !important;
 }
 
+app-summary-primary-info {
+  --summary-primary-info-padding-top: 0;
+}
+
 .privacy-mini-wrapper {
   background: var(--mat-sys-surface);
   border-radius: 50%;

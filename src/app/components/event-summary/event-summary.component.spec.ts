@@ -100,9 +100,14 @@ describe('EventSummaryComponent', () => {
             resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
             'utf8'
         );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.scss'),
+            'utf8'
+        );
 
         expect(template).toContain('class="event-summary-content"');
         expect(template).not.toContain('qs-glass-card-panel');
+        expect(styles).toContain('--summary-primary-info-padding-top: 0;');
     });
 
     it('renders event tags read-only for public viewers', () => {
