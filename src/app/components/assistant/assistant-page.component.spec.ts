@@ -180,14 +180,11 @@ describe('AssistantPageComponent', () => {
       .toBeTruthy();
   });
 
-  it('centers the loading indicator inside the send action', () => {
-    component.sending.set(true);
-    fixture.detectChanges();
-
+  it('centers both send states inside the action', () => {
     const sendButton = fixture.nativeElement.querySelector(
       '.composer-submit',
     ) as HTMLButtonElement;
-    const content = sendButton.querySelector(
+    let content = sendButton.querySelector(
       '.composer-submit-content',
     ) as HTMLElement;
     const styles = readFileSync(resolve(
@@ -195,13 +192,22 @@ describe('AssistantPageComponent', () => {
       'src/app/components/assistant/assistant-page.component.scss',
     ), 'utf8');
 
+    expect(sendButton.querySelector('mat-icon')?.textContent).toContain('arrow_upward');
+    expect(content).toBeTruthy();
+
+    component.sending.set(true);
+    fixture.detectChanges();
+    content = sendButton.querySelector('.composer-submit-content') as HTMLElement;
+
     expect(sendButton.querySelector('mat-spinner')).toBeTruthy();
     expect(content).toBeTruthy();
-    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*display:\s*inline-flex;/s);
-    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*align-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*justify-content:\s*center;/s);
-    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*width:\s*24px;/s);
-    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*height:\s*24px;/s);
+    expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
+    expect(styles).toMatch(/\.composer-submit\s*{[^}]*place-items:\s*center;/s);
+    expect(styles).toMatch(/\.composer-submit\s*{[^}]*width:\s*40px;/s);
+    expect(styles).toMatch(/\.composer-submit\s*{[^}]*height:\s*40px;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*position:\s*absolute;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
   });
 
   it('keeps loading state inside the full chat region above the composer', () => {

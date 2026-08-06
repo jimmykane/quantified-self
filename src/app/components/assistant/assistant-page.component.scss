@@ -265,17 +265,33 @@ h1 {
 }
 
 .composer-submit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  line-height: 0;
   color: var(--mat-sys-primary);
   background: var(--mat-sys-primary-container);
 }
 
 .composer-submit-content {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.composer-submit-content > mat-icon {
+  display: block;
   width: 24px;
   height: 24px;
-  vertical-align: middle;
+  margin: 0;
+  font-size: 24px;
+  line-height: 24px;
 }
 
 .composer-footer {
