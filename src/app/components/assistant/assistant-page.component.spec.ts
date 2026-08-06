@@ -108,7 +108,9 @@ describe('AssistantPageComponent', () => {
 
     expect(text).toContain('Assistant');
     expect(text).toContain('Examples & data access');
-    expect(fixture.nativeElement.querySelector('mat-chip')?.textContent.trim()).toBe('Beta');
+    expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.assistant-header p')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-welcome')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-trust-row')).toBeNull();
     expect(fixture.nativeElement.querySelector('.external-mcp-card')).toBeNull();
@@ -118,9 +120,10 @@ describe('AssistantPageComponent', () => {
     const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
     expect(header.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(chat.contains(explore)).toBe(true);
+    expect(header.contains(explore)).toBe(true);
+    expect(chat.contains(explore)).toBe(false);
     expect(chat.contains(composer)).toBe(true);
-    expect(explore.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
@@ -142,11 +145,13 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
     const chat = fixture.nativeElement.querySelector('.assistant-chat') as HTMLElement;
     const conversation = fixture.nativeElement.querySelector('.conversation') as HTMLElement;
+    const dock = fixture.nativeElement.querySelector('.assistant-composer-dock') as HTMLElement;
     const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
 
     expect(chat.contains(conversation)).toBe(true);
-    expect(chat.contains(composer)).toBe(true);
-    expect(conversation.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(chat.contains(dock)).toBe(true);
+    expect(dock.contains(composer)).toBe(true);
+    expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
   });
 
@@ -239,16 +244,19 @@ describe('AssistantPageComponent', () => {
     expect(scrollStartSpy).toHaveBeenCalledOnce();
   });
 
-  it('keeps a send error inside the composer after the input', () => {
+  it('keeps a send error in the dock above the composer', () => {
     component.errorMessage.set('Something went wrong while preparing the answer.');
     fixture.detectChanges();
-    const composer = fixture.nativeElement.querySelector('.composer') as HTMLFormElement;
+    const dock = fixture.nativeElement.querySelector('.assistant-composer-dock') as HTMLElement;
+    const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
     const error = fixture.nativeElement.querySelector('.assistant-error') as HTMLElement;
+    const dismiss = error.querySelector('button') as HTMLButtonElement;
 
     expect(error).toBeTruthy();
-    expect(error.parentElement?.classList).toContain('composer-shell');
-    expect(composer.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(error.parentElement).toBe(dock);
+    expect(error.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+    expect(dismiss.getAttribute('aria-label')).toBe('Dismiss Assistant error');
   });
 
   it('sends a starter prompt and renders the grounded response evidence', async () => {
@@ -264,7 +272,7 @@ describe('AssistantPageComponent', () => {
     expect(text).toContain('Your readiness is 72 today.');
     expect(text).toContain('1 grounded result');
     expect(text).toContain('Get daily report');
-    expect(text).toContain('19 of 20 Assistant requests remaining');
+    expect(text).toContain('19 of 20 remaining');
   });
 
   it('starts a new server-owned conversation', async () => {
@@ -331,7 +339,7 @@ describe('AssistantPageComponent', () => {
     await component.sendMessage();
 
     expect(component.quota()).toBeNull();
-    expect(component.quotaText()).toContain('Allowance status unavailable');
+    expect(component.quotaText()).toBe('Allowance checked when you send');
     expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
   });
 

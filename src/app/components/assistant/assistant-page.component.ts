@@ -93,10 +93,10 @@ export class AssistantPageComponent implements OnInit {
     const status = this.quota();
     if (!status) {
       return this.loadingConversation()
-        ? 'Assistant allowance is loading'
-        : 'Allowance status unavailable; it will be checked when you send';
+        ? 'Loading allowance'
+        : 'Allowance checked when you send';
     }
-    return `${status.remainingCount} of ${status.limit} Assistant requests remaining`;
+    return `${status.remainingCount} of ${status.limit} remaining`;
   });
 
   async ngOnInit(): Promise<void> {

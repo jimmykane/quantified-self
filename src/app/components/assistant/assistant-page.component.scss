@@ -1,63 +1,49 @@
 :host {
-  display: flex;
-  min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
+  display: block;
+  height: calc(100vh - var(--qs-effective-top-offset, 0px));
+  overflow: hidden;
 }
 
 @supports (height: 100dvh) {
   :host {
-    min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+    height: calc(100dvh - var(--qs-effective-top-offset, 0px));
   }
 }
 
 .assistant-page {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
+  width: 100%;
   max-width: 920px;
-  margin: 0 auto;
-  padding: 28px 24px calc(40px + env(safe-area-inset-bottom));
-  box-sizing: border-box;
+  height: 100%;
   min-height: 0;
+  margin: 0 auto;
+  padding: 18px 24px calc(16px + env(safe-area-inset-bottom));
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-.assistant-header,
-.assistant-heading,
-.assistant-heading-icon,
-.assistant-title-row,
+.assistant-header {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 0 4px 8px;
+}
+
+.assistant-header-row,
 .assistant-header-actions,
+.assistant-explore-trigger,
 .message-role,
 .thinking-content,
 .evidence-panel summary,
-.assistant-explore-trigger button,
 .evidence-links a {
   display: flex;
   align-items: center;
 }
 
-.assistant-header {
+.assistant-header-row {
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
-}
-
-.assistant-heading {
-  align-items: flex-start;
-  gap: 14px;
-  min-width: 0;
-}
-
-.assistant-heading-icon {
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  color: var(--mat-sys-primary);
-  background: var(--mat-sys-primary-container);
-}
-
-.assistant-title-row {
-  gap: 10px;
 }
 
 h1,
@@ -66,89 +52,17 @@ p {
 }
 
 h1 {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: clamp(2rem, 6vw, 2.75rem);
+  font: var(--mat-sys-headline-medium);
   font-weight: 600;
-  line-height: 1;
-}
-
-.assistant-heading p {
-  margin-top: 6px;
-  color: var(--mat-sys-on-surface-variant);
-  line-height: 1.45;
-}
-
-.assistant-beta-chip {
-  min-height: 24px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
 }
 
 .assistant-header-actions {
-  gap: 8px;
+  gap: 4px;
   flex: 0 0 auto;
-}
-
-.assistant-loading {
-  display: grid;
-  flex: 1 1 auto;
-  align-content: center;
-  justify-items: center;
-  gap: 12px;
-  min-height: 0;
-  padding: 20px;
-}
-
-.assistant-chat {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-
-.conversation {
-  display: grid;
-  flex: 1 1 auto;
-  align-content: start;
-  gap: 20px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 4px 20px;
-}
-
-.composer-shell {
-  --qs-glass-panel-radius: 22px;
-  flex: 0 0 auto;
-  margin-top: auto;
-  padding: 14px;
-}
-
-.composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.composer-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 8px 3px 0;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.69rem;
-  line-height: 1.35;
 }
 
 .assistant-explore-trigger {
-  display: flex;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-
-.assistant-explore-trigger button {
+  justify-self: start;
   gap: 7px;
   color: var(--mat-sys-on-surface-variant);
 }
@@ -160,8 +74,44 @@ h1 {
   font-size: 18px;
 }
 
+.assistant-chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-loading {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 20px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.conversation {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  padding: 8px 4px 12px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.conversation::before {
+  content: '';
+  margin-top: auto;
+}
+
 .message {
-  width: min(86%, 720px);
+  width: min(78%, 700px);
   padding: 16px 18px;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 20px;
@@ -169,14 +119,14 @@ h1 {
 }
 
 .message-user {
-  justify-self: end;
+  align-self: flex-end;
   border-bottom-right-radius: 7px;
   color: var(--mat-sys-on-primary-container);
   background: var(--mat-sys-primary-container);
 }
 
 .message-assistant {
-  justify-self: start;
+  align-self: flex-start;
   border-bottom-left-radius: 7px;
   background: var(--mat-sys-surface-container-low);
 }
@@ -267,26 +217,80 @@ h1 {
   gap: 7px;
 }
 
+.assistant-composer-dock {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.composer-shell {
+  --qs-glass-panel-radius: 22px;
+  padding: 12px;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.composer mat-form-field {
+  width: 100%;
+}
+
+.composer-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 5px 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
 .assistant-error {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  margin: 8px 0 4px;
-  padding: 11px 13px;
+  gap: 8px;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--mat-sys-error) 32%, transparent);
   border-radius: 14px;
   color: var(--mat-sys-on-error-container);
   background: var(--mat-sys-error-container);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.assistant-error > mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
 }
 
 @media (max-width: 720px) {
   .assistant-page {
-    padding: 20px 14px calc(28px + env(safe-area-inset-bottom));
+    padding: 12px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .assistant-header {
+    padding-inline: 2px;
+  }
+
+  h1 {
+    font: var(--mat-sys-headline-small);
+    font-weight: 600;
+  }
+
+  .conversation {
+    gap: 14px;
+    padding: 6px 2px 8px;
   }
 
   .message {
-    width: 94%;
+    width: 88%;
     padding: 14px;
   }
 
@@ -298,21 +302,13 @@ h1 {
     grid-template-columns: minmax(0, 1fr) 48px;
     gap: 7px;
   }
-
-  .composer-footer {
-    display: grid;
-    gap: 3px;
-  }
-}
-
-@media (max-width: 480px) {
-  .assistant-beta-chip,
-  .assistant-heading p {
-    display: none;
-  }
 }
 
 @media (max-width: 430px) {
+  .composer-footer span:last-child {
+    display: none;
+  }
+
   .evidence-item dl {
     grid-template-columns: 1fr;
   }
