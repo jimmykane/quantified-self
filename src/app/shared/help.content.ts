@@ -448,7 +448,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Charts and maps
 
-- When a visual materially helps, the Assistant can add one interactive chart and one satellite map to an answer. The newest map loads inline; use **Show map** for an older result or **Expand** for a larger view.
+- When a visual materially helps, the Assistant can add one interactive chart and one satellite map to an answer. Maps wait for you to choose **Show map** or **Expand**; opening or refreshing a conversation never loads map tiles automatically.
 - Gemini chooses only from safe chart-series or map sources advertised by the current validated tool result. Quantified Self constructs all plotted values, coordinates, labels, and renderer settings deterministically; Gemini cannot author arbitrary chart configuration or move map points.
 - Charts reuse existing measurement, sleep, Training, aggregate metric, ranking, jump, and workout-chart results. Missing readings remain gaps instead of becoming zero.
 - Maps use only activity coordinates already allowed by the current **Precise activity locations** chat. Saved-route bounds, geometry, and waypoints are still unavailable.
@@ -464,7 +464,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Retention and control
 
-- Quantified Self stores one active conversation per user, with at most the latest six completed turns. Text, compact evidence, and any bounded chart or map payload use the same retention period.
+- Quantified Self stores one active conversation per user, with at most the latest six completed turns. If bounded charts, maps, and grounded details make that transcript too large, the oldest whole turn is removed first so the newest completed answer can still be saved. Text, compact evidence, and any bounded chart or map payload use the same retention period.
 - The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
 - **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations to **off**.

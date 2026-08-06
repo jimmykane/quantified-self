@@ -618,7 +618,7 @@ export function createAssistantConversationStore(
             'The Assistant conversation changed before this response could be saved.',
           );
         }
-        const messages = [
+        let messages = [
           ...conversation.messages,
           userMessage,
           assistantMessage,
@@ -637,16 +637,29 @@ export function createAssistantConversationStore(
             completedAtMs: nowMs,
           },
         ].slice(-ASSISTANT_MAX_REPLAY_RECEIPTS);
-        const updatedConversation: StoredAssistantConversation = {
-          ...conversation,
-          messages,
-          replayReceipts,
-          updatedAt: Timestamp.fromDate(now),
-          expireAt: Timestamp.fromMillis(nowMs + ASSISTANT_CONVERSATION_RETENTION_MS),
-          pendingTurn: null,
-        };
-        const publicConversation = toPublicConversation(updatedConversation);
-        if (!validateAssistantConversation(publicConversation).ok) {
+        let updatedConversation: StoredAssistantConversation;
+        let publicConversation: AssistantConversation;
+        let validation: ReturnType<typeof validateAssistantConversation>;
+        do {
+          updatedConversation = {
+            ...conversation,
+            messages,
+            replayReceipts,
+            updatedAt: Timestamp.fromDate(now),
+            expireAt: Timestamp.fromMillis(nowMs + ASSISTANT_CONVERSATION_RETENTION_MS),
+            pendingTurn: null,
+          };
+          publicConversation = toPublicConversation(updatedConversation);
+          validation = validateAssistantConversation(publicConversation);
+          if (!validation.ok
+            && validation.reason === 'conversation_too_large'
+            && messages.length > 2) {
+            messages = messages.slice(2);
+            continue;
+          }
+          break;
+        } while (messages.length >= 2);
+        if (!validation.ok) {
           throw new AssistantConversationStoreError(
             'turn_lost',
             'The Assistant response could not be stored safely.',

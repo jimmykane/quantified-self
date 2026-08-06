@@ -14,6 +14,7 @@ import {
   type AssistantMapVisual,
   type AssistantVisual,
 } from '../../../shared/assistant.types';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
 import {
   TRAINING_LOAD_DAY_MS,
   buildTrainingLoadPoints,
@@ -264,17 +265,56 @@ export function downsampleAssistantChartPoints(
   if (limit === 2) {
     return [points[0], points[points.length - 1]];
   }
-  const bucketCount = Math.max(1, Math.floor((limit - 2) / 2));
+  const interiorBudget = limit - 2;
+  const gapIndexes: number[] = [];
+  for (let index = 0; index < points.length;) {
+    if (points[index].y !== null) {
+      index += 1;
+      continue;
+    }
+    const runStart = index;
+    while (index + 1 < points.length && points[index + 1].y === null) {
+      index += 1;
+    }
+    const runEnd = index;
+    if (runStart > 0 && runEnd < points.length - 1) {
+      gapIndexes.push(Math.floor((runStart + runEnd) / 2));
+    }
+    index += 1;
+  }
+  const retainedGapIndexes = gapIndexes.length <= interiorBudget
+    ? gapIndexes
+    : Array.from({ length: interiorBudget }, (_, index) => gapIndexes[
+        interiorBudget === 1
+          ? Math.floor((gapIndexes.length - 1) / 2)
+          : Math.round(index * (gapIndexes.length - 1) / (interiorBudget - 1))
+      ]);
+  const selectedIndexes = new Set<number>([
+    0,
+    points.length - 1,
+    ...retainedGapIndexes,
+  ]);
+  const extremaBudget = interiorBudget - retainedGapIndexes.length;
+  if (extremaBudget <= 0) {
+    return [...selectedIndexes]
+      .sort((left, right) => left - right)
+      .map(index => points[index]);
+  }
+
   const interior = points.slice(1, -1);
+  const bucketCount = Math.max(1, Math.floor(extremaBudget / 2));
   const bucketSize = interior.length / bucketCount;
-  const selected: Array<{ point: AssistantChartPoint; index: number }> = [];
+  const extremaIndexes: number[] = [];
   for (let bucket = 0; bucket < bucketCount; bucket += 1) {
     const start = Math.floor(bucket * bucketSize);
     const end = Math.min(interior.length, Math.floor((bucket + 1) * bucketSize));
     const entries = interior.slice(start, Math.max(start + 1, end));
-    let minimumIndex = 0;
-    let maximumIndex = 0;
-    for (let index = 1; index < entries.length; index += 1) {
+    let minimumIndex = entries.findIndex(point => point.y !== null);
+    let maximumIndex = minimumIndex;
+    if (minimumIndex < 0) {
+      continue;
+    }
+    for (let index = minimumIndex + 1; index < entries.length; index += 1) {
       const current = entries[index].y;
       const minimum = entries[minimumIndex].y;
       const maximum = entries[maximumIndex].y;
@@ -288,16 +328,15 @@ export function downsampleAssistantChartPoints(
     const indices = minimumIndex === maximumIndex
       ? [minimumIndex]
       : [minimumIndex, maximumIndex].sort((left, right) => left - right);
-    indices.forEach(index => selected.push({
-      point: entries[index],
-      index: start + index,
-    }));
+    indices.forEach(index => extremaIndexes.push(start + index + 1));
   }
-  const unique = [...new Map(selected.map(entry => [entry.index, entry])).values()]
-    .sort((left, right) => left.index - right.index)
-    .slice(0, limit - 2)
-    .map(entry => entry.point);
-  return [points[0], ...unique, points[points.length - 1]];
+  extremaIndexes
+    .filter(index => !selectedIndexes.has(index))
+    .slice(0, extremaBudget)
+    .forEach(index => selectedIndexes.add(index));
+  return [...selectedIndexes]
+    .sort((left, right) => left - right)
+    .map(index => points[index]);
 }
 
 function timeSeries(
@@ -408,12 +447,23 @@ function buildMetricSeries(
     metricLabel,
     MAX_LABEL_CHARS,
   );
+  const categoryType = aggregation.categoryType;
+  if (categoryType !== ChartDataCategoryTypes.DateType
+    && categoryType !== ChartDataCategoryTypes.ActivityType) {
+    return null;
+  }
   const points: AssistantChartPoint[] = asRecords(aggregation.buckets).flatMap((bucket) => {
-    const timestamp = isoTimestamp(bucket.time);
-    const category = typeof bucket.bucketKey === 'string'
-      ? boundedText(bucket.bucketKey, 'Period', MAX_LABEL_CHARS)
-      : typeof bucket.bucketKey === 'number'
-        ? bucket.bucketKey
+    const timestamp = categoryType === ChartDataCategoryTypes.DateType
+      ? isoTimestamp(bucket.time ?? (
+          typeof bucket.bucketKey === 'number' ? bucket.bucketKey : null
+        ))
+      : null;
+    const category = categoryType === ChartDataCategoryTypes.ActivityType
+      ? typeof bucket.bucketKey === 'string'
+        ? boundedText(bucket.bucketKey, 'Period', MAX_LABEL_CHARS)
+        : typeof bucket.bucketKey === 'number'
+          ? bucket.bucketKey
+          : null
       : null;
     const value = finiteNumber(bucket.aggregateValue);
     return value === null || (timestamp === null && category === null)
@@ -428,23 +478,34 @@ function buildMetricSeries(
   } : null;
 }
 
+function metricChartAxisType(
+  result: Record<string, unknown>,
+): AssistantChartVisual['xAxis']['type'] | null {
+  const aggregation = isRecord(result.aggregation) ? result.aggregation : {};
+  if (aggregation.categoryType === ChartDataCategoryTypes.DateType) {
+    return 'time';
+  }
+  return aggregation.categoryType === ChartDataCategoryTypes.ActivityType
+    ? 'category'
+    : null;
+}
+
 function buildMetricChart(
   output: Record<string, unknown>,
   timeZone: string,
 ): AssistantVisualChartCandidate | null {
+  const axisType = metricChartAxisType(output);
   const result = buildMetricSeries(output, 0);
-  if (!result) {
+  if (!result || !axisType) {
     return null;
   }
-  const firstX = result.points[0]?.x;
-  const isTimeAxis = typeof firstX === 'string' && firstX.endsWith('Z');
   return {
     title: `${result.label} trend`.slice(0, MAX_TITLE_CHARS),
     xAxis: {
-      type: isTimeAxis ? 'time' : 'category',
+      type: axisType,
       label: 'Period',
       unit: null,
-      timeZone: isTimeAxis ? resolveTimeZone(timeZone) : null,
+      timeZone: axisType === 'time' ? resolveTimeZone(timeZone) : null,
     },
     defaultChartType: 'line',
     series: [result],
@@ -455,23 +516,26 @@ function buildMultiMetricChart(
   output: Record<string, unknown>,
   timeZone: string,
 ): AssistantVisualChartCandidate | null {
-  const series = asRecords(output.results)
+  const results = asRecords(output.results);
+  const axisTypes = results.map(metricChartAxisType);
+  const axisType = axisTypes[0] ?? null;
+  if (!axisType || axisTypes.some(candidate => candidate !== axisType)) {
+    return null;
+  }
+  const series = results
     .map(buildMetricSeries)
     .filter((value): value is AssistantChartSeries & { key: string } => value !== null)
     .slice(0, ASSISTANT_MAX_CHART_SERIES);
   if (!series.length) {
     return null;
   }
-  const allTimes = series.every(candidate => candidate.points.every(point => (
-    typeof point.x === 'string' && point.x.endsWith('Z')
-  )));
   return {
     title: 'Metric comparison',
     xAxis: {
-      type: allTimes ? 'time' : 'category',
+      type: axisType,
       label: 'Period',
       unit: null,
-      timeZone: allTimes ? resolveTimeZone(timeZone) : null,
+      timeZone: axisType === 'time' ? resolveTimeZone(timeZone) : null,
     },
     defaultChartType: 'line',
     series,

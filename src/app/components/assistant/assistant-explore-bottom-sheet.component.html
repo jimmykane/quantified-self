@@ -42,7 +42,7 @@
       <div class="assistant-location-copy">
         <h3 id="assistant-location-access">Precise activity locations</h3>
         <p>Allow activity tools used in this chat to include exact start/end and MTB jump coordinates, plus nearby activity results, for Gemini.</p>
-        <p class="assistant-location-note">Off by default. Changing this setting starts a new chat so precise locations never cross into a coordinate-free conversation. Place-name searches send only the location text to Mapbox.</p>
+        <p class="assistant-location-note">Off by default. Changing this setting starts a new chat so precise locations never cross into a coordinate-free conversation. Place-name searches send only the location text to Mapbox. Satellite tiles load only after you choose to view a map.</p>
       </div>
       <mat-slide-toggle
         [checked]="data.locationAccess === 'precise_activity'"

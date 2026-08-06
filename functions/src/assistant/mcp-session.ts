@@ -86,6 +86,36 @@ function isAssistantToolName(value: string): value is AssistantMcpToolName {
   return ASSISTANT_TOOL_NAME_SET.has(value);
 }
 
+function projectAssistantInputSchema(
+  name: AssistantMcpToolName,
+  inputSchema: AssistantMcpToolDefinition['inputSchema'],
+  activityLocationEnabled: boolean,
+): AssistantMcpToolDefinition['inputSchema'] {
+  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
+    return inputSchema;
+  }
+  const properties = inputSchema.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return inputSchema;
+  }
+  const coordinateFreeProperties = {
+    ...(properties as Record<string, unknown>),
+  };
+  delete coordinateFreeProperties.includeLocation;
+  delete coordinateFreeProperties.maxLocationPoints;
+  return {
+    ...inputSchema,
+    properties: coordinateFreeProperties,
+    ...(Array.isArray(inputSchema.required)
+      ? {
+          required: inputSchema.required.filter(field => (
+            field !== 'includeLocation' && field !== 'maxLocationPoints'
+          )),
+        }
+      : {}),
+  };
+}
+
 export async function createAssistantMcpSession(
   uid: string,
   publicBaseUrl: string,
@@ -129,7 +159,11 @@ export async function createAssistantMcpSession(
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
         description: tool.description || tool.title || tool.name,
-        inputSchema: tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],
+        inputSchema: projectAssistantInputSchema(
+          name,
+          tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],
+          activityLocationEnabled,
+        ),
         ...(tool.outputSchema
           ? { outputSchema: tool.outputSchema as AssistantMcpToolDefinition['outputSchema'] }
           : {}),

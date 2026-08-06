@@ -103,6 +103,8 @@ describe('AssistantVisualMapComponent', () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(autoResize.bind).toHaveBeenCalled());
 
+    expect(fixture.nativeElement.querySelector('.assistant-visual-map').getAttribute('role'))
+      .toBe('region');
     expect(loader.createMap).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
       style: 'mapbox://styles/mapbox/standard-satellite',
       center: [20.85, 39.66],
@@ -117,6 +119,7 @@ describe('AssistantVisualMapComponent', () => {
     expect(map.fitBounds).toHaveBeenCalledWith(expect.any(LngLatBounds), {
       padding: 50,
       animate: false,
+      maxZoom: 16,
     });
     expect(fixture.componentInstance.loading()).toBe(false);
     expect(fixture.componentInstance.loadFailed()).toBe(false);

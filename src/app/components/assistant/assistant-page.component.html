@@ -71,7 +71,7 @@
                         </span>
                       </span>
                       <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
-                        matTooltip="Expand" (click)="openVisual(visual)">
+                        matTooltip="Expand" [disabled]="visualDetailOpen()" (click)="openVisual(visual)">
                         <mat-icon>open_in_full</mat-icon>
                       </button>
                     </header>
@@ -79,11 +79,11 @@
                     @if (visual.kind === 'chart') {
                       <app-assistant-visual-chart [visual]="visual" />
                     } @else {
-                      @if (isMapActive(message, $index)) {
+                      @if (!expandedMap() && activeMapKey() === message.id + ':' + $index) {
                         <app-assistant-visual-map [visual]="visual" />
                       } @else {
                         <button mat-button class="assistant-show-map" type="button"
-                          (click)="showInlineMap(message, $index)">
+                          (click)="showInlineMap(message.id + ':' + $index)">
                           <mat-icon>map</mat-icon>
                           Show map
                         </button>

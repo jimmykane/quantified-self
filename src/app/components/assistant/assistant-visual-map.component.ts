@@ -5,7 +5,6 @@ import {
   Component,
   ElementRef,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
@@ -14,6 +13,7 @@ import {
   signal,
 } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import type { Map as MapboxMap, MapOptions } from 'mapbox-gl';
 import type {
   AssistantMapMarker,
   AssistantMapVisual,
@@ -40,73 +40,20 @@ const MARKER_PRESENTATION: Record<AssistantMapMarker['kind'], {
   nearby: { color: '#8b5cf6', icon: 'near_me' },
   search: { color: '#2196f3', icon: 'search' },
 };
+const ASSISTANT_MAP_MAX_FIT_ZOOM = 16;
 
 @Component({
   selector: 'app-assistant-visual-map',
   standalone: true,
   imports: [CommonModule, MaterialModule],
-  template: `
-    <div class="assistant-map-shell">
-      <div #mapDiv class="assistant-visual-map" role="img" [attr.aria-label]="visual.title"></div>
-      @if (loading()) {
-        <div class="assistant-map-state" aria-live="polite">
-          <mat-spinner diameter="24"></mat-spinner>
-          <span>Loading satellite map…</span>
-        </div>
-      } @else if (loadFailed()) {
-        <div class="assistant-map-state assistant-map-error" role="status">
-          <mat-icon>map</mat-icon>
-          <span>The map could not be loaded. The answer remains available.</span>
-        </div>
-      }
-    </div>
-  `,
-  styles: [`
-    :host { display: block; min-width: 0; }
-    .assistant-map-shell {
-      position: relative;
-      min-height: 220px;
-      overflow: hidden;
-      border-radius: 14px;
-      background: var(--mat-sys-surface-container);
-    }
-    .assistant-visual-map { width: 100%; height: 220px; }
-    .assistant-map-state {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-content: center;
-      justify-items: center;
-      gap: 9px;
-      padding: 20px;
-      color: var(--mat-sys-on-surface-variant);
-      background: var(--mat-sys-surface-container);
-      text-align: center;
-      font-size: 0.84rem;
-    }
-    .assistant-map-error mat-icon { color: var(--mat-sys-error); }
-    :host-context(.assistant-visual-detail) .assistant-map-shell,
-    :host-context(.assistant-visual-detail) .assistant-visual-map {
-      min-height: min(66vh, 580px);
-      height: min(66vh, 580px);
-    }
-    @media (max-width: 720px) {
-      .assistant-map-shell,
-      .assistant-visual-map { min-height: 210px; height: 210px; }
-      :host-context(.assistant-visual-detail) .assistant-map-shell,
-      :host-context(.assistant-visual-detail) .assistant-visual-map {
-        min-height: min(62vh, 500px);
-        height: min(62vh, 500px);
-      }
-    }
-  `],
+  templateUrl: './assistant-visual-map.component.html',
+  styleUrls: ['./assistant-visual-map.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input({ required: true }) visual!: AssistantMapVisual;
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef<HTMLDivElement>;
 
-  private readonly zone = inject(NgZone);
   private readonly mapboxLoader = inject(MapboxLoaderService);
   private readonly mapboxAutoResize = inject(MapboxAutoResizeService);
   private readonly mapStyleService = inject(MapStyleService);
@@ -122,7 +69,7 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
       combineTrackLayers: true,
     },
   );
-  private map: any | null = null;
+  private map: MapboxMap | null = null;
   private viewInitialized = false;
   private lifecycleVersion = 0;
   private fitHandler: (() => void) | null = null;
@@ -152,7 +99,7 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
     if (!container || !this.visual || this.map) {
       return;
     }
-    let pendingMap: any | null = null;
+    let pendingMap: MapboxMap | null = null;
     const lifecycleVersion = ++this.lifecycleVersion;
     this.loading.set(true);
     this.loadFailed.set(false);
@@ -162,7 +109,7 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
         'satellite',
         this.themeService.appTheme() || AppThemes.Normal,
       );
-      const options: Record<string, unknown> = {
+      const options: Omit<MapOptions, 'container'> = {
         style: resolvedStyle.styleUrl,
         center: firstPosition
           ? [firstPosition.longitudeDegrees, firstPosition.latitudeDegrees]
@@ -192,7 +139,10 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
       this.mapboxAutoResize.bind(map, {
         container,
         throttleMs: 150,
-        onResize: () => this.zone.run(() => this.mapManager.fitBoundsToTracks(false)),
+        onResize: () => this.mapManager.fitBoundsToTracks(
+          false,
+          ASSISTANT_MAP_MAX_FIT_ZOOM,
+        ),
       });
       map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 90, unit: 'metric' }), 'bottom-left');
@@ -212,7 +162,10 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
         if (fitted || !this.map) {
           return;
         }
-        fitted = this.mapManager.fitBoundsToTracks(false);
+        fitted = this.mapManager.fitBoundsToTracks(
+          false,
+          ASSISTANT_MAP_MAX_FIT_ZOOM,
+        );
         if (fitted) {
           this.loading.set(false);
         }

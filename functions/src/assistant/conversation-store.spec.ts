@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { AssistantMessage } from '../../../shared/assistant.types';
+import type {
+  AssistantEvidence,
+  AssistantMessage,
+  AssistantVisual,
+} from '../../../shared/assistant.types';
 import {
   ASSISTANT_MAX_REPLAY_RECEIPTS,
   AssistantConversationStoreError,
@@ -65,6 +69,44 @@ function message(
   };
 }
 
+function largeValidVisual(seed: string): AssistantVisual {
+  return {
+    kind: 'chart',
+    title: 'Large deterministic chart',
+    chartType: 'line',
+    xAxis: {
+      type: 'category',
+      label: 'Period',
+      unit: null,
+      timeZone: null,
+    },
+    series: Array.from({ length: 4 }, (_, seriesIndex) => ({
+      label: `Series ${seriesIndex}`,
+      unit: 'ms',
+      points: Array.from({ length: 72 }, (_, pointIndex) => ({
+        x: `${seed}-${seriesIndex}-${pointIndex}-${'🔥'.repeat(45)}`,
+        y: pointIndex,
+      })),
+    })),
+  };
+}
+
+function largeValidEvidence(): AssistantEvidence[] {
+  return Array.from({ length: 6 }, () => ({
+    toolName: 't'.repeat(120),
+    title: '🔥'.repeat(80),
+    summary: '🔥'.repeat(150),
+    facts: Array.from({ length: 6 }, () => ({
+      label: '🔥'.repeat(40),
+      value: '🔥'.repeat(80),
+    })),
+    links: Array.from({ length: 3 }, () => ({
+      label: '🔥'.repeat(40),
+      url: 'https://quantified-self.io/help',
+    })),
+  }));
+}
+
 function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
   expect(turn.kind).toBe('started');
   if (turn.kind !== 'started') {
@@ -109,6 +151,54 @@ describe('Assistant conversation store', () => {
     expect(conversation?.messages).toHaveLength(12);
     expect(conversation?.messages[0].text).toBe('Question 1');
     expect(conversation?.messages.at(-1)?.text).toBe('Answer 6');
+  });
+
+  it('evicts oldest completed pairs before a bounded visual transcript exceeds its byte budget', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `large-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+
+    let conversationId: string | undefined;
+    for (let index = 0; index < 6; index += 1) {
+      const requestId = `large-request-${index.toString().padStart(4, '0')}`;
+      const begun = requireStartedTurn(await store.beginTurn(
+        'user-1',
+        conversationId,
+        requestId,
+      ));
+      conversationId = begun.conversationId;
+      await store.completeTurn(
+        'user-1',
+        begun,
+        message(requestId, 'user', `Question ${index}`),
+        {
+          ...message(`large-answer-${index}`, 'assistant', `Answer ${index}`),
+          evidence: largeValidEvidence(),
+          visuals: [largeValidVisual(`${index}`)],
+        },
+      );
+    }
+
+    const conversation = await store.getActiveConversation('user-1');
+    expect(conversation?.messages.length).toBeLessThan(12);
+    expect(conversation?.messages.length).toBeGreaterThanOrEqual(2);
+    expect(conversation?.messages.at(-2)?.text).toBe('Question 5');
+    expect(conversation?.messages.at(-1)?.text).toBe('Answer 5');
+    await expect(store.findRequestState(
+      'user-1',
+      conversationId,
+      'large-request-0000',
+      createAssistantRequestFingerprint('large-request-0000', 'Question 0'),
+    )).resolves.toMatchObject({ kind: 'replayed' });
   });
 
   it('exposes the pending client request only while its turn lease is active', async () => {

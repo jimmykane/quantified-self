@@ -76,6 +76,10 @@ describe('Assistant MCP session', () => {
       const dailyReportSchema = session.tools
         .find(tool => tool.name === 'get_daily_report')?.inputSchema;
       expect(dailyReportSchema?.required).toContain('timeZone');
+      const chartSchema = session.tools
+        .find(tool => tool.name === 'get_activity_chart_data')?.inputSchema;
+      expect(chartSchema?.properties).not.toHaveProperty('includeLocation');
+      expect(chartSchema?.properties).not.toHaveProperty('maxLocationPoints');
     } finally {
       await session.close();
     }
@@ -160,6 +164,10 @@ describe('Assistant MCP session', () => {
       expect(session.tools.find(
         tool => tool.name === 'search_activities_near_location',
       )?.description).toContain('Mapbox');
+      const chartSchema = session.tools
+        .find(tool => tool.name === 'get_activity_chart_data')?.inputSchema;
+      expect(chartSchema?.properties).toHaveProperty('includeLocation');
+      expect(chartSchema?.properties).toHaveProperty('maxLocationPoints');
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
     } finally {
       await session.close();

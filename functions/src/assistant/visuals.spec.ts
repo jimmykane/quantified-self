@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
 import { buildTrainingLoadPoints } from '../../../shared/training-load';
 import { createMcpOutputSchemaRegistry } from '../mcp/tool-output-schemas';
 import {
@@ -111,6 +112,7 @@ describe('Assistant visual projection', () => {
       },
       aggregation: {
         valueType,
+        categoryType: ChartDataCategoryTypes.DateType,
         buckets: [{
           bucketKey: '2026-08-01',
           time: Date.parse('2026-08-01T00:00:00.000Z'),
@@ -141,6 +143,34 @@ describe('Assistant visual projection', () => {
         { label: 'Heart rate (Maximum)' },
       ],
     });
+  });
+
+  it('uses the authoritative aggregation category instead of guessing from labels', () => {
+    const source = createAssistantVisualSource('query_metric', {
+      metric: {
+        type: 'Duration',
+        displayType: 'Duration',
+        unit: 'seconds',
+      },
+      aggregation: {
+        valueType: 'Total',
+        categoryType: ChartDataCategoryTypes.ActivityType,
+        buckets: [{
+          bucketKey: 'Adventure Racing Z',
+          aggregateValue: 3_600,
+        }],
+      },
+    }, 'source_2', 'Europe/Helsinki');
+
+    expect(source?.chart?.xAxis).toEqual({
+      type: 'category',
+      label: 'Period',
+      unit: null,
+      timeZone: null,
+    });
+    expect(source?.chart?.series[0].points).toEqual([
+      { x: 'Adventure Racing Z', y: 3_600 },
+    ]);
   });
 
   it('uses the authoritative Training metric title without duplicating trend wording', () => {
@@ -333,5 +363,18 @@ describe('Assistant visual projection', () => {
     expect(downsampled).toContainEqual(points[500]);
     expect(downsampled).toContainEqual(points[501]);
     expect(downsampleAssistantChartPoints(points, 100)).toEqual(downsampled);
+  });
+
+  it('retains interior null runs so downsampling cannot imply missing readings', () => {
+    const points = Array.from({ length: 1_000 }, (_, index) => ({
+      x: index,
+      y: index >= 500 && index <= 503 ? null : index,
+    }));
+
+    const downsampled = downsampleAssistantChartPoints(points, 100);
+    expect(downsampled.length).toBeLessThanOrEqual(100);
+    expect(downsampled.some(point => point.y === null)).toBe(true);
+    expect(downsampled[0]).toEqual(points[0]);
+    expect(downsampled.at(-1)).toEqual(points.at(-1));
   });
 });

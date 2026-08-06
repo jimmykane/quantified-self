@@ -1,5 +1,6 @@
 import { z } from 'genkit';
 import { retry } from 'genkit/model/middleware';
+import * as logger from 'firebase-functions/logger';
 import {
   ASSISTANT_MAX_RESPONSE_CHARS,
   type AssistantEvidence,
@@ -105,6 +106,8 @@ export interface AssistantRuntimeDependencies {
     locationAccess: AssistantLocationAccess,
   ) => Promise<AssistantMcpSession>;
   generateAnswer: (input: AssistantModelGenerationInput) => Promise<AssistantModelGenerationResult>;
+  createVisualSource: typeof createAssistantVisualSource;
+  resolveVisuals: typeof resolveAssistantVisuals;
   now: () => Date;
 }
 
@@ -216,6 +219,28 @@ function projectAssistantToolResultForModel(
     projected[key] = projectAssistantToolResultForModel(child);
   }
   return projected;
+}
+
+function appendAssistantVisualizationDescriptor(
+  projectedResult: unknown,
+  visualSource: AssistantVisualSource | null,
+): Record<string, unknown> {
+  if (!projectedResult
+    || typeof projectedResult !== 'object'
+    || Array.isArray(projectedResult)) {
+    throw new Error('The Assistant tool projection was not an object.');
+  }
+  const projected = projectedResult as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(projected, 'assistantVisualization')) {
+    throw new Error('The Assistant tool projection used a reserved visual field.');
+  }
+  if (!visualSource) {
+    return projected;
+  }
+  return {
+    ...projected,
+    assistantVisualization: visualSource.descriptor,
+  };
 }
 
 function normalizeFieldName(value: string): string {
@@ -389,6 +414,8 @@ const defaultDependencies: AssistantRuntimeDependencies = {
     locationAccess,
   ),
   generateAnswer: generateAssistantModelAnswer,
+  createVisualSource: createAssistantVisualSource,
+  resolveVisuals: resolveAssistantVisuals,
   now: () => new Date(),
 };
 
@@ -465,21 +492,29 @@ export function createAssistantRuntime(
               name: tool.name,
               structuredContent: result.structuredContent,
             });
-            const visualSource = createAssistantVisualSource(
-              tool.name,
-              result.structuredContent,
-              `source_${invocations.length}`,
-              typeof resolvedToolInput.timeZone === 'string'
-                ? resolvedToolInput.timeZone
-                : input.timeZone,
-            );
+            let visualSource: AssistantVisualSource | null = null;
+            try {
+              visualSource = dependencies.createVisualSource(
+                tool.name,
+                result.structuredContent,
+                `source_${invocations.length}`,
+                typeof resolvedToolInput.timeZone === 'string'
+                  ? resolvedToolInput.timeZone
+                  : input.timeZone,
+              );
+            } catch (error) {
+              logger.warn('[Assistant] Optional visual source projection failed.', {
+                toolName: tool.name,
+                errorName: error instanceof Error ? error.name : 'unknown',
+              });
+            }
             if (visualSource) {
               visualSources.push(visualSource);
             }
-            return {
-              data: projectAssistantToolResultForModel(result.structuredContent),
-              assistantVisualization: visualSource?.descriptor ?? null,
-            };
+            return appendAssistantVisualizationDescriptor(
+              projectAssistantToolResultForModel(result.structuredContent),
+              visualSource,
+            );
           },
         }));
         const generatedResult = await dependencies.generateAnswer({
@@ -509,14 +544,23 @@ export function createAssistantRuntime(
         ))) {
           throw new Error('The Assistant response included an internal visual source reference.');
         }
+        const validatedOutput = AssistantModelOutputSchema.parse({
+          answer: generated.answer,
+          visuals: generated.visualRequest,
+        });
+        let visuals: AssistantVisual[] = [];
+        try {
+          visuals = dependencies.resolveVisuals(visualSources, validatedOutput.visuals);
+        } catch (error) {
+          logger.warn('[Assistant] Optional visual resolution failed.', {
+            errorName: error instanceof Error ? error.name : 'unknown',
+          });
+        }
         return {
-          answer: AssistantModelOutputSchema.parse({
-            answer: generated.answer,
-            visuals: generated.visualRequest,
-          }).answer,
+          answer: validatedOutput.answer,
           evidence: buildAssistantEvidenceList(session.tools, invocations),
           toolNames: invocations.map(invocation => invocation.name),
-          visuals: resolveAssistantVisuals(visualSources, generated.visualRequest),
+          visuals,
         };
       } finally {
         await session.close();

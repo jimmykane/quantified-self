@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.assistant-map-shell {
+  position: relative;
+  min-height: 220px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--mat-sys-surface-container);
+}
+
+.assistant-visual-map {
+  width: 100%;
+  height: 220px;
+}
+
+.assistant-map-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 20px;
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container);
+  text-align: center;
+  font-size: 0.84rem;
+}
+
+.assistant-map-error mat-icon {
+  color: var(--mat-sys-error);
+}
+
+:host-context(.assistant-visual-detail) .assistant-map-shell,
+:host-context(.assistant-visual-detail) .assistant-visual-map {
+  min-height: min(66vh, 580px);
+  height: min(66vh, 580px);
+}
+
+@media (max-width: 720px) {
+  .assistant-map-shell,
+  .assistant-visual-map {
+    min-height: 210px;
+    height: 210px;
+  }
+
+  :host-context(.assistant-visual-detail) .assistant-map-shell,
+  :host-context(.assistant-visual-detail) .assistant-visual-map {
+    min-height: min(62vh, 500px);
+    height: min(62vh, 500px);
+  }
+}

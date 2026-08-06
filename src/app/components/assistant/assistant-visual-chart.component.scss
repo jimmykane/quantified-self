@@ -1,0 +1,23 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.assistant-visual-chart {
+  width: 100%;
+  height: 220px;
+}
+
+:host-context(.assistant-visual-detail) .assistant-visual-chart {
+  height: min(62vh, 520px);
+}
+
+@media (max-width: 720px) {
+  .assistant-visual-chart {
+    height: 210px;
+  }
+
+  :host-context(.assistant-visual-detail) .assistant-visual-chart {
+    height: min(58vh, 440px);
+  }
+}

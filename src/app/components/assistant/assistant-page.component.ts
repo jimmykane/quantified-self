@@ -6,7 +6,6 @@ import {
   OnDestroy,
   OnInit,
   computed,
-  effect,
   inject,
   signal,
   viewChild,
@@ -102,7 +101,6 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private pendingRecoveryDeadlineMs = 0;
   private pendingRegistrationDeadlineMs = 0;
   private destroyed = false;
-  private latestKnownMapKey: string | null = null;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly composerPlaceholder = 'Ask about your data…';
@@ -131,6 +129,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly conversationLoadError = signal<string | null>(null);
   readonly activeMapKey = signal<string | null>(null);
   readonly expandedMap = signal(false);
+  readonly visualDetailOpen = signal(false);
   readonly messages = computed(() => {
     const storedMessages = this.conversation()?.messages || [];
     const pendingMessage = this.pendingUserMessage();
@@ -139,11 +138,6 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       : storedMessages;
   });
   readonly isEmpty = computed(() => this.messages().length === 0);
-  private readonly mapVisualKeys = computed(() => this.messages().flatMap(message => (
-    (message.visuals || []).flatMap((visual, index) => (
-      visual.kind === 'map' ? [this.getVisualKey(message, index)] : []
-    ))
-  )));
   readonly quotaBlocked = computed(() => {
     const status = this.quota();
     return status !== null
@@ -168,16 +162,6 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     }
     return `${status.remainingCount} of ${status.limit} remaining`;
   });
-
-  constructor() {
-    effect(() => {
-      const latestMapKey = this.mapVisualKeys().at(-1) ?? null;
-      if (latestMapKey !== this.latestKnownMapKey) {
-        this.latestKnownMapKey = latestMapKey;
-        this.activeMapKey.set(latestMapKey);
-      }
-    });
-  }
 
   async ngOnInit(): Promise<void> {
     await this.loadConversation();
@@ -209,6 +193,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.retryRequest.set(null);
       this.pendingRequestId.set(null);
       this.pendingUserMessage.set(null);
+      this.activeMapKey.set(null);
+      this.expandedMap.set(false);
       this.promptControl.setValue('');
       this.errorMessage.set(null);
       this.conversationLoadError.set(null);
@@ -306,31 +292,40 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       });
   }
 
-  getVisualKey(message: AssistantMessage, index: number): string {
-    return `${message.id}:${index}`;
-  }
-
-  isMapActive(message: AssistantMessage, index: number): boolean {
-    return !this.expandedMap()
-      && this.activeMapKey() === this.getVisualKey(message, index);
-  }
-
-  showInlineMap(message: AssistantMessage, index: number): void {
-    this.activeMapKey.set(this.getVisualKey(message, index));
+  showInlineMap(mapKey: string): void {
+    this.activeMapKey.set(mapKey);
   }
 
   openVisual(visual: AssistantVisual): void {
+    if (this.visualDetailOpen()) {
+      return;
+    }
     const data: AssistantVisualDetailData = { visual };
+    this.visualDetailOpen.set(true);
     if (visual.kind === 'map') {
       this.expandedMap.set(true);
     }
-    const closed = this.breakpointObserver.isMatched('(max-width: 720px)')
-      ? this.bottomSheet.open(AssistantVisualDetailComponent, { data }).afterDismissed()
-      : this.dialog.open(AssistantVisualDetailComponent, {
-          data,
-          maxWidth: 'calc(100vw - 32px)',
-        }).afterClosed();
+    let closed;
+    try {
+      closed = this.breakpointObserver.isMatched('(max-width: 720px)')
+        ? this.bottomSheet.open(AssistantVisualDetailComponent, {
+            data,
+            ariaLabel: visual.title,
+          }).afterDismissed()
+        : this.dialog.open(AssistantVisualDetailComponent, {
+            data,
+            ariaLabel: visual.title,
+            maxWidth: 'calc(100vw - 32px)',
+          }).afterClosed();
+    } catch (error) {
+      this.visualDetailOpen.set(false);
+      if (visual.kind === 'map') {
+        this.expandedMap.set(false);
+      }
+      throw error;
+    }
     closed.subscribe(() => {
+      this.visualDetailOpen.set(false);
       if (visual.kind === 'map') {
         this.expandedMap.set(false);
       }
@@ -513,6 +508,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.pendingRequestId.set(null);
       this.clearRememberedPendingRequest();
       this.retryRequest.set(null);
+      this.activeMapKey.set(null);
+      this.expandedMap.set(false);
       this.promptControl.setValue(prompt);
       this.scrollToPageStart();
     } catch (error) {

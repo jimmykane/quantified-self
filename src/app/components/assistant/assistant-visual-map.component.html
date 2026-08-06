@@ -1,0 +1,19 @@
+<div class="assistant-map-shell">
+  <div
+    #mapDiv
+    class="assistant-visual-map"
+    role="region"
+    [attr.aria-label]="visual.title"
+  ></div>
+  @if (loading()) {
+    <div class="assistant-map-state" aria-live="polite">
+      <mat-spinner diameter="24"></mat-spinner>
+      <span>Loading satellite map…</span>
+    </div>
+  } @else if (loadFailed()) {
+    <div class="assistant-map-state assistant-map-error" role="status">
+      <mat-icon>map</mat-icon>
+      <span>The map could not be loaded. The answer remains available.</span>
+    </div>
+  }
+</div>

@@ -514,6 +514,7 @@ describe('Assistant runtime', () => {
       generateAnswer: async (input) => {
         const projected = await input.tools[0].execute({});
         expect(projected).toMatchObject({
+          buckets: expect.any(Array),
           assistantVisualization: {
             sourceId: 'source_1',
             chart: {
@@ -524,6 +525,7 @@ describe('Assistant runtime', () => {
             map: null,
           },
         });
+        expect(projected).not.toHaveProperty('data');
         expect(JSON.stringify(projected.assistantVisualization)).not.toContain('51');
         return {
           answer: 'Your overnight recovery trend declined across the two recorded nights.',
@@ -560,6 +562,95 @@ describe('Assistant runtime', () => {
         ],
       }],
     })]);
+  });
+
+  it('keeps a grounded answer when optional visual source projection fails', async () => {
+    const { session } = createSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      createVisualSource: () => {
+        throw new Error('Synthetic visual projection failure.');
+      },
+      generateAnswer: async (input) => {
+        const projected = await input.tools[0].execute({});
+        expect(projected).not.toHaveProperty('assistantVisualization');
+        return {
+          answer: 'Your readiness is 72 today.',
+          visualRequest: { chart: null, map: null },
+        };
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'How am I today?',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    })).resolves.toMatchObject({
+      answer: 'Your readiness is 72 today.',
+      visuals: [],
+    });
+  });
+
+  it('keeps a grounded answer when optional visual resolution fails', async () => {
+    const { session } = createSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      resolveVisuals: () => {
+        throw new Error('Synthetic visual resolution failure.');
+      },
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({});
+        return {
+          answer: 'Your readiness is 72 today.',
+          visualRequest: { chart: null, map: null },
+        };
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'How am I today?',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    })).resolves.toMatchObject({
+      answer: 'Your readiness is 72 today.',
+      visuals: [],
+    });
+  });
+
+  it('rejects a tool payload that collides with the reserved visual descriptor', async () => {
+    const { session, callTool, close } = createSession();
+    callTool.mockResolvedValue({
+      structuredContent: {
+        localDate: '2026-08-03',
+        readiness: { score: 72 },
+        assistantVisualization: {
+          sourceId: 'attacker-selected-source',
+        },
+      },
+    });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({});
+        return {
+          answer: 'This answer must not be returned.',
+          visualRequest: { chart: null, map: null },
+        };
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'How am I today?',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    })).rejects.toThrow('reserved visual field');
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('binds explicit precise activity-location consent to the MCP session and model instructions', async () => {
@@ -758,13 +849,10 @@ describe('Assistant runtime', () => {
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
         await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
-          data: {
-            activities: [{
-              activityRef,
-              activityType: 'Running',
-            }],
-          },
-          assistantVisualization: null,
+          activities: [{
+            activityRef,
+            activityType: 'Running',
+          }],
         });
         return 'Your latest recorded activity was Running.';
       },
@@ -805,18 +893,15 @@ describe('Assistant runtime', () => {
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
         await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
-          data: {
-            startTime: '2026-07-31T07:50:22.000Z',
-            endTime: '2026-07-31T14:30:45.000Z',
-            bucketStart: '2026-07-31T07:50:22.000Z',
-            nested: {
-              asOfDay: '2026-07-31T07:50:22.000Z',
-              generatedAt: '2026-07-31T14:30:45.000Z',
-            },
-            averageHrvMs: 42,
-            timestampMs: 320,
+          startTime: '2026-07-31T07:50:22.000Z',
+          endTime: '2026-07-31T14:30:45.000Z',
+          bucketStart: '2026-07-31T07:50:22.000Z',
+          nested: {
+            asOfDay: '2026-07-31T07:50:22.000Z',
+            generatedAt: '2026-07-31T14:30:45.000Z',
           },
-          assistantVisualization: null,
+          averageHrvMs: 42,
+          timestampMs: 320,
         });
         return 'The activity started on July 31, 2026.';
       },

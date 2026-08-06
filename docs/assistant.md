@@ -104,8 +104,8 @@ path, each assistant message to 64 KiB of visual JSON, and the full public conve
 endpoint-preserving sampling. Time axes persist the server-selected IANA timezone (or UTC for UTC-bound Training
 payloads), so calendar labels remain consistent when the answer is reopened from another timezone. The frontend
 renders through the existing ECharts host/theme/tooltip helpers and Mapbox
-loader/style/resize/marker/track manager. Only one inline Mapbox instance is active: the newest map loads automatically,
-an older map requires **Show map**, and expanding a map temporarily suspends the inline instance. Desktop uses a
+loader/style/resize/marker/track manager. Maps never load merely because a conversation is opened: the user must choose
+**Show map** or **Expand**. Only one inline Mapbox instance is active, and expanding a map temporarily suspends it. Desktop uses a
 Material dialog and mobile uses the app's Material bottom sheet. A visual-rendering failure leaves the text answer and
 evidence available.
 
@@ -229,6 +229,9 @@ from being mistaken for the current request.
 
 Text, compact evidence, and any bounded visual payload share the same conversation document and lifecycle; visuals do
 not create a separate cache or longer-lived location record. Each completed turn refreshes `expireAt` to seven days.
+The transcript retains at most six completed turns; if individually valid evidence and visual payloads would exceed the
+conversation byte ceiling, completion evicts the oldest whole user/assistant pair until the newest answer fits. The
+separate bounded replay receipt remains, so an evicted request ID is still idempotent for the conversation generation.
 Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
 valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for

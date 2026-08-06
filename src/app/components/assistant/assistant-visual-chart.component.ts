@@ -51,23 +51,8 @@ const ASSISTANT_CHART_COLORS = ['#2196f3', '#10b981', '#f59e0b', '#8b5cf6'];
 @Component({
   selector: 'app-assistant-visual-chart',
   standalone: true,
-  template: `
-    <div
-      #chartDiv
-      class="assistant-visual-chart"
-      role="img"
-      [attr.aria-label]="visual.title"
-    ></div>
-  `,
-  styles: [`
-    :host { display: block; min-width: 0; }
-    .assistant-visual-chart { width: 100%; height: 220px; }
-    :host-context(.assistant-visual-detail) .assistant-visual-chart { height: min(62vh, 520px); }
-    @media (max-width: 720px) {
-      .assistant-visual-chart { height: 210px; }
-      :host-context(.assistant-visual-detail) .assistant-visual-chart { height: min(58vh, 440px); }
-    }
-  `],
+  templateUrl: './assistant-visual-chart.component.html',
+  styleUrls: ['./assistant-visual-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, OnDestroy {

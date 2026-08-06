@@ -587,10 +587,11 @@ describe('TrackMapManager', () => {
       strokeWidth: 3,
     });
 
-    expect(manager.fitBoundsToTracks(false)).toBe(true);
+    expect(manager.fitBoundsToTracks(false, 16)).toBe(true);
     expect(map.fitBounds).toHaveBeenCalledWith(expect.any(MockLngLatBounds), expect.objectContaining({
       animate: false,
       padding: 50,
+      maxZoom: 16,
     }));
     const bounds = map.fitBounds.mock.calls[0][0] as MockLngLatBounds;
     expect(bounds.points).toEqual([

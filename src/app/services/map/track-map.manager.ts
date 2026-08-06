@@ -282,7 +282,10 @@ export class TrackMapManager {
     }
   }
 
-  public fitBoundsToTracks(animate: boolean = true): boolean {
+  public fitBoundsToTracks(
+    animate: boolean = true,
+    maxZoom?: number,
+  ): boolean {
     const fitStartedAt = this.nowMs();
     if (!this.map || !this.mapboxgl || !this.currentTracks.length) {
       this.logger.log(`[${this.logPrefix}Perf] fitBoundsToTracks:skipped`, {
@@ -317,13 +320,18 @@ export class TrackMapManager {
       return false;
     }
 
+    const boundedMaxZoom = typeof maxZoom === 'number' && Number.isFinite(maxZoom)
+      ? Math.min(24, Math.max(0, maxZoom))
+      : null;
     this.map.fitBounds(bounds, {
       padding: 50,
       animate,
+      ...(boundedMaxZoom !== null ? { maxZoom: boundedMaxZoom } : {}),
     });
     this.logPerformance('fitBoundsToTracks:complete', fitStartedAt, {
       trackCount: this.currentTracks.length,
       animate,
+      maxZoom: boundedMaxZoom,
       hasPoints,
     });
     return true;

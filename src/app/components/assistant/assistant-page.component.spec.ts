@@ -5,10 +5,11 @@ import { signal } from '@angular/core';
 import { CdkTextareaAutosize } from '@angular/cdk/text-field';
 import { By } from '@angular/platform-browser';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -24,6 +25,7 @@ import {
 } from '../../services/assistant.service';
 import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { AssistantPageComponent } from './assistant-page.component';
+import { AssistantVisualDetailComponent } from './assistant-visual-detail.component';
 
 const chatResponse: AssistantChatResponse = {
   conversation: {
@@ -201,7 +203,7 @@ describe('AssistantPageComponent', () => {
       .toBeTruthy();
   });
 
-  it('renders deterministic answer charts and retains the map tile disclosure', async () => {
+  it('renders deterministic charts but waits for explicit user action before loading maps', async () => {
     const conversation = {
       ...chatResponse.conversation,
       messages: chatResponse.conversation.messages.map(message => (
@@ -237,7 +239,6 @@ describe('AssistantPageComponent', () => {
         } : message
       )),
     };
-    component.expandedMap.set(true);
     component.conversation.set(conversation);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -247,11 +248,56 @@ describe('AssistantPageComponent', () => {
     expect(visualCards).toHaveLength(2);
     expect(fixture.nativeElement.textContent).toContain('Overnight HRV trend');
     expect(fixture.nativeElement.querySelector('app-assistant-visual-chart')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-assistant-visual-map')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Show map');
     expect(fixture.nativeElement.textContent).toContain(
       'Viewing sends the displayed map area to Mapbox for satellite tiles.',
     );
+    expect(component.activeMapKey()).toBeNull();
+
+    component.showInlineMap('assistant-1:1');
     expect(component.activeMapKey()).toBe('assistant-1:1');
+  });
+
+  it('keeps visual expansion to one overlay at a time', () => {
+    const closed = new Subject<void>();
+    const componentDialog = (component as unknown as {
+      dialog: MatDialog;
+    }).dialog;
+    const openSpy = vi.spyOn(componentDialog, 'open').mockReturnValue({
+      afterClosed: () => closed.asObservable(),
+    } as never);
+    const visual = {
+      kind: 'map' as const,
+      title: 'Activity location',
+      style: 'satellite' as const,
+      markers: [{
+        kind: 'start' as const,
+        label: 'Start',
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.853,
+      }],
+      path: [],
+    };
+
+    component.openVisual(visual);
+    component.openVisual(visual);
+
+    expect(openSpy).toHaveBeenCalledOnce();
+    expect(openSpy).toHaveBeenCalledWith(
+      AssistantVisualDetailComponent,
+      expect.objectContaining({
+        ariaLabel: 'Activity location',
+        data: { visual },
+      }),
+    );
+    expect(component.visualDetailOpen()).toBe(true);
+    expect(component.expandedMap()).toBe(true);
+
+    closed.next();
+    expect(component.visualDetailOpen()).toBe(false);
+    expect(component.expandedMap()).toBe(false);
+    openSpy.mockRestore();
   });
 
   it('centers both send states inside the action', () => {
