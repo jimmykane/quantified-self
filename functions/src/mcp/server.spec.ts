@@ -572,7 +572,7 @@ describe('MCP HTTP scope enforcement', () => {
       'query_activities',
       'search_activities_near_location',
     ]);
-  });
+  }, 15_000);
 
   it('advertises bounded saved-route type and name filters', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

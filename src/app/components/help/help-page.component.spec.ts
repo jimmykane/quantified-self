@@ -130,7 +130,7 @@ describe('HelpPageComponent', () => {
     const sectionCopy = fixture.debugElement.query(By.css('#help-section-content .section-copy'))?.nativeElement as HTMLElement | undefined;
     expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one read-only Quantified Self result');
     expect(sectionCopy?.innerHTML).toContain('latest six completed turns');
-    expect(sectionCopy?.innerHTML).toContain('no access to exact activity locations');
+    expect(sectionCopy?.innerHTML).toContain('no access to coordinate fields');
     expect(sectionCopy?.innerHTML).toContain('becomes unavailable about <strong>seven days</strong>');
     expect(sectionCopy?.innerHTML).toContain('at most four extra minutes');
     expect(sectionCopy?.innerHTML).toContain('deletes the expired record asynchronously');

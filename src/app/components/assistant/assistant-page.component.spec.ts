@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CdkTextareaAutosize } from '@angular/cdk/text-field';
 import { By } from '@angular/platform-browser';
@@ -170,6 +172,30 @@ describe('AssistantPageComponent', () => {
     expect(dock.contains(composer)).toBe(true);
     expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+  });
+
+  it('centers the loading indicator inside the send action', () => {
+    component.sending.set(true);
+    fixture.detectChanges();
+
+    const sendButton = fixture.nativeElement.querySelector(
+      '.composer-submit',
+    ) as HTMLButtonElement;
+    const content = sendButton.querySelector(
+      '.composer-submit-content',
+    ) as HTMLElement;
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/assistant/assistant-page.component.scss',
+    ), 'utf8');
+
+    expect(sendButton.querySelector('mat-spinner')).toBeTruthy();
+    expect(content).toBeTruthy();
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*display:\s*inline-flex;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*align-items:\s*center;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*justify-content:\s*center;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*width:\s*24px;/s);
+    expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*height:\s*24px;/s);
   });
 
   it('keeps loading state inside the full chat region above the composer', () => {

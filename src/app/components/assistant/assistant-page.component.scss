@@ -269,6 +269,15 @@ h1 {
   background: var(--mat-sys-primary-container);
 }
 
+.composer-submit-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+}
+
 .composer-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

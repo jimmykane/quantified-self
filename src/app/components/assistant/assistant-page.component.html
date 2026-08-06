@@ -113,11 +113,13 @@
             [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
             [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
           <button mat-icon-button class="composer-submit" type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
-            @if (sending()) {
-              <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-              <mat-icon>arrow_upward</mat-icon>
-            }
+            <span class="composer-submit-content">
+              @if (sending()) {
+                <mat-spinner diameter="20"></mat-spinner>
+              } @else {
+                <mat-icon>arrow_upward</mat-icon>
+              }
+            </span>
           </button>
         </form>
         <div class="composer-footer">
