@@ -23,8 +23,8 @@ import {
   type AssistantMcpToolName,
 } from './mcp-session';
 import {
-  applyAssistantToolDefaults,
   assistantToolUsesDefaultTimeZone,
+  normalizeAssistantToolInput,
 } from './tool-input';
 import {
   createAssistantVisualSource,
@@ -567,7 +567,7 @@ export function createAssistantRuntime(
               throw new Error('The Assistant tool-call budget was exceeded.');
             }
             toolCallCount += 1;
-            const resolvedToolInput = applyAssistantToolDefaults(
+            const resolvedToolInput = normalizeAssistantToolInput(
               tool.name,
               toolInput,
               input.timeZone,

@@ -596,12 +596,15 @@ describe('Assistant callable', () => {
   });
 
   it('does not retry a permanent Genkit provider error', async () => {
-    const { dependencies, store, reservation } = createDependencies();
+    const { dependencies, store } = createDependencies();
     const providerError = Object.assign(new Error('Invalid model request.'), {
       name: 'GenkitError',
       status: 'INVALID_ARGUMENT',
     });
-    vi.mocked(dependencies.answer).mockRejectedValue(providerError);
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw providerError;
+    });
 
     await expect(runAssistantChat({
       requestId: REQUEST_ID,
@@ -610,8 +613,8 @@ describe('Assistant callable', () => {
     }, context, dependencies)).rejects.toMatchObject({ code: 'unavailable' });
 
     expect(dependencies.answer).toHaveBeenCalledOnce();
-    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
-    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.finalizeQuota).toHaveBeenCalledOnce();
+    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
     expect(store.releaseTurn).toHaveBeenCalledOnce();
   });
 

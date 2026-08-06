@@ -20,6 +20,17 @@ const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
   'get_today_readiness',
   'get_daily_report',
 ]);
+const ASSISTANT_DATE_RANGE_TOOL_NAMES = new Set<AssistantMcpToolName>([
+  'query_measurements',
+  'query_metric',
+  'query_metrics',
+  'get_sleep_trend',
+  'list_sleep_vitals',
+  'list_sleep_sessions',
+  'query_activities',
+  'rank_activities_by_metric',
+  'search_activities_near_location',
+]);
 
 export function assistantToolUsesDefaultTimeZone(
   toolName: AssistantMcpToolName,
@@ -57,6 +68,47 @@ function resolveAssistantActivityGroup(value: string): string | null {
   return ActivityTypesHelper.getActivityTypeGroupsAsUniqueArray().find(group => (
     normalizeAssistantCatalogTerm(String(group)).replace(/ group$/u, '') === normalized
   )) || null;
+}
+
+function normalizeAssistantMetricValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  return resolveAssistantMetricType(value) || value;
+}
+
+function normalizeAssistantSportsLibMetricInputs(
+  toolName: AssistantMcpToolName,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  if (toolName === 'query_metric' || toolName === 'rank_activities_by_metric') {
+    return {
+      ...input,
+      metric: normalizeAssistantMetricValue(input.metric),
+    };
+  }
+  if (toolName === 'query_metrics' && Array.isArray(input.metrics)) {
+    return {
+      ...input,
+      metrics: input.metrics.map((selector) => {
+        if (!selector || typeof selector !== 'object' || Array.isArray(selector)) {
+          return selector;
+        }
+        const metricSelector = selector as Record<string, unknown>;
+        return {
+          ...metricSelector,
+          metric: normalizeAssistantMetricValue(metricSelector.metric),
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_activity_metrics' && Array.isArray(input.metrics)) {
+    return {
+      ...input,
+      metrics: input.metrics.map(normalizeAssistantMetricValue),
+    };
+  }
+  return input;
 }
 
 function formatAssistantLocalDate(date: Date, timeZone: string): string {
@@ -139,7 +191,34 @@ function normalizeAssistantDateBoundary(
     : new Date(nextStartTimeMs - 1).toISOString();
 }
 
-export function applyAssistantToolDefaults(
+function normalizeAssistantDateRange(
+  toolName: AssistantMcpToolName,
+  input: Record<string, unknown>,
+  fallbackTimeZone: string,
+): Record<string, unknown> {
+  if (!ASSISTANT_DATE_RANGE_TOOL_NAMES.has(toolName)) {
+    return input;
+  }
+  const hasStart = Object.prototype.hasOwnProperty.call(input, 'start');
+  const hasEnd = Object.prototype.hasOwnProperty.call(input, 'end');
+  if (!hasStart && !hasEnd) {
+    return input;
+  }
+  const timeZone = typeof input.timeZone === 'string'
+    ? input.timeZone
+    : fallbackTimeZone;
+  return {
+    ...input,
+    ...(hasStart
+      ? { start: normalizeAssistantDateBoundary(input.start, timeZone, 'start') }
+      : {}),
+    ...(hasEnd
+      ? { end: normalizeAssistantDateBoundary(input.end, timeZone, 'end') }
+      : {}),
+  };
+}
+
+export function normalizeAssistantToolInput(
   toolName: AssistantMcpToolName,
   toolInput: Record<string, unknown>,
   timeZone: string,
@@ -148,42 +227,29 @@ export function applyAssistantToolDefaults(
     && toolInput.timeZone === undefined
     ? { ...toolInput, timeZone }
     : toolInput;
+  let normalizedInput = normalizeAssistantSportsLibMetricInputs(
+    toolName,
+    defaultedInput,
+  );
   if (toolName === 'rank_activities_by_metric') {
-    const metric = typeof defaultedInput.metric === 'string'
-      ? resolveAssistantMetricType(defaultedInput.metric)
+    const activityGroup = typeof normalizedInput.activityGroup === 'string'
+      ? resolveAssistantActivityGroup(normalizedInput.activityGroup)
       : null;
-    const activityGroup = typeof defaultedInput.activityGroup === 'string'
-      ? resolveAssistantActivityGroup(defaultedInput.activityGroup)
-      : null;
-    return {
-      ...defaultedInput,
-      ...(metric ? { metric } : {}),
+    normalizedInput = {
+      ...normalizedInput,
       ...(activityGroup ? { activityGroup } : {}),
     };
   }
-  if (toolName !== 'query_measurements') {
-    return defaultedInput;
+  if (toolName === 'query_measurements') {
+    const measurementDefinition = typeof normalizedInput.measurementType === 'string'
+      ? resolveMcpMeasurementDefinition(normalizedInput.measurementType)
+      : null;
+    normalizedInput = {
+      ...normalizedInput,
+      ...(measurementDefinition
+        ? { measurementType: measurementDefinition.id }
+        : {}),
+    };
   }
-  const measurementDefinition = typeof defaultedInput.measurementType === 'string'
-    ? resolveMcpMeasurementDefinition(defaultedInput.measurementType)
-    : null;
-  const resolvedTimeZone = typeof defaultedInput.timeZone === 'string'
-    ? defaultedInput.timeZone
-    : timeZone;
-  return {
-    ...defaultedInput,
-    ...(measurementDefinition
-      ? { measurementType: measurementDefinition.id }
-      : {}),
-    start: normalizeAssistantDateBoundary(
-      defaultedInput.start,
-      resolvedTimeZone,
-      'start',
-    ),
-    end: normalizeAssistantDateBoundary(
-      defaultedInput.end,
-      resolvedTimeZone,
-      'end',
-    ),
-  };
+  return normalizeAssistantDateRange(toolName, normalizedInput, timeZone);
 }

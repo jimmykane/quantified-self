@@ -131,7 +131,7 @@ fences, unknown fields, invalid source IDs, and unsupported visual selections fa
 
 Tool continuations are driven explicitly so the complete provider-returned model messages—including Gemini 3 thought
 signatures—are replayed unchanged before the validated tool responses. At the Assistant boundary, model-friendly
-measurement names, Sports Lib metric and activity-group labels, and local date-only measurement ranges are normalized
+measurement names, Sports Lib metric and activity-group labels, and local date-only ranges are normalized
 before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
 accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
 
@@ -309,8 +309,8 @@ changes:
 
 1. Follow `.agent/skills/mcp-metric-surface/SKILL.md` and the public MCP lifecycle in `docs/mcp-server.md`.
 2. Decide explicitly whether the built-in Assistant should receive it. Do not widen scopes or add tools implicitly.
-3. Update the Assistant allowlist, system routing guidance, evidence and visual projections, Help, policies, and this document when
-   the boundary changes.
+3. Update the Assistant allowlist, `tool-input.ts` model-input normalization, system routing guidance, evidence and
+   visual projections, Help, policies, and this document when the boundary changes.
 4. Update the deterministic visual projector when the result should support charts or maps. Never let the model provide
    data points, coordinates, renderer configuration, or arbitrary labels. Add positive routing/projection tests plus
    negative leakage tests for identifiers, provenance, files, route geography, coordinates, and unsupported visual keys.
