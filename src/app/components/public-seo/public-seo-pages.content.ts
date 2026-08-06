@@ -422,7 +422,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'directions_run',
             title: 'Individual activity details and charts',
-            copy: 'Discover canonical Sports Lib activity types, filter bounded newest-first scans for requests such as your latest run, resolve today or yesterday in an explicit IANA timezone, and inspect summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, or bounded chart-ready data. Metric ranking supports explicit periods or a processing-bounded all-history scan, so a client can rank the relevant maximum-jump metric before verifying the winning MTB jump details.',
+            copy: 'Discover canonical Sports Lib activity types, filter bounded newest-first scans for requests such as your latest run, resolve today or yesterday in an explicit IANA timezone, and inspect summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, or bounded chart-ready data. Metric ranking supports explicit periods or a processing-bounded all-history scan, so a client can use the relevant persisted maximum-jump metric as the authoritative record and request individual jump details only when needed.',
           },
           {
             icon: 'bedtime',
@@ -522,7 +522,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and activity context',
-            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts with the ready Training snapshots already used in the app. For MTB jump records, the Assistant ranks the relevant maximum-jump metric across matching activities before inspecting the winner instead of guessing from jump count or a recent sample.',
+            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts with the ready Training snapshots already used in the app. For MTB jump records, the Assistant ranks the relevant persisted maximum-jump metric across matching activities instead of guessing from jump count or a recent sample, and reads individual jump details only when requested.',
           },
           {
             icon: 'scale',

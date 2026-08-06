@@ -598,12 +598,20 @@ ranking with activity filters pushes the canonical types into the Firestore `in`
 the processing bound applies to the relevant sport family instead of all account activities. Both shapes use existing
 single-field indexes and require no new composite index. First-class body measurements remain excluded.
 
+The optional `activityGroup` input takes an exact group value returned by `list_activity_types` and expands it through
+Sports Lib's `ActivityTypesHelper`. It is combined with any explicit activity types, canonicalized, deduplicated, and
+kept under the same 20-type input limit before Firestore access. This keeps sport-family membership in the shared
+library instead of relying on each Assistant or MCP client to maintain its own subtype list.
+
 MTB jump superlatives reuse this generic metric path rather than introducing a second jump-ranking store or tool.
-Discover every canonical type in the Mountain Biking group and the corresponding Sports Lib maximum metric:
+Discover the Mountain Biking group value, pass it as `activityGroup` so the server expands every canonical type, and
+select the corresponding Sports Lib maximum metric:
 `Maximum Jump Distance` for biggest/longest, `Maximum Jump Height` for highest, `Maximum Jump Hang Time` for airtime,
 `Maximum Jump Speed` for fastest, or `Maximum Jump Score` for an explicit score request. Rank the matching activities,
-then paginate `list_activity_jumps` for the winner and verify the exact returned jump field. `jumpCount` is availability
-and volume evidence only; it never ranks jump quality.
+and treat the winning persisted maximum and its canonical unit as authoritative. Use `list_activity_jumps` only when the
+user asks for jump-level details. When reading those records, follow `nextCursor` until `scanComplete` or state that the
+inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
+jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
 ## First-class body measurements
 

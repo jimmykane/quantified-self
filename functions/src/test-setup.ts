@@ -188,6 +188,15 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     },
     ActivityTypesHelper: {
         resolveActivityType: actual.ActivityTypesHelper.resolveActivityType.bind(actual.ActivityTypesHelper),
+        getActivityTypeGroupsAsUniqueArray: () => [
+            'cycling_group',
+            'mountain_biking_group',
+            'running_group',
+            'trail_running_group',
+            'swimming_group',
+            'unspecified_group',
+            'water_sports_group',
+        ],
         getActivityTypesAsUniqueArray:
             actual.ActivityTypesHelper.getActivityTypesAsUniqueArray.bind(
                 actual.ActivityTypesHelper,

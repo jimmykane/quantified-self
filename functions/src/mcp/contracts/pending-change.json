@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "580cd80e8c3fbf9729269439a276a6179383168c4f31371eedbf30e54d4a648d",
+  "candidateSha256": "273f471dd58f63db28c7b07bd6ef532b02a96424868643b2cbc84f812642f3ad",
   "lifecycleAction": "developer-refresh",
   "summary": "Add the daily report and contract-safe activity and nearby-search replacements, bounded multi-metric queries, Training capability discovery, activity overviews, all-history activity ranking, deterministic MTB jump-superlative routing, and clearer sleep-vital routing.",
   "rescanRequired": true

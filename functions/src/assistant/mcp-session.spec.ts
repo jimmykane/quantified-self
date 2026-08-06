@@ -64,8 +64,10 @@ describe('Assistant MCP session', () => {
       );
       expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
         .toContain('coordinates redacted');
-      expect(session.instructions).toContain('every canonical type in the Mountain Biking group');
+      expect(session.instructions).toContain('server expands the group to every canonical type');
       expect(session.instructions).toContain('Maximum Jump Distance');
+      expect(session.instructions).toContain('Treat the ranked metric value as authoritative');
+      expect(session.instructions).toContain('only when jump-level details are requested');
       expect(session.instructions).toContain('Never rank jump quality by jumpCount');
       expect(session.tools.find(tool => tool.name === 'list_routes')?.description)
         .toContain('Bounds are redacted');

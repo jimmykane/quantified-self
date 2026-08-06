@@ -778,6 +778,9 @@ describe('MCP HTTP scope enforcement', () => {
         required?: string[];
       } | undefined;
       const rankingInputSchema = rankActivities?.inputSchema as {
+        properties?: Record<string, {
+          description?: string;
+        }>;
         oneOf?: Array<{
           title?: string;
           required?: string[];
@@ -805,6 +808,8 @@ describe('MCP HTTP scope enforcement', () => {
       );
       expect(instructions).toContain('rank_activities_by_metric');
       expect(instructions).toContain('Maximum Jump Distance');
+      expect(instructions).toContain('Treat the ranked metric value as authoritative');
+      expect(instructions).toContain('only when jump-level details are requested');
       expect(instructions).toContain('Never rank jump quality by jumpCount');
       expect(listActivityTypes).toBeDefined();
       expect(queryActivities?.description).toContain('relativePeriod/timeZone');
@@ -841,9 +846,12 @@ describe('MCP HTTP scope enforcement', () => {
       ]);
       expect(inputSchema?.oneOf?.[2]?.not).toBeDefined();
       expect(rankActivities?.description).toContain('all history');
-      expect(rankActivities?.description).toContain('Maximum Jump metric');
+      expect(rankActivities?.description).toContain('ranked Maximum Jump metric is authoritative');
+      expect(rankingInputSchema?.properties?.activityGroup?.description)
+        .toContain('activityGroup from list_activity_types');
       expect(rankingInputSchema?.required || []).not.toContain('start');
       expect(rankingInputSchema?.required || []).not.toContain('end');
+      expect(rankingInputSchema?.required || []).not.toContain('activityGroup');
       expect(rankingInputSchema?.oneOf?.map(option => option.title)).toEqual([
         'Explicit date range',
         'All available history',

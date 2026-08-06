@@ -96,6 +96,23 @@ describe('Assistant runtime', () => {
     )).toBe(true);
   });
 
+  it('keeps the MTB record example within the bounded authoritative ranking workflow', () => {
+    const example = ASSISTANT_PROMPT_EXAMPLES.find(candidate => (
+      candidate.id === 'biggest-mtb-jump'
+    ));
+
+    expect(example?.toolWorkflow).toEqual([
+      'list_activity_types',
+      'rank_activities_by_metric',
+    ]);
+    expect(example?.toolWorkflow).not.toContain('list_metrics');
+    expect(example?.toolWorkflow).not.toContain('list_activity_jumps');
+    expect(example?.routingHint).toContain('pass that exact group to the ranking tool');
+    expect(example?.routingHint).toContain('server-expanded activity types');
+    expect(example?.routingHint).toContain('top ranked metric value and unit as authoritative');
+    expect(example?.routingHint).toContain('unless the user explicitly asks for subrecord details');
+  });
+
   it('requires an initial tool request and then permits a final model answer', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',

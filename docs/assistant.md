@@ -115,9 +115,11 @@ Assistant examples are therefore the only conversational prompt catalog that nee
 phase receives fresh dynamic Genkit action objects so their request-local registries do not produce
 duplicate-registration errors during discovery-and-answer workflows.
 
-The published MTB example also locks the Assistant to the shared MCP superlative workflow: discover every canonical
-Mountain Biking activity type and the Sports Lib maximum-jump metric, rank matching activities across the requested
-range or all available history, then inspect the winning activity's coordinate-redacted jump records. This is the same
+The published MTB example also locks the Assistant to the shared MCP superlative workflow: discover the Mountain Biking
+activity-group value, pass it to the shared ranker so Sports Lib expands every canonical subtype, and follow the
+server's maximum-jump mapping across the requested range or all available history. The ranked persisted maximum and unit
+are authoritative. Coordinate-redacted jump records are read only when the user explicitly asks for subrecord details,
+avoiding a redundant scan that can exceed the Assistant's turn budget on jump-heavy activities. This is the same ranking
 path available to external MCP clients. It never substitutes `jumpCount` or a newest-first sample for jump quality, and
 an over-budget all-history scan fails instead of being described as an all-time result.
 

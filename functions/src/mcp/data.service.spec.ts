@@ -1104,7 +1104,7 @@ describe('MCP data service', () => {
       uid: 'user-1',
       connectionId: 'connection-1',
       metric: DataJumpDistanceMax.type,
-      activityTypes: [ActivityTypes.MountainBiking],
+      activityGroup: 'mountain_biking_group',
       order: 'highest',
       limit: 1,
     });
@@ -1124,7 +1124,11 @@ describe('MCP data service', () => {
       undefined,
       undefined,
       DataJumpDistanceMax.type,
-      [ActivityTypes.MountainBiking],
+      [
+        ActivityTypes.DownhillCycling,
+        'Enduro MTB',
+        ActivityTypes.MountainBiking,
+      ],
       25,
       undefined,
     );
@@ -1136,6 +1140,28 @@ describe('MCP data service', () => {
       connectionId: 'connection-1',
       metric: DataJumpDistanceMax.type,
       startTimeMs: Date.parse('2026-01-01T00:00:00.000Z'),
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityGroup: 'invented_group',
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityGroup: 'unspecified_group',
       order: 'highest',
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_request',

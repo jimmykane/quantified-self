@@ -28,14 +28,14 @@ Resolve activities through opaque public references and request only the detail 
 6. For highest, lowest, best, or worst requests tied to one persisted numeric metric, use the bounded ranking
    capability instead of downloading activity pages and sorting them client-side. Preserve its metric unit, date range,
    activity filter, scan coverage, and deterministic order.
-7. For an MTB jump superlative, discover every canonical activity type in the Mountain Biking group and the matching
-   persisted maximum metric. “Biggest” or “longest” means `Maximum Jump Distance`; “highest” means `Maximum Jump
-   Height`; “longest airtime” means `Maximum Jump Hang Time`; “fastest” means `Maximum Jump Speed`; and an explicit
-   score request means `Maximum Jump Score`. Clarify genuinely ambiguous wording such as “best.” Rank the matching
-   activities first, omitting start and end only when the user asks for all available history, then inspect and paginate
-   the winning activity's jump records to verify the exact returned field. Never rank jump quality by jump count or by
-   sorting a newest-first activity sample. If an all-history scan exceeds its processing bound, request or choose an
-   explicit period rather than presenting a partial result as an all-time record.
+7. For an MTB jump superlative, discover the Mountain Biking activity-group value and pass that group to the bounded
+   ranking capability so the server, not the model, expands every canonical subtype. Follow the live server instructions
+   to choose the persisted maximum metric matching the user's wording, and clarify genuinely ambiguous wording such as
+   “best.” Omit start and end only when the user asks for all available history, and treat the ranked maximum as
+   authoritative. Read individual jump records only when the user asks for subrecord details; preserve pagination
+   completeness and say when the inspected records are incomplete. Never rank jump quality by jump count or by sorting
+   a newest-first activity sample. If an all-history scan exceeds its processing bound, request or choose an explicit
+   period rather than presenting a partial result as an all-time record.
 
 ## Permissions and Privacy
 

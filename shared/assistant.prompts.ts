@@ -53,8 +53,8 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
     prompt: 'What was my biggest MTB jump?',
     shortLabel: 'Biggest MTB jump',
     icon: 'terrain',
-    toolWorkflow: ['list_activity_types', 'list_metrics', 'rank_activities_by_metric', 'list_activity_jumps'],
-    routingHint: 'Discover every canonical type in the Mountain Biking group and resolve Maximum Jump Distance, rank those activities across all available history, then paginate the winning activity jumps as needed and report the largest returned distance. Never substitute jump count or an activity-page sample for the ranking.',
+    toolWorkflow: ['list_activity_types', 'rank_activities_by_metric'],
+    routingHint: 'Discover the Mountain Biking activityGroup, pass that exact group to the ranking tool with the server-mapped Maximum Jump Distance metric, and rank all of its server-expanded activity types across all available history. Treat the top ranked metric value and unit as authoritative. Do not spend the bounded workflow on jump-detail pagination unless the user explicitly asks for subrecord details, and never substitute jump count or an activity-page sample for the ranking.',
   },
 ] as const satisfies readonly AssistantPromptExample[];
 

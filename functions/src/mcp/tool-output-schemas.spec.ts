@@ -1219,7 +1219,7 @@ const successfulToolArguments: Record<
   },
   rank_activities_by_metric: {
     metric: 'Maximum Jump Distance',
-    activityTypes: ['Mountain Biking'],
+    activityGroup: 'mountain_biking_group',
     limit: 1,
   },
   list_routes: {

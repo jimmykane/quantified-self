@@ -150,6 +150,9 @@ const MCP_ACTIVITY_RANKING_INPUT_SCHEMA = z.object({
   start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
   end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
   activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+  activityGroup: z.string().min(1).max(80)
+    .describe('Exact activityGroup from list_activity_types; expands to its canonical types.')
+    .optional(),
   order: z.enum(['highest', 'lowest']).default('highest'),
   limit: z.number().int().min(1).max(25).default(10),
 }).superRefine((input, context) => {
@@ -551,7 +554,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
     instructions.push(
-      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, include every canonical type in the Mountain Biking group and rank by the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric, then paginate list_activity_jumps for the top activity and verify the exact jump field. Never rank jump quality by jumpCount.',
+      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -1257,7 +1260,7 @@ export function createMcpServer(
 
     server.registerTool('rank_activities_by_metric', {
       title: 'Rank activities by metric',
-      description: 'Rank activities by one persisted metric over a range or all history; oversized scans fail rather than return partial results. For jump superlatives, rank a Maximum Jump metric, then inspect the winner with list_activity_jumps.',
+      description: 'Rank one persisted metric over a range or all history. Oversized scans fail. A ranked Maximum Jump metric is authoritative; read jump details only when requested.',
       inputSchema: MCP_ACTIVITY_RANKING_INPUT_SCHEMA,
       outputSchema: outputSchemas.rank_activities_by_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
@@ -1274,6 +1277,7 @@ export function createMcpServer(
           ? undefined
           : parseMcpDateTime(input.end, 'end'),
         activityTypes: input.activityTypes,
+        activityGroup: input.activityGroup,
         order: input.order,
         limit: input.limit,
       }),

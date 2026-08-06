@@ -2265,6 +2265,47 @@ function resolveCanonicalActivityTypes(
   ].sort();
 }
 
+function resolveRankingActivityTypes(
+  activityTypes: readonly string[] | undefined,
+  activityGroup: string | undefined,
+): string[] {
+  const resolved = resolveCanonicalActivityTypes(activityTypes);
+  if (activityGroup === undefined) {
+    return resolved;
+  }
+  const normalizedGroup = `${activityGroup}`.trim();
+  const group = ActivityTypesHelper.getActivityTypeGroupsAsUniqueArray()
+    .find(candidate => candidate === normalizedGroup);
+  if (!group) {
+    throw new McpDataError(
+      'invalid_request',
+      `Unknown activity group: ${normalizedGroup}`,
+    );
+  }
+  const groupActivityTypes = ActivityTypesHelper
+    .getActivityTypesForActivityGroup(group)
+    .map(String);
+  if (groupActivityTypes.length === 0) {
+    throw new McpDataError(
+      'invalid_request',
+      `Activity group has no canonical activity types: ${normalizedGroup}`,
+    );
+  }
+  const combined = [
+    ...new Set([
+      ...resolved,
+      ...groupActivityTypes,
+    ]),
+  ].sort();
+  if (combined.length > 20) {
+    throw new McpDataError(
+      'invalid_request',
+      'At most 20 activity types can be requested after activity-group expansion.',
+    );
+  }
+  return combined;
+}
+
 function normalizeRouteSearch(search: string | undefined): string | null {
   const normalized = `${search || ''}`.trim().toLowerCase();
   if (normalized.length > 120) {
@@ -3906,6 +3947,7 @@ export interface RankActivitiesByMetricInput {
   startTimeMs?: number;
   endTimeMs?: number;
   activityTypes?: readonly string[];
+  activityGroup?: string;
   order: 'highest' | 'lowest';
   limit?: number;
 }
@@ -4783,7 +4825,13 @@ async function rankActivitiesByMetric(
   dependencies: McpDataServiceDependencies,
   input: RankActivitiesByMetricInput,
 ) {
-  const { query } = resolveActivityListQuery(dependencies, input);
+  const { query } = resolveActivityListQuery(dependencies, {
+    ...input,
+    activityTypes: resolveRankingActivityTypes(
+      input.activityTypes,
+      input.activityGroup,
+    ),
+  });
   const metric = resolveSportsLibNumericMetric(input.metric);
   if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
     throw new McpDataError(
