@@ -7,7 +7,7 @@
           <mat-icon>help_outline</mat-icon>
         </a>
         <button mat-icon-button type="button" aria-label="Start a new chat" matTooltip="Start a new chat"
-          [disabled]="loadingConversation() || sending() || resetting()" (click)="resetConversation()">
+          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
           @if (resetting()) {
             <mat-spinner diameter="20"></mat-spinner>
           } @else {
@@ -16,14 +16,31 @@
         </button>
       </div>
     </div>
-    <button class="assistant-explore-trigger" mat-button type="button" (click)="openExploreSheet()">
+    <button class="assistant-explore-trigger" mat-button type="button"
+      [disabled]="loadingConversation() || !!conversationLoadError()" (click)="openExploreSheet()">
       <mat-icon>auto_awesome</mat-icon>
       Examples &amp; data access
     </button>
   </header>
 
   <section class="assistant-chat">
-    @if (!loadingConversation() && (!isEmpty() || sending())) {
+    @if (loadingConversation()) {
+      <section class="assistant-loading" aria-live="polite">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>Loading your conversation…</span>
+      </section>
+    } @else if (conversationLoadError()) {
+      <section class="assistant-load-error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <h2>Conversation unavailable</h2>
+        <p>{{ conversationLoadError() }}</p>
+        <button mat-flat-button type="button" (click)="retryConversationLoad()">
+          <mat-icon>refresh</mat-icon>
+          Try again
+        </button>
+      </section>
+    } @else {
+      @if (!isEmpty() || sending()) {
       <section class="conversation qs-scrollbar" aria-label="Assistant conversation">
         @for (message of messages(); track message.id) {
           <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">
@@ -89,44 +106,40 @@
 
         <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
       </section>
-    } @else if (loadingConversation()) {
-      <section class="assistant-loading" aria-live="polite">
-        <mat-spinner diameter="24"></mat-spinner>
-        <span>Loading your conversation…</span>
-      </section>
-    }
-
-    <footer class="assistant-composer-dock">
-      @if (errorMessage()) {
-        <section class="assistant-error" role="alert">
-          <mat-icon>error_outline</mat-icon>
-          <span>{{ errorMessage() }}</span>
-          <button mat-icon-button type="button" aria-label="Dismiss Assistant error" (click)="errorMessage.set(null)">
-            <mat-icon>close</mat-icon>
-          </button>
-        </section>
       }
-      <section class="composer-shell">
-        <form class="composer" (submit)="handleComposerSubmit($event)">
-          <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
-            cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
-            [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
-            [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-          <button mat-icon-button class="composer-submit" type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
-            <span class="composer-submit-content">
-              @if (sending()) {
-                <mat-spinner diameter="20"></mat-spinner>
-              } @else {
-                <mat-icon>arrow_upward</mat-icon>
-              }
-            </span>
-          </button>
-        </form>
-        <div class="composer-footer">
-          <span>{{ quotaText() }}</span>
-          <span>{{ promptControl.value.length }}/{{ maxMessageChars }}</span>
-        </div>
-      </section>
-    </footer>
+
+      <footer class="assistant-composer-dock">
+        @if (errorMessage()) {
+          <section class="assistant-error" role="alert">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ errorMessage() }}</span>
+            <button mat-icon-button type="button" aria-label="Dismiss Assistant error" (click)="errorMessage.set(null)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </section>
+        }
+        <section class="composer-shell">
+          <form class="composer" (submit)="handleComposerSubmit($event)">
+            <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
+              cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+              [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
+            <button mat-icon-button class="composer-submit" type="submit" [disabled]="sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+              <span class="composer-submit-content">
+                @if (sending()) {
+                  <mat-spinner diameter="20"></mat-spinner>
+                } @else {
+                  <mat-icon>arrow_upward</mat-icon>
+                }
+              </span>
+            </button>
+          </form>
+          <div class="composer-footer">
+            <span>{{ quotaText() }}</span>
+            <span>{{ promptControl.value.length }}/{{ maxMessageChars }}</span>
+          </div>
+        </section>
+      </footer>
+    }
   </section>
 </main>

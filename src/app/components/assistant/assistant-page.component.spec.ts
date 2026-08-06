@@ -211,20 +211,18 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
   });
 
-  it('keeps loading state inside the full chat region above the composer', () => {
+  it('uses the full chat region for loading without exposing the composer', () => {
     component.loadingConversation.set(true);
     fixture.detectChanges();
     const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
     const chat = fixture.nativeElement.querySelector('.assistant-chat') as HTMLElement;
-    const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
     const loading = fixture.nativeElement.querySelector('.assistant-loading') as HTMLElement;
 
     expect(header.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(chat.contains(loading)).toBe(true);
-    expect(chat.contains(composer)).toBe(true);
-    expect(loading.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.composer-shell')).toBeNull();
+    expect(fixture.nativeElement.querySelector('textarea')).toBeNull();
   });
 
   it('follows an in-flight server turn after refresh until its answer is saved', async () => {
@@ -895,7 +893,7 @@ describe('AssistantPageComponent', () => {
     }
   });
 
-  it('does not start recovery after a permanent initial state failure', async () => {
+  it('blocks the composer and offers retry after an initial state failure', async () => {
     const pendingRequestId = 'assistant-request-initial-permanent-failure';
     sessionStorage.setItem(
       'quantified-self.assistant.pending-request-id',
@@ -909,11 +907,36 @@ describe('AssistantPageComponent', () => {
     );
 
     await component.ngOnInit();
+    fixture.detectChanges();
 
     expect(component.sending()).toBe(false);
-    expect(component.errorMessage()).toBe('The Assistant is unavailable for this account.');
+    expect(component.errorMessage()).toBeNull();
+    expect(component.conversationLoadError()).toBe(
+      'The Assistant is unavailable for this account.',
+    );
     expect(assistantService.getConversationState).toHaveBeenCalledOnce();
     expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.assistant-load-error')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Conversation unavailable');
+    expect(fixture.nativeElement.querySelector('.composer-shell')).toBeNull();
+    expect(fixture.nativeElement.querySelector('textarea')).toBeNull();
+    component.promptControl.setValue('This must not send');
+
+    await component.sendMessage();
+
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: null,
+      pendingRequestId: null,
+    });
+
+    await component.retryConversationLoad();
+    fixture.detectChanges();
+
+    expect(component.conversationLoadError()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.assistant-load-error')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.composer-shell')).toBeTruthy();
   });
 
   it('opens the explore sheet and inserts a selected example', () => {

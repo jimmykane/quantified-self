@@ -104,6 +104,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly sending = signal(false);
   readonly resetting = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly conversationLoadError = signal<string | null>(null);
   readonly messages = computed(() => {
     const storedMessages = this.conversation()?.messages || [];
     const pendingMessage = this.pendingUserMessage();
@@ -138,6 +139,19 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
 
   async ngOnInit(): Promise<void> {
+    await this.loadConversation();
+  }
+
+  async retryConversationLoad(): Promise<void> {
+    if (this.loadingConversation()) {
+      return;
+    }
+    await this.loadConversation();
+  }
+
+  private async loadConversation(): Promise<void> {
+    this.loadingConversation.set(true);
+    this.conversationLoadError.set(null);
     const initializingUid = this.auth.currentUser?.uid;
     const rememberedRequest = this.readRememberedPendingRequest();
     let requestToResume: AssistantPendingRequest | null = null;
@@ -155,6 +169,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.pendingUserMessage.set(null);
       this.promptControl.setValue('');
       this.errorMessage.set(null);
+      this.conversationLoadError.set(null);
       this.sending.set(false);
       this.loadingConversation.set(false);
       return;
@@ -199,7 +214,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       }
     } else {
       this.clearRememberedPendingRequest(rememberedRequest?.requestId);
-      this.errorMessage.set(this.assistantService.getErrorMessage(conversationResult.reason));
+      this.errorMessage.set(null);
+      this.conversationLoadError.set(
+        this.assistantService.getErrorMessage(conversationResult.reason),
+      );
     }
     if (quotaResult.status === 'fulfilled') {
       this.quota.set(quotaResult.value);
@@ -226,6 +244,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   openExploreSheet(): void {
+    if (this.loadingConversation() || this.conversationLoadError()) {
+      return;
+    }
     this.bottomSheet.open(AssistantExploreBottomSheetComponent)
       .afterDismissed()
       .subscribe((prompt: string | undefined) => {
@@ -237,6 +258,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
 
   async sendMessage(): Promise<void> {
     if (this.loadingConversation()
+      || this.conversationLoadError()
       || this.sending()
       || this.quotaPreventsSend()
       || this.promptControl.invalid) {
@@ -375,7 +397,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
-    if (this.loadingConversation() || this.resetting() || this.sending()) {
+    if (this.loadingConversation()
+      || this.conversationLoadError()
+      || this.resetting()
+      || this.sending()) {
       return;
     }
     this.resetting.set(true);

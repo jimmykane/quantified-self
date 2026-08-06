@@ -94,6 +94,39 @@ h1 {
   color: var(--mat-sys-on-surface-variant);
 }
 
+.assistant-load-error {
+  display: grid;
+  flex: 1 1 auto;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 24px;
+  text-align: center;
+}
+
+.assistant-load-error > mat-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--mat-sys-error);
+  font-size: 32px;
+}
+
+.assistant-load-error h2 {
+  margin: 0;
+  font: var(--mat-sys-title-large);
+  font-weight: 600;
+}
+
+.assistant-load-error p {
+  max-width: 460px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.assistant-load-error button {
+  margin-top: 4px;
+}
+
 .conversation {
   display: flex;
   flex: 1 1 auto;
