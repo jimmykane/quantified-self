@@ -26,7 +26,7 @@ Angular Assistant page
   -> existing MCP data service, strict output schemas, and Sports Lib catalogs
   -> dynamically generated Genkit tools
   -> Gemini answer
-  -> deterministic evidence projection
+  -> deterministic evidence and optional visual projection
   -> bounded conversation completion
 ```
 
@@ -60,7 +60,7 @@ The internal session always grants `metrics:read`, `measurements:read`, `sleep:r
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
 - first-class body-measurement discovery and bounded history;
-- bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, and swim lengths;
+- bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, swim lengths, and on-demand chart series;
 - coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
 
 The default conversation remains coordinate-free: activity start/end and MTB jump coordinates are omitted and nearby
@@ -75,9 +75,43 @@ The selected access mode is stored with the server-owned conversation. `beginTur
 fingerprints bind precise-location retries to that wider consent, changing the setting creates a new generation, and
 **New chat** always creates a coordinate-free generation. This prevents coordinate-bearing history from later being
 sent as part of a coordinate-free chat. Route-location scope, saved-route bounds, route geometry, route waypoints,
-activity chart streams, original source files, write tools, and dashboard settings remain unavailable in both modes.
+original source files, write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
+read bounded activity chart series but never their breadcrumb location stream. Precise-activity chats can request that
+existing location stream when an activity map is relevant.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
+
+## Deterministic visual answers
+
+An answer may store at most one chart and one satellite map. Gemini decides whether a visual would materially clarify
+the answer and selects only a server-advertised per-turn source ID, chart presentation (`line` or `bar`), and up to four
+allowlisted series keys. It never supplies plotted values, coordinates, colors, URLs, ECharts options, Mapbox
+configuration, or visual titles. `functions/src/assistant/visuals.ts` deterministically copies those fields from the
+already authorized, strictly validated MCP result into the shared `AssistantVisual` contract. Unknown sources or series
+are ignored, and visual projection failure never replaces an otherwise valid text answer or evidence list.
+
+The adapter reuses existing MCP results rather than introducing another query or calculation layer. It projects
+body-measurement history, aggregate metrics, sleep and safe-vital trends, supported Training-derived trend payloads,
+activity rankings, individual jump details, and activity chart streams. Maps reuse exact start/end, jump, nearby-match,
+or bounded chart-breadcrumb coordinates only when the conversation already has `activity-location:read`. Saved-route
+coordinates and geometry remain unavailable. Visual labels and units come from the existing MCP sleep, Training, and
+activity-chart catalogs. Form charts feed the persisted daily loads through the shared `buildTrainingLoadPoints` engine
+used by the app and derived-metric service, so fitness, fatigue, and Form are not recalculated by a parallel formula.
+
+The shared storage contract limits charts to four series and 300 points per series, maps to 50 markers and a 500-point
+path, each assistant message to 64 KiB of visual JSON, and the full public conversation to 512 KiB. Missing values stay
+`null` chart gaps. Deterministic min/max bucket downsampling keeps endpoints and local extrema; paths use deterministic
+endpoint-preserving sampling. Time axes persist the server-selected IANA timezone (or UTC for UTC-bound Training
+payloads), so calendar labels remain consistent when the answer is reopened from another timezone. The frontend
+renders through the existing ECharts host/theme/tooltip helpers and Mapbox
+loader/style/resize/marker/track manager. Only one inline Mapbox instance is active: the newest map loads automatically,
+an older map requires **Show map**, and expanding a map temporarily suspends the inline instance. Desktop uses a
+Material dialog and mobile uses the app's Material bottom sheet. A visual-rendering failure leaves the text answer and
+evidence available.
+
+Opening an Assistant satellite map sends the displayed geographic area to Mapbox to retrieve map tiles. This is
+separate from place-name geocoding: direct-coordinate searches still avoid the geocoder, but viewing their resulting
+map necessarily discloses the viewed tile area to Mapbox. The inline map and expanded view show this disclosure.
 
 Every current answer must execute at least one allowlisted tool. Genkit tools are built from the MCP server's live JSON
 input schemas. MCP validates every structured result against its strict output schema before the model receives it; the
@@ -108,6 +142,9 @@ The model receives only:
   are renamed and converted to ISO-8601 strings at this internal boundary. Measurement values such as HRV milliseconds
   and relative offsets such as a jump `timestampMs` remain numeric. In a `precise_activity` conversation, relevant
   selected results can also contain validated activity start/end or MTB jump coordinates and nearby activity matches.
+- a server-owned visual descriptor when the selected result supports a chart or map. It contains only a per-turn source
+  ID, safe series labels and units, and marker/path counts. Gemini chooses among those keys; the backend constructs the
+  persisted values and coordinates from the original validated result.
 
 Opaque references and cursors remain available to the model only because bounded follow-up detail and pagination calls
 need them. After generation, the runtime rejects any answer that repeats an exact opaque reference, opaque cursor, or
@@ -190,7 +227,9 @@ completed answer, the page restores the exact tab-scoped question to the compose
 ready to send again instead of presenting it as an unknown previous request. This prevents another tab's same-text turn
 from being mistaken for the current request.
 
-Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
+Text, compact evidence, and any bounded visual payload share the same conversation document and lifecycle; visuals do
+not create a separate cache or longer-lived location record. Each completed turn refreshes `expireAt` to seven days.
+Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
 valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for
 at most four extra minutes. The conversation becomes unavailable when `expireAt` passes; Firestore TTL deletes the
@@ -256,9 +295,11 @@ changes:
 
 1. Follow `.agent/skills/mcp-metric-surface/SKILL.md` and the public MCP lifecycle in `docs/mcp-server.md`.
 2. Decide explicitly whether the built-in Assistant should receive it. Do not widen scopes or add tools implicitly.
-3. Update the Assistant allowlist, system routing guidance, evidence projection, Help, policies, and this document when
+3. Update the Assistant allowlist, system routing guidance, evidence and visual projections, Help, policies, and this document when
    the boundary changes.
-4. Add positive routing tests plus negative leakage tests for identifiers, provenance, files, route geography, and coordinates.
+4. Update the deterministic visual projector when the result should support charts or maps. Never let the model provide
+   data points, coordinates, renderer configuration, or arbitrary labels. Add positive routing/projection tests plus
+   negative leakage tests for identifiers, provenance, files, route geography, coordinates, and unsupported visual keys.
 5. Run the Assistant tests, MCP output contract suite, and `npm --prefix functions run mcp:contract:check`.
 6. If the public registered MCP contract changed, follow its digest-bound publication and ChatGPT rescan lifecycle.
    An implementation-only Assistant change that leaves the public contract unchanged requires neither a registered
@@ -282,6 +323,7 @@ Also run the public Help/SEO content tests whenever capabilities, privacy, reten
 ## Deliberately deferred capabilities
 
 The initial version does not include streaming responses, multiple named conversations, proactive notifications,
-voice, saved-route location access, route geometry or waypoints, chart-stream analysis, write actions, dashboard arrangement, or medical recommendations.
+voice, saved-route location access, route geometry or waypoints, arbitrary model-authored visual specifications, write
+actions, dashboard arrangement, or medical recommendations.
 Any expansion needs an explicit product decision, privacy review, bounded data contract, quota/cost model, and rollback
 plan. Saved-route location or route-geometry support should normally remain in the external MCP path where the user approves those scopes.

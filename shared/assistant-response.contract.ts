@@ -1,14 +1,22 @@
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_EVIDENCE_ITEMS,
+  ASSISTANT_MAX_CHART_POINTS_PER_SERIES,
+  ASSISTANT_MAX_CHART_SERIES,
+  ASSISTANT_MAX_CONVERSATION_BYTES,
+  ASSISTANT_MAX_MAP_MARKERS,
+  ASSISTANT_MAX_MAP_PATH_POINTS,
   ASSISTANT_MAX_MESSAGE_CHARS,
   ASSISTANT_MAX_RESPONSE_CHARS,
   ASSISTANT_MAX_STORED_MESSAGES,
+  ASSISTANT_MAX_VISUAL_BYTES_PER_MESSAGE,
+  ASSISTANT_MAX_VISUALS_PER_MESSAGE,
   isValidAssistantRequestId,
   type AssistantChatResponse,
   type AssistantConversation,
   type AssistantEvidence,
   type AssistantMessage,
+  type AssistantVisual,
 } from './assistant.types';
 
 export type AssistantValidationResult<T> =
@@ -89,9 +97,143 @@ function isEvidence(value: unknown): value is AssistantEvidence {
   return factsValid && linksValid;
 }
 
+function getUtf8ByteLength(value: unknown): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isIanaTimeZone(value: unknown): value is string {
+  if (!isBoundedString(value, 1, 80)) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isMapPosition(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, ['latitudeDegrees', 'longitudeDegrees'])
+    && isFiniteNumber(value.latitudeDegrees)
+    && value.latitudeDegrees >= -90
+    && value.latitudeDegrees <= 90
+    && isFiniteNumber(value.longitudeDegrees)
+    && value.longitudeDegrees >= -180
+    && value.longitudeDegrees <= 180;
+}
+
+function isChartVisual(value: Record<string, unknown>): boolean {
+  const xAxis = value.xAxis;
+  if (!hasOnlyKeys(value, ['kind', 'title', 'chartType', 'xAxis', 'series'])
+    || value.kind !== 'chart'
+    || !isBoundedString(value.title, 1, 160)
+    || !['line', 'bar'].includes(`${value.chartType}`)
+    || !isRecord(xAxis)
+    || !hasOnlyKeys(xAxis, ['type', 'label', 'unit', 'timeZone'])
+    || !['time', 'linear', 'category'].includes(`${xAxis.type}`)
+    || !isBoundedString(xAxis.label, 1, 80)
+    || (xAxis.unit !== null && !isBoundedString(xAxis.unit, 1, 80))
+    || (xAxis.type === 'time'
+      ? !isIanaTimeZone(xAxis.timeZone)
+      : xAxis.timeZone !== null)
+    || !Array.isArray(value.series)
+    || value.series.length < 1
+    || value.series.length > ASSISTANT_MAX_CHART_SERIES) {
+    return false;
+  }
+
+  const labels = new Set<string>();
+  return value.series.every((series) => {
+    if (!isRecord(series)
+      || !hasOnlyKeys(series, ['label', 'unit', 'points'])
+      || !isBoundedString(series.label, 1, 120)
+      || labels.has(series.label)
+      || (series.unit !== null && !isBoundedString(series.unit, 1, 80))
+      || !Array.isArray(series.points)
+      || series.points.length < 1
+      || series.points.length > ASSISTANT_MAX_CHART_POINTS_PER_SERIES) {
+      return false;
+    }
+    labels.add(series.label);
+    return series.points.every((point) => {
+      if (!isRecord(point)
+        || !hasOnlyKeys(point, ['x', 'y'])
+        || (point.y !== null && !isFiniteNumber(point.y))) {
+        return false;
+      }
+      if (xAxis.type === 'time') {
+        return isIsoDate(point.x);
+      }
+      if (xAxis.type === 'linear') {
+        return isFiniteNumber(point.x);
+      }
+      return isFiniteNumber(point.x) || isBoundedString(point.x, 1, 120);
+    });
+  });
+}
+
+function isMapVisual(value: Record<string, unknown>): boolean {
+  if (!hasOnlyKeys(value, ['kind', 'title', 'style', 'markers', 'path'])
+    || value.kind !== 'map'
+    || !isBoundedString(value.title, 1, 160)
+    || value.style !== 'satellite'
+    || !Array.isArray(value.markers)
+    || value.markers.length > ASSISTANT_MAX_MAP_MARKERS
+    || !Array.isArray(value.path)
+    || value.path.length > ASSISTANT_MAX_MAP_PATH_POINTS
+    || (value.markers.length === 0 && value.path.length < 2)
+    || (value.path.length === 1)) {
+    return false;
+  }
+
+  const markerKinds = ['start', 'end', 'jump', 'nearby', 'search'];
+  const markersValid = value.markers.every(marker => isRecord(marker)
+    && hasOnlyKeys(marker, ['kind', 'label', 'latitudeDegrees', 'longitudeDegrees'])
+    && markerKinds.includes(`${marker.kind}`)
+    && isBoundedString(marker.label, 1, 120)
+    && isFiniteNumber(marker.latitudeDegrees)
+    && marker.latitudeDegrees >= -90
+    && marker.latitudeDegrees <= 90
+    && isFiniteNumber(marker.longitudeDegrees)
+    && marker.longitudeDegrees >= -180
+    && marker.longitudeDegrees <= 180);
+  return markersValid && value.path.every(isMapPosition);
+}
+
+function isVisual(value: unknown): value is AssistantVisual {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return value.kind === 'chart'
+    ? isChartVisual(value)
+    : value.kind === 'map' && isMapVisual(value);
+}
+
+function areVisualsValid(value: unknown): value is AssistantVisual[] {
+  if (!Array.isArray(value)
+    || value.length < 1
+    || value.length > ASSISTANT_MAX_VISUALS_PER_MESSAGE
+    || getUtf8ByteLength(value) > ASSISTANT_MAX_VISUAL_BYTES_PER_MESSAGE
+    || !value.every(isVisual)) {
+    return false;
+  }
+  const kinds = new Set(value.map(visual => visual.kind));
+  return kinds.size === value.length;
+}
+
 function isMessage(value: unknown): value is AssistantMessage {
   if (!isRecord(value)
-    || !hasOnlyKeys(value, ['id', 'role', 'text', 'createdAt', 'evidence'])
+    || !hasOnlyKeys(value, ['id', 'role', 'text', 'createdAt', 'evidence', 'visuals'])
     || !isBoundedString(value.id, 1, 120)
     || (value.role !== 'user' && value.role !== 'assistant')
     || !isBoundedString(
@@ -106,12 +248,14 @@ function isMessage(value: unknown): value is AssistantMessage {
   }
 
   if (value.role === 'user') {
-    return value.evidence === undefined;
+    return value.evidence === undefined && value.visuals === undefined;
   }
-  return value.evidence === undefined
+  const evidenceValid = value.evidence === undefined
     || (Array.isArray(value.evidence)
       && value.evidence.length <= ASSISTANT_MAX_EVIDENCE_ITEMS
       && value.evidence.every(isEvidence));
+  const visualsValid = value.visuals === undefined || areVisualsValid(value.visuals);
+  return evidenceValid && visualsValid;
 }
 
 function hasValidMessageSequence(messages: AssistantMessage[]): boolean {
@@ -151,6 +295,9 @@ export function validateAssistantConversation(
   }
   if (!isIsoDate(value.expiresAt)) {
     return { ok: false, reason: 'invalid_expiry' };
+  }
+  if (getUtf8ByteLength(value) > ASSISTANT_MAX_CONVERSATION_BYTES) {
+    return { ok: false, reason: 'conversation_too_large' };
   }
 
   return { ok: true, data: value as unknown as AssistantConversation };

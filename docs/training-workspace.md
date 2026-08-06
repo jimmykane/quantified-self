@@ -1434,6 +1434,13 @@ Training Summary projection. `shared/training-load.ts` owns the canonical daily 
 by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
 selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
 
+The built-in Assistant consumes this same strict `get_training_metric` projection. Its optional deterministic chart
+adapter takes Training titles from the MCP catalog and plots only supported trend arrays. For the `form` payload it
+passes the projected daily loads through `shared/training-load.ts` so CTL, ATL, and Form match the workspace and derived
+backend exactly; it does not maintain another formula. The adapter refuses an implausible expansion beyond 20 years,
+downsamples the resulting display series within the shared Assistant payload budget, and never exposes raw snapshots or
+provider/device provenance to Gemini as visual configuration.
+
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map
 in `functions/src/mcp/derived-output-schemas.ts`. The server recursively removes event/activity IDs, names, and labels,

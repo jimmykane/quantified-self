@@ -49,12 +49,53 @@
       @if (!isEmpty() || sending()) {
       <section class="conversation qs-scrollbar" aria-label="Assistant conversation">
         @for (message of messages(); track message.id) {
-          <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">
+          <article class="message" [class.message-user]="message.role === 'user'"
+            [class.message-assistant]="message.role === 'assistant'"
+            [class.message-has-visuals]="!!message.visuals?.length">
             <div class="message-role">
               <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
               <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
             </div>
             <p class="message-text">{{ message.text }}</p>
+
+            @if (message.visuals?.length) {
+              <section class="assistant-visuals" aria-label="Answer visuals">
+                @for (visual of message.visuals; track $index) {
+                  <article class="assistant-visual-card">
+                    <header>
+                      <span class="assistant-visual-heading">
+                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'satellite_alt' }}</mat-icon>
+                        <span>
+                          <strong>{{ visual.title }}</strong>
+                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Satellite map' }}</small>
+                        </span>
+                      </span>
+                      <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
+                        matTooltip="Expand" (click)="openVisual(visual)">
+                        <mat-icon>open_in_full</mat-icon>
+                      </button>
+                    </header>
+
+                    @if (visual.kind === 'chart') {
+                      <app-assistant-visual-chart [visual]="visual" />
+                    } @else {
+                      @if (isMapActive(message, $index)) {
+                        <app-assistant-visual-map [visual]="visual" />
+                      } @else {
+                        <button mat-button class="assistant-show-map" type="button"
+                          (click)="showInlineMap(message, $index)">
+                          <mat-icon>map</mat-icon>
+                          Show map
+                        </button>
+                      }
+                      <p class="assistant-map-disclosure">
+                        Viewing sends the displayed map area to Mapbox for satellite tiles.
+                      </p>
+                    }
+                  </article>
+                }
+              </section>
+            }
 
             @if (message.evidence?.length) {
               <details class="evidence-panel">

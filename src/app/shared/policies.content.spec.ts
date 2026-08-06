@@ -39,11 +39,14 @@ describe('Built-in Assistant policy', () => {
     expect(content).toContain('opaque reference or cursor is rejected');
     expect(content).toContain('route names can contain user- or provider-assigned place information');
     expect(content).toContain('saved-route bounds, route geometry, waypoints');
-    expect(content).toContain('server-owned active conversation becomes unavailable about seven days after');
+    expect(content).toContain('bounded chart or map payload share the same server-owned active conversation');
+    expect(content).toContain('becomes unavailable about seven days after');
     expect(content).toContain('at most four extra minutes');
     expect(content).toContain('Firestore TTL then deletes it asynchronously');
     expect(content).toContain('built-in Assistant can make the same bounded place-name lookup');
     expect(content).toContain('only the supplied location text');
+    expect(content).toContain('displayed geographic tile area');
+    expect(content).toContain('deterministically constructs any chart values, map coordinates, labels, and renderer settings');
     expect(content).toContain('saved-route access remains limited to coordinate-free summaries');
     expect(content).not.toContain('AI Insights');
     expect(content).not.toContain('rollback');

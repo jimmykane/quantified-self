@@ -52,7 +52,7 @@ describe('help.content', () => {
 
     expect(assistantSection?.title).toBe('Assistant');
     expect(assistantSection?.content).toContain('Every current answer must use at least one read-only Quantified Self result');
-    expect(assistantSection?.content).toContain('Expand **grounded results**');
+    expect(assistantSection?.content).toContain('Expand **Data used**');
     expect(assistantSection?.content).toContain("browser's IANA timezone");
     expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
     expect(assistantSection?.content).toContain('opaque reference or cursor is rejected');
@@ -67,6 +67,9 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('coordinate-free by default');
     expect(assistantSection?.content).toContain('**Precise activity locations**');
     expect(assistantSection?.content).toContain('exact activity start/end and MTB jump coordinates');
+    expect(assistantSection?.content).toContain('one interactive chart and one satellite map');
+    expect(assistantSection?.content).toContain('displayed geographic area to Mapbox');
+    expect(assistantSection?.content).toContain('constructs all plotted values, coordinates, labels, and renderer settings deterministically');
     expect(assistantSection?.content).toContain('Changing this setting starts a new chat');
     expect(assistantSection?.content).toContain('route geometry');
     expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');

@@ -163,7 +163,10 @@ describe('Assistant runtime', () => {
         ],
       } as never)
       .mockResolvedValueOnce({
-        output: { answer: 'Your readiness is 72 today.' },
+        output: {
+          answer: 'Your readiness is 72 today.',
+          visuals: { chart: null, map: null },
+        },
       } as never);
 
     await expect(generateAssistantModelAnswer({
@@ -175,7 +178,10 @@ describe('Assistant runtime', () => {
       tools: [tool],
       publishedExample: ASSISTANT_PROMPT_EXAMPLES[0],
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
-    })).resolves.toBe('Your readiness is 72 today.');
+    })).resolves.toEqual({
+      answer: 'Your readiness is 72 today.',
+      visualRequest: { chart: null, map: null },
+    });
 
     expect(generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
       system: expect.stringContaining(
@@ -476,6 +482,86 @@ describe('Assistant runtime', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('lets the model select a server-owned visual descriptor without selecting values', async () => {
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        buckets: [{
+          bucketStartMs: Date.parse('2026-08-01T00:00:00.000Z'),
+          averageDurationSeconds: 28_800,
+          averageScore: 80,
+          averageVitals: { averageHrvMs: 51 },
+        }, {
+          bucketStartMs: Date.parse('2026-08-02T00:00:00.000Z'),
+          averageDurationSeconds: 27_000,
+          averageScore: 75,
+          averageVitals: { averageHrvMs: 46 },
+        }],
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use sleep trends for recovery questions.',
+      tools: [{
+        name: 'get_sleep_trend',
+        title: 'Get sleep trend',
+        description: 'Return bounded sleep trends.',
+        inputSchema: { type: 'object', properties: {} },
+      }],
+      callTool,
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        const projected = await input.tools[0].execute({});
+        expect(projected).toMatchObject({
+          assistantVisualization: {
+            sourceId: 'source_1',
+            chart: {
+              availableSeries: expect.arrayContaining([
+                { key: 'average_hrv', label: 'Average HRV', unit: 'ms' },
+              ]),
+            },
+            map: null,
+          },
+        });
+        expect(JSON.stringify(projected.assistantVisualization)).not.toContain('51');
+        return {
+          answer: 'Your overnight recovery trend declined across the two recorded nights.',
+          visualRequest: {
+            chart: {
+              sourceId: 'source_1',
+              seriesKeys: ['average_hrv'],
+              chartType: 'line',
+            },
+            map: null,
+          },
+        };
+      },
+    });
+
+    const result = await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show my overnight HRV trend.',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(result.visuals).toEqual([expect.objectContaining({
+      kind: 'chart',
+      title: 'Sleep and recovery trend',
+      xAxis: expect.objectContaining({ timeZone: 'Europe/Helsinki' }),
+      series: [{
+        label: 'Average HRV',
+        unit: 'ms',
+        points: [
+          { x: '2026-08-01T00:00:00.000Z', y: 51 },
+          { x: '2026-08-02T00:00:00.000Z', y: 46 },
+        ],
+      }],
+    })]);
+  });
+
   it('binds explicit precise activity-location consent to the MCP session and model instructions', async () => {
     const { session } = createSession();
     const createMcpSession = vi.fn().mockResolvedValue(session);
@@ -672,10 +758,13 @@ describe('Assistant runtime', () => {
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
         await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
-          activities: [{
-            activityRef,
-            activityType: 'Running',
-          }],
+          data: {
+            activities: [{
+              activityRef,
+              activityType: 'Running',
+            }],
+          },
+          assistantVisualization: null,
         });
         return 'Your latest recorded activity was Running.';
       },
@@ -716,15 +805,18 @@ describe('Assistant runtime', () => {
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
         await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
-          startTime: '2026-07-31T07:50:22.000Z',
-          endTime: '2026-07-31T14:30:45.000Z',
-          bucketStart: '2026-07-31T07:50:22.000Z',
-          nested: {
-            asOfDay: '2026-07-31T07:50:22.000Z',
-            generatedAt: '2026-07-31T14:30:45.000Z',
+          data: {
+            startTime: '2026-07-31T07:50:22.000Z',
+            endTime: '2026-07-31T14:30:45.000Z',
+            bucketStart: '2026-07-31T07:50:22.000Z',
+            nested: {
+              asOfDay: '2026-07-31T07:50:22.000Z',
+              generatedAt: '2026-07-31T14:30:45.000Z',
+            },
+            averageHrvMs: 42,
+            timestampMs: 320,
           },
-          averageHrvMs: 42,
-          timestampMs: 320,
+          assistantVisualization: null,
         });
         return 'The activity started on July 31, 2026.';
       },

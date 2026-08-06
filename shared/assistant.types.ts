@@ -3,6 +3,13 @@ export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
 export const ASSISTANT_MAX_RESPONSE_CHARS = 4_000;
 export const ASSISTANT_MAX_STORED_MESSAGES = 12;
 export const ASSISTANT_MAX_EVIDENCE_ITEMS = 6;
+export const ASSISTANT_MAX_VISUALS_PER_MESSAGE = 2;
+export const ASSISTANT_MAX_CHART_SERIES = 4;
+export const ASSISTANT_MAX_CHART_POINTS_PER_SERIES = 300;
+export const ASSISTANT_MAX_MAP_MARKERS = 50;
+export const ASSISTANT_MAX_MAP_PATH_POINTS = 500;
+export const ASSISTANT_MAX_VISUAL_BYTES_PER_MESSAGE = 64 * 1024;
+export const ASSISTANT_MAX_CONVERSATION_BYTES = 512 * 1024;
 const ASSISTANT_REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16,120}$/;
 
 export const ASSISTANT_LOCATION_ACCESS_VALUES = [
@@ -74,12 +81,67 @@ export interface AssistantEvidence {
   links: AssistantEvidenceLink[];
 }
 
+export type AssistantChartType = 'line' | 'bar';
+export type AssistantChartXAxisType = 'time' | 'linear' | 'category';
+
+export interface AssistantChartPoint {
+  x: string | number;
+  y: number | null;
+}
+
+export interface AssistantChartSeries {
+  label: string;
+  unit: string | null;
+  points: AssistantChartPoint[];
+}
+
+export interface AssistantChartVisual {
+  kind: 'chart';
+  title: string;
+  chartType: AssistantChartType;
+  xAxis: {
+    type: AssistantChartXAxisType;
+    label: string;
+    unit: string | null;
+    timeZone: string | null;
+  };
+  series: AssistantChartSeries[];
+}
+
+export type AssistantMapMarkerKind =
+  | 'start'
+  | 'end'
+  | 'jump'
+  | 'nearby'
+  | 'search';
+
+export interface AssistantMapPosition {
+  latitudeDegrees: number;
+  longitudeDegrees: number;
+}
+
+export interface AssistantMapMarker extends AssistantMapPosition {
+  kind: AssistantMapMarkerKind;
+  label: string;
+}
+
+export interface AssistantMapVisual {
+  kind: 'map';
+  title: string;
+  style: 'satellite';
+  markers: AssistantMapMarker[];
+  path: AssistantMapPosition[];
+}
+
+export type AssistantVisual = AssistantChartVisual | AssistantMapVisual;
+
 export interface AssistantMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   createdAt: string;
   evidence?: AssistantEvidence[];
+  visuals?: AssistantVisual[];
 }
 
 export interface AssistantConversation {

@@ -434,7 +434,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Starter prompts fill the composer; they do not send automatically.
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
-- Every current answer must use at least one read-only Quantified Self result. Expand **grounded results** below an answer to inspect compact facts and app links produced from actual tool results.
+- Every current answer must use at least one read-only Quantified Self result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
 - Use **New chat** to clear the stored messages, return precise activity locations to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read
@@ -442,21 +442,29 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
 - **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
 - **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
-- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps, and swim lengths. Activity start/end and MTB jump coordinates are redacted by default. In **Examples & data access**, you can start a new chat with **Precise activity locations** enabled for exact activity positions and nearby activity searches. For an MTB jump record, the Assistant ranks the matching Mountain Biking activities by the relevant maximum-jump metric and treats that persisted maximum as authoritative instead of comparing jump counts or only recent activities. It reads individual jump records only when you ask for those details.
+- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps, swim lengths, and bounded on-demand workout chart series. Activity start/end, chart breadcrumbs, and MTB jump coordinates are redacted by default. In **Examples & data access**, you can start a new chat with **Precise activity locations** enabled for exact activity positions, chart breadcrumbs, and nearby activity searches. For an MTB jump record, the Assistant ranks the matching Mountain Biking activities by the relevant maximum-jump metric and treats that persisted maximum as authoritative instead of comparing jump counts or only recent activities. It reads individual jump records only when you ask for those details.
 - **Saved routes:** coordinate-free route names, activity types, bounded summary metrics and counts, and import or update times, filterable by sport, name, or recency. Route names can contain user- or provider-assigned place information.
 - **Activity metrics:** one or several bounded aggregate metric queries through the canonical MCP metric catalog.
+
+## Charts and maps
+
+- When a visual materially helps, the Assistant can add one interactive chart and one satellite map to an answer. The newest map loads inline; use **Show map** for an older result or **Expand** for a larger view.
+- Gemini chooses only from safe chart-series or map sources advertised by the current validated tool result. Quantified Self constructs all plotted values, coordinates, labels, and renderer settings deterministically; Gemini cannot author arbitrary chart configuration or move map points.
+- Charts reuse existing measurement, sleep, Training, aggregate metric, ranking, jump, and workout-chart results. Missing readings remain gaps instead of becoming zero.
+- Maps use only activity coordinates already allowed by the current **Precise activity locations** chat. Saved-route bounds, geometry, and waypoints are still unavailable.
+- Opening a satellite map sends the displayed geographic area to Mapbox to load map tiles. This applies even after a direct-coordinate search that did not use Mapbox geocoding. If a map cannot load, the text answer and **Data used** remain available.
 
 ## Privacy boundaries
 
 - The built-in Assistant is coordinate-free by default. When you explicitly enable **Precise activity locations** for a fresh chat, activity tools selected during that chat may send Gemini exact activity start/end and MTB jump coordinates plus nearby activity results. Place-name nearby searches send only the location text to Mapbox; direct-coordinate searches do not use Mapbox. Changing this setting starts a new chat so coordinate-bearing history cannot cross back into a coordinate-free conversation.
-- Saved-route bounds, route geometry, route waypoints, raw chart streams, original files, write tools, and dashboard settings remain unavailable even when precise activity locations are enabled.
+- Saved-route bounds, route geometry, route waypoints, full-resolution or unrequested sensor streams, original files, write tools, and dashboard settings remain unavailable even when precise activity locations are enabled.
 - Gemini receives your message, the browser's IANA timezone for local-day context, bounded recent conversation context, and the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and an answer that repeats an opaque reference or cursor is rejected. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
 - Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
 - The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
 
 ## Retention and control
 
-- Quantified Self stores one active conversation per user, with at most the latest six completed turns.
+- Quantified Self stores one active conversation per user, with at most the latest six completed turns. Text, compact evidence, and any bounded chart or map payload use the same retention period.
 - The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
 - **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations to **off**.

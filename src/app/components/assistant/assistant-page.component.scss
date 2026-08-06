@@ -181,6 +181,10 @@ h1 {
   background: var(--mat-sys-surface-container-low);
 }
 
+.message-has-visuals {
+  width: min(94%, 820px);
+}
+
 .message-role {
   gap: 6px;
   margin-bottom: 9px;
@@ -198,6 +202,82 @@ h1 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.62;
+}
+
+.assistant-visuals {
+  display: grid;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.assistant-visual-card {
+  min-width: 0;
+  padding: 11px;
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.assistant-visual-card > header,
+.assistant-visual-heading,
+.assistant-visual-heading > span {
+  display: flex;
+}
+
+.assistant-visual-card > header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 2px 8px 5px;
+}
+
+.assistant-visual-heading {
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.assistant-visual-heading > mat-icon {
+  flex: 0 0 auto;
+  color: var(--mat-sys-primary);
+}
+
+.assistant-visual-heading > span {
+  flex-direction: column;
+  min-width: 0;
+}
+
+.assistant-visual-heading strong {
+  overflow: hidden;
+  font: var(--mat-sys-title-small);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-visual-heading small,
+.assistant-map-disclosure {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.assistant-visual-heading small {
+  font-size: 0.72rem;
+}
+
+.assistant-show-map {
+  display: flex;
+  width: 100%;
+  min-height: 112px;
+  border-radius: 14px;
+  background: var(--mat-sys-surface-container);
+}
+
+.assistant-map-disclosure {
+  margin: 8px 4px 1px;
+  font-size: 0.7rem;
+  line-height: 1.35;
 }
 
 .thinking-content {
@@ -478,6 +558,11 @@ h1 {
   .message {
     width: 88%;
     padding: 14px;
+  }
+
+  .message-has-visuals {
+    width: 100%;
+    padding: 12px;
   }
 
   .composer {

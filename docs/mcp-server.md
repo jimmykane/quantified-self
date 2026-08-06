@@ -29,7 +29,13 @@ call the hosted endpoint or mint OAuth credentials, but it still uses the same r
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
-offer a validated safe app link. This prevents the Assistant from becoming a parallel data API.
+offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and
+data tools. A deterministic adapter can turn supported validated MCP results into a shared Assistant chart or satellite
+map payload; Gemini selects only an advertised per-turn source and series key, never values, coordinates, renderer
+configuration, or titles. Coordinate-free sessions cannot request chart breadcrumbs, while the explicit existing
+`activity-location:read` mode can. Saved-route geometry remains excluded. Viewing an in-app satellite map sends its
+displayed tile area to Mapbox, independently of whether place-name geocoding was used. This prevents the Assistant from
+becoming a parallel data or calculation API.
 
 The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
 tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the

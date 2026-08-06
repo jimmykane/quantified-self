@@ -32,6 +32,36 @@ function buildResponse(): AssistantChatResponse {
               url: 'https://quantified-self.io/user/me/event/activity',
             }],
           }],
+          visuals: [{
+            kind: 'chart',
+            title: 'Sleep and recovery trend',
+            chartType: 'line',
+            xAxis: {
+              type: 'time',
+              label: 'Date',
+              unit: null,
+              timeZone: 'Europe/Helsinki',
+            },
+            series: [{
+              label: 'Overnight HRV',
+              unit: 'ms',
+              points: [
+                { x: '2026-08-02T00:00:00.000Z', y: 52 },
+                { x: '2026-08-03T00:00:00.000Z', y: null },
+              ],
+            }],
+          }, {
+            kind: 'map',
+            title: 'Activity location',
+            style: 'satellite',
+            markers: [{
+              kind: 'start',
+              label: 'Start',
+              latitudeDegrees: 39.665,
+              longitudeDegrees: 20.853,
+            }],
+            path: [],
+          }],
         },
       ],
       expiresAt: '2026-08-10T12:00:00.000Z',
@@ -111,6 +141,71 @@ describe('Assistant response contract', () => {
       ok: false,
       reason: 'invalid_messages',
     });
+  });
+
+  it('accepts bounded deterministic charts and maps on assistant messages', () => {
+    expect(validateAssistantConversation(buildResponse().conversation).ok).toBe(true);
+  });
+
+  it('rejects malformed, duplicate, or user-owned visual payloads', () => {
+    const duplicateKinds = buildResponse();
+    duplicateKinds.conversation.messages[1].visuals = [
+      duplicateKinds.conversation.messages[1].visuals![0],
+      duplicateKinds.conversation.messages[1].visuals![0],
+    ];
+    expect(validateAssistantConversation(duplicateKinds.conversation).ok).toBe(false);
+
+    const invalidCoordinate = buildResponse();
+    const map = invalidCoordinate.conversation.messages[1].visuals![1];
+    if (map.kind === 'map') {
+      map.markers[0].latitudeDegrees = 91;
+    }
+    expect(validateAssistantConversation(invalidCoordinate.conversation).ok).toBe(false);
+
+    const rawConfig = buildResponse();
+    const chart = rawConfig.conversation.messages[1].visuals![0] as unknown as Record<string, unknown>;
+    chart.echartsOptions = { tooltip: { formatter: '<img src=x>' } };
+    expect(validateAssistantConversation(rawConfig.conversation).ok).toBe(false);
+
+    const invalidTimeZone = buildResponse();
+    const timeChart = invalidTimeZone.conversation.messages[1].visuals![0];
+    if (timeChart.kind === 'chart') {
+      timeChart.xAxis.timeZone = 'Not/A_Time_Zone';
+    }
+    expect(validateAssistantConversation(invalidTimeZone.conversation).ok).toBe(false);
+
+    const userVisual = buildResponse();
+    userVisual.conversation.messages[0].visuals =
+      userVisual.conversation.messages[1].visuals;
+    expect(validateAssistantConversation(userVisual.conversation).ok).toBe(false);
+  });
+
+  it('rejects visual series and payloads beyond their storage budgets', () => {
+    const tooManyPoints = buildResponse();
+    const chart = tooManyPoints.conversation.messages[1].visuals![0];
+    if (chart.kind === 'chart') {
+      chart.series[0].points = Array.from({ length: 301 }, (_, index) => ({
+        x: new Date(Date.UTC(2026, 0, 1 + index)).toISOString(),
+        y: index,
+      }));
+    }
+    expect(validateAssistantConversation(tooManyPoints.conversation).ok).toBe(false);
+
+    const oversized = buildResponse();
+    const oversizedChart = oversized.conversation.messages[1].visuals![0];
+    if (oversizedChart.kind === 'chart') {
+      oversizedChart.series = Array.from({ length: 4 }, (_, seriesIndex) => ({
+        label: `Series ${seriesIndex} ${'x'.repeat(90)}`,
+        unit: 'milliseconds',
+        points: Array.from({ length: 300 }, (_, pointIndex) => ({
+          x: `Category ${pointIndex} ${'y'.repeat(90)}`,
+          y: pointIndex,
+        })),
+      }));
+      oversizedChart.xAxis.type = 'category';
+      oversizedChart.xAxis.timeZone = null;
+    }
+    expect(validateAssistantConversation(oversized.conversation).ok).toBe(false);
   });
 
   it('rejects unexpected top-level response fields', () => {

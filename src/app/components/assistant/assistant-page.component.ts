@@ -6,13 +6,16 @@ import {
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth } from 'app/firebase/auth';
@@ -24,6 +27,7 @@ import {
   type AssistantConversation,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type AssistantVisual,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { MaterialModule } from '../../modules/material.module';
@@ -36,6 +40,12 @@ import {
   AssistantExploreBottomSheetComponent,
   type AssistantExploreBottomSheetResult,
 } from './assistant-explore-bottom-sheet.component';
+import { AssistantVisualChartComponent } from './assistant-visual-chart.component';
+import {
+  AssistantVisualDetailComponent,
+  type AssistantVisualDetailData,
+} from './assistant-visual-detail.component';
+import { AssistantVisualMapComponent } from './assistant-visual-map.component';
 
 const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
 const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
@@ -69,6 +79,8 @@ type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantR
     RouterModule,
     MaterialModule,
     TextFieldModule,
+    AssistantVisualChartComponent,
+    AssistantVisualMapComponent,
   ],
   templateUrl: './assistant-page.component.html',
   styleUrls: ['./assistant-page.component.scss'],
@@ -78,6 +90,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly dialog = inject(MatDialog);
+  private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly auth = inject(Auth);
   private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
@@ -88,6 +102,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private pendingRecoveryDeadlineMs = 0;
   private pendingRegistrationDeadlineMs = 0;
   private destroyed = false;
+  private latestKnownMapKey: string | null = null;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly composerPlaceholder = 'Ask about your data…';
@@ -114,6 +129,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   readonly resetting = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly conversationLoadError = signal<string | null>(null);
+  readonly activeMapKey = signal<string | null>(null);
+  readonly expandedMap = signal(false);
   readonly messages = computed(() => {
     const storedMessages = this.conversation()?.messages || [];
     const pendingMessage = this.pendingUserMessage();
@@ -122,6 +139,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       : storedMessages;
   });
   readonly isEmpty = computed(() => this.messages().length === 0);
+  private readonly mapVisualKeys = computed(() => this.messages().flatMap(message => (
+    (message.visuals || []).flatMap((visual, index) => (
+      visual.kind === 'map' ? [this.getVisualKey(message, index)] : []
+    ))
+  )));
   readonly quotaBlocked = computed(() => {
     const status = this.quota();
     return status !== null
@@ -146,6 +168,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     }
     return `${status.remainingCount} of ${status.limit} remaining`;
   });
+
+  constructor() {
+    effect(() => {
+      const latestMapKey = this.mapVisualKeys().at(-1) ?? null;
+      if (latestMapKey !== this.latestKnownMapKey) {
+        this.latestKnownMapKey = latestMapKey;
+        this.activeMapKey.set(latestMapKey);
+      }
+    });
+  }
 
   async ngOnInit(): Promise<void> {
     await this.loadConversation();
@@ -272,6 +304,37 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
           void this.changeLocationAccess(result.locationAccess);
         }
       });
+  }
+
+  getVisualKey(message: AssistantMessage, index: number): string {
+    return `${message.id}:${index}`;
+  }
+
+  isMapActive(message: AssistantMessage, index: number): boolean {
+    return !this.expandedMap()
+      && this.activeMapKey() === this.getVisualKey(message, index);
+  }
+
+  showInlineMap(message: AssistantMessage, index: number): void {
+    this.activeMapKey.set(this.getVisualKey(message, index));
+  }
+
+  openVisual(visual: AssistantVisual): void {
+    const data: AssistantVisualDetailData = { visual };
+    if (visual.kind === 'map') {
+      this.expandedMap.set(true);
+    }
+    const closed = this.breakpointObserver.isMatched('(max-width: 720px)')
+      ? this.bottomSheet.open(AssistantVisualDetailComponent, { data }).afterDismissed()
+      : this.dialog.open(AssistantVisualDetailComponent, {
+          data,
+          maxWidth: 'calc(100vw - 32px)',
+        }).afterClosed();
+    closed.subscribe(() => {
+      if (visual.kind === 'map') {
+        this.expandedMap.set(false);
+      }
+    });
   }
 
   async sendMessage(): Promise<void> {

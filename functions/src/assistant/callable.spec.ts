@@ -98,6 +98,7 @@ function createDependencies() {
         answer: 'Your readiness is 72 today.',
         evidence: [],
         toolNames: ['get_daily_report'],
+        visuals: [],
       };
     }),
     createId: vi.fn().mockReturnValue('assistant-message'),
@@ -286,6 +287,49 @@ describe('Assistant callable', () => {
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
     }));
+  });
+
+  it('persists bounded server-owned visuals with the assistant message', async () => {
+    const { dependencies, store } = createDependencies();
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      return {
+        answer: 'Your HRV trend is shown below.',
+        evidence: [],
+        toolNames: ['get_sleep_trend'],
+        visuals: [{
+          kind: 'chart',
+          title: 'Overnight HRV trend',
+          chartType: 'line',
+          xAxis: {
+            type: 'time',
+            label: 'Date',
+            unit: null,
+            timeZone: 'Europe/Helsinki',
+          },
+          series: [{
+            label: 'Overnight HRV',
+            unit: 'ms',
+            points: [{ x: '2026-08-03T00:00:00.000Z', y: 52 }],
+          }],
+        }],
+      };
+    });
+
+    await runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'Show my HRV trend.',
+      timeZone: 'Europe/Helsinki',
+    }, context, dependencies);
+
+    expect(store.completeTurn).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        visuals: [expect.objectContaining({ kind: 'chart' })],
+      }),
+    );
   });
 
   it('rejects unknown Assistant location-access modes before reserving quota', async () => {

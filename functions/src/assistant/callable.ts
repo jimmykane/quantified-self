@@ -499,6 +499,7 @@ export async function runAssistantChat(
       text: result.answer,
       createdAt,
       evidence: result.evidence,
+      ...(result.visuals?.length ? { visuals: result.visuals } : {}),
     };
     const conversation = await dependencies.conversationStore.completeTurn(
       uid,

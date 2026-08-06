@@ -499,10 +499,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.assistant,
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
-    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, and saved-route summaries. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, saved-route summaries, and optional interactive charts or activity maps. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     h1: 'A fitness-data Assistant grounded in your own history',
-    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
-    chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Saved routes'],
+    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools, shows the results that grounded each answer, and can add a deterministic chart or opt-in activity map when it clarifies the result. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Charts & maps', 'Saved routes'],
     actions: [
       routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
       routeAction('View Membership', '/pricing'),
@@ -534,6 +534,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'Saved-route summaries',
             copy: 'Find recent saved routes by sport, name, or recency while coordinate fields, saved bounds, geometry, and waypoints stay unavailable. Route names may contain place information.',
           },
+          {
+            icon: 'monitoring',
+            title: 'Deterministic charts and activity maps',
+            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A satellite map can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
+          },
         ],
       },
       {
@@ -549,7 +554,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'location_on',
             title: 'Precise activity locations stay opt-in',
-            copy: 'Activity start/end and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions and nearby activity searches. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
+            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a satellite map sends the displayed tile area to Mapbox. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
           },
           {
             icon: 'timer',
@@ -562,11 +567,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, and coordinate-free saved-route summaries. Exact activity start/end and MTB jump locations plus nearby activity search are available only after you explicitly enable precise activity locations for a fresh chat.',
+        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, bounded workout charts, and coordinate-free saved-route summaries. It can show deterministic charts from those results. Exact activity start/end, chart breadcrumbs, MTB jump locations, nearby activity search, and activity maps are available only after you explicitly enable precise activity locations for a fresh chat.',
       },
       {
         question: 'Does the Assistant send raw files or route locations to Gemini?',
-        answer: 'No raw files or saved-route locations are sent. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Results are coordinate-free by default. If you explicitly enable precise activity locations for a fresh chat, those results may include exact activity start/end and MTB jump coordinates or nearby activity matches. Place-name searches send only the location text to Mapbox. Coordinate-free saved-route summaries may include route names with place information, but saved bounds, route geometry, and waypoints remain unavailable. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer.',
+        answer: 'No raw files or saved-route locations are sent. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Results are coordinate-free by default. If you explicitly enable precise activity locations for a fresh chat, those results may include exact activity start/end and MTB jump coordinates, bounded chart breadcrumbs, or nearby activity matches. Place-name searches send only the location text to Mapbox; opening a satellite map separately sends its displayed tile area to Mapbox. Coordinate-free saved-route summaries may include route names with place information, but saved bounds, route geometry, and waypoints remain unavailable. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer.',
       },
       {
         question: 'Is the Assistant available on the free plan?',
@@ -578,7 +583,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Start with today, then ask why',
-    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, activity, or saved-route question, then use follow-ups to compare the evidence over time.',
+    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, activity, or saved-route question, then use follow-ups and deterministic visuals to compare the evidence over time.',
     closingActions: [
       routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),

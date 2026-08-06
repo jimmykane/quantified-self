@@ -105,6 +105,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('saved-route summaries');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('interactive charts or activity maps');
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);
@@ -113,6 +114,9 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Saved-route summaries')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.title === 'Deterministic charts and activity maps')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.copy.includes('maximum-jump metric'))
@@ -134,6 +138,9 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
       item.answer.includes('Direct in-app URLs are withheld')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('displayed tile area to Mapbox')
     ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.h1).toBe('Compare FIT, TCX, GPX, JSON, and SML workout files');

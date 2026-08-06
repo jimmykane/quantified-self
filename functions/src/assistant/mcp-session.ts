@@ -27,6 +27,8 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_jumps',
   'list_activity_swim_lengths',
   'get_activity_overview',
+  'list_activity_chart_metrics',
+  'get_activity_chart_data',
   'get_activity_metrics',
   'rank_activities_by_metric',
   'list_routes',

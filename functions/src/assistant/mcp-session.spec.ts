@@ -59,7 +59,8 @@ describe('Assistant MCP session', () => {
       }
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
       expect(session.tools.map(tool => tool.name)).toContain('list_routes');
-      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_chart_data');
+      expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data');
+      expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics');
       expect(session.tools.map(tool => tool.name)).not.toContain(
         'search_activities_near_location',
       );

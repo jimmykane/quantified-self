@@ -135,6 +135,8 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('different signed-in account cannot restore');
     expect(sectionCopy?.innerHTML).toContain('coordinate-free by default');
     expect(sectionCopy?.innerHTML).toContain('Precise activity locations');
+    expect(sectionCopy?.innerHTML).toContain('one interactive chart and one satellite map');
+    expect(sectionCopy?.innerHTML).toContain('displayed geographic area to Mapbox');
     expect(sectionCopy?.innerHTML).toContain('Saved-route bounds, route geometry, route waypoints');
     expect(sectionCopy?.innerHTML).toContain('becomes unavailable about <strong>seven days</strong>');
     expect(sectionCopy?.innerHTML).toContain('at most four extra minutes');

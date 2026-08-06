@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { CdkTextareaAutosize } from '@angular/cdk/text-field';
 import { By } from '@angular/platform-browser';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -10,9 +11,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
+import { AppThemeService } from '../../services/app.theme.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { LoggerService } from '../../services/logger.service';
 import {
   AssistantError,
   AssistantService,
@@ -78,6 +83,18 @@ describe('AssistantPageComponent', () => {
   const auth = {
     currentUser: { uid: 'assistant-user' },
   };
+  const chart = {
+    isDisposed: vi.fn(() => false),
+    dispatchAction: vi.fn(),
+  };
+  const eChartsLoader = {
+    init: vi.fn().mockResolvedValue(chart),
+    setOption: vi.fn(),
+    dispose: vi.fn(),
+    resize: vi.fn(),
+    subscribeToViewportResize: vi.fn(() => vi.fn()),
+    attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
+  };
 
   beforeEach(async () => {
     sessionStorage.clear();
@@ -105,6 +122,9 @@ describe('AssistantPageComponent', () => {
         { provide: AssistantService, useValue: assistantService },
         { provide: AssistantQuotaService, useValue: quotaService },
         { provide: Auth, useValue: auth },
+        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: EChartsLoaderService, useValue: eChartsLoader },
+        { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
     }).compileComponents();
 
@@ -179,6 +199,59 @@ describe('AssistantPageComponent', () => {
     expect(dock.contains(composer)).toBe(true);
     expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+  });
+
+  it('renders deterministic answer charts and retains the map tile disclosure', async () => {
+    const conversation = {
+      ...chatResponse.conversation,
+      messages: chatResponse.conversation.messages.map(message => (
+        message.role === 'assistant' ? {
+          ...message,
+          visuals: [{
+            kind: 'chart' as const,
+            title: 'Overnight HRV trend',
+            chartType: 'line' as const,
+            xAxis: {
+              type: 'time' as const,
+              label: 'Date',
+              unit: null,
+              timeZone: 'Europe/Helsinki',
+            },
+            series: [{
+              label: 'Overnight HRV',
+              unit: 'ms',
+              points: [{ x: '2026-08-03T00:00:00.000Z', y: 52 }],
+            }],
+          }, {
+            kind: 'map' as const,
+            title: 'Activity location',
+            style: 'satellite' as const,
+            markers: [{
+              kind: 'start' as const,
+              label: 'Start',
+              latitudeDegrees: 39.665,
+              longitudeDegrees: 20.853,
+            }],
+            path: [],
+          }],
+        } : message
+      )),
+    };
+    component.expandedMap.set(true);
+    component.conversation.set(conversation);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const visualCards = fixture.nativeElement.querySelectorAll('.assistant-visual-card');
+    expect(visualCards).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Overnight HRV trend');
+    expect(fixture.nativeElement.querySelector('app-assistant-visual-chart')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Show map');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Viewing sends the displayed map area to Mapbox for satellite tiles.',
+    );
+    expect(component.activeMapKey()).toBe('assistant-1:1');
   });
 
   it('centers both send states inside the action', () => {

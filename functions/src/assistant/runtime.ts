@@ -5,6 +5,7 @@ import {
   type AssistantEvidence,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type AssistantVisual,
 } from '../../../shared/assistant.types';
 import {
   findAssistantPromptExample,
@@ -20,6 +21,12 @@ import {
   type AssistantMcpSession,
   type AssistantMcpToolName,
 } from './mcp-session';
+import {
+  createAssistantVisualSource,
+  resolveAssistantVisuals,
+  type AssistantVisualRequest,
+  type AssistantVisualSource,
+} from './visuals';
 
 const ASSISTANT_MAX_TOOL_CALLS_PER_TURN = 6;
 const ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL = ASSISTANT_MAX_TOOL_CALLS_PER_TURN;
@@ -44,7 +51,22 @@ const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
 
 const AssistantModelOutputSchema = z.object({
   answer: z.string().trim().min(1).max(ASSISTANT_MAX_RESPONSE_CHARS),
+  visuals: z.object({
+    chart: z.object({
+      sourceId: z.string().regex(/^source_[1-6]$/),
+      seriesKeys: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
+      chartType: z.enum(['line', 'bar']),
+    }).strict().nullable(),
+    map: z.object({
+      sourceId: z.string().regex(/^source_[1-6]$/),
+    }).strict().nullable(),
+  }).strict().default({ chart: null, map: null }),
 }).strict();
+
+export interface AssistantModelGenerationResult {
+  answer: string;
+  visualRequest: AssistantVisualRequest;
+}
 
 export interface AssistantRuntimeTool {
   name: AssistantMcpToolName;
@@ -73,6 +95,7 @@ export interface AssistantRuntimeResult {
   answer: string;
   evidence: AssistantEvidence[];
   toolNames: AssistantMcpToolName[];
+  visuals: AssistantVisual[];
 }
 
 export interface AssistantRuntimeDependencies {
@@ -81,7 +104,7 @@ export interface AssistantRuntimeDependencies {
     appBaseUrl: string,
     locationAccess: AssistantLocationAccess,
   ) => Promise<AssistantMcpSession>;
-  generateAnswer: (input: AssistantModelGenerationInput) => Promise<string>;
+  generateAnswer: (input: AssistantModelGenerationInput) => Promise<AssistantModelGenerationResult>;
   now: () => Date;
 }
 
@@ -95,6 +118,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Use body-measurement tools for weight or other recorded measurements, not activity metric tools.',
   'Use Training tools for load, Form, ramp, volume, intensity, or current-versus-usual questions.',
   'Use activity tools for recent workouts or explicitly requested activity details.',
+  'For a requested workout chart, discover supported streams with list_activity_chart_metrics and read only the relevant bounded series with get_activity_chart_data.',
   'Use list_routes for saved-route summary questions by sport, name, or recency.',
   'Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability.',
   'Never invent data, calculations, dates, tool results, health claims, diagnoses, or workout prescriptions.',
@@ -102,14 +126,16 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
-  'For the final model response, use the required structured response envelope and put only plain text, not Markdown or nested JSON, in its answer field. Do not mention tool names unless it helps explain missing data.',
+  'Some tool results include a server-owned assistantVisualization descriptor. When a chart or map would materially clarify the answer, request at most one chart and one map using only a supplied sourceId and chart series key; otherwise return null for that visual. Never invent a sourceId or series key, put a sourceId in the answer, request a map without a map descriptor, or choose a visual merely for decoration.',
+  'For the final model response, use the required structured response envelope and put only plain text, not Markdown or nested JSON, in its answer field. Populate its visuals field only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
   'This is fitness information, not medical advice. Recommend professional care when the user describes urgent or concerning symptoms.',
 ].join(' ');
 
 export const ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS = [
   'For this built-in Assistant, use query_activities for individual workout discovery.',
   'Coordinate-free saved-route summaries are available only through list_routes.',
-  'Location searches, exact coordinates, route geometry, route waypoints, raw chart streams, original files, and write actions are unavailable.',
+  'Location searches, exact coordinates, route geometry, route waypoints, original files, and write actions are unavailable.',
+  'Bounded activity chart data is available through list_activity_chart_metrics and get_activity_chart_data; coordinate-free chats never receive its location stream.',
   'Do not attempt unavailable tools; briefly direct exact-location, nearby-search, route-geometry, or waypoint questions to an externally authorized MCP client.',
 ].join(' ');
 
@@ -119,6 +145,7 @@ export const ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS = [
   'Use coordinate-bearing activity data only when it is relevant to the user\'s location, nearby-search, map, trail, or jump-location question.',
   'For where-was-my-record-jump questions, use the authoritative activity ranking first, then inspect that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
   'A place-name nearby search sends only the supplied location text to Mapbox; direct-coordinate searches do not use Mapbox.',
+  'For a requested activity breadcrumb or satellite map, call get_activity_chart_data with includeLocation true only after identifying the relevant activity.',
   'Saved-route bounds, route geometry, route waypoints, original files, write actions, and dashboard settings remain unavailable.',
   'Do not claim that precise locations are unavailable when an enabled tool result provides them.',
 ].join(' ');
@@ -348,7 +375,10 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
   if (!parsed.success) {
     throw new Error('The Assistant model returned an invalid response.');
   }
-  return parsed.data.answer;
+  return {
+    answer: parsed.data.answer,
+    visualRequest: parsed.data.visuals,
+  };
 };
 
 const defaultDependencies: AssistantRuntimeDependencies = {
@@ -387,6 +417,7 @@ export function createAssistantRuntime(
         locationAccess,
       );
       const invocations: AssistantToolInvocation[] = [];
+      const visualSources: AssistantVisualSource[] = [];
       let toolCallCount = 0;
       let cumulativeToolOutputBytes = 0;
       try {
@@ -434,12 +465,24 @@ export function createAssistantRuntime(
               name: tool.name,
               structuredContent: result.structuredContent,
             });
-            return projectAssistantToolResultForModel(
+            const visualSource = createAssistantVisualSource(
+              tool.name,
               result.structuredContent,
-            ) as Record<string, unknown>;
+              `source_${invocations.length}`,
+              typeof resolvedToolInput.timeZone === 'string'
+                ? resolvedToolInput.timeZone
+                : input.timeZone,
+            );
+            if (visualSource) {
+              visualSources.push(visualSource);
+            }
+            return {
+              data: projectAssistantToolResultForModel(result.structuredContent),
+              assistantVisualization: visualSource?.descriptor ?? null,
+            };
           },
         }));
-        const answer = await dependencies.generateAnswer({
+        const generatedResult = await dependencies.generateAnswer({
           currentTime: dependencies.now().toISOString(),
           timeZone: input.timeZone,
           prompt: input.prompt,
@@ -450,15 +493,30 @@ export function createAssistantRuntime(
           publishedExample,
           onBillableAttempt: input.onBillableAttempt ?? (async () => undefined),
         });
+        const generated = typeof generatedResult === 'string'
+          ? {
+              answer: generatedResult,
+              visualRequest: { chart: null, map: null },
+            }
+          : generatedResult;
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
         assertPublishedExampleWorkflowCompleted(publishedExample, invocations);
-        assertAnswerDoesNotEchoToolSecrets(answer, invocations);
+        assertAnswerDoesNotEchoToolSecrets(generated.answer, invocations);
+        if (visualSources.some(source => (
+          generated.answer.includes(source.descriptor.sourceId)
+        ))) {
+          throw new Error('The Assistant response included an internal visual source reference.');
+        }
         return {
-          answer: AssistantModelOutputSchema.parse({ answer }).answer,
+          answer: AssistantModelOutputSchema.parse({
+            answer: generated.answer,
+            visuals: generated.visualRequest,
+          }).answer,
           evidence: buildAssistantEvidenceList(session.tools, invocations),
           toolNames: invocations.map(invocation => invocation.name),
+          visuals: resolveAssistantVisuals(visualSources, generated.visualRequest),
         };
       } finally {
         await session.close();
