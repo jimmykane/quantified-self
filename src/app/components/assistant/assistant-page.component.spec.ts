@@ -129,8 +129,11 @@ describe('AssistantPageComponent', () => {
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
     expect(fixture.nativeElement.querySelector('mat-hint')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.composer-footer')?.textContent)
+    const composerFooter = fixture.nativeElement.querySelector('.composer-footer') as HTMLElement;
+    expect(composerFooter.textContent)
       .toContain(`0/${component.maxMessageChars}`);
+    expect(composerFooter.children).toHaveLength(2);
+    expect(composerFooter.textContent).not.toContain('AI can make mistakes');
     expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
     const headerActions = Array.from(

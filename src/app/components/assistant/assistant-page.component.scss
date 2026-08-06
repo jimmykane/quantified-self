@@ -222,32 +222,32 @@ h1 {
 .assistant-composer-dock {
   display: grid;
   flex: 0 0 auto;
-  gap: 6px;
-  padding-top: 2px;
+  gap: 5px;
+  padding-top: 1px;
 }
 
 .composer-shell {
-  --qs-glass-panel-radius: 18px;
-  padding: 8px 10px 7px;
+  --qs-glass-panel-radius: 14px;
+  padding: 5px 8px 4px;
 }
 
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .composer mat-form-field {
-  @include mat.form-field-density(-2);
+  @include mat.form-field-density(-4);
   width: 100%;
 }
 
 .composer-footer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 3px 4px 0;
+  padding: 2px 3px 0;
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.69rem;
   line-height: 1.2;
@@ -298,20 +298,12 @@ h1 {
   }
 
   .composer {
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr) 40px;
     gap: 6px;
   }
 }
 
 @media (max-width: 430px) {
-  .composer-disclaimer {
-    display: none;
-  }
-
-  .composer-footer {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .evidence-item dl {
     grid-template-columns: 1fr;
   }
