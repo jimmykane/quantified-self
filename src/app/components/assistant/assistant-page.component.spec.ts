@@ -200,7 +200,9 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
     content = sendButton.querySelector('.composer-submit-content') as HTMLElement;
 
-    expect(sendButton.querySelector('mat-spinner')).toBeTruthy();
+    expect(sendButton.querySelector('mat-icon')?.textContent).toContain('hourglass_top');
+    expect(sendButton.querySelector('mat-spinner')).toBeNull();
+    expect(sendButton.getAttribute('aria-label')).toBe('Assistant is responding');
     expect(content).toBeTruthy();
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*place-items:\s*center;/s);

@@ -124,10 +124,12 @@
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-            <button mat-icon-button class="composer-submit" type="submit" [disabled]="sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+            <button mat-icon-button class="composer-submit" type="submit"
+              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [attr.aria-label]="sending() ? 'Assistant is responding' : 'Send message'">
               <span class="composer-submit-content">
                 @if (sending()) {
-                  <mat-spinner diameter="20"></mat-spinner>
+                  <mat-icon aria-hidden="true">hourglass_top</mat-icon>
                 } @else {
                   <mat-icon>arrow_upward</mat-icon>
                 }
