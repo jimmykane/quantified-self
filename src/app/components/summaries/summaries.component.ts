@@ -502,8 +502,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return this.openDashboardManagerDialogWithState();
   }
 
-  public openDashboardCalendar(event: MouseEvent): void {
-    event.preventDefault();
+  public openDashboardCalendar(): void {
     if (!this.user?.uid) {
       return;
     }

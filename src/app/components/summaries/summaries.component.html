@@ -20,22 +20,18 @@
       </div>
     </div>
     } @else if (showTodaySummary) {
-    <a
-      mat-button
-      href="/calendar"
-      class="dashboard-section-title-block dashboard-today-button"
-      appHapticTap
-      aria-label="Open this month's activity calendar"
-      (click)="openDashboardCalendar($event)"
-    >
-      <mat-icon aria-hidden="true">today</mat-icon>
+    <div class="dashboard-section-title-block">
+      <button mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
+        aria-label="Open this month's activity calendar" matTooltip="Open calendar" (click)="openDashboardCalendar()">
+        <mat-icon aria-hidden="true">today</mat-icon>
+      </button>
       <div class="dashboard-section-title-copy">
         <h2 id="dashboard-today-title">Today</h2>
         <div class="dashboard-section-subtitle">
           {{ todayDateSubtitle }}
         </div>
       </div>
-    </a>
+    </div>
     }
     @if (showActions || derivedMetricsBanner?.showRetry) {
     <div class="dashboard-section-actions">
@@ -51,10 +47,6 @@
       <a mat-stroked-button class="dashboard-training-link" routerLink="/training" aria-label="Open Training workspace">
         <mat-icon aria-hidden="true">monitoring</mat-icon>
         <span class="dashboard-training-link-label">Open Training</span>
-      </a>
-      <a mat-stroked-button class="dashboard-calendar-link" routerLink="/calendar" aria-label="Open activity calendar">
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span class="dashboard-calendar-link-label">Calendar</span>
       </a>
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">

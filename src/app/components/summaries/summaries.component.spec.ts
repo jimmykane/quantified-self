@@ -189,7 +189,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('exposes Training and Calendar actions beside Dashboard manager', () => {
+  it('exposes the Training action without a duplicate Calendar action', () => {
     component.showActions = true;
 
     fixture.detectChanges();
@@ -198,11 +198,7 @@ describe('SummariesComponent', () => {
     expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
     expect(trainingLink.textContent).toContain('Open Training');
     expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
-    const calendarLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link') as HTMLAnchorElement;
-    expect(calendarLink).not.toBeNull();
-    expect(calendarLink.getAttribute('aria-label')).toBe('Open activity calendar');
-    expect(calendarLink.textContent).toContain('Calendar');
-    expect(calendarLink.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -248,10 +244,9 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
     expect(dashboardHeader).not.toBeNull();
-    const todayButton = dashboardHeader?.querySelector('.dashboard-today-button') as HTMLAnchorElement | null;
-    expect(todayButton?.getAttribute('href')).toBe('/calendar');
-    expect(todayButton?.getAttribute('aria-label')).toBe("Open this month's activity calendar");
-    todayButton?.click();
+    const todayCalendarButton = dashboardHeader?.querySelector('.dashboard-today-calendar-button') as HTMLButtonElement | null;
+    expect(todayCalendarButton?.getAttribute('aria-label')).toBe("Open this month's activity calendar");
+    todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
       data: { user: component.user },
     });
@@ -346,7 +341,7 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('font-size: 1rem;');
   });
 
-  it('keeps narrow derived-status actions compact and accessibly named', () => {
+  it('keeps narrow derived-status and Training actions compact and accessibly named', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
     const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
     const template = readFileSync(templatePath, 'utf8');
@@ -355,11 +350,13 @@ describe('SummariesComponent', () => {
     expect(template).toContain('aria-label="Retry derived metrics update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
-    expect(template).toContain('class="dashboard-calendar-link-label"');
+    expect(template).toContain('class="dashboard-today-calendar-button"');
+    expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
     expect(styles).toContain('.dashboard-training-link-label');
-    expect(styles).toContain('.dashboard-calendar-link-label');
+    expect(styles).toContain('.dashboard-today-calendar-button');
+    expect(styles).not.toContain('.dashboard-calendar-link');
   });
 
   it('does not mutate dashboard tile arrays during live drag sorting', () => {
