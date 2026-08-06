@@ -76,18 +76,24 @@ describe('ActivityCalendarGridComponent', () => {
     expect(styles).not.toMatch(/\.activity-calendar-weekday--weekend\s*{\s*background:/);
   });
 
-  it('centers the current-day number without a font-specific horizontal offset', () => {
+  it('centers the current-day number within a fixed marker', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
       'utf8',
     );
     const numberRule = styles.match(/\.activity-calendar-day-number\s*\{([^}]*)\}/)?.[1];
     const todayRule = styles.match(/\.activity-calendar-day--today \.activity-calendar-day-number\s*\{([^}]*)\}/)?.[1];
+    const todayNumberValueRule = styles.match(
+      /\.activity-calendar-day--today \.activity-calendar-day-number-value\s*\{([^}]*)\}/,
+    )?.[1];
 
-    expect(numberRule).toContain('display: inline-grid;');
-    expect(numberRule).toContain('place-items: center;');
+    expect(numberRule).toContain('display: inline-flex;');
+    expect(numberRule).toContain('align-items: center;');
+    expect(numberRule).toContain('justify-content: center;');
     expect(numberRule).toContain('padding: 0;');
-    expect(todayRule).not.toMatch(/padding-(left|right)/);
+    expect(numberRule).toContain('font-variant-numeric: tabular-nums;');
+    expect(todayNumberValueRule).toContain('transform: translateX(-0.5px);');
+    expect(todayRule).not.toMatch(/transform:/);
   });
 
   it('keeps compact and yearly current-day markers square', () => {
