@@ -225,13 +225,14 @@ h1 {
 }
 
 .composer-shell {
-  --qs-glass-panel-radius: 14px;
   padding: 5px 8px 4px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 14px;
+  background: var(--mat-sys-surface-container-lowest);
 }
 
 .composer-shell:focus-within {
-  outline: 2px solid var(--mat-sys-primary);
-  outline-offset: -2px;
+  border-color: var(--mat-sys-primary);
 }
 
 .composer {
@@ -261,6 +262,11 @@ h1 {
 .composer-input::placeholder {
   color: var(--mat-sys-on-surface-variant);
   opacity: 1;
+}
+
+.composer-submit {
+  color: var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
 }
 
 .composer-footer {

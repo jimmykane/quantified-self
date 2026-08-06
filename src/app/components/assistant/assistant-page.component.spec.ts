@@ -127,6 +127,9 @@ describe('AssistantPageComponent', () => {
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
+    expect(sendButton.classList).toContain('mat-mdc-icon-button');
+    expect(sendButton.classList).not.toContain('mat-mdc-mini-fab');
+    expect(composer.classList).not.toContain('qs-glass-card-panel');
     expect(fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
     const composerFooter = fixture.nativeElement.querySelector('.composer-footer') as HTMLElement;
     expect(composerFooter.textContent)
