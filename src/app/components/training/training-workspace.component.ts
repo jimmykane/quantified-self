@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -364,6 +364,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     @Optional() private readonly ngZone: NgZone | null = null,
     @Optional() private readonly analyticsService: AppAnalyticsService | null = null,
     @Optional() breakpointObserver: BreakpointObserver | null = null,
+    @Inject(LOCALE_ID) private readonly locale: string,
   ) {
     this.useTrainingStateDetailsDialog = breakpointObserver
       ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
@@ -1063,11 +1064,26 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return formatter.format(new Date(dayMs));
   }
 
+  private formatTrainingDataAsOfDate(dayMs: number): string {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    };
+    try {
+      return new Intl.DateTimeFormat(this.locale || undefined, options).format(new Date(dayMs));
+    } catch {
+      return new Intl.DateTimeFormat(undefined, options).format(new Date(dayMs));
+    }
+  }
+
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
     const trainingSummaryAsOfDayMs = this.derivedState.trainingSummary?.asOfDayMs;
     this.trainingDataAsOfText = Number.isFinite(trainingSummaryAsOfDayMs)
-      ? `Data through ${this.formatTrainingUtcDate(trainingSummaryAsOfDayMs as number)}`
+      ? `Data through ${this.formatTrainingDataAsOfDate(trainingSummaryAsOfDayMs as number)}`
       : null;
     const formPoints = this.derivedState.formPoints;
     const currentTrainingState = buildCurrentTrainingStateContext({

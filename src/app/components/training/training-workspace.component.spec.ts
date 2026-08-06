@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -115,7 +115,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(element.querySelector('.training-data-as-of')).toBeNull();
+    expect(element.querySelector('.training-page-subtitle')).toBeNull();
     const feedbackAction = element.querySelector('.training-feedback-action');
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
@@ -203,6 +203,7 @@ describe('TrainingWorkspaceComponent', () => {
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+        { provide: LOCALE_ID, useValue: 'en-GB' },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -212,14 +213,18 @@ describe('TrainingWorkspaceComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const expectedAsOfDate = new Intl.DateTimeFormat(undefined, {
-      month: 'short',
+    const expectedAsOfDate = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'long',
+      month: 'long',
       day: 'numeric',
       year: 'numeric',
       timeZone: 'UTC',
     }).format(new Date(trainingSummaryAsOfDayMs));
-    expect(fixture.nativeElement.querySelector('.training-data-as-of')?.textContent?.trim())
+    const title = fixture.nativeElement.querySelector('#training-title');
+    const subtitle = fixture.nativeElement.querySelector('.training-page-subtitle');
+    expect(subtitle?.textContent?.trim())
       .toBe(`Data through ${expectedAsOfDate}`);
+    expect(subtitle?.previousElementSibling).toBe(title);
   });
 
   it('keeps every route-header action in one compact row through tablet widths', () => {
