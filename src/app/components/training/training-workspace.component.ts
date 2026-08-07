@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, LOCALE_I
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -641,6 +641,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         return this.formatTrainingBuildDuration(value);
       case 'count':
         return this.formatNumber(value, 0);
+      case 'jump-distance': {
+        const formattedDistance = resolveUnitAwareDisplayStat(
+          new DataJumpDistance(value),
+          this.unitSettings,
+          { stripRepeatedUnit: true },
+        )?.text;
+        return formattedDistance || `${this.formatNumber(value, 1)} m`;
+      }
       case 'cadence':
         return `${this.formatNumber(value, 1)} /min`;
       case 'pace-500m': {

@@ -12,6 +12,7 @@ import {
   DataFlow,
   DataGrit,
   DataJumpCount,
+  DataJumpDistanceMax,
   DataMovingTime,
   DataSwimDistance,
   type ActivityTypes as ActivityType,
@@ -48,18 +49,20 @@ export type TrainingProfileMetricId =
   | 'descent'
   | 'descent-time'
   | 'jump-count'
+  | 'max-jump-distance'
   | 'grit'
   | 'flow'
   | 'pace-500m'
   | 'cadence'
   | 'stroke-distance';
 
-export type TrainingProfileMetricAggregation = 'sum' | 'mean' | 'distance-weighted-pace';
+export type TrainingProfileMetricAggregation = 'sum' | 'mean' | 'maximum' | 'distance-weighted-pace';
 export type TrainingProfileMetricUnit =
   | 'distance'
   | 'elevation'
   | 'duration'
   | 'count'
+  | 'jump-distance'
   | 'score'
   | 'cadence'
   | 'stroke-distance'
@@ -127,6 +130,13 @@ export const TRAINING_PROFILE_METRIC_DEFINITIONS = [
     aggregation: 'sum',
     unit: 'count',
     statTypes: [DataJumpCount.type],
+  },
+  {
+    id: 'max-jump-distance',
+    label: 'Longest jump',
+    aggregation: 'maximum',
+    unit: 'jump-distance',
+    statTypes: [DataJumpDistanceMax.type, ...DataJumpDistanceMax.aliases],
   },
   {
     id: 'grit',
@@ -270,7 +280,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'jump-count', 'grit', 'flow'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
       },
       {
         id: 'enduro',
@@ -280,7 +290,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'volume-only',
         loadPolicy: 'volume-only',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time', 'jump-count', 'grit', 'flow'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
       },
       {
         id: 'downhill',
@@ -290,7 +300,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'volume-only',
         loadPolicy: 'volume-only',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'descent', 'descent-time', 'jump-count', 'grit', 'flow'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'descent', 'descent-time', 'jump-count', 'max-jump-distance', 'grit', 'flow'],
       },
     ],
   },

@@ -3862,7 +3862,9 @@ describe('MCP data service', () => {
         context: contextByDiscipline[discipline][0],
         profile: contextByDiscipline[discipline][1],
         activityCount: 1,
-        metrics: [{ metric: 'distance', value: 10_000, sourceActivityCount: 1 }],
+        metrics: discipline === 'cycling'
+          ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
+          : [{ metric: 'distance', value: 10_000, sourceActivityCount: 1 }],
         privateContextNote: 'must-not-leak',
       }],
     });
@@ -3900,6 +3902,7 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('rowing');
     expect(serialized).not.toContain('walking-hiking');
     expect(serialized).not.toContain('privateContextNote');
+    expect(serialized).not.toContain('max-jump-distance');
   });
 
   it('strips internal context metrics and added families from Training build projection', () => {
@@ -3928,7 +3931,10 @@ describe('MCP data service', () => {
         context: 'downhill',
         profile: 'gravity',
         activityCount: 1,
-        metrics: [{ metric: 'descent', value: 900, sourceActivityCount: 1 }],
+        metrics: [
+          { metric: 'descent', value: 900, sourceActivityCount: 1 },
+          { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 },
+        ],
       }],
     };
     const projected = projectDerivedMetricPayloadForMcp(
@@ -3954,6 +3960,7 @@ describe('MCP data service', () => {
 
     expect(serialized).not.toContain('contexts');
     expect(serialized).not.toContain('descent');
+    expect(serialized).not.toContain('max-jump-distance');
     expect(serialized).not.toContain('rowing');
     expect(projectedBuild.disciplines.map(item => item.discipline))
       .toEqual(['running', 'cycling', 'swimming']);

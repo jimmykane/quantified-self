@@ -7,13 +7,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
 import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
@@ -1549,6 +1550,7 @@ describe('TrainingWorkspaceComponent', () => {
           { metric: 'descent', value: 4_000, sourceActivityCount: 4 },
           { metric: 'descent-time', value: 2_400, sourceActivityCount: 4 },
           { metric: 'jump-count', value: 18, sourceActivityCount: 3 },
+          { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 3 },
         ],
       }],
     };
@@ -1562,6 +1564,7 @@ describe('TrainingWorkspaceComponent', () => {
             { metric: 'descent', value: 3_000, sourceActivityCount: 4 },
             { metric: 'descent-time', value: 2_100, sourceActivityCount: 4 },
             { metric: 'jump-count', value: 12, sourceActivityCount: 3 },
+            { metric: 'max-jump-distance', value: 5.8, sourceActivityCount: 3 },
           ],
         }],
       },
@@ -1570,6 +1573,12 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ label: 'Downhill MTB · Descent', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'Downhill MTB · Descent time', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'Downhill MTB · Jumps', deltaText: '+6' }),
+      expect.objectContaining({
+        label: 'Downhill MTB · Longest jump',
+        currentText: '7.4 m',
+        benchmarkText: '5.8 m',
+        deltaText: '+1.6 m',
+      }),
     ]));
     expect(gravityRows).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'TSS' }),
@@ -1579,6 +1588,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.formatTrainingBuildFootnote('rowing')).toContain('durability is not available');
     expect((component as any).formatTrainingProfileMetric('stroke-distance', 10, 'rowing')).toBe('10.0 m');
     expect((component as any).formatTrainingProfileMetric('descent', 4_000, 'cycling')).toMatch(/^4[,.]000 m$/);
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect((component as any).formatTrainingProfileMetric('max-jump-distance', 7.4, 'cycling')).toBe('24.3 ft');
+    component.unitSettings = null;
     expect((component as any).buildTrainingContextMetricViews([{
       context: 'strength', profile: 'strength', activityCount: 2,
       metrics: [{ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 }],

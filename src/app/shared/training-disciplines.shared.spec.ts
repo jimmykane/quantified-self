@@ -80,6 +80,19 @@ describe('shared Training sport registry', () => {
       intensityPolicy: 'volume-only',
       loadPolicy: 'volume-only',
     });
+
+    const cycling = getTrainingSportDefinition('cycling');
+    ['mountain-biking', 'enduro', 'downhill'].forEach((contextId) => {
+      expect(cycling?.contexts.find(context => context.id === contextId)?.profileMetrics)
+        .toContain('max-jump-distance');
+    });
+    expect(TRAINING_PROFILE_METRIC_DEFINITIONS.find(metric => metric.id === 'max-jump-distance'))
+      .toMatchObject({
+        label: 'Longest jump',
+        aggregation: 'maximum',
+        unit: 'jump-distance',
+        statTypes: ['Maximum Jump Distance', 'Jump Distance Max'],
+      });
   });
 
   it('keeps intentionally unsupported broad-family members in Other', () => {
