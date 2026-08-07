@@ -74,9 +74,10 @@ export class ActivityRangeTableSectionComponent {
         catchError(() => of({ status: 'error', events: [] } as ActivityRangeTableState)),
       );
     }),
-  ), { initialValue: { status: 'idle', events: [] } as ActivityRangeTableState });
+  ), { initialValue: { status: 'loading', events: [] } as ActivityRangeTableState });
 
   readonly isLoading = computed(() => this.state().status === 'loading');
+  readonly isReady = computed(() => this.state().status === 'ready');
   readonly hasError = computed(() => this.state().status === 'error');
   readonly events = computed(() => this.state().events);
   readonly resolvedEmptyMessage = computed(() => (

@@ -2,7 +2,7 @@ import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { User } from '@sports-alliance/sports-lib';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { EventTableModule } from '../../modules/event-table.module';
 import { AppEventService } from '../../services/app.event.service';
 import { ActivityRangeTableSectionComponent } from './activity-range-table-section.component';
@@ -71,6 +71,26 @@ describe('ActivityRangeTableSectionComponent', () => {
     expect(table.showActions).toBe(false);
   });
 
+  it('queries a target user while preserving the viewer for table preferences', async () => {
+    const targetUser = new User('target-user');
+    getEventsBy.mockReturnValue(of([event('activity-1')]));
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('targetUser', targetUser);
+    fixture.componentRef.setInput('range', {
+      startMs: new Date(2026, 7, 1).getTime(),
+      endExclusiveMs: new Date(2026, 8, 1).getTime(),
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(getEventsBy).toHaveBeenCalledWith(targetUser, expect.any(Array), 'startDate', false, 0);
+    const table = fixture.debugElement.query(By.directive(EventTableStubComponent))
+      .componentInstance as EventTableStubComponent;
+    expect(table.user).toBe(user);
+    expect(table.targetUser).toBe(targetUser);
+  });
+
   it('refreshes the query when the range changes and exposes a contextual error', async () => {
     getEventsBy.mockReturnValueOnce(of([])).mockReturnValueOnce(throwError(() => new Error('offline')));
     fixture.componentRef.setInput('user', user);
@@ -93,6 +113,29 @@ describe('ActivityRangeTableSectionComponent', () => {
     expect(getEventsBy).toHaveBeenCalledTimes(2);
     expect(fixture.componentInstance.hasError()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Activities for August 2026 could not be loaded.');
+  });
+
+  it('keeps the loading state visible until the first query result arrives', async () => {
+    const response = new Subject<any[]>();
+    getEventsBy.mockReturnValue(response);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('range', {
+      startMs: new Date(2026, 7, 1).getTime(),
+      endExclusiveMs: new Date(2026, 8, 1).getTime(),
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isLoading()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Loading activities');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities');
+
+    response.next([]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isReady()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('No activities in this period.');
   });
 });
 

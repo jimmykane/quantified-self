@@ -22,12 +22,12 @@
       <span>Retry</span>
     </button>
   </div>
-  } @else if (events().length === 0) {
+  } @else if (isReady() && events().length === 0) {
   <div class="activity-range-table-state activity-range-table-state--empty">
     <mat-icon aria-hidden="true">table_rows</mat-icon>
     <span>{{ resolvedEmptyMessage() }}</span>
   </div>
-  } @else if (user(); as user) {
+  } @else if (isReady() && user(); as user) {
   <app-event-table presentation="browse" [user]="user" [targetUser]="targetUser() || user"
     [events]="events()" [showActions]="false" [isLoading]="false">
   </app-event-table>
