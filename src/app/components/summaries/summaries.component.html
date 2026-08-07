@@ -14,6 +14,7 @@
     @if (!derivedMetricsBanner && showTodaySummary) {
       <button pageHeaderLeading mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
         aria-label="Open this month's activity calendar" matTooltip="Open calendar" (click)="openDashboardCalendar()">
+        <span class="dashboard-today-calendar-cue" aria-hidden="true"></span>
         <mat-icon aria-hidden="true">today</mat-icon>
       </button>
     }

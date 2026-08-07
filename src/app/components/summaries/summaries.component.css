@@ -187,6 +187,40 @@
 .dashboard-today-calendar-button {
   color: var(--mat-sys-primary);
   flex: 0 0 auto;
+  position: relative;
+}
+
+.dashboard-today-calendar-cue {
+  animation: dashboard-today-calendar-pulse 1.6s cubic-bezier(0.2, 0, 0, 1) 450ms 2;
+  background: var(--mat-sys-primary-container);
+  border-radius: 50%;
+  inset: 6px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: scale(0.72);
+}
+
+@keyframes dashboard-today-calendar-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  28% {
+    opacity: 0.62;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-today-calendar-cue {
+    animation: none;
+  }
 }
 
 .dashboard-section-title-copy {

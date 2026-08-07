@@ -251,6 +251,7 @@ describe('SummariesComponent', () => {
     expect(dashboardHeader).not.toBeNull();
     const todayCalendarButton = dashboardHeader?.querySelector('.dashboard-today-calendar-button') as HTMLButtonElement | null;
     expect(todayCalendarButton?.getAttribute('aria-label')).toBe("Open this month's activity calendar");
+    expect(todayCalendarButton?.querySelector('.dashboard-today-calendar-cue')?.getAttribute('aria-hidden')).toBe('true');
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
       data: { user: component.user },
@@ -363,6 +364,16 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('.dashboard-training-link-label');
     expect(styles).toContain('.dashboard-today-calendar-button');
     expect(styles).not.toContain('.dashboard-calendar-link');
+  });
+
+  it('gently cues the Today calendar action without forcing motion', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('animation: dashboard-today-calendar-pulse 1.6s cubic-bezier(0.2, 0, 0, 1) 450ms 2;');
+    expect(styles).toContain('background: var(--mat-sys-primary-container);');
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(styles).toMatch(/\.dashboard-today-calendar-cue\s*\{\s*animation: none;/);
   });
 
   it('does not mutate dashboard tile arrays during live drag sorting', () => {
