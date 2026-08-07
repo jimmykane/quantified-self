@@ -416,6 +416,7 @@ export interface McpDataServiceDependencies {
     uid: string,
     startTimeMs: number,
     endTimeMs: number,
+    statTypes: readonly string[],
     limit: number,
     cursor?: unknown,
   ) => Promise<RawDocument[]>;
@@ -595,7 +596,14 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
-  fetchEventDocuments: async (uid, startTimeMs, endTimeMs, limit, cursor) => {
+  fetchEventDocuments: async (
+    uid,
+    startTimeMs,
+    endTimeMs,
+    statTypes,
+    limit,
+    cursor,
+  ) => {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
@@ -604,7 +612,15 @@ const defaultDependencies: McpDataServiceDependencies = {
       .where('startDate', '<=', endTimeMs)
       .orderBy('startDate', 'asc')
       .limit(limit)
-      .select('startDate', 'endDate', 'stats', 'mergeType', 'isMerge');
+      .select(
+        'startDate',
+        'endDate',
+        'mergeType',
+        'isMerge',
+        ...[...new Set(statTypes)].map(
+          statType => new FieldPath('stats', statType),
+        ),
+      );
     if (cursor) {
       query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
     }
@@ -2578,6 +2594,7 @@ function measureStatsWork(data: Record<string, unknown>): {
 async function fetchBoundedEventDocuments(
   dependencies: McpDataServiceDependencies,
   input: Pick<QueryMetricInput, 'uid' | 'startTimeMs' | 'endTimeMs'>,
+  statTypes: readonly string[],
 ): Promise<RawDocument[]> {
   const documents: RawDocument[] = [];
   let cursor: unknown;
@@ -2593,6 +2610,7 @@ async function fetchBoundedEventDocuments(
       input.uid,
       input.startTimeMs,
       input.endTimeMs,
+      statTypes,
       pageLimit,
       cursor,
     );
@@ -2768,10 +2786,14 @@ async function querySelectedMetrics(
   const timeZone = requireTimeZone(input.timeZone);
   const selectors = resolveMetricSelectors(input.metrics);
   const activityTypes = resolveActivityTypes(input.activityTypes);
-  const docs = await fetchBoundedEventDocuments(dependencies, input);
   const metricTypes = [...new Set(
     selectors.map(selector => selector.metric.type),
   )];
+  const docs = await fetchBoundedEventDocuments(
+    dependencies,
+    input,
+    [...metricTypes, DataActivityTypes.type],
+  );
   const events = docs.flatMap((doc) => {
     if (isBenchmarkEventForTrainingMetrics(doc.data)) {
       return [];
@@ -5683,7 +5705,11 @@ export function createMcpDataService(
         );
       }
 
-      const documents = await fetchBoundedEventDocuments(dependencies, input);
+      const documents = await fetchBoundedEventDocuments(
+        dependencies,
+        input,
+        [definition.canonicalMetricType],
+      );
       const measurements = documents.flatMap((document) => {
         if (isBenchmarkEventForTrainingMetrics(document.data)) {
           return [];

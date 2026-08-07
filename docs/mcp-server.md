@@ -582,15 +582,16 @@ This is intentionally not a curated MCP metric list. A correctly exported and pe
 becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
 expose precise position.
 
-`query_metric` imports stored event JSON through `EventImporterJSON` and reuses the shared event-stat aggregation engine.
-It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
-their prior local-time behavior when they omit the timezone.
+`query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
+cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
+aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
+non-MCP callers keep their prior local-time behavior when they omit the timezone.
 
 `query_metrics` uses the same range, paging, byte, stat-entry, filtering, import, and aggregation primitives. It accepts
 one to four canonical metric/aggregation selectors, deduplicates identical selectors, fetches the bounded event range
-once, and imports each eligible event once with only the selected stats plus activity type. It then builds one result
-per selector with the shared grouping, interval, timezone, and activity-type filters. It does not create a metric
-catalog document or any other persisted cache.
+once through a Firestore field mask containing only those stats plus activity type, and imports each eligible event
+once. It then builds one result per selector with the shared grouping, interval, timezone, and activity-type filters. It
+does not create a metric catalog document or any other persisted cache.
 
 `get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
@@ -986,8 +987,9 @@ requires no new Firestore composite index.
 - Event and sleep date ranges are at most 366 days.
 - Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
   2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.
-- An event metric query reads at most 25 events per Firestore page and rejects matches above 2,000 events, more than
-  4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
+- An event metric query selects only the requested canonical stats plus activity type, reads at most 25 events per
+  Firestore page, and rejects matches above 2,000 events, more than 4 MiB of cumulative serialized selected stats, or
+  more than 20,000 cumulative selected top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
   activity-type stat needed for filtering.
 - Multi-metric queries accept at most four selectors, share the same 2,000-event, 4 MiB, and 20,000-entry work budgets,

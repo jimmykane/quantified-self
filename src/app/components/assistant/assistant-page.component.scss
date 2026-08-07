@@ -417,9 +417,9 @@ h1 {
 }
 
 .assistant-composer-dock {
+  position: relative;
   display: grid;
   flex: 0 0 auto;
-  gap: 5px;
   padding-top: 1px;
 }
 
@@ -508,6 +508,11 @@ h1 {
 }
 
 .assistant-error {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;

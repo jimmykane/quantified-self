@@ -1173,7 +1173,7 @@ describe('AssistantPageComponent', () => {
     expect(scrollStartSpy).toHaveBeenCalledOnce();
   });
 
-  it('keeps a send error in the dock above the composer', () => {
+  it('overlays a send error above the composer without resizing the dock', () => {
     component.errorMessage.set('Something went wrong while preparing the answer.');
     fixture.detectChanges();
     const dock = fixture.nativeElement.querySelector('.assistant-composer-dock') as HTMLElement;
@@ -1186,6 +1186,17 @@ describe('AssistantPageComponent', () => {
     expect(error.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(dismiss.getAttribute('aria-label')).toBe('Dismiss Assistant error');
+
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/assistant/assistant-page.component.scss',
+    ), 'utf8');
+    expect(styles).toMatch(
+      /\.assistant-composer-dock\s*{[^}]*position:\s*relative;/s,
+    );
+    expect(styles).toMatch(
+      /\.assistant-error\s*{[^}]*position:\s*absolute;[^}]*bottom:\s*calc\(100% \+ 8px\);/s,
+    );
   });
 
   it('sends a starter prompt and renders the grounded response evidence', async () => {

@@ -3040,6 +3040,14 @@ describe('MCP data service', () => {
       }),
     ]);
     expect(dependencies.importEvent).toHaveBeenCalledTimes(1);
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-03-01T00:00:00.000Z'),
+      Date.parse('2024-04-30T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
+      25,
+      undefined,
+    );
   });
 
   it('queries several canonical metrics through one bounded import pass', async () => {
@@ -3115,6 +3123,14 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+    );
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-04-01T00:00:00.000Z'),
+      Date.parse('2024-04-02T00:00:00.000Z'),
+      [DataDistance.type, DataAscent.type, DataActivityTypes.type],
+      25,
+      undefined,
     );
     expect(JSON.stringify(result)).not.toContain('private-source-key');
   });
@@ -3284,6 +3300,14 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('private-source-key');
     expect(serialized).not.toContain('private-previous-source');
     expect(serialized).not.toContain('Private scale');
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-03-30T00:00:00.000Z'),
+      Date.parse('2024-04-02T00:00:00.000Z'),
+      [DataWeight.type],
+      25,
+      undefined,
+    );
   });
 
   it('keeps even-count medians finite when all persisted values are finite', async () => {
@@ -3482,7 +3506,7 @@ describe('MCP data service', () => {
   it('fails explicitly when an event query exceeds the safety limit', async () => {
     let nextEventIndex = 0;
     vi.mocked(dependencies.fetchEventDocuments).mockImplementation(
-      async (_uid, _startTimeMs, _endTimeMs, limit) => Array.from(
+      async (_uid, _startTimeMs, _endTimeMs, _statTypes, limit) => Array.from(
         { length: Math.min(limit, 2001 - nextEventIndex) },
         () => {
           const index = nextEventIndex;
@@ -3606,6 +3630,7 @@ describe('MCP data service', () => {
       'user-1',
       Date.parse('2024-01-01T00:00:00.000Z'),
       Date.parse('2024-02-01T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
       25,
       undefined,
     );
@@ -3614,6 +3639,7 @@ describe('MCP data service', () => {
       'user-1',
       Date.parse('2024-01-01T00:00:00.000Z'),
       Date.parse('2024-02-01T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
       25,
       'cursor-24',
     );
