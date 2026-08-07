@@ -127,7 +127,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - Weekday order follows **Settings -> Dashboard -> Start of the Week**. The configured first day is identified in the header, and Saturday and Sunday remain identifiable as weekend days.
 - Distance, ascent, and descent use the units selected in **Settings -> Units**.
-- The Calendar grid and its activity table are independent from dashboard event-table filters, custom-chart ranges, and map-tile filters. The table always uses the exact selected Week, Month, or Year, while the dashboard tile independently loads its current-month window.
+- The Calendar grid and its activity table use their own visible-period activity query, independent from the dashboard event table, custom-chart ranges, and map-tile filters. The table always uses the exact selected Week, Month, or Year, while the dashboard tile independently loads its current-month window.
 - Normal activity events are included. Merge and benchmark records are excluded so comparison artifacts do not create calendar days or inflate totals.`;
 
 export const HELP_ACTIONS: HelpAction[] = [
