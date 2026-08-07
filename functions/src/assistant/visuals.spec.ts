@@ -139,9 +139,45 @@ describe('Assistant visual projection', () => {
       kind: 'chart',
       xAxis: { timeZone: 'Europe/Helsinki' },
       series: [
-        { label: 'Heart rate (Average)' },
-        { label: 'Heart rate (Maximum)' },
+        { label: 'Heart rate (Average)', dataType: 'HeartRate' },
+        { label: 'Heart rate (Maximum)', dataType: 'HeartRate' },
       ],
+    });
+  });
+
+  it('preserves canonical Sports Lib types for unit-aware chart display', () => {
+    const source = createAssistantVisualSource('query_metric', {
+      metric: {
+        type: 'Distance',
+        displayType: 'Distance',
+        unit: 'meters',
+      },
+      aggregation: {
+        valueType: 'Total',
+        categoryType: ChartDataCategoryTypes.DateType,
+        buckets: [{
+          bucketKey: '2026-08-03',
+          time: Date.parse('2026-08-03T00:00:00.000Z'),
+          aggregateValue: 65_000,
+        }],
+      },
+    }, 'source_distance', 'Europe/Helsinki');
+
+    expect(resolveAssistantVisuals([source!], {
+      chart: {
+        sourceId: 'source_distance',
+        seriesKeys: ['metric_0'],
+        chartType: 'line',
+      },
+      map: null,
+    })[0]).toMatchObject({
+      kind: 'chart',
+      series: [{
+        label: 'Distance (Total)',
+        unit: 'm',
+        dataType: 'Distance',
+        points: [{ x: '2026-08-03T00:00:00.000Z', y: 65_000 }],
+      }],
     });
   });
 
@@ -546,8 +582,14 @@ describe('Assistant visual projection', () => {
     });
     expect(visuals.map(visual => visual.kind)).toEqual(['chart', 'map']);
     expect(visuals[0]).toMatchObject({
-      xAxis: { type: 'linear', label: 'Distance', unit: 'm', timeZone: null },
-      series: [{ label: 'Heart rate', unit: 'bpm' }],
+      xAxis: {
+        type: 'linear',
+        label: 'Distance',
+        unit: 'm',
+        dataType: 'Distance',
+        timeZone: null,
+      },
+      series: [{ label: 'Heart rate', unit: 'bpm', dataType: 'Heart Rate' }],
     });
     expect(visuals[1]).toMatchObject({
       path: [

@@ -15,8 +15,10 @@ import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import {
@@ -125,6 +127,10 @@ describe('AssistantPageComponent', () => {
         { provide: AssistantQuotaService, useValue: quotaService },
         { provide: Auth, useValue: auth },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        {
+          provide: AppUserSettingsQueryService,
+          useValue: { unitSettings: signal(normalizeUserUnitSettings({})) },
+        },
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],

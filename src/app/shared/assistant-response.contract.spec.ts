@@ -45,6 +45,7 @@ function buildResponse(): AssistantChatResponse {
             series: [{
               label: 'Overnight HRV',
               unit: 'ms',
+              dataType: 'HeartRateVariability',
               points: [
                 { x: '2026-08-02T00:00:00.000Z', y: 52 },
                 { x: '2026-08-03T00:00:00.000Z', y: null },
@@ -155,6 +156,22 @@ describe('Assistant response contract', () => {
 
   it('accepts bounded deterministic charts and maps on assistant messages', () => {
     expect(validateAssistantConversation(buildResponse().conversation).ok).toBe(true);
+  });
+
+  it('accepts optional canonical chart types and rejects malformed ones', () => {
+    const legacy = buildResponse();
+    const legacyChart = legacy.conversation.messages[1].visuals![0];
+    if (legacyChart.kind === 'chart') {
+      delete legacyChart.series[0].dataType;
+    }
+    expect(validateAssistantConversation(legacy.conversation).ok).toBe(true);
+
+    const malformed = buildResponse();
+    const malformedChart = malformed.conversation.messages[1].visuals![0];
+    if (malformedChart.kind === 'chart') {
+      malformedChart.series[0].dataType = 'x'.repeat(121);
+    }
+    expect(validateAssistantConversation(malformed.conversation).ok).toBe(false);
   });
 
   it('rejects malformed, duplicate, or user-owned visual payloads', () => {

@@ -11,9 +11,21 @@ import {
   effect,
   inject,
 } from '@angular/core';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import {
+  AppThemes,
+  DataDistance,
+  type UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
-import type { AssistantChartVisual } from '@shared/assistant.types';
+import type {
+  AssistantChartSeries,
+  AssistantChartVisual,
+} from '@shared/assistant.types';
+import {
+  resolveUnitAwareDisplayFromValue,
+  stripTrailingDisplayUnit,
+} from '@shared/unit-aware-display';
+import { formatDashboardAxisNumericValue } from '../../helpers/dashboard-chart-data.helper';
 import {
   buildDashboardEChartsStyleTokens,
   buildDashboardEChartsTooltipChrome,
@@ -33,6 +45,7 @@ import {
   resolveEChartsThemeName,
 } from '../../helpers/echarts-theme.helper';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -44,6 +57,14 @@ interface TooltipParam {
   marker?: string;
   seriesName?: string;
   value?: [string | number, number | null];
+}
+
+interface AssistantAxisPresentation {
+  key: string;
+  dataType: string | null;
+  rawUnit: string | null;
+  rawMax: number;
+  displayUnit: string;
 }
 
 const ASSISTANT_CHART_COLORS = ['#2196f3', '#10b981', '#f59e0b', '#8b5cf6'];
@@ -60,6 +81,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly themeService = inject(AppThemeService);
+  private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
   private readonly chartHost = new EChartsHostController({
     eChartsLoader: inject(EChartsLoaderService),
     logger: inject(LoggerService),
@@ -70,6 +92,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
   constructor() {
     effect(() => {
       this.themeService.appTheme();
+      this.userSettingsQuery.unitSettings();
       if (this.viewInitialized) {
         void this.refresh();
       }
@@ -115,7 +138,9 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
       darkTheme,
       this.chartDiv?.nativeElement.clientWidth || 0,
     );
-    const units = [...new Set(this.visual.series.map(series => series.unit || 'Value'))];
+    const unitSettings = this.userSettingsQuery.unitSettings();
+    const yAxes = this.buildYAxisPresentations(unitSettings);
+    const xAxis = this.buildXAxisPresentation(unitSettings);
     const dateFormatter = new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
       ...(this.visual.xAxis.timeZone
@@ -129,8 +154,8 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
       color: ASSISTANT_CHART_COLORS,
       textStyle: { color: style.textColor, fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
       grid: {
-        left: units.length > 2 ? 58 : 42,
-        right: units.length > 1 ? 52 + Math.max(0, units.length - 2) * 34 : 18,
+        left: yAxes.length > 2 ? 58 : 42,
+        right: yAxes.length > 1 ? 52 + Math.max(0, yAxes.length - 2) * 34 : 18,
         top: 18,
         bottom: 34,
         containLabel: false,
@@ -163,9 +188,9 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
               ));
               return [{
                 label: entry.seriesName || 'Value',
-                value: `${new Intl.NumberFormat(undefined, {
-                  maximumFractionDigits: 2,
-                }).format(y)}${series?.unit ? ` ${series.unit}` : ''}`,
+                value: series
+                  ? this.formatSeriesValue(series, y, unitSettings)
+                  : this.formatRawValue(y, null),
                 markerColor: entry.color || null,
               }];
             }),
@@ -176,8 +201,8 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
         type: this.visual.xAxis.type === 'category'
           ? 'category'
           : this.visual.xAxis.type === 'time' ? 'time' : 'value',
-        name: this.visual.xAxis.unit
-          ? `${this.visual.xAxis.label} (${this.visual.xAxis.unit})`
+        name: xAxis.displayUnit
+          ? `${this.visual.xAxis.label} (${xAxis.displayUnit})`
           : this.visual.xAxis.label,
         nameLocation: 'middle',
         nameGap: 25,
@@ -191,12 +216,14 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
           hideOverlap: true,
           ...(this.visual.xAxis.type === 'time'
             ? { formatter: (value: number) => dateFormatter.format(new Date(value)) }
-            : {}),
+            : xAxis.dataType
+              ? { formatter: (value: number) => this.formatAxisValue(xAxis, value, unitSettings) }
+              : {}),
         },
       },
-      yAxis: units.map((unit, index) => ({
+      yAxis: yAxes.map((axis, index) => ({
         type: 'value',
-        name: unit,
+        name: axis.displayUnit,
         position: index === 0 ? 'left' : 'right',
         offset: index <= 1 ? 0 : (index - 1) * 34,
         nameTextStyle: { color: style.secondaryTextColor },
@@ -205,9 +232,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
         axisLabel: {
           color: style.secondaryTextColor,
           fontSize: style.axisFontSize,
-          formatter: (value: number) => new Intl.NumberFormat(undefined, {
-            maximumFractionDigits: 1,
-          }).format(value),
+          formatter: (value: number) => this.formatAxisValue(axis, value, unitSettings),
         },
         splitLine: index === 0
           ? { lineStyle: { color: style.gridColor } }
@@ -216,7 +241,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
       series: this.visual.series.map((series, index) => ({
         name: series.label,
         type: this.visual.chartType,
-        yAxisIndex: units.indexOf(series.unit || 'Value'),
+        yAxisIndex: yAxes.findIndex(axis => axis.key === this.seriesAxisKey(series)),
         connectNulls: false,
         showSymbol: series.points.length <= 30,
         symbol: 'circle',
@@ -231,5 +256,136 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
         emphasis: { focus: 'series' },
       })),
     };
+  }
+
+  private buildYAxisPresentations(
+    unitSettings: UserUnitSettingsInterface,
+  ): AssistantAxisPresentation[] {
+    const axes = new Map<string, Omit<AssistantAxisPresentation, 'displayUnit'>>();
+    this.visual.series.forEach((series) => {
+      const key = this.seriesAxisKey(series);
+      const rawMax = this.maximumAbsoluteValue(series.points.map(point => point.y));
+      const existing = axes.get(key);
+      if (existing) {
+        existing.rawMax = Math.max(existing.rawMax, rawMax);
+        return;
+      }
+      axes.set(key, {
+        key,
+        dataType: series.dataType || null,
+        rawUnit: series.unit,
+        rawMax,
+      });
+    });
+
+    return [...axes.values()].map(axis => ({
+      ...axis,
+      displayUnit: this.resolveDisplayUnit(axis, unitSettings),
+    }));
+  }
+
+  private buildXAxisPresentation(
+    unitSettings: UserUnitSettingsInterface,
+  ): AssistantAxisPresentation {
+    const axis = {
+      key: 'x-axis',
+      dataType: this.visual.xAxis.dataType || null,
+      rawUnit: this.visual.xAxis.unit,
+      rawMax: this.maximumAbsoluteValue(
+        this.visual.series.flatMap(series => series.points.map(point => point.x)),
+      ),
+    };
+    return {
+      ...axis,
+      displayUnit: this.resolveDisplayUnit(axis, unitSettings, ''),
+    };
+  }
+
+  private resolveDisplayUnit(
+    axis: Omit<AssistantAxisPresentation, 'displayUnit'>,
+    unitSettings: UserUnitSettingsInterface,
+    fallback = 'Value',
+  ): string {
+    if (axis.dataType === DataDistance.type) {
+      const formatted = formatDashboardAxisNumericValue(
+        axis.dataType,
+        axis.rawMax,
+        undefined,
+        unitSettings,
+        axis.rawMax,
+      );
+      const distanceUnit = formatted.match(/\s(km|mi|m)$/i)?.[1];
+      if (distanceUnit) {
+        return this.normalizeDisplayUnit(distanceUnit);
+      }
+    }
+    const display = axis.dataType
+      ? resolveUnitAwareDisplayFromValue(axis.dataType, axis.rawMax, unitSettings, {
+          stripRepeatedUnit: true,
+        })
+      : null;
+    return this.normalizeDisplayUnit(display?.unit || axis.rawUnit || fallback);
+  }
+
+  private formatAxisValue(
+    axis: AssistantAxisPresentation,
+    value: number,
+    unitSettings: UserUnitSettingsInterface,
+  ): string {
+    if (!axis.dataType) {
+      return this.formatRawValue(value, null);
+    }
+    const formatted = formatDashboardAxisNumericValue(
+      axis.dataType,
+      value,
+      undefined,
+      unitSettings,
+      axis.rawMax,
+    );
+    return axis.displayUnit
+      ? stripTrailingDisplayUnit(formatted, axis.displayUnit)
+      : formatted;
+  }
+
+  private formatSeriesValue(
+    series: AssistantChartSeries,
+    value: number,
+    unitSettings: UserUnitSettingsInterface,
+  ): string {
+    const display = series.dataType
+      ? resolveUnitAwareDisplayFromValue(series.dataType, value, unitSettings, {
+          stripRepeatedUnit: true,
+        })
+      : null;
+    if (!display) {
+      return this.formatRawValue(value, series.unit);
+    }
+    const unit = this.normalizeDisplayUnit(display.unit);
+    return `${display.value}${unit ? ` ${unit}` : ''}`;
+  }
+
+  private seriesAxisKey(series: AssistantChartSeries): string {
+    return series.dataType
+      ? `type:${series.dataType}|unit:${series.unit || ''}`
+      : `unit:${series.unit || 'Value'}`;
+  }
+
+  private maximumAbsoluteValue(values: Array<string | number | null>): number {
+    return values.reduce<number>((maximum, value) => (
+      typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(maximum, Math.abs(value))
+        : maximum
+    ), 0);
+  }
+
+  private formatRawValue(value: number, unit: string | null): string {
+    const formatted = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 2,
+    }).format(value);
+    return `${formatted}${unit ? ` ${unit}` : ''}`;
+  }
+
+  private normalizeDisplayUnit(unit: string): string {
+    return unit === 'Km' ? 'km' : unit;
   }
 }

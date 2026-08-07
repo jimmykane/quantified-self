@@ -97,6 +97,10 @@ or bounded chart-breadcrumb coordinates only when the conversation already has `
 coordinates and geometry remain unavailable. Visual labels and units come from the existing MCP sleep, Training, and
 activity-chart catalogs. Form charts feed the persisted daily loads through the shared `buildTrainingLoadPoints` engine
 used by the app and derived-metric service, so fitness, fatigue, and Form are not recalculated by a parallel formula.
+For supported Sports Lib metrics, the deterministic chart projection also retains the canonical data type as bounded
+presentation metadata. Stored points remain in MCP's canonical units, while the frontend reuses the app's Sports Lib
+unit conversion path for axes and tooltips. Distance totals therefore render as kilometers or miles according to the
+signed-in user's current unit settings without changing the MCP result or asking Gemini to scale values.
 For a record-jump location request, the backend binds the jump-detail read to the ranked activity reference and matches
 the relevant Sports Lib maximum metric value to the individual record. It renders only the matching marker or tied
 markers; if that record is not present in the bounded jump page, it omits the map rather than showing unrelated jumps.

@@ -37,6 +37,11 @@ configuration, or titles. Coordinate-free sessions cannot request chart breadcru
 displayed tile area to Mapbox, independently of whether place-name geocoding was used. This prevents the Assistant from
 becoming a parallel data or calculation API.
 
+Assistant chart values remain in the canonical units returned by MCP. The deterministic projection retains an optional,
+bounded canonical Sports Lib data type for each supported series (and for a distance-based X axis), and the Angular
+renderer applies the signed-in user's current unit settings to axis labels and tooltips. This presentation metadata is
+not shown to Gemini, does not change the stored canonical values, and is not part of the registered public MCP contract.
+
 The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
 tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the
 Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See

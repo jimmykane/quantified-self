@@ -16,6 +16,7 @@ import {
 } from '../../../shared/assistant.types';
 import {
   ChartDataCategoryTypes,
+  DataDistance,
   DataJumpDistanceMax,
   DataJumpHangTimeMax,
   DataJumpHeightMax,
@@ -131,6 +132,7 @@ interface SeriesDefinition {
   key: string;
   label: string;
   unit: string | null;
+  dataType?: string | null;
   read: (record: Record<string, unknown>) => unknown;
 }
 
@@ -198,6 +200,12 @@ function normalizeUnit(value: unknown): string | null {
     watts: 'W',
   };
   return aliases[normalized] ?? normalized;
+}
+
+function normalizeDataType(value: unknown): string | null {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, MAX_LABEL_CHARS)
+    : null;
 }
 
 function isoTimestamp(value: unknown): string | null {
@@ -396,10 +404,12 @@ function timeSeries(
     if (points.length === 0 || points.every(point => point.y === null)) {
       return [];
     }
+    const dataType = normalizeDataType(definition.dataType);
     return [{
       key: definition.key,
       label: boundedText(definition.label, definition.key, MAX_LABEL_CHARS),
       unit: normalizeUnit(definition.unit),
+      ...(dataType ? { dataType } : {}),
       points: downsampleAssistantChartPoints(points),
     }];
   });
@@ -428,10 +438,12 @@ function linearSeries(
     if (points.length === 0 || points.every(point => point.y === null)) {
       return [];
     }
+    const dataType = normalizeDataType(definition.dataType);
     return [{
       key: definition.key,
       label: boundedText(definition.label, definition.key, MAX_LABEL_CHARS),
       unit: normalizeUnit(definition.unit),
+      ...(dataType ? { dataType } : {}),
       points: downsampleAssistantChartPoints(points),
     }];
   });
@@ -448,6 +460,7 @@ function buildMeasurementChart(
     key: 'value',
     label,
     unit: normalizeUnit(metric.unit),
+    dataType: normalizeDataType(metric.type),
     read: point => point.value,
   }]);
   return series.length ? {
@@ -477,6 +490,7 @@ function buildMetricSeries(
   const aggregationLabel = typeof aggregation.valueType === 'string'
     ? humanize(aggregation.valueType, 'Value')
     : null;
+  const dataType = normalizeDataType(metric.type);
   const label = boundedText(
     aggregationLabel ? `${metricLabel} (${aggregationLabel})` : metricLabel,
     metricLabel,
@@ -509,6 +523,7 @@ function buildMetricSeries(
     key: `metric_${index}`,
     label,
     unit: normalizeUnit(metric.unit),
+    ...(dataType ? { dataType } : {}),
     points: downsampleAssistantChartPoints(points),
   } : null;
 }
@@ -772,7 +787,11 @@ function buildRankingChart(
   const metric = isRecord(output.metric) ? output.metric : {};
   const label = boundedText(metric.displayType, humanize(metric.type, 'Activity metric'), MAX_LABEL_CHARS);
   const series = timeSeries(asRecords(output.activities), activity => activity.startTime, [{
-    key: 'ranked_value', label, unit: normalizeUnit(metric.unit), read: activity => activity.value,
+    key: 'ranked_value',
+    label,
+    unit: normalizeUnit(metric.unit),
+    dataType: normalizeDataType(metric.type),
+    read: activity => activity.value,
   }]);
   return series.length ? {
     title: `${label} by activity`.slice(0, MAX_TITLE_CHARS),
@@ -800,10 +819,12 @@ function buildActivityChart(output: Record<string, unknown>): AssistantVisualCha
       const y = finiteNumber(values[pointIndex]);
       return xValue === null || y === null ? [] : [{ x: xValue, y }];
     });
+    const dataType = normalizeDataType(metric?.streamType);
     return points.length ? [{
       key: `series_${index}`,
       label: metric?.label ?? humanize(record.metric, `Series ${index + 1}`),
       unit: normalizeUnit(metric?.unit ?? record.canonicalUnit),
+      ...(dataType ? { dataType } : {}),
       points: downsampleAssistantChartPoints(points),
     }] : [];
   }).slice(0, ASSISTANT_MAX_CHART_SERIES);
@@ -814,6 +835,7 @@ function buildActivityChart(output: Record<string, unknown>): AssistantVisualCha
       type: 'linear',
       label: xAxis === 'distance' ? 'Distance' : 'Elapsed time',
       unit: xAxis === 'distance' ? 'm' : 's',
+      ...(xAxis === 'distance' ? { dataType: DataDistance.type } : {}),
       timeZone: null,
     },
     defaultChartType: 'line',
@@ -1108,6 +1130,7 @@ export function resolveAssistantVisuals(
         .map(candidate => ({
           label: candidate.label,
           unit: candidate.unit,
+          ...(candidate.dataType ? { dataType: candidate.dataType } : {}),
           points: downsampleAssistantChartPoints(candidate.points),
         }));
       if (series.length) {
