@@ -57,7 +57,31 @@ npm --prefix functions run secrets:check
 
 The compiled check loads every exported Firebase Function and compares its generated `secretEnvironmentVariables` metadata with the policy. It fails for missing bindings, extra bindings, duplicate bindings, policy entries without an exported endpoint, or a secret on an endpoint that defaults to no access. The Firebase codebase also sets `disallowLegacyRuntimeConfig: true`, preventing deprecated Cloud Runtime Config values from being generated into `.runtimeconfig.json` during v1 Function packaging.
 
-## One-command production cutover
+## One-time deployed environment cleanup
+
+An older Firebase deployment may have copied local dotenv or Runtime Config credentials into every deployed Function as ordinary environment variables. Adding a `defineSecret()` binding with the same name then fails with `Secret environment variable overlaps non secret environment variable`. Removing the local file does not remove those already-deployed bindings.
+
+Use the repository migration before the first complete Secret Manager deployment. It compares and prints only credential names, never prints values, defaults to a dry run, and limits preparatory updates to repository endpoints that require Secret Manager bindings. Each update removes legacy ordinary environment variables and attaches the endpoint's complete least-privilege Secret Manager policy in the same Function revision. It reuses the already-deployed Cloud Storage source archive; it does not upload the current checkout.
+
+```bash
+npm --prefix functions run secrets:migrate-deployed -- \
+  --project=quantified-self-io \
+  --region=europe-west2
+```
+
+Review the reported endpoint and credential names. The apply mode is a production mutation and requires separate explicit approval plus an exact project confirmation:
+
+```bash
+npm --prefix functions run secrets:migrate-deployed -- \
+  --project=quantified-self-io \
+  --region=europe-west2 \
+  --apply \
+  --confirm-project=quantified-self-io
+```
+
+The migration uses existing enabled Secret Manager versions and does not create, replace, retrieve, print, or rotate secret values. It is idempotent, but Function updates are not globally atomic; if one fails, fix the reported error and rerun the same command. Do not delete ordinary bindings in a separate command, because that creates an avoidable interval where the affected Function has no credential source.
+
+## Complete production cutover
 
 Confirm all managed names have an enabled version, run the complete local verification suite, and deploy every repository-defined Function in one command:
 
@@ -68,9 +92,13 @@ npm --prefix functions run secrets:check:compiled
 npm --prefix functions run mcp:contract:check:compiled
 firebase deploy --only functions --dry-run --project quantified-self-io
 firebase deploy --only functions --project quantified-self-io
+npm --prefix functions run secrets:migrate-deployed -- \
+  --project=quantified-self-io \
+  --region=europe-west2 \
+  --require-clean
 ```
 
-The final command requires explicit production approval. Firebase submits all Functions from one command, but updates are not transactionally atomic. If an endpoint update fails, correct the binding or deployment error and rerun the complete Functions deployment; do not switch to an improvised mixture of secret and `.env` configuration.
+The non-dry-run Firebase command requires explicit production approval. Firebase submits all Functions from one command, but updates are not transactionally atomic. If an endpoint update fails, correct the binding or deployment error and rerun the complete Functions deployment; do not switch to an improvised mixture of secret and `.env` configuration. The final audit must report no repository endpoint with a managed credential in ordinary environment variables, no missing or extra Secret Manager binding, and no repository endpoint missing from the deployed region.
 
 This project previously stored provider credentials in deprecated Firebase Runtime Config under `suuntoapp`, `corosapi`, and `garminhealthapi`. `disallowLegacyRuntimeConfig` prevents those values from entering new source archives, but it does not delete the old cloud-side copies. After the complete Functions deployment succeeds, remove the obsolete namespaces in the same approved cutover window:
 
