@@ -9,8 +9,8 @@ responsive action placement. Import the standalone component directly from a sta
 
 Use the `route` variant for a primary workspace heading and the `compact` variant for embedded workspace context such
 as Dashboard Today. Both variants use the same visible Material `headline-small` title role and a 40 px title row;
-`headingLevel` controls document semantics rather than visual size. This keeps Dashboard Today, Calendar, Training, and
-the other authenticated workspace headings aligned without promoting an embedded section to an `h1`. The component
+`headingLevel` controls document semantics rather than visual size. This keeps Dashboard Today, Calendar, Training,
+Routes, and signed-in Compare files aligned without promoting an embedded section to an `h1`. The component
 provides:
 
 - `title`, `titleId`, and `headingLevel` for the page or section heading.
