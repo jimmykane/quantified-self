@@ -1,0 +1,98 @@
+name: Tag package version
+
+# Mirror the sports-lib release flow: tag only after the exact main commit has
+# passed its test gate and completed the production Hosting deployment.
+on:
+  workflow_run:
+    workflows:
+      - MAIN HOSTING Build and Deploy
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-version-tag
+  cancel-in-progress: false
+
+jobs:
+  tag-version:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tag the precise commit whose main Hosting workflow succeeded.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - id: release
+        name: Detect a package version change
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+
+          node <<'NODE'
+          const packageJson = require('./package.json');
+          const lockfile = require('./package-lock.json');
+
+          if (
+            packageJson.version !== lockfile.version ||
+            packageJson.version !== lockfile.packages[''].version
+          ) {
+            throw new Error('package.json and package-lock.json must have the same version');
+          }
+          NODE
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+          if ! git cat-file -e "$TARGET_SHA^:package.json" 2> /dev/null; then
+            echo "Unable to compare this commit with its parent package version" >&2
+            exit 1
+          fi
+
+          previous_version="$(git show "$TARGET_SHA^:package.json" | node -e "let input=''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(input).version));")"
+
+          if [ "$previous_version" = "$version" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Package version remains $version; no tag is required."
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Package version changed from $previous_version to $version."
+
+      - name: Create package version tag
+        if: steps.release.outputs.changed == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null 2>&1; then
+            git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+            existing_sha="$(git rev-list -n 1 "$TAG")"
+
+            if [ "$existing_sha" = "$TARGET_SHA" ]; then
+              echo "$TAG already points to $TARGET_SHA; nothing to do."
+              exit 0
+            fi
+
+            echo "$TAG already exists at $existing_sha instead of $TARGET_SHA" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$TARGET_SHA" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"

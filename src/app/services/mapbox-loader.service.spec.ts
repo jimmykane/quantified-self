@@ -1,6 +1,8 @@
 import {
+    MAPBOX_CSS_ASSET_PATH,
     MAPBOX_ESM_WORKER_ASSET_PATH,
     MapboxLoaderService,
+    resolveMapboxCssUrl,
     resolveMapboxEsmWorkerUrl
 } from './mapbox-loader.service';
 import { NgZone } from '@angular/core';
@@ -22,8 +24,6 @@ vi.mock('mapbox-gl/dist/esm/mapbox-gl.js', () => ({
     default: mapboxEsmMock.runtime
 }));
 
-vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}));
-
 describe('MapboxLoaderService', () => {
     let service: MapboxLoaderService;
     let zone: NgZone;
@@ -43,6 +43,7 @@ describe('MapboxLoaderService', () => {
         } as any;
 
         service = new MapboxLoaderService(zone, PLATFORM_BROWSER_ID as any);
+        vi.spyOn(service as any, 'loadMapboxStyles').mockResolvedValue(undefined);
         mapboxEsmMock.runtime.accessToken = '';
         mapboxEsmMock.runtime.workerUrl = '';
 
@@ -52,6 +53,7 @@ describe('MapboxLoaderService', () => {
 
     afterEach(() => {
         vi.restoreAllMocks();
+        document.querySelectorAll('[data-mapbox-gl-stylesheet="true"]').forEach(element => element.remove());
     });
 
     it('should be created', () => {
@@ -71,6 +73,12 @@ describe('MapboxLoaderService', () => {
             );
         });
 
+        it('should resolve the lazy static stylesheet from the document base URI', () => {
+            expect(resolveMapboxCssUrl('https://quantified-self.io/app/')).toBe(
+                `https://quantified-self.io/app/${MAPBOX_CSS_ASSET_PATH}`
+            );
+        });
+
         it('should load the ESM Mapbox runtime and configure the module worker', async () => {
             const result = await service.loadMapbox();
 
@@ -79,21 +87,31 @@ describe('MapboxLoaderService', () => {
             expect(result.accessToken).toBe(environment.mapboxAccessToken);
         });
 
-        it('should allow a retry after lazy stylesheet loading fails', async () => {
-            const loadError = new Error('stylesheet chunk unavailable');
-            vi.spyOn(console, 'error').mockImplementation(() => undefined);
-            const stylesSpy = vi.spyOn(service as any, 'loadMapboxStyles')
-                .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
-                    queueMicrotask(() => reject(loadError));
-                }))
-                .mockResolvedValueOnce(undefined);
+        it('should wait for the lazy static stylesheet before resolving Mapbox', async () => {
+            const stylesheetService = new MapboxLoaderService(zone, PLATFORM_BROWSER_ID as any);
+            const stylesPromise = (stylesheetService as any).loadMapboxStyles();
+            const stylesheet = document.querySelector<HTMLLinkElement>('[data-mapbox-gl-stylesheet="true"]');
 
-            await expect(service.loadMapbox()).rejects.toBe(loadError);
-            expect((service as any).apiLoadingPromise).toBeNull();
+            expect(stylesheet?.href).toBe(resolveMapboxCssUrl(document.baseURI));
+            stylesheet?.dispatchEvent(new Event('load'));
 
-            await expect(service.loadMapbox()).resolves.toBe(mapboxEsmMock.runtime);
-            expect(stylesSpy).toHaveBeenCalledTimes(2);
+            await expect(stylesPromise).resolves.toBeUndefined();
         });
+
+        it('should allow a retry when lazy static stylesheet loading fails', async () => {
+            const stylesheetService = new MapboxLoaderService(zone, PLATFORM_BROWSER_ID as any);
+            const firstAttempt = (stylesheetService as any).loadMapboxStyles();
+            const rejectedFirstAttempt = expect(firstAttempt).rejects.toThrow('Failed to load Mapbox GL CSS.');
+            document.querySelector<HTMLLinkElement>('[data-mapbox-gl-stylesheet="true"]')?.dispatchEvent(new Event('error'));
+
+            await rejectedFirstAttempt;
+
+            const secondAttempt = (stylesheetService as any).loadMapboxStyles();
+            document.querySelector<HTMLLinkElement>('[data-mapbox-gl-stylesheet="true"]')?.dispatchEvent(new Event('load'));
+
+            await expect(secondAttempt).resolves.toBeUndefined();
+        });
+
     });
 
     describe('createMap', () => {

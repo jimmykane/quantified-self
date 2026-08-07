@@ -7,9 +7,14 @@ type MapboxGlRuntime = typeof import('mapbox-gl/dist/esm/mapbox-gl.js');
 type MapboxGlApi = MapboxGlRuntime['default'];
 
 export const MAPBOX_ESM_WORKER_ASSET_PATH = 'assets/mapbox-gl/esm/worker.js';
+export const MAPBOX_CSS_ASSET_PATH = 'assets/mapbox-gl/mapbox-gl.css';
 
 export function resolveMapboxEsmWorkerUrl(baseUri: string): string {
     return new URL(MAPBOX_ESM_WORKER_ASSET_PATH, baseUri).toString();
+}
+
+export function resolveMapboxCssUrl(baseUri: string): string {
+    return new URL(MAPBOX_CSS_ASSET_PATH, baseUri).toString();
 }
 
 @Injectable({
@@ -61,12 +66,21 @@ export class MapboxLoaderService {
 
     private loadMapboxStyles(): Promise<void> {
         if (!this.stylesLoadingPromise) {
-            this.stylesLoadingPromise = import('mapbox-gl/dist/mapbox-gl.css')
-                .then(() => undefined)
-                .catch((error: unknown) => {
-                    this.stylesLoadingPromise = null;
-                    throw error;
-                });
+            this.stylesLoadingPromise = new Promise<void>((resolve, reject) => {
+                const stylesheet = document.createElement('link');
+                stylesheet.rel = 'stylesheet';
+                stylesheet.href = resolveMapboxCssUrl(document.baseURI);
+                stylesheet.dataset['mapboxGlStylesheet'] = 'true';
+                stylesheet.addEventListener('load', () => resolve(), { once: true });
+                stylesheet.addEventListener('error', () => {
+                    stylesheet.remove();
+                    reject(new Error('Failed to load Mapbox GL CSS.'));
+                }, { once: true });
+                document.head.appendChild(stylesheet);
+            }).catch((error: unknown) => {
+                this.stylesLoadingPromise = null;
+                throw error;
+            });
         }
 
         return this.stylesLoadingPromise;

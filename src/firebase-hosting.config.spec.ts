@@ -32,6 +32,7 @@ interface FirebaseConfig {
 
 interface AngularBuildOptions {
   assets: Array<string | { glob: string; input: string; output: string }>;
+  styles: string[];
 }
 
 interface AngularBuildConfiguration {
@@ -396,6 +397,18 @@ describe('Firebase Hosting configuration', () => {
       output: '/',
     });
     expect(assets).not.toContain('src/favicon.ico');
+  });
+
+  it('ships Mapbox CSS as a lazy static asset instead of a lazy stylesheet chunk', () => {
+    const assets = angularConfig.projects['track-tools'].architect.build.options.assets;
+    const styles = angularConfig.projects['track-tools'].architect.build.options.styles;
+
+    expect(assets).toContainEqual({
+      glob: 'mapbox-gl.css',
+      input: 'node_modules/mapbox-gl/dist',
+      output: 'assets/mapbox-gl',
+    });
+    expect(styles).not.toContain('node_modules/mapbox-gl/dist/mapbox-gl.css');
   });
 
   it('keeps the static Firebase 404 page noindexed and useful without JavaScript', () => {
