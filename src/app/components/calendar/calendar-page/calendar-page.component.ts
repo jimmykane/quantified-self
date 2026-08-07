@@ -19,6 +19,7 @@ import {
   navigateActivityCalendarDate,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
+  resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
 } from '../../../helpers/activity-calendar.helper';
 import {
@@ -31,6 +32,7 @@ import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
 } from '../calendar-day-details/calendar-day-details.component';
+import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
@@ -52,7 +54,12 @@ interface CalendarSummaryMetric {
 @Component({
   selector: 'app-calendar-page',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarGridComponent, ActivityCalendarVolumeListComponent],
+  imports: [
+    SharedModule,
+    ActivityCalendarGridComponent,
+    ActivityCalendarVolumeListComponent,
+    ActivityRangeTableSectionComponent,
+  ],
   templateUrl: './calendar-page.component.html',
   styleUrls: ['./calendar-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -112,6 +119,11 @@ export class CalendarPageComponent {
       now: this.today(),
     });
   });
+  readonly primaryActivityRange = computed(() => resolveActivityCalendarPrimaryRange(
+    this.routeState().view,
+    this.routeState().anchorDate,
+    this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
+  ));
   readonly periodSummaryMetrics = computed<CalendarSummaryMetric[]>(() => {
     if (this.eventState().status !== 'ready') {
       return [

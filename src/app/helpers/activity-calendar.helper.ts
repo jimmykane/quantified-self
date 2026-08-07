@@ -15,6 +15,7 @@ import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import type { SummaryStatsSettingsLike } from './summary-stats.helper';
 import { resolveTrainingEventDisplayLabel } from './training-event-label.helper';
+import type { ActivityRange } from '../models/activity-range.interface';
 
 export type ActivityCalendarView = 'week' | 'month' | 'year';
 export type ActivityCalendarVolumeMetric = 'duration' | 'distance' | 'ascent' | 'descent';
@@ -24,10 +25,7 @@ export interface ActivityCalendarRouteState {
   anchorDate: Date;
 }
 
-export interface ActivityCalendarQueryWindow {
-  startMs: number;
-  endExclusiveMs: number;
-}
+export type ActivityCalendarQueryWindow = ActivityRange;
 
 export interface ActivityCalendarFamilySummary {
   id: string;
@@ -212,8 +210,29 @@ export function resolveActivityCalendarQueryWindow(
   anchorDate: Date,
   startOfWeek?: DaysOfTheWeek | number | null,
 ): ActivityCalendarQueryWindow {
+  const normalizedView = normalizeActivityCalendarView(view);
+  const primaryRange = resolveActivityCalendarPrimaryRange(normalizedView, anchorDate, startOfWeek);
+  if (normalizedView !== 'month') {
+    return primaryRange;
+  }
+
   const anchor = startOfLocalDay(isValidDate(anchorDate) ? anchorDate : new Date());
-  if (view === 'week') {
+  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const gridStart = startOfCalendarWeek(monthStart, startOfWeek);
+  return {
+    startMs: gridStart.getTime(),
+    endExclusiveMs: addLocalDays(gridStart, CALENDAR_MONTH_GRID_DAYS).getTime(),
+  };
+}
+
+export function resolveActivityCalendarPrimaryRange(
+  view: ActivityCalendarView,
+  anchorDate: Date,
+  startOfWeek?: DaysOfTheWeek | number | null,
+): ActivityRange {
+  const anchor = startOfLocalDay(isValidDate(anchorDate) ? anchorDate : new Date());
+  const normalizedView = normalizeActivityCalendarView(view);
+  if (normalizedView === 'week') {
     const start = startOfCalendarWeek(anchor, startOfWeek);
     return {
       startMs: start.getTime(),
@@ -221,7 +240,7 @@ export function resolveActivityCalendarQueryWindow(
     };
   }
 
-  if (view === 'year') {
+  if (normalizedView === 'year') {
     const start = new Date(anchor.getFullYear(), 0, 1);
     return {
       startMs: start.getTime(),
@@ -230,10 +249,9 @@ export function resolveActivityCalendarQueryWindow(
   }
 
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const gridStart = startOfCalendarWeek(monthStart, startOfWeek);
   return {
-    startMs: gridStart.getTime(),
-    endExclusiveMs: addLocalDays(gridStart, CALENDAR_MONTH_GRID_DAYS).getTime(),
+    startMs: monthStart.getTime(),
+    endExclusiveMs: new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1).getTime(),
   };
 }
 

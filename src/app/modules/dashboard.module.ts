@@ -5,10 +5,6 @@ import { CommonModule } from '@angular/common';
 import { DashboardRoutingModule } from '../dashboard.routing.module';
 import { DashboardComponent } from '../components/dashboard/dashboard.component';
 import { SummariesComponent } from '../components/summaries/summaries.component';
-import { EventsExportFormComponent } from '../components/events-export-form/events-export.form.component';
-import { EventTableComponent, MatPaginatorIntlFireStore } from '../components/event-table/event.table.component';
-import { MergeOptionsDialogComponent } from '../components/event-table/merge-options-dialog/merge-options-dialog.component';
-import { MatPaginatorIntl } from '@angular/material/paginator';
 import { EventsMapComponent } from '../components/events-map/events-map.component';
 import { TileChartComponent } from '../components/tile/chart/tile.chart.component';
 import { TileMapComponent } from '../components/tile/map/tile.map.component';
@@ -16,7 +12,6 @@ import { TileChartActionsComponent } from '../components/tile/actions/chart/tile
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
 import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
-import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
@@ -28,6 +23,7 @@ import { DashboardActionPromptsComponent } from '../components/dashboard/dashboa
 import { RoutePreviewMapComponent } from '../components/routes/route-preview-map/route-preview-map.component';
 import { ActivityCalendarTileComponent } from '../components/calendar/activity-calendar-tile/activity-calendar-tile.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
+import { EventTableModule } from './event-table.module';
 
 @NgModule({
     imports: [
@@ -42,6 +38,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         RoutePreviewMapComponent,
         ActivityCalendarTileComponent,
         UploadActivitiesComponent,
+        EventTableModule,
     ],
     exports: [],
     declarations: [
@@ -51,10 +48,6 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         TileMapActionsComponent,
         TileActionsHeaderComponent,
         TileActionsFooterComponent,
-        EventsExportFormComponent,
-        EventTableComponent,
-        MergeOptionsDialogComponent,
-        EventTableActionsComponent,
         TileChartComponent,
         TileMapComponent,
         DashboardTileEventFiltersComponent,
@@ -64,9 +57,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
         DashboardActionPromptsComponent,
 
     ],
-    providers: [
-        { provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore },
-    ]
+    providers: []
 })
 
 

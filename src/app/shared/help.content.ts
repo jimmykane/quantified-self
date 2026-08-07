@@ -121,12 +121,13 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - Below the calendar, **Activities** compares activity groups by recorded duration. Each bar uses the same color as its circles and is scaled against the longest-duration group in the selected period. The info control beside the heading explains this comparison.
 - Available duration, distance, ascent, and descent totals appear with icons beneath each bar. A metric is omitted when no positive recorded value exists, and **--** beside an activity group means duration was not recorded.
 - Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent. Ascent and descent summary exclusions configured in **Settings** also apply.
+- The activity table beneath the duration bars lists normal activities in the selected Week, Month, or Year. It follows Calendar navigation exactly, so it has no additional search, sport, tag, or date filters; use column sorting, pagination, or select a row to open the activity. Month tables exclude adjacent dates shown only to complete the grid.
 
 ## Preferences and data scope
 
 - Weekday order follows **Settings -> Dashboard -> Start of the Week**. The configured first day is identified in the header, and Saturday and Sunday remain identifiable as weekend days.
 - Distance, ascent, and descent use the units selected in **Settings -> Units**.
-- The full Calendar owns a visible-period activity query that is independent from the dashboard event table, custom-chart ranges, and map-tile filters. The dashboard tile independently loads its current-month window.
+- The Calendar grid and its activity table are independent from dashboard event-table filters, custom-chart ranges, and map-tile filters. The table always uses the exact selected Week, Month, or Year, while the dashboard tile independently loads its current-month window.
 - Normal activity events are included. Merge and benchmark records are excluded so comparison artifacts do not create calendar days or inflate totals.`;
 
 export const HELP_ACTIONS: HelpAction[] = [
