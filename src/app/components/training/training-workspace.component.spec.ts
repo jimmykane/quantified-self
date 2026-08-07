@@ -249,6 +249,16 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
+  it('separates adjacent Training Mix sport contexts with matching dividers', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const styles = readFileSync(stylePath, 'utf8');
+    const adjacentContextRule = styles.match(/\.training-mix-contexts section \+ section \{([^}]*)\}/)?.[1];
+
+    expect(styles).toContain('--training-mix-context-divider-color: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
+    expect(adjacentContextRule).toContain('padding-top: 12px;');
+    expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
+  });
+
   it('renders activity-family icons only for sport-specific training driver cards', async () => {
     const coverage = {
       totalCount: 4,

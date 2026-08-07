@@ -935,6 +935,9 @@ capacity metrics just to fill the card. The chart's nested loading host particip
 occupies the remaining canvas. Multiple visible families use compact responsive summary rows with the global chart
 below. Tablet and mobile retain the stacked layout.
 
+Within one discipline card, every observed context after the first starts below a matching theme-aware divider. This
+keeps Cycling, Mountain biking, Enduro MTB, and Downhill MTB visually distinct while preserving one shared card surface.
+
 ### 6. Power Systems
 
 `training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
