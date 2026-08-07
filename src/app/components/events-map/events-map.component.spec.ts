@@ -530,6 +530,43 @@ describe('EventsMapComponent', () => {
     ]);
     expect(mapOptions?.center).toBeUndefined();
     expect(mapOptions?.zoom).toBeUndefined();
+    expect(mapOptions?.fitBoundsOptions).toMatchObject({
+      padding: 80,
+      animate: false,
+      duration: 0,
+      maxZoom: 13,
+    });
+  });
+
+  it('keeps tightly grouped event starts below the clustered-source zoom cutoff', async () => {
+    component.events = [
+      createEvent('event-1', 40.64, 22.94),
+      createEvent('event-2', 40.64001, 22.94001),
+    ];
+
+    await initMap();
+
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    expect(createMapCall?.[1]?.fitBoundsOptions?.maxZoom).toBe(13);
+    expect(map.fitBounds).toHaveBeenLastCalledWith(expect.any(Array), expect.objectContaining({
+      padding: 80,
+      animate: false,
+      maxZoom: 13,
+    }));
+  });
+
+  it('does not cap camera fits when event clustering is disabled', async () => {
+    component.events = [
+      createEvent('event-1', 40.64, 22.94),
+      createEvent('event-2', 40.64001, 22.94001),
+    ];
+    component.clusterMarkers = false;
+
+    await initMap();
+
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    expect(createMapCall?.[1]?.fitBoundsOptions?.maxZoom).toBeUndefined();
+    expect(map.fitBounds).toHaveBeenLastCalledWith(expect.any(Array), expect.not.objectContaining({ maxZoom: expect.anything() }));
   });
 
   it('should include focusLocation in initial bounds when events are present', async () => {
