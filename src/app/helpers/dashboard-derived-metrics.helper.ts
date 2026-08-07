@@ -20,6 +20,7 @@ import type {
   DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
   DerivedTrainingBuildWindow,
+  DerivedTrainingContextSummary,
   DerivedTrainingRecoveryComparison,
   DerivedTrainingRecoveryWindow,
   DerivedTrainingDisciplineSummary,
@@ -42,7 +43,15 @@ import {
   normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
 } from '@shared/derived-metrics';
-import { isTrainingDiscipline, TRAINING_DISCIPLINES } from '@shared/training-disciplines';
+import {
+  getTrainingSportContextDefinition,
+  getTrainingSportDefinition,
+  isTrainingDiscipline,
+  isTrainingProfileMetricId,
+  isTrainingSportContextId,
+  TRAINING_DISCIPLINES,
+  type TrainingDiscipline,
+} from '@shared/training-disciplines';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
   resolveDashboardFormLatestPoint,
@@ -183,6 +192,7 @@ export interface DashboardTrainingSummaryWindow {
   easySeconds: number;
   moderateSeconds: number;
   hardSeconds: number;
+  contexts: DerivedTrainingContextSummary[];
 }
 
 export interface DashboardTrainingDisciplineSummary extends Omit<DerivedTrainingDisciplineSummary, 'current28d' | 'baseline28d'> {
@@ -428,7 +438,95 @@ export function resolveDashboardAcwrContext(payload: unknown): DashboardAcwrCont
   };
 }
 
-function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainingSummaryWindow | null {
+function resolveDashboardTrainingContextSummaries(
+  value: unknown,
+  discipline: TrainingDiscipline,
+): DerivedTrainingContextSummary[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const allowedContexts = new Set(getTrainingSportDefinition(discipline)?.contexts.map(context => context.id) || []);
+  const contexts: DerivedTrainingContextSummary[] = [];
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return null;
+    }
+    const raw = candidate as Partial<DerivedTrainingContextSummary>;
+    const definition = isTrainingSportContextId(raw.context)
+      ? getTrainingSportContextDefinition(raw.context)
+      : null;
+    const activityCount = toFiniteNumber(raw.activityCount);
+    if (
+      !definition
+      || !allowedContexts.has(definition.id)
+      || raw.profile !== definition.profile
+      || activityCount === null
+      || activityCount <= 0
+      || !Array.isArray(raw.metrics)
+    ) {
+      return null;
+    }
+    const allowedMetrics = new Set<string>(definition.profileMetrics);
+    const metrics = raw.metrics.flatMap((candidateMetric) => {
+      if (!candidateMetric || typeof candidateMetric !== 'object' || Array.isArray(candidateMetric)) {
+        return [];
+      }
+      const metric = candidateMetric as DerivedTrainingContextSummary['metrics'][number];
+      const metricValue = toFiniteNumber(metric.value);
+      const sourceActivityCount = toFiniteNumber(metric.sourceActivityCount);
+      if (
+        !isTrainingProfileMetricId(metric.metric)
+        || !allowedMetrics.has(metric.metric)
+        || metricValue === null
+        || metricValue < 0
+        || sourceActivityCount === null
+        || sourceActivityCount <= 0
+        || sourceActivityCount > activityCount
+      ) {
+        return [];
+      }
+      return [{ metric: metric.metric, value: metricValue, sourceActivityCount }];
+    });
+    if (
+      metrics.length !== raw.metrics.length
+      || new Set(metrics.map(metric => metric.metric)).size !== metrics.length
+    ) {
+      return null;
+    }
+    contexts.push({
+      context: definition.id,
+      profile: definition.profile,
+      activityCount,
+      metrics,
+    });
+  }
+  return new Set(contexts.map(context => context.context)).size === contexts.length ? contexts : null;
+}
+
+function hasConsistentTrainingContextActivityCount(
+  activityCount: number,
+  contexts: readonly DerivedTrainingContextSummary[],
+): boolean {
+  if (activityCount === 0) {
+    return contexts.length === 0;
+  }
+  if (contexts.length === 0) {
+    return false;
+  }
+  const contextActivityCount = contexts.reduce(
+    (total, context) => total + context.activityCount,
+    0,
+  );
+  // Summary baselines round the overall normalized count and every context to
+  // two decimals independently. Allow only that bounded rounding difference.
+  const roundingTolerance = 0.01 * (contexts.length + 1);
+  return Math.abs(contextActivityCount - activityCount) <= roundingTolerance;
+}
+
+function resolveDashboardTrainingSummaryWindow(
+  value: unknown,
+  discipline: TrainingDiscipline,
+): DashboardTrainingSummaryWindow | null {
   const raw = (value || {}) as Partial<DerivedTrainingSummaryWindow>;
   const periodDays = toFiniteNumber(raw.periodDays);
   const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
@@ -438,6 +536,7 @@ function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainin
   const easySeconds = toFiniteNumber(raw.easySeconds);
   const moderateSeconds = toFiniteNumber(raw.moderateSeconds);
   const hardSeconds = toFiniteNumber(raw.hardSeconds);
+  const contexts = resolveDashboardTrainingContextSummaries(raw.contexts, discipline);
   if (
     periodDays === null
     || periodDays <= 0
@@ -455,6 +554,8 @@ function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainin
     || moderateSeconds < 0
     || hardSeconds === null
     || hardSeconds < 0
+    || !contexts
+    || !hasConsistentTrainingContextActivityCount(activityCount, contexts)
   ) {
     return null;
   }
@@ -467,6 +568,7 @@ function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainin
     easySeconds,
     moderateSeconds,
     hardSeconds,
+    contexts,
   };
 }
 
@@ -495,8 +597,8 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
       if (!isTrainingDiscipline(source.discipline)) {
         return null;
       }
-      const current28d = resolveDashboardTrainingSummaryWindow(source.current28d);
-      const baseline28d = resolveDashboardTrainingSummaryWindow(source.baseline28d);
+      const current28d = resolveDashboardTrainingSummaryWindow(source.current28d, source.discipline);
+      const baseline28d = resolveDashboardTrainingSummaryWindow(source.baseline28d, source.discipline);
       if (!current28d || !baseline28d) {
         return null;
       }
@@ -606,7 +708,10 @@ export function resolveDashboardTrainingCapacityContext(payload: unknown): Dashb
   return { asOfDayMs, disciplines };
 }
 
-function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingBuildWindow | null {
+function resolveDashboardTrainingBuildWindow(
+  value: unknown,
+  discipline: TrainingDiscipline,
+): DashboardTrainingBuildWindow | null {
   const raw = (value || {}) as Partial<DerivedTrainingBuildWindow>;
   const periodWeeks = toFiniteNumber(raw.periodWeeks);
   const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
@@ -620,6 +725,7 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
   const durability = raw.durability === null ? null : resolveTrainingDurabilityWindowMetrics(raw.durability);
   const poolPaceActivityCount = toFiniteNumber(raw.poolPaceActivityCount);
   const openWaterPaceActivityCount = toFiniteNumber(raw.openWaterPaceActivityCount);
+  const contexts = resolveDashboardTrainingContextSummaries(raw.contexts, discipline);
   if (
     (periodWeeks !== 8 && periodWeeks !== 10 && periodWeeks !== 12)
     || windowStartDayMs === null
@@ -633,6 +739,8 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     || (raw.durability !== null && !durability)
     || poolPaceActivityCount === null
     || openWaterPaceActivityCount === null
+    || !contexts
+    || !hasConsistentTrainingContextActivityCount(activityCount, contexts)
   ) {
     return null;
   }
@@ -657,6 +765,7 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     poolPaceActivityCount,
     openWaterAveragePaceSecondsPer100m: toFiniteNumber(raw.openWaterAveragePaceSecondsPer100m),
     openWaterPaceActivityCount,
+    contexts,
   };
 }
 
@@ -894,8 +1003,12 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
       return [];
     }
     const selection = resolveDashboardTrainingBuildSelection(source.selection);
-    const current = source.current === null ? null : resolveDashboardTrainingBuildWindow(source.current);
-    const benchmark = source.benchmark === null ? null : resolveDashboardTrainingBuildWindow(source.benchmark);
+    const current = source.current === null
+      ? null
+      : resolveDashboardTrainingBuildWindow(source.current, source.discipline);
+    const benchmark = source.benchmark === null
+      ? null
+      : resolveDashboardTrainingBuildWindow(source.benchmark, source.discipline);
     const disciplineRecovery = source.recovery === null
       ? null
       : resolveDashboardTrainingRecoveryComparison(source.recovery);

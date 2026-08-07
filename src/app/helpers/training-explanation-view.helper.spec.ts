@@ -127,6 +127,35 @@ describe('buildTrainingExplanationViewModel', () => {
     }
   });
 
+  it('uses the shared registry icon for an added Training family', () => {
+    const input = payload();
+    input.current.sportLoads = [{
+      sport: 'rowing',
+      label: 'Rowing',
+      activityCount: 2,
+      loadActivityCount: 2,
+      trainingStressScore: 120,
+      loadSharePercent: 40,
+    }];
+    input.baselineMedian = {
+      ...input.baselineMedian,
+      sportLoads: [{
+        sport: 'rowing',
+        label: 'Rowing',
+        activityCount: 1,
+        loadActivityCount: 1,
+        trainingStressScore: 60,
+        loadSharePercent: 30,
+      }],
+    };
+
+    expect(buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'mix'))
+      .toEqual(expect.objectContaining({
+        title: 'Rowing load',
+        iconActivityType: 'Rowing',
+      }));
+  });
+
   it('preserves each top contributor as a separate display item', () => {
     const input = payload();
     input.topContributors.push({

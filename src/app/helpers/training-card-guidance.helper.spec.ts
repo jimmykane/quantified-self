@@ -86,6 +86,15 @@ describe('training-card-guidance.helper', () => {
     expect(view.nextStepText).toBeNull();
   });
 
+  it('describes volume-only policy as intentional instead of missing evidence', () => {
+    const mix = buildTrainingMixGuidance(summary(), 'Strength', 'volume-only');
+    const build = buildTrainingBuildGuidance(buildSource(), 'volume-only');
+
+    expect(mix.conclusionText).toContain('recorded volume');
+    expect(mix.evidenceText).toContain('intentionally omitted');
+    expect(build?.evidenceText).toContain('TSS is intentionally omitted');
+  });
+
   it('describes a sustained intensity difference and a TSS-only load model plainly', () => {
     const mix = buildTrainingMixGuidance({
       ...summary(),

@@ -237,7 +237,9 @@ describe('setTrainingBuildBenchmark', () => {
             discipline: 'running',
             selection: { mode: 'event', durationWeeks: 8, eventId: '🏃'.repeat(400) },
         })).toThrow('selection must be a valid');
-        expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'rowing', selection: null })).toThrow('discipline');
+        expect(parseTrainingBuildBenchmarkRequest({ discipline: 'rowing', selection: null }))
+            .toEqual({ discipline: 'rowing', selection: null });
+        expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'crossfit', selection: null })).toThrow('discipline');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
             selection: { mode: 'session', durationWeeks: 8, eventId: 'event-1' },

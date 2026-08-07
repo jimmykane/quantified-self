@@ -291,10 +291,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     eyebrow: 'Training Analysis',
     title: 'Training Analysis for Endurance Athletes',
-    description: 'Analyze running, cycling, mountain biking, and swimming training with readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
+    description: 'Analyze eight sport families—from running, cycling, swimming, and rowing to walking and hiking, Nordic skiing, strength, and paddling—with readiness, load trends, intensity, durability, sleep context, and historical build comparisons, all through context-aware summaries.',
     h1: 'Training analysis for endurance athletes',
     intro: 'Training is a curated workspace for understanding your current workload in context: compare it with your usual training, see what changed, and inspect the evidence behind readiness, performance, and long-session durability.',
-    chips: ['Training readiness', 'Load trends', 'Running', 'Cycling & MTB', 'Swimming', 'Best build'],
+    chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Open Training', '/training'),
@@ -326,7 +326,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Running, Cycling including mountain biking, and Swimming are handled as separate disciplines, including individual legs from multisport activities.',
+        copy: 'Eight conservative sport families keep materially different contexts separate, including individual registered legs from multisport activities.',
         items: [
           {
             icon: 'directions_run',
@@ -340,8 +340,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'show_chart',
-            title: 'Load and intensity trends',
-            copy: 'Follow CTL, ATL, Form, ramp rate, monotony, strain, and weekly Easy, Moderate, and Hard intensity distribution from derived training load.',
+            title: 'Context-aware sport summaries',
+            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume and descent evidence without invented run segmentation.',
           },
         ],
       },
@@ -375,7 +375,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports does Training support?',
-        answer: 'Training supports Running and Trail Running, Cycling including road, indoor, virtual, e-bike, and mountain biking, plus Pool and Open Water Swimming. Multisport files are split into their individual activity legs when available.',
+        answer: 'Training supports eight conservative families: Running; Cycling including road, indoor, virtual, e-bike, standard MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Multisport files are split into their registered activity legs when available. Nearby unlisted sports remain Other rather than being guessed into a family.',
       },
       {
         question: 'Does Training tell me what workout to do?',

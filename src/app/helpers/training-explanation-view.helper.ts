@@ -3,6 +3,7 @@ import type {
   DerivedTrainingExplanationRhythm,
   DerivedTrainingExplanationSportLoad,
 } from '@shared/derived-metrics';
+import { getTrainingSportDefinition, isTrainingDiscipline } from '@shared/training-disciplines';
 import { isGenericTrainingEventLabel } from './training-event-label.helper';
 
 export type TrainingExplanationTone = 'positive' | 'negative' | 'neutral';
@@ -145,8 +146,8 @@ function resolveTrainingSportIconActivityType(
   sport: DerivedTrainingExplanationSportLoad['sport'],
   label: string,
 ): string | null {
-  return sport === 'running' || sport === 'cycling' || sport === 'swimming'
-    ? label
+  return isTrainingDiscipline(sport)
+    ? getTrainingSportDefinition(sport)?.iconActivityType || label
     : null;
 }
 

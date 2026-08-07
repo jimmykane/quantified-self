@@ -126,7 +126,7 @@
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel" role="status">
             <span class="training-metric-label">Training comparison</span>
             <strong>Preparing</strong>
-            <span>Reading your recent running, cycling/MTB, and swimming workouts.</span>
+            <span>Reading your recent workouts across the Training sport groups.</span>
           </article>
         } @else if (trainingComparisonState === 'unavailable') {
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel">
@@ -438,13 +438,11 @@
                   }
                 </section>
               }
-              @if (card.discipline === 'swimming') {
-                <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
-              } @else {
-                <p class="training-build-footnote">Merged events are excluded. Durability compares only eligible, context-matched workouts; missing evidence remains unavailable.</p>
-              }
+              <p class="training-build-footnote">{{ card.footnote }}</p>
             }
           </article>
+        } @empty {
+          <p class="training-empty-state">No sport-specific benchmark cards qualify yet. Choose sports shown to set one manually.</p>
         }
       </div>
     </section>
@@ -588,31 +586,49 @@
                   <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.guidance.nextStepText }}</p>
                 }
               </div>
-              @if (trainingMixDisciplines.length === 1) {
-                <div class="training-mix-zone-comparison">
-                  <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
-                  <dl>
-                    @for (zone of discipline.zones; track zone.label) {
-                      <div class="training-mix-zone-row">
-                        <div class="training-mix-zone-row-heading"><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
-                        <div class="training-mix-zone-track" aria-hidden="true">
-                          @if (zone.currentPercent !== null) {
-                            <span class="training-mix-zone-current" [style.width.%]="zone.currentPercent"></span>
-                          }
-                          @if (zone.baselinePercent !== null) {
-                            <span class="training-mix-zone-baseline" [style.left.%]="zone.baselinePercent"></span>
-                          }
+              @if (discipline.zones.length) {
+                @if (trainingMixDisciplines.length === 1) {
+                  <div class="training-mix-zone-comparison">
+                    <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
+                    <dl>
+                      @for (zone of discipline.zones; track zone.label) {
+                        <div class="training-mix-zone-row">
+                          <div class="training-mix-zone-row-heading"><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
+                          <div class="training-mix-zone-track" aria-hidden="true">
+                            @if (zone.currentPercent !== null) {
+                              <span class="training-mix-zone-current" [style.width.%]="zone.currentPercent"></span>
+                            }
+                            @if (zone.baselinePercent !== null) {
+                              <span class="training-mix-zone-baseline" [style.left.%]="zone.baselinePercent"></span>
+                            }
+                          </div>
                         </div>
-                      </div>
+                      }
+                    </dl>
+                  </div>
+                } @else {
+                  <dl class="training-mix-compact-zones">
+                    @for (zone of discipline.zones; track zone.label) {
+                      <div><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
                     }
                   </dl>
-                </div>
-              } @else {
-                <dl class="training-mix-compact-zones">
-                  @for (zone of discipline.zones; track zone.label) {
-                    <div><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
+                }
+              } @else if (discipline.intensityEvidenceText) {
+                <p class="training-mix-intensity-note">{{ discipline.intensityEvidenceText }}</p>
+              }
+              @if (discipline.contexts.length) {
+                <div class="training-mix-contexts">
+                  @for (context of discipline.contexts; track context.context) {
+                    <section>
+                      <header><strong>{{ context.label }}</strong><span>Now / usual</span></header>
+                      <dl>
+                        @for (metric of context.metrics; track metric.metric) {
+                          <div><dt>{{ metric.label }}</dt><dd><app-training-metric-text [text]="metric.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="metric.referenceText"></app-training-metric-text></span></dd></div>
+                        }
+                      </dl>
+                    </section>
                   }
-                </dl>
+                </div>
               }
             </article>
           } @empty {
@@ -738,6 +754,7 @@
       }
     </section>
 
+    @if (isPerformanceSectionVisible) {
     <section class="training-section" aria-labelledby="performance-title">
       <div class="training-section-heading">
         <div>
@@ -747,7 +764,7 @@
         <span class="training-section-note">Imported source and observation timing stay visible</span>
       </div>
       <div class="training-performance-grid">
-        @if (hasPowerCapacityVisible) {
+        @if (isCapacityVisible) {
           @if (derivedState.trainingCapacityStatus === 'failed') {
             <p class="training-empty-state">Capacity markers are unavailable right now. Refresh to request another derived snapshot.</p>
           } @else if (derivedState.trainingCapacityStatus === 'ready') {
@@ -792,7 +809,7 @@
             </div>
           }
         }
-        @if (isSwimmingVisible) {
+        @if (isSwimPerformanceVisible) {
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
               <app-training-swim-performance-chart
@@ -813,6 +830,7 @@
             </article>
           }
         }
+        @if (isDurabilityVisible) {
         <article class="training-durability-panel qs-glass-card-panel" aria-labelledby="training-durability-title">
           <header>
             <div>
@@ -886,7 +904,8 @@
             </div>
           }
         </article>
-        @if (isCyclingVisible) {
+        }
+        @if (isCyclingPowerProfileVisible) {
           @if (derivedState.powerCurveStatus === 'ready' || cyclingPowerCurve?.series?.length) {
             <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
               @if (cyclingPowerProfile; as profile) {
@@ -920,7 +939,7 @@
             </article>
           }
         }
-        @if (isRunningVisible) {
+        @if (isRunningPowerProfileVisible) {
           @if (derivedState.powerCurveStatus === 'ready' || runningPowerCurve?.series?.length) {
             <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
               @if (runningPowerProfile; as profile) {
@@ -956,6 +975,7 @@
         }
       </div>
     </section>
+    }
 
     <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
       <div class="training-section-heading">
