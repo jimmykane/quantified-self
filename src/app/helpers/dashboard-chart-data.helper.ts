@@ -389,7 +389,8 @@ export function formatDashboardAxisNumericValue(
       return formatCompactAxisDisplay(display) || formatCompactAxisNumber(numericValue);
     }
 
-    const distanceAxisMax = Math.max(Math.abs(toFiniteNumber(axisMax) ?? 0), Math.abs(numericValue));
+    const providedAxisMax = toFiniteNumber(axisMax);
+    const distanceAxisMax = Math.abs(providedAxisMax ?? numericValue);
     if (distanceAxisMax >= 1000) {
       return `${formatCompactAxisNumber(numericValue / 1000)} km`;
     }
@@ -450,8 +451,11 @@ export function formatDashboardAxisNumericValueWithoutUnit(
   value: unknown,
   logger?: WarnLogger,
   unitSettings?: UserUnitSettingsInterface | null,
-  axisMax = 0,
+  axisMax?: number,
 ): string {
+  const effectiveAxisMax = Math.abs(
+    toFiniteNumber(axisMax) ?? toFiniteNumber(value) ?? 0,
+  );
   const formatted = formatDashboardAxisNumericValue(
     chartDataType,
     value,
@@ -461,7 +465,7 @@ export function formatDashboardAxisNumericValueWithoutUnit(
   );
   const displayUnit = resolveDashboardAxisDisplayUnit(
     chartDataType,
-    axisMax,
+    effectiveAxisMax,
     unitSettings,
   );
   return displayUnit

@@ -173,6 +173,13 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
             ? dateFormatter.format(new Date(
                 typeof x === 'number' ? x : Date.parse(`${x}`),
               ))
+            : typeof x === 'number' && this.visual.xAxis.dataType
+              ? `${this.visual.xAxis.label}: ${formatDashboardNumericValue(
+                  this.visual.xAxis.dataType,
+                  x,
+                  undefined,
+                  unitSettings,
+                )}`
             : `${x ?? ''}`;
           return renderDashboardEChartsTooltipCard(style, {
             title,

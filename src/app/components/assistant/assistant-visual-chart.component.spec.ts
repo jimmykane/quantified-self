@@ -162,4 +162,46 @@ describe('AssistantVisualChartComponent', () => {
     expect(option.yAxis[0].name).toBe('m');
     expect(option.yAxis[0].axisLabel.formatter(700)).toBe('700');
   });
+
+  it('formats a canonical distance X axis and its tooltip title', () => {
+    unitSettings.set(normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    }));
+    fixture.componentInstance.visual = {
+      kind: 'chart',
+      title: 'Heart rate by distance',
+      chartType: 'line',
+      xAxis: {
+        type: 'linear',
+        label: 'Distance',
+        unit: 'm',
+        dataType: DataDistance.type,
+        timeZone: null,
+      },
+      series: [{
+        label: 'Heart rate',
+        unit: 'bpm',
+        points: [{ x: 1_609.344, y: 145 }, { x: 16_093.44, y: 160 }],
+      }],
+    };
+
+    const option = (
+      fixture.componentInstance as unknown as {
+        buildOption: (darkTheme: boolean) => Parameters<EChartsType['setOption']>[0];
+      }
+    ).buildOption(false) as {
+      xAxis: {
+        name: string;
+        axisLabel: { formatter: (value: number) => string };
+      };
+      tooltip: { formatter: (params: unknown) => string };
+    };
+
+    expect(option.xAxis.name).toBe('Distance (mi)');
+    expect(option.xAxis.axisLabel.formatter(1_609.344)).toBe('1');
+    expect(option.tooltip.formatter({
+      seriesName: 'Heart rate',
+      value: [1_609.344, 145],
+    })).toContain('Distance: 1.00 mi');
+  });
 });

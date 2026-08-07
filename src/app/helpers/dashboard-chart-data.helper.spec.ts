@@ -239,6 +239,26 @@ describe('dashboard-chart-data.helper', () => {
       imperial,
       70_000,
     )).toBe('43.5');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      70_000,
+      undefined,
+      metric,
+    )).toBe('70');
+    expect(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      1_000,
+      undefined,
+      metric,
+      999,
+    )).toBe('1,000 m');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      1_000,
+      undefined,
+      metric,
+      999,
+    )).toBe('1,000');
   });
 
   it('should format ascent and descent axis values without misreading grouped meters as decimals', () => {
