@@ -175,18 +175,19 @@
           </section>
         }
         <section class="composer-shell">
-          <form class="composer" (submit)="handleComposerSubmit($event)">
+          <form class="composer" [class.composer-sending]="sending()" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-            <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
-              [attr.aria-label]="sending() ? 'Assistant is responding' : 'Send message'">
-              <span class="composer-submit-content">
-                <mat-icon>arrow_upward</mat-icon>
-              </span>
-            </button>
+            @if (!sending()) {
+              <button mat-icon-button class="composer-submit" type="submit"
+                [disabled]="quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+                <span class="composer-submit-content">
+                  <mat-icon>arrow_upward</mat-icon>
+                </span>
+              </button>
+            }
           </form>
           <div class="composer-footer">
             <span>{{ quotaText() }}</span>

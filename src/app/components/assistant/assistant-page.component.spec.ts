@@ -301,11 +301,11 @@ describe('AssistantPageComponent', () => {
     openSpy.mockRestore();
   });
 
-  it('keeps the send icon visible while disabling the action during a response', () => {
-    const sendButton = fixture.nativeElement.querySelector(
+  it('removes the send action while a response is in progress', () => {
+    let sendButton = fixture.nativeElement.querySelector(
       '.composer-submit',
     ) as HTMLButtonElement;
-    let content = sendButton.querySelector(
+    const content = sendButton.querySelector(
       '.composer-submit-content',
     ) as HTMLElement;
     const styles = readFileSync(resolve(
@@ -318,14 +318,11 @@ describe('AssistantPageComponent', () => {
 
     component.sending.set(true);
     fixture.detectChanges();
-    content = sendButton.querySelector('.composer-submit-content') as HTMLElement;
+    sendButton = fixture.nativeElement.querySelector('.composer-submit') as HTMLButtonElement;
+    const composer = fixture.nativeElement.querySelector('.composer') as HTMLElement;
 
-    expect(sendButton.disabled).toBe(true);
-    expect(sendButton.querySelector('mat-spinner')).toBeNull();
-    expect(sendButton.querySelector('.composer-progress')).toBeNull();
-    expect(sendButton.querySelector('mat-icon')?.textContent).toContain('arrow_upward');
-    expect(sendButton.getAttribute('aria-label')).toBe('Assistant is responding');
-    expect(content).toBeTruthy();
+    expect(sendButton).toBeNull();
+    expect(composer.classList.contains('composer-sending')).toBe(true);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*place-items:\s*center;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*width:\s*40px;/s);
@@ -333,6 +330,7 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*position:\s*absolute;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
+    expect(styles).toMatch(/\.composer-sending\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {

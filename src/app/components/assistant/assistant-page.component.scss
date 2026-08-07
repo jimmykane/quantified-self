@@ -441,6 +441,10 @@ h1 {
   gap: 8px;
 }
 
+.composer-sending {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .composer-input {
   display: block;
   width: 100%;
