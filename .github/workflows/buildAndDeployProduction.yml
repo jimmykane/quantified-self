@@ -5,15 +5,61 @@ on:
     types: [published]
 
 jobs:
-  test:
-    uses: ./.github/workflows/_run-tests.yml
-
-  deploy:
-    needs: test
+  resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve a release commit from main
+        id: resolve
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git fetch --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "The release tag must reference a commit contained in main." >&2
+            exit 1
+          fi
+
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: resolve
+    uses: ./.github/workflows/_run-tests.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
+
+  deploy:
+    needs:
+      - resolve
+      - test
+    runs-on: ubuntu-latest
+    environment: production-deploy
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/242713487388/locations/global/workloadIdentityPools/qs-github/providers/github
+          service_account: qs-github-production-deploy@quantified-self-io.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -50,10 +96,5 @@ jobs:
       - name: Remove sourcemaps
         run: find dist -name "*.map" -delete
 
-      - name: Create SA key
-        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
-
       - name: Deploy to Firebase
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
-          firebase deploy --only hosting:production,functions,firestore,storage
+        run: firebase deploy --only hosting:production,functions,firestore,storage
