@@ -4,6 +4,7 @@ on:
   push:
     branches-ignore:
       - develop
+      - main
   pull_request:
 
 jobs:

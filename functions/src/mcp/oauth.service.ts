@@ -308,7 +308,7 @@ function documentData<T>(snapshot: admin.firestore.DocumentSnapshot): T | null {
   return snapshot.exists ? snapshot.data() as T : null;
 }
 
-function isActiveMcpConnection(connection: McpConnection | null): connection is McpConnection {
+export function isActiveMcpConnection(connection: McpConnection | null): connection is McpConnection {
   if (!connection || connection.revokedAtMs !== null || connection.status === 'revoked') {
     return false;
   }

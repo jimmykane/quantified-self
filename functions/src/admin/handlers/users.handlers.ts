@@ -17,15 +17,54 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { BasicUser, CountStats, ListUsersRequest, ListUsersResponse, UserCountRequest, UserCountResponse } from '../shared/types';
+import {
+    buildMcpLogicalConnectionId,
+    isActiveMcpConnection,
+    MCP_OAUTH_COLLECTIONS,
+    type McpConnection,
+} from '../../mcp/oauth.service';
+import {
+    BasicUser,
+    ConnectionCountStats,
+    CountStats,
+    ListUsersRequest,
+    ListUsersResponse,
+    UserCountRequest,
+    UserCountResponse,
+} from '../shared/types';
 
 const ADMIN_STATS_COLLECTION = 'adminStats';
 const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
 const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
+const ADMIN_CONNECTION_COUNTS_DOC = 'connectionCounts';
 const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
 const PAID_LIFECYCLE_SUBSCRIPTION_STATUSES = [...ACTIVE_SUBSCRIPTION_STATUSES, 'canceled', 'unpaid'] as const;
 const PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET = new Set<string>(PAID_LIFECYCLE_SUBSCRIPTION_STATUSES);
 const PAID_SUBSCRIPTION_ROLE_SET = new Set<string>([SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC]);
+const SERVICE_CONNECTION_PROVIDERS = [
+    { collectionName: GARMIN_API_TOKENS_COLLECTION_NAME, provider: 'Garmin' },
+    { collectionName: SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, provider: 'Suunto' },
+    { collectionName: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, provider: 'COROS' },
+    { collectionName: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME, provider: 'Wahoo' },
+] as const;
+const SERVICE_PROVIDER_BY_TOKEN_COLLECTION: Map<string, string> = new Map(
+    SERVICE_CONNECTION_PROVIDERS.map(({ collectionName, provider }) => [collectionName, provider])
+);
+
+interface StoredConnectionCountStats {
+    serviceUsers: number;
+    mcpUsers: number;
+    both: number;
+    providers: Record<string, number>;
+}
+
+interface ActiveMcpConnectionCandidate {
+    uid: string;
+    connectionId: string;
+    clientId: string;
+    supersedesLegacy: boolean;
+    active: boolean;
+}
 
 interface SubscriptionOwnerDocSnapshot {
     data: () => Record<string, unknown>;
@@ -292,6 +331,262 @@ function getGlobalRouteCount(
     });
 }
 
+function emptyServiceProviderCounts(): Record<string, number> {
+    return Object.fromEntries(SERVICE_CONNECTION_PROVIDERS.map(({ provider }) => [provider, 0]));
+}
+
+function readStoredConnectionCountStats(data: admin.firestore.DocumentData | undefined): StoredConnectionCountStats | null {
+    if (!data) {
+        return null;
+    }
+
+    const serviceUsers = data.serviceUsers;
+    const mcpUsers = data.mcpUsers;
+    const both = data.both;
+    const providers = data.providers;
+    if (
+        typeof serviceUsers !== 'number' || !Number.isFinite(serviceUsers)
+        || typeof mcpUsers !== 'number' || !Number.isFinite(mcpUsers)
+        || typeof both !== 'number' || !Number.isFinite(both)
+        || !providers || typeof providers !== 'object' || Array.isArray(providers)
+    ) {
+        return null;
+    }
+
+    const normalizedProviders = emptyServiceProviderCounts();
+    for (const { provider } of SERVICE_CONNECTION_PROVIDERS) {
+        const providerCount = (providers as Record<string, unknown>)[provider];
+        if (typeof providerCount !== 'number' || !Number.isFinite(providerCount)) {
+            return null;
+        }
+        normalizedProviders[provider] = normalizeCount(providerCount);
+    }
+
+    return {
+        serviceUsers: normalizeCount(serviceUsers),
+        mcpUsers: normalizeCount(mcpUsers),
+        both: normalizeCount(both),
+        providers: normalizedProviders,
+    };
+}
+
+function toConnectionCountStats(
+    stats: StoredConnectionCountStats,
+    cacheStatus: NonNullable<ConnectionCountStats['cacheStatus']>,
+    computedAt: string | null,
+    expireAt: string | null,
+): ConnectionCountStats {
+    return {
+        ...stats,
+        cacheStatus,
+        computedAt,
+        expireAt,
+    };
+}
+
+function readCachedConnectionCountStats(
+    data: admin.firestore.DocumentData | undefined,
+    nowMs: number,
+): ConnectionCountStats | null {
+    const stats = readStoredConnectionCountStats(data);
+    const expireAtMs = toEpochMillis(data?.expireAt);
+    if (!stats || expireAtMs === null || expireAtMs <= nowMs) {
+        return null;
+    }
+
+    return toConnectionCountStats(
+        stats,
+        'fresh',
+        toIsoString(data?.computedAt),
+        new Date(expireAtMs).toISOString(),
+    );
+}
+
+function readStaleConnectionCountStats(data: admin.firestore.DocumentData | undefined): ConnectionCountStats | null {
+    const stats = readStoredConnectionCountStats(data);
+    if (!stats) {
+        return null;
+    }
+
+    return toConnectionCountStats(
+        stats,
+        'stale',
+        toIsoString(data?.computedAt),
+        toIsoString(data?.expireAt),
+    );
+}
+
+function unavailableConnectionCountStats(): ConnectionCountStats {
+    return {
+        serviceUsers: null,
+        mcpUsers: null,
+        both: null,
+        providers: emptyServiceProviderCounts(),
+        cacheStatus: 'unavailable',
+        computedAt: null,
+        expireAt: null,
+    };
+}
+
+function resolveServiceConnectionFromToken(
+    document: admin.firestore.QueryDocumentSnapshot,
+): { uid: string; provider: string } | null {
+    const tokenRoot = document.ref.parent.parent;
+    const collectionName = tokenRoot?.parent.id;
+    if (!tokenRoot || !collectionName) {
+        return null;
+    }
+
+    const provider = SERVICE_PROVIDER_BY_TOKEN_COLLECTION.get(collectionName);
+    if (!provider) {
+        return null;
+    }
+
+    return { uid: tokenRoot.id, provider };
+}
+
+function resolveMcpConnectionCandidate(
+    document: admin.firestore.QueryDocumentSnapshot,
+): Pick<ActiveMcpConnectionCandidate, 'uid' | 'connectionId' | 'clientId' | 'supersedesLegacy'> | null {
+    const userDocument = document.ref.parent.parent;
+    const data = document.data() as Record<string, unknown>;
+    const clientId = typeof data.clientId === 'string' ? data.clientId.trim() : '';
+    if (!userDocument?.id || !clientId || !document.id) {
+        return null;
+    }
+
+    return {
+        uid: userDocument.id,
+        connectionId: document.id,
+        clientId,
+        supersedesLegacy: data.supersedesLegacy === true,
+    };
+}
+
+async function calculateConnectionCountStats(
+    db: admin.firestore.Firestore,
+): Promise<StoredConnectionCountStats> {
+    const [tokenSnapshot, mcpConnectionSnapshot] = await Promise.all([
+        db.collectionGroup('tokens').select('serviceName').get(),
+        db.collectionGroup(MCP_OAUTH_COLLECTIONS.userConnections)
+            .select('clientId', 'status', 'revokedAtMs', 'lastUsedAtMs', 'supersedesLegacy')
+            .get(),
+    ]);
+    const serviceUserIds = new Set<string>();
+    const serviceUserIdsByProvider = new Map<string, Set<string>>(
+        SERVICE_CONNECTION_PROVIDERS.map(({ provider }) => [provider, new Set<string>()])
+    );
+
+    tokenSnapshot.docs.forEach((document) => {
+        const connection = resolveServiceConnectionFromToken(document);
+        if (!connection) {
+            return;
+        }
+
+        serviceUserIds.add(connection.uid);
+        serviceUserIdsByProvider.get(connection.provider)?.add(connection.uid);
+    });
+
+    const mcpConnectionsByUserId = new Map<string, ActiveMcpConnectionCandidate[]>();
+    mcpConnectionSnapshot.docs.forEach((document) => {
+        const connection = resolveMcpConnectionCandidate(document);
+        if (!connection) {
+            return;
+        }
+
+        const candidate: ActiveMcpConnectionCandidate = {
+            ...connection,
+            active: isActiveMcpConnection(document.data() as McpConnection),
+        };
+        const userConnections = mcpConnectionsByUserId.get(candidate.uid) || [];
+        userConnections.push(candidate);
+        mcpConnectionsByUserId.set(candidate.uid, userConnections);
+    });
+
+    const mcpUserIds = new Set<string>();
+    mcpConnectionsByUserId.forEach((connections, userId) => {
+        const supersedingClientIds = new Set(
+            connections
+                .filter(connection => (
+                    connection.supersedesLegacy
+                    && connection.connectionId === buildMcpLogicalConnectionId(connection.clientId)
+                ))
+                .map(connection => connection.clientId)
+        );
+        const hasActiveConnection = connections.some(connection => (
+            connection.active
+            && (
+                !supersedingClientIds.has(connection.clientId)
+                || connection.connectionId === buildMcpLogicalConnectionId(connection.clientId)
+            )
+        ));
+        if (hasActiveConnection) {
+            mcpUserIds.add(userId);
+        }
+    });
+
+    const providers = emptyServiceProviderCounts();
+    serviceUserIdsByProvider.forEach((userIds, provider) => {
+        providers[provider] = userIds.size;
+    });
+
+    return {
+        serviceUsers: serviceUserIds.size,
+        mcpUsers: mcpUserIds.size,
+        both: [...serviceUserIds].filter(userId => mcpUserIds.has(userId)).length,
+        providers,
+    };
+}
+
+async function getConnectionCountStats(
+    db: admin.firestore.Firestore,
+    requestedByUid?: string | null,
+): Promise<ConnectionCountStats> {
+    const nowMs = Date.now();
+    const cacheRef = resolveGlobalCollectionCountCacheRef(db, ADMIN_CONNECTION_COUNTS_DOC, 'connection');
+    let cachedData: admin.firestore.DocumentData | undefined;
+
+    if (cacheRef) {
+        try {
+            const cacheSnapshot = await cacheRef.get();
+            cachedData = cacheSnapshot.exists ? cacheSnapshot.data() : undefined;
+            const cached = readCachedConnectionCountStats(cachedData, nowMs);
+            if (cached) {
+                return cached;
+            }
+        } catch (error) {
+            logger.warn('Failed to read admin connection count cache', error);
+        }
+    }
+
+    try {
+        const stats = await calculateConnectionCountStats(db);
+        const computedAt = new Date(nowMs);
+        const expireAt = new Date(nowMs + GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS);
+
+        if (cacheRef) {
+            try {
+                await cacheRef.set({
+                    kind: 'connectionCounts',
+                    schemaVersion: 1,
+                    ...stats,
+                    computedAt,
+                    expireAt,
+                    refreshedBy: requestedByUid || null,
+                    updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+            } catch (error) {
+                logger.warn('Failed to write admin connection count cache', error);
+            }
+        }
+
+        return toConnectionCountStats(stats, 'refreshed', computedAt.toISOString(), expireAt.toISOString());
+    } catch (error) {
+        logger.warn('Failed to calculate admin connection counts', error);
+        return readStaleConnectionCountStats(cachedData) || unavailableConnectionCountStats();
+    }
+}
+
 /**
  * Lists all users with pagination, search, and sorting support.
  * OPTIMIZED: Only enriches users on the current page to minimize Firestore reads.
@@ -496,7 +791,16 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot, paidSubscriptionHistorySnapshot, eventStats, routeStats] = await Promise.all([
+        const [
+            totalSnapshot,
+            proSnapshot,
+            basicSnapshot,
+            onboardedSnapshot,
+            paidSubscriptionHistorySnapshot,
+            eventStats,
+            routeStats,
+            connectionStats,
+        ] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -520,7 +824,8 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             getGlobalRouteCount(db, {
                 forceRefresh: forceRefreshRouteCount,
                 requestedByUid: request.auth?.uid || null,
-            })
+            }),
+            getConnectionCountStats(db, request.auth?.uid || null),
         ]);
 
         const total = totalSnapshot.data().count;
@@ -601,6 +906,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             onboardingCompleted,
             events: eventStats,
             routes: routeStats,
+            connections: connectionStats,
             providers: providerCounts
         };
     } catch (error: unknown) {

@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
+import { ApplicationRef } from '@angular/core';
 import { AppUpdateService } from './app.update.service';
-import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { SwUpdate, VersionEvent, VersionReadyEvent } from '@angular/service-worker';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, Subject } from 'rxjs';
-import { vi, describe, beforeEach, it, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import { LoggerService } from './logger.service';
 import { AppWindowService } from './app.window.service';
 
@@ -13,18 +14,31 @@ describe('AppUpdateService', () => {
     let snackBarMock: any;
     let loggerMock: any;
     let windowServiceMock: any;
-    let versionUpdatesSubject: Subject<VersionReadyEvent>;
+    let versionUpdatesSubject: Subject<VersionEvent>;
     let unrecoverableSubject: Subject<any>;
     let mockWindow: any;
     let localStorageState: Record<string, string>;
+    let windowEventListeners: Map<string, () => void>;
+    let documentEventListeners: Map<string, () => void>;
 
     beforeEach(() => {
-        versionUpdatesSubject = new Subject<VersionReadyEvent>();
+        versionUpdatesSubject = new Subject<VersionEvent>();
         unrecoverableSubject = new Subject<any>();
+        windowEventListeners = new Map();
+        documentEventListeners = new Map();
 
         mockWindow = {
             location: {
                 reload: vi.fn()
+            },
+            addEventListener: vi.fn((eventName: string, handler: () => void) => {
+                windowEventListeners.set(eventName, handler);
+            }),
+            document: {
+                visibilityState: 'visible',
+                addEventListener: vi.fn((eventName: string, handler: () => void) => {
+                    documentEventListeners.set(eventName, handler);
+                }),
             },
             localStorage: {
                 getItem: vi.fn((key: string) => localStorageState[key] ?? null),
@@ -40,7 +54,7 @@ describe('AppUpdateService', () => {
 
         swUpdateMock = {
             isEnabled: true,
-            checkForUpdate: vi.fn(),
+            checkForUpdate: vi.fn().mockResolvedValue(true),
             versionUpdates: versionUpdatesSubject.asObservable(),
             unrecoverable: unrecoverableSubject.asObservable(),
             activateUpdate: vi.fn().mockResolvedValue(undefined)
@@ -68,6 +82,10 @@ describe('AppUpdateService', () => {
             ]
         });
         service = TestBed.inject(AppUpdateService);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('should be created', () => {
@@ -109,6 +127,72 @@ describe('AppUpdateService', () => {
 
         expect(loggerMock.error).toHaveBeenCalled();
         expect(mockWindow.location.reload).toHaveBeenCalled();
+    });
+
+    it('checks for updates when connectivity returns or the tab becomes visible', async () => {
+        const onlineHandler = windowEventListeners.get('online');
+        const visibilityChangeHandler = documentEventListeners.get('visibilitychange');
+        expect(onlineHandler).toBeDefined();
+        expect(visibilityChangeHandler).toBeDefined();
+
+        await Promise.resolve();
+        await Promise.resolve();
+        swUpdateMock.checkForUpdate.mockClear();
+
+        onlineHandler?.();
+        await Promise.resolve();
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(1);
+
+        visibilityChangeHandler?.();
+        await Promise.resolve();
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries a check shortly after no update is returned', async () => {
+        vi.useFakeTimers();
+        const retryUpdatesMock = {
+            ...swUpdateMock,
+            checkForUpdate: vi.fn().mockResolvedValue(false),
+        };
+
+        new AppUpdateService(
+            { isStable: of(true) } as ApplicationRef,
+            retryUpdatesMock,
+            snackBarMock,
+            loggerMock,
+            windowServiceMock,
+        );
+
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(retryUpdatesMock.checkForUpdate).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(retryUpdatesMock.checkForUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs update installation failures and schedules a recovery check', async () => {
+        vi.useFakeTimers();
+        await Promise.resolve();
+        await Promise.resolve();
+        swUpdateMock.checkForUpdate.mockClear();
+
+        versionUpdatesSubject.next({
+            type: 'VERSION_INSTALLATION_FAILED',
+            version: { hash: 'failed-version', appData: {} },
+            error: 'Gateway Timeout',
+        });
+
+        expect(loggerMock.error).toHaveBeenCalledWith(
+            '[AppUpdateService] Failed to install app update',
+            {
+                error: 'Gateway Timeout',
+                versionHash: 'failed-version',
+            },
+        );
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(1);
     });
 
     it('should not show snackbar more than once for the same version hash in one app runtime', () => {

@@ -20,6 +20,16 @@ export interface CountStats {
 export type EventCountStats = CountStats;
 export type RouteCountStats = CountStats;
 
+export interface ConnectionCountStats {
+    serviceUsers: number | null;
+    mcpUsers: number | null;
+    both: number | null;
+    providers: Record<string, number>;
+    cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
+    computedAt?: string | null;
+    expireAt?: string | null;
+}
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -88,6 +98,7 @@ export interface UserCountStats {
     providers: Record<string, number>;
     events: EventCountStats;
     routes: RouteCountStats;
+    connections?: ConnectionCountStats;
 }
 
 interface UserCountFunctionResponse {
@@ -105,6 +116,7 @@ interface UserCountFunctionResponse {
     providers: Record<string, number>;
     events?: Partial<EventCountStats>;
     routes?: Partial<RouteCountStats>;
+    connections?: Partial<ConnectionCountStats>;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -260,6 +272,9 @@ export class AdminService {
                     providers: result.data.providers || {},
                     events,
                     routes,
+                    ...(result.data.connections ? {
+                        connections: this.mapConnectionCountStats(result.data.connections),
+                    } : {}),
                 };
             })
         );
@@ -278,6 +293,40 @@ export class AdminService {
             mapped.computedAt = stats.computedAt ?? null;
         }
         if (stats && Object.prototype.hasOwnProperty.call(stats, 'expireAt')) {
+            mapped.expireAt = stats.expireAt ?? null;
+        }
+        return mapped;
+    }
+
+    private mapConnectionCountStats(stats: Partial<ConnectionCountStats>): ConnectionCountStats {
+        const providers: Record<string, number> = {};
+        if (stats.providers && typeof stats.providers === 'object') {
+            Object.entries(stats.providers).forEach(([provider, count]) => {
+                if (typeof count === 'number' && Number.isFinite(count)) {
+                    providers[provider] = Math.max(0, Math.floor(count));
+                }
+            });
+        }
+
+        const mapped: ConnectionCountStats = {
+            serviceUsers: typeof stats.serviceUsers === 'number' && Number.isFinite(stats.serviceUsers)
+                ? Math.max(0, Math.floor(stats.serviceUsers))
+                : null,
+            mcpUsers: typeof stats.mcpUsers === 'number' && Number.isFinite(stats.mcpUsers)
+                ? Math.max(0, Math.floor(stats.mcpUsers))
+                : null,
+            both: typeof stats.both === 'number' && Number.isFinite(stats.both)
+                ? Math.max(0, Math.floor(stats.both))
+                : null,
+            providers,
+        };
+        if (stats.cacheStatus) {
+            mapped.cacheStatus = stats.cacheStatus;
+        }
+        if (Object.prototype.hasOwnProperty.call(stats, 'computedAt')) {
+            mapped.computedAt = stats.computedAt ?? null;
+        }
+        if (Object.prototype.hasOwnProperty.call(stats, 'expireAt')) {
             mapped.expireAt = stats.expireAt ?? null;
         }
         return mapped;

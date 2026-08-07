@@ -25,6 +25,16 @@ export interface CountStats {
 export type EventCountStats = CountStats;
 export type RouteCountStats = CountStats;
 
+export interface ConnectionCountStats {
+    serviceUsers: number | null;
+    mcpUsers: number | null;
+    both: number | null;
+    providers: Record<string, number>;
+    cacheStatus?: 'fresh' | 'refreshed' | 'stale' | 'unavailable';
+    computedAt?: string | null;
+    expireAt?: string | null;
+}
+
 export interface UserCountRequest {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -89,6 +99,7 @@ export interface UserCountResponse {
     onboardingCompleted: number;
     events: EventCountStats;
     routes: RouteCountStats;
+    connections: ConnectionCountStats;
     providers: Record<string, number>;
 }
 
