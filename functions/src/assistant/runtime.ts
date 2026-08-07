@@ -9,8 +9,8 @@ import {
   type AssistantVisual,
 } from '../../../shared/assistant.types';
 import {
-  findAssistantPromptExample,
-  type AssistantPublishedPromptExample,
+  findAssistantPromptWorkflow,
+  type AssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
 import { assistantGenkit } from './model';
 import {
@@ -99,7 +99,7 @@ export interface AssistantModelGenerationInput {
   mcpInstructions: string;
   locationAccess?: AssistantLocationAccess;
   tools: AssistantRuntimeTool[];
-  publishedExample: AssistantPublishedPromptExample | null;
+  publishedExample: AssistantPromptWorkflow | null;
   /**
    * Marks the boundary immediately before work that can incur model or tool
    * cost. The callable supplies an idempotent implementation.
@@ -162,6 +162,7 @@ export const ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS = [
   'Exact activity start/end positions, MTB jump coordinates, and nearby activity search are available.',
   'Use coordinate-bearing activity data only when it is relevant to the user\'s location, nearby-search, map, trail, or jump-location question.',
   'For where-was-my-record-jump questions, first use list_activity_types to discover the exact Mountain Biking activityGroup, then rank Maximum Jump Distance across that server-expanded group, then inspect only that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
+  'For recent or latest jump details or locations, query activities newest first, select the first activity with jumpCount greater than zero, then inspect that activity with list_activity_jumps. Never substitute an activity start or end position for a jump position.',
   'A place-name nearby search sends only the supplied location text to Mapbox; direct-coordinate searches do not use Mapbox.',
   'For a requested activity breadcrumb or map, call get_activity_chart_data with includeLocation true only after identifying the relevant activity.',
   'Saved-route bounds, route geometry, route waypoints, original files, write actions, and dashboard settings remain unavailable.',
@@ -302,21 +303,130 @@ function assertAnswerDoesNotEchoToolSecrets(
 }
 
 function assertPublishedExampleWorkflowCompleted(
-  publishedExample: AssistantPublishedPromptExample | null,
+  publishedExample: AssistantPromptWorkflow | null,
   invocations: readonly AssistantToolInvocation[],
+  jumpDetailDiscoveryResolved = false,
+  qualifyingJumpActivityRefs: ReadonlySet<string> = new Set(),
 ): void {
   if (!publishedExample) {
     return;
   }
+  const requiredWorkflow = publishedExample.toolWorkflow.filter(toolName => (
+    toolName !== 'list_activity_jumps'
+    || !publishedExample.jumpDetailSource
+    || qualifyingJumpActivityRefs.size > 0
+  ));
   let workflowIndex = 0;
   for (const invocation of invocations) {
-    if (invocation.name === publishedExample.toolWorkflow[workflowIndex]) {
+    if (invocation.name === requiredWorkflow[workflowIndex]) {
       workflowIndex += 1;
     }
   }
-  if (workflowIndex !== publishedExample.toolWorkflow.length) {
+  if (workflowIndex !== requiredWorkflow.length
+    || (publishedExample.jumpDetailSource && !jumpDetailDiscoveryResolved)) {
     throw new Error(
       `The Assistant did not complete the published ${publishedExample.id} workflow.`,
+    );
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.flatMap(item => {
+      const record = asRecord(item);
+      return record ? [record] : [];
+    })
+    : [];
+}
+
+function activityRef(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+interface JumpWorkflowDiscovery {
+  qualifyingActivityRefs: string[];
+  resolved: boolean;
+}
+
+function discoverQualifyingJumpActivityRefs(
+  workflow: AssistantPromptWorkflow | null,
+  toolName: AssistantMcpToolName,
+  structuredContent: Record<string, unknown>,
+): JumpWorkflowDiscovery {
+  if (workflow?.jumpDetailSource === 'recent_activity_with_jumps'
+    && toolName === 'query_activities') {
+    const firstActivityWithJumps = asRecordArray(structuredContent.activities)
+      .find(activity => (
+        typeof activity.jumpCount === 'number'
+        && Number.isSafeInteger(activity.jumpCount)
+        && activity.jumpCount > 0
+      ));
+    const reference = activityRef(firstActivityWithJumps?.activityRef);
+    return {
+      qualifyingActivityRefs: reference ? [reference] : [],
+      resolved: reference !== null || structuredContent.scanComplete === true,
+    };
+  }
+  if (workflow?.jumpDetailSource === 'ranked_record'
+    && toolName === 'rank_activities_by_metric') {
+    const metric = asRecord(structuredContent.metric);
+    if (structuredContent.order !== 'highest'
+      || typeof metric?.type !== 'string'
+      || !metric.type.startsWith('Maximum Jump ')) {
+      return { qualifyingActivityRefs: [], resolved: false };
+    }
+    const rankedActivity = asRecordArray(structuredContent.activities)
+      .find(activity => activity.rank === 1);
+    const reference = activityRef(rankedActivity?.activityRef);
+    return {
+      qualifyingActivityRefs: reference ? [reference] : [],
+      resolved: true,
+    };
+  }
+  return { qualifyingActivityRefs: [], resolved: false };
+}
+
+function assertJumpDetailActivityRef(
+  workflow: AssistantPromptWorkflow | null,
+  toolName: AssistantMcpToolName,
+  toolInput: Record<string, unknown>,
+  qualifyingActivityRefs: ReadonlySet<string>,
+): void {
+  if (!workflow?.jumpDetailSource || toolName !== 'list_activity_jumps') {
+    return;
+  }
+  const reference = activityRef(toolInput.activityRef);
+  if (!reference || !qualifyingActivityRefs.has(reference)) {
+    throw new Error(
+      `The Assistant did not use a qualifying activity for the supported ${workflow.id} workflow.`,
+    );
+  }
+}
+
+function assertWorkflowMapSelection(
+  workflow: AssistantPromptWorkflow | null,
+  visualRequest: AssistantVisualRequest,
+  visualSources: readonly AssistantVisualSource[],
+  visualSourceToolNames: ReadonlyMap<string, AssistantMcpToolName>,
+): void {
+  if (!workflow?.mapSourceToolName || !visualRequest.map) {
+    return;
+  }
+  const source = visualSources.find(candidate => (
+    candidate.descriptor.sourceId === visualRequest.map?.sourceId
+  ));
+  if (!source
+    || source.map === null
+    || source.descriptor.map === null
+    || visualSourceToolNames.get(source.descriptor.sourceId) !== workflow.mapSourceToolName) {
+    throw new Error(
+      `The Assistant selected a non-jump map for the supported ${workflow.id} workflow.`,
     );
   }
 }
@@ -376,6 +486,12 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
     default:
       if (error.message.startsWith('The Assistant did not complete the published ')) {
         return 'published_workflow_incomplete';
+      }
+      if (error.message.startsWith('The Assistant did not use a qualifying activity')) {
+        return 'jump_workflow_activity_mismatch';
+      }
+      if (error.message.startsWith('The Assistant selected a non-jump map')) {
+        return 'jump_workflow_map_mismatch';
       }
       if (error.message.startsWith('Assistant example tools are unavailable:')) {
         return 'example_tools_unavailable';
@@ -544,10 +660,13 @@ export function createAssistantRuntime(
       );
       const invocations: AssistantToolInvocation[] = [];
       const visualSources: AssistantVisualSource[] = [];
+      const visualSourceToolNames = new Map<string, AssistantMcpToolName>();
+      const qualifyingJumpActivityRefs = new Set<string>();
+      let jumpDetailDiscoveryResolved = false;
       let toolCallCount = 0;
       let cumulativeToolOutputBytes = 0;
       try {
-        const publishedExample = findAssistantPromptExample(input.prompt);
+        const publishedExample = findAssistantPromptWorkflow(input.prompt);
         if (publishedExample) {
           const availableToolNames = new Set<string>(
             session.tools.map(tool => tool.name),
@@ -578,6 +697,12 @@ export function createAssistantRuntime(
               toolInput,
               input.timeZone,
             );
+            assertJumpDetailActivityRef(
+              publishedExample,
+              tool.name,
+              resolvedToolInput,
+              qualifyingJumpActivityRefs,
+            );
             await input.onBillableAttempt?.();
             let result;
             try {
@@ -596,6 +721,16 @@ export function createAssistantRuntime(
               name: tool.name,
               structuredContent: result.structuredContent,
             });
+            const jumpWorkflowDiscovery = discoverQualifyingJumpActivityRefs(
+              publishedExample,
+              tool.name,
+              result.structuredContent,
+            );
+            jumpWorkflowDiscovery.qualifyingActivityRefs.forEach(
+              reference => qualifyingJumpActivityRefs.add(reference),
+            );
+            jumpDetailDiscoveryResolved = jumpDetailDiscoveryResolved
+              || jumpWorkflowDiscovery.resolved;
             let visualSource: AssistantVisualSource | null = null;
             try {
               visualSource = dependencies.createVisualSource(
@@ -615,6 +750,7 @@ export function createAssistantRuntime(
             }
             if (visualSource) {
               visualSources.push(visualSource);
+              visualSourceToolNames.set(visualSource.descriptor.sourceId, tool.name);
             }
             return appendAssistantVisualizationDescriptor(
               projectAssistantToolResultForModel(result.structuredContent),
@@ -642,7 +778,12 @@ export function createAssistantRuntime(
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
-        assertPublishedExampleWorkflowCompleted(publishedExample, invocations);
+        assertPublishedExampleWorkflowCompleted(
+          publishedExample,
+          invocations,
+          jumpDetailDiscoveryResolved,
+          qualifyingJumpActivityRefs,
+        );
         assertAnswerDoesNotEchoToolSecrets(generated.answer, invocations);
         if (visualSources.some(source => (
           generated.answer.includes(source.descriptor.sourceId)
@@ -653,6 +794,12 @@ export function createAssistantRuntime(
           answer: generated.answer,
           visuals: generated.visualRequest,
         });
+        assertWorkflowMapSelection(
+          publishedExample,
+          validatedOutput.visuals,
+          visualSources,
+          visualSourceToolNames,
+        );
         let visuals: AssistantVisual[] = [];
         try {
           visuals = dependencies.resolveVisuals(visualSources, validatedOutput.visuals);

@@ -96,6 +96,8 @@ export interface EventsMapFocusLocation {
   standalone: true
 })
 export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit, OnDestroy {
+  private static readonly EVENT_CLUSTER_MAX_ZOOM = 14;
+  private static readonly CLUSTERED_EVENTS_FIT_MAX_ZOOM = EventsMapComponent.EVENT_CLUSTER_MAX_ZOOM - 1;
   private static readonly EVENTS_SOURCE_ID = 'events-map-events-source';
   private static readonly EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
   private static readonly EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
@@ -264,9 +266,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       if (initialBounds) {
         mapOptions.bounds = initialBounds;
         mapOptions.fitBoundsOptions = {
-          padding: 80,
           duration: 0,
-          animate: false,
+          ...this.buildEventFitBoundsOptions(false),
         };
       } else {
         mapOptions.zoom = initialCamera.zoom;
@@ -478,7 +479,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       ? {
         cluster: true,
         clusterRadius: 50,
-        clusterMaxZoom: 14,
+        clusterMaxZoom: EventsMapComponent.EVENT_CLUSTER_MAX_ZOOM,
       }
       : {}
     );
@@ -825,10 +826,21 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       return;
     }
 
-    this.mapInstance()?.fitBounds?.(bounds, {
+    this.mapInstance()?.fitBounds?.(bounds, this.buildEventFitBoundsOptions(animate));
+  }
+
+  private buildEventFitBoundsOptions(animate: boolean): {
+    padding: number;
+    animate: boolean;
+    maxZoom?: number;
+  } {
+    return {
       padding: 80,
       animate,
-    });
+      // Tight or identical start coordinates can otherwise fit beyond the source's
+      // clustering cutoff, leaving only overlapping individual points to render.
+      ...(this.clusterMarkers ? { maxZoom: EventsMapComponent.CLUSTERED_EVENTS_FIT_MAX_ZOOM } : {}),
+    };
   }
 
   private fitBoundsToSelectedTracks(animate: boolean): void {

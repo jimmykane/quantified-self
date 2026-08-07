@@ -1,10 +1,20 @@
-export interface AssistantPromptExample {
+export interface AssistantPromptWorkflow {
   id: string;
+  toolWorkflow: readonly string[];
+  routingHint: string;
+  /**
+   * When a supported jump workflow reads subrecords, constrain the opaque
+   * activity reference to an activity discovered by its preceding step.
+   */
+  jumpDetailSource?: 'ranked_record' | 'recent_activity_with_jumps';
+  /** A jump-location request may only render the map produced by this tool. */
+  mapSourceToolName?: 'list_activity_jumps';
+}
+
+export interface AssistantPromptExample extends AssistantPromptWorkflow {
   prompt: string;
   shortLabel: string;
   icon: string;
-  toolWorkflow: readonly string[];
-  routingHint: string;
 }
 
 export const ASSISTANT_PROMPT_EXAMPLES = [
@@ -61,6 +71,26 @@ export const ASSISTANT_PROMPT_EXAMPLES = [
 export type AssistantPublishedPromptExample =
   typeof ASSISTANT_PROMPT_EXAMPLES[number];
 
+export const ASSISTANT_RECORD_MTB_JUMP_LOCATION_WORKFLOW = {
+  id: 'record-mtb-jump-location',
+  toolWorkflow: [
+    'list_activity_types',
+    'rank_activities_by_metric',
+    'list_activity_jumps',
+  ],
+  routingHint: 'Discover the Mountain Biking activityGroup, rank the matching persisted Maximum Jump metric across all available history in highest order, then use only the rank-one opaque activity reference with list_activity_jumps. For a map or coordinates, select only the jump-record map descriptor for that ranked activity; never substitute an activity start or end position for a jump position.',
+  jumpDetailSource: 'ranked_record',
+  mapSourceToolName: 'list_activity_jumps',
+} as const satisfies AssistantPromptWorkflow;
+
+export const ASSISTANT_RECENT_JUMP_DETAILS_WORKFLOW = {
+  id: 'recent-jump-details',
+  toolWorkflow: ['query_activities', 'list_activity_jumps'],
+  routingHint: 'Query activities newest first without date selectors. Select the first returned activity with jumpCount greater than zero, then pass only that activity\'s opaque reference to list_activity_jumps. Continue the same bounded activity scan with nextCursor only when no returned activity has jumps. For a map or coordinates, select only the jump-record map descriptor; never substitute an activity start or end position for a jump position.',
+  jumpDetailSource: 'recent_activity_with_jumps',
+  mapSourceToolName: 'list_activity_jumps',
+} as const satisfies AssistantPromptWorkflow;
+
 export const ASSISTANT_STARTER_PROMPTS: readonly string[] =
   ASSISTANT_PROMPT_EXAMPLES.map(example => example.prompt);
 
@@ -72,8 +102,17 @@ function normalizeExamplePrompt(value: string): string {
 }
 
 function isMtbRecordJumpPrompt(value: string): boolean {
-  return /\b(?:biggest|longest|maximum|max|record)\b/u.test(value)
+  return /\b(?:biggest|longest|maximum|max|record|highest|fastest)\b/u.test(value)
     && /\b(?:mtb|mountain bike|mountain biking)\b/u.test(value)
+    && /\bjumps?\b/u.test(value);
+}
+
+function isJumpDetailOrLocationPrompt(value: string): boolean {
+  return /\b(?:map|where|location|coordinates?|detail|details)\b/u.test(value);
+}
+
+function isRecentJumpPrompt(value: string): boolean {
+  return /\b(?:last|latest|recent|newest|most recent)\b/u.test(value)
     && /\bjumps?\b/u.test(value);
 }
 
@@ -90,4 +129,25 @@ export function findAssistantPromptExample(
   return isMtbRecordJumpPrompt(normalizedPrompt)
     ? ASSISTANT_PROMPT_EXAMPLES.find(example => example.id === 'biggest-mtb-jump') || null
     : null;
+}
+
+/**
+ * Returns the deterministic supported workflow for a prompt. Most matches are
+ * public starter examples; jump-detail variants add the one necessary
+ * subrecord read so a start/end summary can never be mistaken for a jump.
+ */
+export function findAssistantPromptWorkflow(
+  prompt: string,
+): AssistantPromptWorkflow | null {
+  const normalizedPrompt = normalizeExamplePrompt(prompt);
+  if (
+    isMtbRecordJumpPrompt(normalizedPrompt)
+    && isJumpDetailOrLocationPrompt(normalizedPrompt)
+  ) {
+    return ASSISTANT_RECORD_MTB_JUMP_LOCATION_WORKFLOW;
+  }
+  if (isRecentJumpPrompt(normalizedPrompt)) {
+    return ASSISTANT_RECENT_JUMP_DETAILS_WORKFLOW;
+  }
+  return findAssistantPromptExample(prompt);
 }

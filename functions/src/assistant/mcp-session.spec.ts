@@ -71,6 +71,7 @@ describe('Assistant MCP session', () => {
       expect(session.instructions).toContain('Treat the ranked metric value as authoritative');
       expect(session.instructions).toContain('only when jump-level details are requested');
       expect(session.instructions).toContain('Never rank jump quality by jumpCount');
+      expect(session.instructions).toContain('select the first activity with jumpCount greater than zero');
       expect(session.tools.find(tool => tool.name === 'list_routes')?.description)
         .toContain('Bounds are redacted');
       const dailyReportSchema = session.tools
