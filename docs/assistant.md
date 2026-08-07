@@ -97,6 +97,10 @@ or bounded chart-breadcrumb coordinates only when the conversation already has `
 coordinates and geometry remain unavailable. Visual labels and units come from the existing MCP sleep, Training, and
 activity-chart catalogs. Form charts feed the persisted daily loads through the shared `buildTrainingLoadPoints` engine
 used by the app and derived-metric service, so fitness, fatigue, and Form are not recalculated by a parallel formula.
+For a record-jump location request, the backend binds the jump-detail read to the ranked activity reference and matches
+the relevant Sports Lib maximum metric value to the individual record. It renders only the matching marker or tied
+markers; if that record is not present in the bounded jump page, it omits the map rather than showing unrelated jumps.
+A jump-detail read without a matching record ranking retains the normal all-jump map.
 
 The shared storage contract limits charts to four series and 300 points per series, maps to 50 markers and a 500-point
 path, each assistant message to 64 KiB of visual JSON, and the full public conversation to 512 KiB. Missing values stay
@@ -151,7 +155,8 @@ The model receives only:
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
   model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
   are renamed and converted to ISO-8601 strings at this internal boundary. Measurement values such as HRV milliseconds
-  and relative offsets such as a jump `timestampMs` remain numeric. In a `precise_activity` conversation, relevant
+  remain numeric. A jump's relative `timestampMs` is renamed and converted to `elapsedTimeSeconds` so it cannot be
+  mistaken for a calendar timestamp. In a `precise_activity` conversation, relevant
   selected results can also contain validated activity start/end or MTB jump coordinates and nearby activity matches.
 - a server-owned visual descriptor when the selected result supports a chart or map. It contains only a per-turn source
   ID, safe series labels and units, and marker/path counts. Gemini chooses among those keys; the backend constructs the
@@ -193,6 +198,8 @@ not authored by the model. The evidence adapter:
 - caps evidence at six tool results, six compact facts per result, and three app links;
 - gives activity rankings a deterministic winner-first projection containing the activity type, metric value and unit,
   exact ISO start time, rank, and scan count;
+- presents a jump's relative `timestampMs` as human-readable elapsed activity time rather than a raw implementation
+  field;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;

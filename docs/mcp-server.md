@@ -468,7 +468,9 @@ timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
 Server instructions define absolute output fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus
 `bucketStartMs`, as Unix epoch milliseconds that must be converted exactly before a client states a calendar date.
 Metric values such as HRV milliseconds and relative offsets such as jump `timestampMs` are explicitly not calendar
-timestamps. The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
+timestamps. A jump `timestampMs` is milliseconds elapsed from the activity start. The MCP projection normalizes current
+elapsed-second values plus historical epoch-second or epoch-millisecond values against the selected activity's start.
+The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
 Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
 and granting one location domain never widens the other.
 
@@ -687,7 +689,8 @@ whole activity document or position map.
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
-height, hang time, speed, rotations, and score. With `activity-location:read`, they may also expose latitude/longitude,
+height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in
+milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
 coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
 from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and

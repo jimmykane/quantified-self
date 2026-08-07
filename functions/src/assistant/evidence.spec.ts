@@ -237,6 +237,28 @@ describe('Assistant evidence', () => {
     expect(JSON.stringify(evidence)).not.toMatch(/Latitude|Longitude|39\.665|20\.853/);
   });
 
+  it('presents jump timestamps as elapsed activity time instead of raw milliseconds', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'list_activity_jumps',
+      title: 'List activity jumps',
+    }, {
+      items: [{
+        index: 4,
+        timestampMs: 624_000,
+        distanceMeters: 10.41,
+        score: 90,
+      }],
+      nextCursor: null,
+    });
+
+    expect(evidence.facts).toEqual(expect.arrayContaining([
+      { label: 'Activity time', value: '10m 24s' },
+      { label: 'Distance Meters', value: '10.41' },
+    ]));
+    expect(JSON.stringify(evidence)).not.toContain('Timestamp Ms');
+    expect(JSON.stringify(evidence)).not.toContain('624000');
+  });
+
   it('does not use denied provenance counts in its fallback summary', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',

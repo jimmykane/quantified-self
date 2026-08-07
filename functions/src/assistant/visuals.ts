@@ -14,7 +14,15 @@ import {
   type AssistantMapVisual,
   type AssistantVisual,
 } from '../../../shared/assistant.types';
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import {
+  ChartDataCategoryTypes,
+  DataJumpDistanceMax,
+  DataJumpHangTimeMax,
+  DataJumpHeightMax,
+  DataJumpRotationsMax,
+  DataJumpScoreMax,
+  DataJumpSpeedMax,
+} from '@sports-alliance/sports-lib';
 import {
   TRAINING_LOAD_DAY_MS,
   buildTrainingLoadPoints,
@@ -28,6 +36,21 @@ const MAX_TITLE_CHARS = 160;
 const MAX_LABEL_CHARS = 120;
 const MAX_UNIT_CHARS = 80;
 const MAX_ASSISTANT_TRAINING_CHART_DAYS = 366 * 20;
+type AssistantJumpMetricField =
+  | 'distanceMeters'
+  | 'heightMeters'
+  | 'hangTimeSeconds'
+  | 'speedMetersPerSecond'
+  | 'rotations'
+  | 'score';
+const JUMP_RANKING_FIELD_BY_METRIC = new Map<string, AssistantJumpMetricField>([
+  [DataJumpDistanceMax.type, 'distanceMeters'],
+  [DataJumpHeightMax.type, 'heightMeters'],
+  [DataJumpHangTimeMax.type, 'hangTimeSeconds'],
+  [DataJumpSpeedMax.type, 'speedMetersPerSecond'],
+  [DataJumpRotationsMax.type, 'rotations'],
+  [DataJumpScoreMax.type, 'score'],
+]);
 const ACTIVITY_CHART_METRIC_BY_ID: ReadonlyMap<
   string,
   typeof MCP_ACTIVITY_CHART_METRICS[number]
@@ -55,6 +78,13 @@ export interface AssistantVisualMapCandidate {
   title: string;
   markers: AssistantMapMarker[];
   path: AssistantMapPosition[];
+  jumpSelection?: {
+    activityRef: string;
+    records: Array<{
+      marker: AssistantMapMarker | null;
+      values: Record<AssistantJumpMetricField, number | null>;
+    }>;
+  };
 }
 
 export interface AssistantVisualSourceDescriptor {
@@ -79,6 +109,11 @@ export interface AssistantVisualSource {
   descriptor: AssistantVisualSourceDescriptor;
   chart: AssistantVisualChartCandidate | null;
   map: AssistantVisualMapCandidate | null;
+  jumpRanking?: {
+    activityRef: string;
+    metricField: AssistantJumpMetricField;
+    value: number;
+  };
 }
 
 export interface AssistantVisualRequest {
@@ -841,13 +876,44 @@ function buildNearbyActivityMap(output: Record<string, unknown>): AssistantVisua
   return markers.length ? { title: 'Nearby activities', markers, path: [] } : null;
 }
 
-function buildJumpMap(output: Record<string, unknown>): AssistantVisualMapCandidate | null {
-  const markers = uniqueMarkers(asRecords(output.items).map((jump, index) => marker(
-    jump,
-    'jump',
-    `Jump ${finiteNumber(jump.index) ?? index + 1}`,
-  )));
-  return markers.length ? { title: 'Jump locations', markers, path: [] } : null;
+function buildJumpMap(
+  output: Record<string, unknown>,
+  toolInput: Record<string, unknown>,
+): AssistantVisualMapCandidate | null {
+  const records = asRecords(output.items).map((jump, index) => {
+    const sourceIndex = finiteNumber(jump.index);
+    return {
+      marker: marker(
+        jump,
+        'jump',
+        `Jump ${sourceIndex === null ? index + 1 : sourceIndex + 1}`,
+      ),
+      values: {
+        distanceMeters: finiteNumber(jump.distanceMeters),
+        heightMeters: finiteNumber(jump.heightMeters),
+        hangTimeSeconds: finiteNumber(jump.hangTimeSeconds),
+        speedMetersPerSecond: finiteNumber(jump.speedMetersPerSecond),
+        rotations: finiteNumber(jump.rotations),
+        score: finiteNumber(jump.score),
+      },
+    };
+  });
+  const markers = uniqueMarkers(records.map(record => record.marker));
+  if (!markers.length) {
+    return null;
+  }
+  const activityRef = typeof toolInput.activityRef === 'string'
+    && toolInput.activityRef.length > 0
+    ? toolInput.activityRef
+    : null;
+  return {
+    title: 'Jump locations',
+    markers,
+    path: [],
+    ...(activityRef ? {
+      jumpSelection: { activityRef, records },
+    } : {}),
+  };
 }
 
 function buildChartLocationMap(output: Record<string, unknown>): AssistantVisualMapCandidate | null {
@@ -882,6 +948,7 @@ function buildCandidates(
   toolName: AssistantMcpToolName,
   output: Record<string, unknown>,
   timeZone: string,
+  toolInput: Record<string, unknown>,
 ): { chart: AssistantVisualChartCandidate | null; map: AssistantVisualMapCandidate | null } {
   switch (toolName) {
     case 'query_measurements':
@@ -899,7 +966,7 @@ function buildCandidates(
     case 'get_activity_chart_data':
       return { chart: buildActivityChart(output), map: buildChartLocationMap(output) };
     case 'list_activity_jumps':
-      return { chart: buildJumpChart(output), map: buildJumpMap(output) };
+      return { chart: buildJumpChart(output), map: buildJumpMap(output, toolInput) };
     case 'query_activities':
       return { chart: null, map: buildActivityMap(output) };
     case 'search_activities_near_location':
@@ -907,6 +974,22 @@ function buildCandidates(
     default:
       return { chart: null, map: null };
   }
+}
+
+function buildJumpRankingSelection(output: Record<string, unknown>) {
+  const metric = isRecord(output.metric) ? output.metric : null;
+  const metricField = typeof metric?.type === 'string'
+    ? JUMP_RANKING_FIELD_BY_METRIC.get(metric.type)
+    : undefined;
+  const activities = asRecords(output.activities);
+  const topActivity = activities.find(activity => activity.rank === 1) ?? activities[0];
+  const activityRef = typeof topActivity?.activityRef === 'string'
+    ? topActivity.activityRef
+    : null;
+  const value = finiteNumber(topActivity?.value);
+  return metricField && activityRef && value !== null
+    ? { activityRef, metricField, value }
+    : null;
 }
 
 function withUniqueSeriesLabels(
@@ -934,8 +1017,14 @@ export function createAssistantVisualSource(
   output: Record<string, unknown>,
   sourceId: string,
   timeZone = 'UTC',
+  toolInput: Record<string, unknown> = {},
 ): AssistantVisualSource | null {
-  const candidates = buildCandidates(toolName, output, resolveTimeZone(timeZone));
+  const candidates = buildCandidates(
+    toolName,
+    output,
+    resolveTimeZone(timeZone),
+    toolInput,
+  );
   if (!candidates.chart && !candidates.map) {
     return null;
   }
@@ -943,6 +1032,9 @@ export function createAssistantVisualSource(
     ...candidates.chart,
     series: withUniqueSeriesLabels(candidates.chart.series),
   } : null;
+  const jumpRanking = toolName === 'rank_activities_by_metric'
+    ? buildJumpRankingSelection(output)
+    : null;
   return {
     descriptor: {
       sourceId,
@@ -963,6 +1055,7 @@ export function createAssistantVisualSource(
     },
     chart,
     map: candidates.map,
+    ...(jumpRanking ? { jumpRanking } : {}),
   };
 }
 
@@ -1031,13 +1124,40 @@ export function resolveAssistantVisuals(
   if (request.map) {
     const source = sourceById.get(request.map.sourceId);
     if (source?.map) {
-      visuals.push({
-        kind: 'map',
-        title: source.map.title,
-        style: 'satellite',
-        markers: source.map.markers.slice(0, ASSISTANT_MAX_MAP_MARKERS),
-        path: downsamplePath(source.map.path),
-      });
+      const jumpSelection = source.map.jumpSelection;
+      const matchingRanking = jumpSelection
+        ? [...sources]
+            .reverse()
+            .map(candidate => candidate.jumpRanking)
+            .find(ranking => ranking?.activityRef === jumpSelection.activityRef)
+        : undefined;
+      const selectedJumpMarkers = matchingRanking && jumpSelection
+        ? uniqueMarkers(jumpSelection.records.flatMap((record) => {
+            const candidate = record.values[matchingRanking.metricField];
+            if (candidate === null) {
+              return [];
+            }
+            const tolerance = Math.max(
+              1e-9,
+              Math.max(Math.abs(candidate), Math.abs(matchingRanking.value)) * 1e-9,
+            );
+            return Math.abs(candidate - matchingRanking.value) <= tolerance
+              ? [record.marker]
+              : [];
+          }))
+        : null;
+      const markers = selectedJumpMarkers ?? source.map.markers;
+      if (markers.length) {
+        visuals.push({
+          kind: 'map',
+          title: selectedJumpMarkers
+            ? `Record jump location${selectedJumpMarkers.length === 1 ? '' : 's'}`
+            : source.map.title,
+          style: 'satellite',
+          markers: markers.slice(0, ASSISTANT_MAX_MAP_MARKERS),
+          path: downsamplePath(source.map.path),
+        });
+      }
     }
   }
   return fitVisualsToBudget(visuals);

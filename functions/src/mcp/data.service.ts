@@ -802,7 +802,11 @@ const defaultDependencies: McpDataServiceDependencies = {
       .collection('activities')
       .where(FieldPath.documentId(), '==', activityId)
       .limit(1)
-      .select('eventID', detailField)
+      .select(
+        'eventID',
+        detailField,
+        ...(detailKind === 'jumps' ? ['startDate'] : []),
+      )
       .get();
     const doc = snapshot.docs[0];
     return doc ? {
@@ -838,6 +842,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .select(
         'eventID',
         'type',
+        'startDate',
         'stats',
         'laps',
         'events',
@@ -1625,6 +1630,27 @@ function asTimestampMs(value: unknown): number | null {
   return asFiniteNumber(value);
 }
 
+function asActivityRelativeTimestampMs(
+  value: unknown,
+  activityStartTimeMs: number | null,
+): number | null {
+  const timestamp = asNonNegativeNumber(value);
+  if (timestamp === null) {
+    return null;
+  }
+  const elapsedTimeMs = timestamp < 1_000_000_000
+    ? timestamp * 1_000
+    : activityStartTimeMs === null
+      ? null
+      : (timestamp < 1_000_000_000_000 ? timestamp * 1_000 : timestamp)
+        - activityStartTimeMs;
+  return elapsedTimeMs !== null
+    && elapsedTimeMs >= 0
+    && Number.isSafeInteger(elapsedTimeMs)
+    ? elapsedTimeMs
+    : null;
+}
+
 function asIsoTimestamp(value: number): string | null {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) {
@@ -1817,7 +1843,12 @@ function projectLap(value: unknown, index: number) {
   };
 }
 
-function projectJump(value: unknown, index: number, includeLocation: boolean) {
+function projectJump(
+  value: unknown,
+  index: number,
+  includeLocation: boolean,
+  activityStartTimeMs: number | null,
+) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
@@ -1831,7 +1862,13 @@ function projectJump(value: unknown, index: number, includeLocation: boolean) {
     return null;
   }
   const rawJump = jumpData as Record<string, unknown>;
-  const timestampMs = asTimestampMs(rawEvent.timestamp);
+  // Current Sports Lib FIT imports persist elapsed seconds. Historical JSON
+  // can also contain epoch seconds or milliseconds, so normalize every form
+  // to one activity-relative millisecond offset at the MCP boundary.
+  const timestampMs = asActivityRelativeTimestampMs(
+    rawEvent.timestamp,
+    activityStartTimeMs,
+  );
   const distanceMeters = asNonNegativeNumber(rawJump.distance);
   const score = asNonNegativeNumber(rawJump.score);
   if (timestampMs === null || distanceMeters === null || score === null) {
@@ -4468,11 +4505,19 @@ async function listActivityDetail(
     MAX_ACTIVITY_DETAIL_BYTES,
     'The activity detail exceeds the MCP processing limit.',
   );
+  const activityStartTimeMs = detailKind === 'jumps'
+    ? asTimestampMs(document.data.startDate)
+    : null;
   const projected = candidates.flatMap((candidate, index) => {
     const item = detailKind === 'laps'
       ? projectLap(candidate, index)
       : detailKind === 'jumps'
-        ? projectJump(candidate, index, input.includeLocation === true)
+        ? projectJump(
+            candidate,
+            index,
+            input.includeLocation === true,
+            activityStartTimeMs,
+          )
         : projectSwimLength(candidate, index);
     return item ? [item] : [];
   });
@@ -4611,6 +4656,7 @@ type McpActivityDetailAvailability = {
 function projectActivityOverviewDetailAvailability(
   value: unknown,
   detailKind: ActivityDetailKind,
+  activityStartTimeMs: number | null,
 ): McpActivityDetailAvailability {
   if (!Array.isArray(value)) {
     return {
@@ -4628,7 +4674,7 @@ function projectActivityOverviewDetailAvailability(
     const projected = detailKind === 'laps'
       ? projectLap(candidate, index)
       : detailKind === 'jumps'
-        ? projectJump(candidate, index, false)
+        ? projectJump(candidate, index, false, activityStartTimeMs)
         : projectSwimLength(candidate, index);
     return total + (projected ? 1 : 0);
   }, 0);
@@ -4716,6 +4762,7 @@ async function getActivityOverview(
     ) !== null
   ));
   const activityType = normalizeActivityType(document.data.type);
+  const activityStartTimeMs = asTimestampMs(document.data.startDate);
   const chartSourceDeclared = await dependencies.hasActivityChartSource(
     input.uid,
     reference.eventId,
@@ -4733,6 +4780,7 @@ async function getActivityOverview(
         ...projectActivityOverviewDetailAvailability(
           detailValues.laps,
           'laps',
+          activityStartTimeMs,
         ),
       },
       {
@@ -4740,6 +4788,7 @@ async function getActivityOverview(
         ...projectActivityOverviewDetailAvailability(
           detailValues.jumps,
           'jumps',
+          activityStartTimeMs,
         ),
       },
       {
@@ -4747,6 +4796,7 @@ async function getActivityOverview(
         ...projectActivityOverviewDetailAvailability(
           detailValues.swimLengths,
           'swim_lengths',
+          activityStartTimeMs,
         ),
       },
     ],

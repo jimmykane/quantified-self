@@ -348,7 +348,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         events: [{
           [DataJumpEvent.type]: {
-            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            timestamp: 624,
             jumpData: {
               distance: 2.069,
               height: 0.42,
@@ -381,7 +381,7 @@ describe('MCP data service', () => {
     expect(jumps).toEqual({
       items: [{
         index: 0,
-        timestampMs: Date.parse('2026-07-01T08:30:00.000Z'),
+        timestampMs: 624_000,
         distanceMeters: 2.069,
         heightMeters: 0.42,
         hangTimeSeconds: 0.36,
@@ -401,6 +401,49 @@ describe('MCP data service', () => {
       'jumps',
       true,
     );
+  });
+
+  it('normalizes historical absolute jump timestamps to elapsed milliseconds', async () => {
+    const startTimeMs = Date.parse('2026-07-01T08:00:00.000Z');
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({ startDate: startTimeMs }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        startDate: startTimeMs,
+        events: [{
+          [DataJumpEvent.type]: {
+            timestamp: startTimeMs + 624_000,
+            jumpData: { distance: 10.41, score: 92 },
+          },
+        }, {
+          [DataJumpEvent.type]: {
+            timestamp: (startTimeMs + 900_000) / 1_000,
+            jumpData: { distance: 8.2, score: 80 },
+          },
+        }],
+      },
+    });
+
+    const jumps = await service.listActivityJumps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(jumps.items.map(jump => jump.timestampMs)).toEqual([
+      624_000,
+      900_000,
+    ]);
   });
 
   it('includes both start and end coordinate leaves in nearby-activity reads', () => {
@@ -466,7 +509,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         events: [{
           [DataJumpEvent.type]: {
-            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            timestamp: 624,
             jumpData: {
               distance: 2,
               score: 60,

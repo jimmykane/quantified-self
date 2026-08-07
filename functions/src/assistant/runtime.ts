@@ -208,6 +208,12 @@ function projectAssistantToolResultForModel(
     if (key === 'appUrl') {
       continue;
     }
+    if (key === 'timestampMs' && typeof child === 'number') {
+      if (source.elapsedTimeSeconds === undefined) {
+        projected.elapsedTimeSeconds = child / 1_000;
+      }
+      continue;
+    }
     const isAbsoluteTimestamp = typeof child === 'number'
       && (/(?:Time|Date|Day|At)Ms$/.test(key) || key === 'bucketStartMs');
     if (isAbsoluteTimestamp) {
@@ -599,6 +605,7 @@ export function createAssistantRuntime(
                 typeof resolvedToolInput.timeZone === 'string'
                   ? resolvedToolInput.timeZone
                   : input.timeZone,
+                resolvedToolInput,
               );
             } catch (error) {
               logger.warn('[Assistant] Optional visual source projection failed.', {
