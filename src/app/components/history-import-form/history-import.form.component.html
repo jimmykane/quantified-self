@@ -131,13 +131,14 @@
   <div class="qs-form-actions">
     <button mat-flat-button class="qs-mat-primary" (click)="onSubmit($event)"
       [disabled]="!formGroup.valid || isSubmitting || isLoadingParent || formGroup.disabled">
-      @if (isSubmitting) {
-      <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-        class="qs-spinner-accent"></mat-spinner>
-      Importing History...
-      } @else {
-      Import History
-      }
+      <span class="history-import-action-content">
+        @if (isSubmitting) {
+        <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+        <span>Importing History...</span>
+        } @else {
+        <span>Import History</span>
+        }
+      </span>
     </button>
   </div>
 </form>

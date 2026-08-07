@@ -195,6 +195,21 @@
   margin-top: 0.5rem;
 }
 
+.history-import-action-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  line-height: 20px;
+  min-height: 20px;
+  vertical-align: middle;
+}
+
+.history-import-action-content mat-spinner {
+  flex: 0 0 20px;
+  margin: 0;
+}
+
 .sleep-backfill-section {
   display: flex;
   align-items: center;

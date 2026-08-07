@@ -288,14 +288,14 @@
           [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
           (click)="runCorosToSuuntoBackfill($event)">
           @if (isBackfillingSync) {
-          <ng-container>
+          <span class="service-action-content">
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
             Scheduling activities…
-          </ng-container>
+          </span>
           } @else {
-          <ng-container>
+          <span class="service-action-content">
             Schedule activities
-          </ng-container>
+          </span>
           }
         </button>
 
