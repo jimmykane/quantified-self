@@ -57,12 +57,23 @@ jobs:
       - resolve
       - test
     runs-on: ubuntu-latest
-    environment: production
+    environment: production-deploy
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/242713487388/locations/global/workloadIdentityPools/qs-github/providers/github
+          service_account: qs-github-production-deploy@quantified-self-io.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -78,12 +89,5 @@ jobs:
           npm ci
           npm run build
 
-      - name: Create service account key
-        run: |
-          umask 077
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
-
       - name: Deploy Functions
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase_service_account.json
         run: firebase deploy --only functions
