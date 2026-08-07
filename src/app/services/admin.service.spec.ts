@@ -104,6 +104,15 @@ describe('AdminService', () => {
             routes: {
                 total: 25_000,
             },
+            connections: {
+                serviceUsers: 90,
+                mcpUsers: 12,
+                both: 8,
+                providers: { Garmin: 50, Suunto: 20, COROS: 10, Wahoo: 10 },
+                cacheStatus: 'fresh' as const,
+                computedAt: '2026-08-07T13:00:00.000Z',
+                expireAt: '2026-08-07T14:00:00.000Z',
+            },
             providers: {}
         };
         functionsServiceMock.call.mockResolvedValue({ data: mockData });

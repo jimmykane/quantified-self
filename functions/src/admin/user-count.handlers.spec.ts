@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 import { CallableRequest } from 'firebase-functions/v2/https';
 import {
     getUserCount,
@@ -16,7 +17,7 @@ describe('getUserCount Cloud Function', () => {
         const request = {
             auth: { uid: 'admin-uid', token: { admin: true } },
             app: { appId: 'mock-app-id' }
-        } as unknown as CallableRequest<any>;
+        } as unknown as CallableRequest<unknown>;
         mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
 
         const mockTotalCount = vi.fn().mockResolvedValue({
@@ -84,7 +85,10 @@ describe('getUserCount Cloud Function', () => {
             return {};
         });
 
-        const result = await (getUserCount as any)(request);
+        const getUserCountHandler = getUserCount as unknown as (input: CallableRequest<unknown>) => Promise<{
+            connections: unknown;
+        }>;
+        const result = await getUserCountHandler(request);
 
         expect(result).toEqual(expect.objectContaining({
             count: 150,
@@ -668,5 +672,126 @@ describe('getUserCount Cloud Function', () => {
         } finally {
             firestoreMock.FieldValue = originalFieldValue;
         }
+    });
+
+    it('counts distinct connected service and active MCP users', async () => {
+        const request = {
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+        mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+        const tokenDocument = (collectionName: string, uid: string) => ({
+            ref: {
+                parent: {
+                    parent: {
+                        id: uid,
+                        parent: { id: collectionName },
+                    },
+                },
+            },
+        });
+        const mcpConnectionDocument = (uid: string, connectionId: string, data: Record<string, unknown>) => ({
+            id: connectionId,
+            ref: {
+                parent: {
+                    parent: { id: uid },
+                },
+            },
+            data: () => data,
+        });
+        const supersedingConnectionId = createHash('sha256')
+            .update('mcp-logical-connection-v1:client-e')
+            .digest('base64url');
+        const connectionCacheSet = vi.fn().mockResolvedValue(undefined);
+        const cacheDoc = vi.fn((docId: string) => ({
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+            set: docId === 'connectionCounts' ? connectionCacheSet : vi.fn().mockResolvedValue(undefined),
+        }));
+        const subscriptionQuery = {
+            where: vi.fn().mockReturnThis(),
+            count: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ data: () => ({ count: 0 }) }) }),
+            select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ docs: [] }) }),
+        };
+
+        mockCollection.mockImplementation((name) => {
+            if (name === 'adminStats') {
+                return { doc: cacheDoc };
+            }
+            if (name === 'users') {
+                return {
+                    where: vi.fn().mockReturnValue({
+                        count: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({ data: () => ({ count: 10 }) }),
+                        }),
+                    }),
+                    count: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({ data: () => ({ count: 10 }) }),
+                    }),
+                };
+            }
+            if (name === 'subscriptions') {
+                return subscriptionQuery;
+            }
+            if (name === 'events' || name === 'routes') {
+                return {
+                    count: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ data: () => ({ count: 0 }) }) }),
+                };
+            }
+            if (name === 'tokens') {
+                return {
+                    select: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({
+                            docs: [
+                                tokenDocument('garminAPITokens', 'user-a'),
+                                tokenDocument('garminAPITokens', 'user-a'),
+                                tokenDocument('suuntoAppAccessTokens', 'user-b'),
+                                tokenDocument('COROSAPIAccessTokens', 'user-c'),
+                                tokenDocument('unrelatedTokens', 'ignored-user'),
+                            ],
+                        }),
+                    }),
+                };
+            }
+            if (name === 'mcpConnections') {
+                return {
+                    select: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({
+                            docs: [
+                                mcpConnectionDocument('user-a', 'connection-a', { clientId: 'client-a', status: 'active', revokedAtMs: null }),
+                                mcpConnectionDocument('user-b', 'pending-connection-b', { clientId: 'client-b', status: 'pending', lastUsedAtMs: null, revokedAtMs: null }),
+                                mcpConnectionDocument('user-b', 'connection-b', { clientId: 'client-b', status: 'active', revokedAtMs: null }),
+                                mcpConnectionDocument('user-c', 'connection-c', { clientId: 'client-c', status: 'revoked', revokedAtMs: 100 }),
+                                mcpConnectionDocument('user-d', 'legacy-connection-d', { clientId: 'client-d', lastUsedAtMs: 200, revokedAtMs: null }),
+                                mcpConnectionDocument('user-e', 'legacy-connection-e', { clientId: 'client-e', status: 'active', revokedAtMs: null }),
+                                mcpConnectionDocument('user-e', supersedingConnectionId, { clientId: 'client-e', status: 'revoked', revokedAtMs: 100, supersedesLegacy: true }),
+                            ],
+                        }),
+                    }),
+                };
+            }
+            return {};
+        });
+
+        const result = await (getUserCount as any)(request);
+
+        expect(result.connections).toEqual(expect.objectContaining({
+            serviceUsers: 3,
+            mcpUsers: 3,
+            both: 2,
+            providers: {
+                Garmin: 1,
+                Suunto: 1,
+                COROS: 1,
+                Wahoo: 0,
+            },
+            cacheStatus: 'refreshed',
+        }));
+        expect(connectionCacheSet).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'connectionCounts',
+            serviceUsers: 3,
+            mcpUsers: 3,
+            both: 2,
+        }), { merge: true });
     });
 });

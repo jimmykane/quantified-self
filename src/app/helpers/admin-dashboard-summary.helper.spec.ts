@@ -26,6 +26,12 @@ describe('admin-dashboard-summary helper', () => {
             providers: {},
             events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
             routes: { total: 42 },
+            connections: {
+                serviceUsers: 48,
+                mcpUsers: 12,
+                both: 9,
+                providers: { Garmin: 30, Suunto: 12, COROS: 8, Wahoo: 5 },
+            },
         };
 
         const cards = buildAdminDashboardUserKpiCards(
@@ -57,6 +63,18 @@ describe('admin-dashboard-summary helper', () => {
         expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBe(6);
         expect(cards.find(card => card.id === 'scheduled-cancel')?.severity).toBe('warning');
+        expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
+            value: 48,
+            subtitle: '40% of users · Garmin 30 · Suunto 12 · COROS 8 · Wahoo 5',
+        });
+        expect(cards.find(card => card.id === 'mcp-connected-users')).toMatchObject({
+            value: 12,
+            subtitle: 'Active authorization · 10% of users',
+        });
+        expect(cards.find(card => card.id === 'service-and-mcp-users')).toMatchObject({
+            value: 9,
+            subtitle: 'Connected to both · 8% of users',
+        });
     });
 
     it('keeps trend KPI cards present when trend totals are malformed', () => {

@@ -107,6 +107,7 @@ export function buildAdminDashboardUserKpiCards(
 
     const canceled = finiteNumber(stats.canceled);
     const cancelScheduled = finiteNumber(stats.cancelScheduled);
+    const connectionStats = stats.connections;
 
     return [
         numberCard('total-users', 'Total Users', 'people', stats.total),
@@ -116,6 +117,32 @@ export function buildAdminDashboardUserKpiCards(
         numberCard('monthly-paid', 'Monthly Paid', 'calendar_view_month', stats.monthlyPaid),
         numberCard('yearly-paid', 'Yearly Paid', 'calendar_today', stats.yearlyPaid),
         numberCard('onboarded-users', 'Onboarded', 'how_to_reg', stats.onboardingCompleted, 'ok'),
+        ...(connectionStats ? [
+            numberCard(
+                'service-connected-users',
+                'Service Connected',
+                'link',
+                connectionStats.serviceUsers,
+                'ok',
+                connectedServiceSubtitle(connectionStats.serviceUsers, stats.total, connectionStats.providers)
+            ),
+            numberCard(
+                'mcp-connected-users',
+                'MCP Connected',
+                'hub',
+                connectionStats.mcpUsers,
+                'ok',
+                connectedUserShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
+            ),
+            numberCard(
+                'service-and-mcp-users',
+                'Services + MCP',
+                'account_tree',
+                connectionStats.both,
+                'ok',
+                connectedUserShareSubtitle(connectionStats.both, stats.total, 'Connected to both')
+            ),
+        ] : []),
         compactCard('events', 'Events', 'fitness_center', stats.events.total, countUpdatedSubtitle(stats.events.computedAt)),
         compactCard('routes', 'Routes', 'route', stats.routes.total, countUpdatedSubtitle(stats.routes.computedAt)),
         numberCard('ever-paid', 'Ever Paid', 'workspace_premium', stats.everPaid),
@@ -432,6 +459,31 @@ function countUpdatedSubtitle(computedAt: string | null | undefined): string | u
         return undefined;
     }
     return `Updated ${parsedDate.toLocaleString()}`;
+}
+
+function connectedServiceSubtitle(
+    connectedUsers: number | null,
+    totalUsers: number,
+    providers: Record<string, number>,
+): string | undefined {
+    const share = connectedUserShareSubtitle(connectedUsers, totalUsers);
+    const providerSummary = ['Garmin', 'Suunto', 'COROS', 'Wahoo']
+        .map(provider => `${provider} ${normalizeCount(providers[provider])}`)
+        .join(' · ');
+    return [share, providerSummary].filter((value): value is string => Boolean(value)).join(' · ') || undefined;
+}
+
+function connectedUserShareSubtitle(
+    connectedUsers: number | null,
+    totalUsers: number,
+    prefix?: string,
+): string | undefined {
+    if (connectedUsers === null || totalUsers <= 0) {
+        return prefix;
+    }
+
+    const share = Math.round((connectedUsers / totalUsers) * 100);
+    return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
 }
 
 function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {

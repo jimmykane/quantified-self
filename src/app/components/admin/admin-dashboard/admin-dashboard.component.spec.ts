@@ -63,6 +63,12 @@ describe('AdminDashboardComponent', () => {
         providers: { 'google.com': 80 },
         events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
         routes: { total: 42 },
+        connections: {
+            serviceUsers: 65,
+            mcpUsers: 15,
+            both: 12,
+            providers: { Garmin: 35, Suunto: 15, COROS: 10, Wahoo: 5 },
+        },
     };
 
     const mockGrowthTrend: UserGrowthTrendResponse = {
@@ -263,6 +269,10 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Total Users');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');
+        expect(text).toContain('Service Connected');
+        expect(text).toContain('MCP Connected');
+        expect(text).toContain('Services + MCP');
+        expect(text).toContain('Garmin 35');
         expect(text).toContain('Workout');
         expect(text).toContain('Event Reparse');
         expect(text).toContain('Automatic scan: disabled');
