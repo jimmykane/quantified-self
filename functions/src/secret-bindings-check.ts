@@ -14,6 +14,18 @@ export interface ExportedFunctionLike {
 
 export type FunctionSecretBindingPolicy = Record<string, readonly SecretParam[]>;
 
+/** Returns the names of every exported Firebase Function endpoint. */
+export function getExportedFirebaseFunctionNames(
+  functionExports: Record<string, unknown>,
+): string[] {
+  return Object.entries(functionExports)
+    .filter(([, candidate]) => Boolean(
+      (candidate as ExportedFunctionLike | null)?.__endpoint,
+    ))
+    .map(([functionName]) => functionName)
+    .sort();
+}
+
 function getEndpointSecretNames(endpoint: EndpointMetadata): string[] {
   const entries = Array.isArray(endpoint.secretEnvironmentVariables)
     ? endpoint.secretEnvironmentVariables

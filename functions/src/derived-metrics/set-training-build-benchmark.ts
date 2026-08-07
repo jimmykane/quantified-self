@@ -64,7 +64,7 @@ function requireDiscipline(value: unknown): DerivedTrainingDiscipline {
     if (isTrainingDiscipline(value)) {
         return value;
     }
-    throw new HttpsError('invalid-argument', 'discipline must be running, cycling, or swimming.');
+    throw new HttpsError('invalid-argument', 'discipline must be a supported Training sport.');
 }
 
 export function parseTrainingBuildBenchmarkRequest(value: unknown): SetTrainingBuildBenchmarkRequest {

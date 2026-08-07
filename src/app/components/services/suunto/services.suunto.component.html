@@ -66,14 +66,14 @@
       <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
         [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
         @if (isDisconnecting) {
-        <ng-container>
+        <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-warn"></mat-spinner>
           Disconnecting...
-        </ng-container>
+        </span>
         } @else {
-        <ng-container>
+        <span class="connection-action-content">
           <mat-icon>link_off</mat-icon> Disconnect
-        </ng-container>
+        </span>
         }
       </button>
     </div>
@@ -91,15 +91,15 @@
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
-        <ng-container>
+        <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
           Connecting...
-        </ng-container>
+        </span>
         } @else {
-        <ng-container>
+        <span class="connection-action-content">
           <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
           {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
-        </ng-container>
+        </span>
         }
       </button>
       }
@@ -234,15 +234,15 @@
             [disabled]="isQueueingRoutes"
             (click)="queueRoutesFromSuunto($event)">
             @if (isQueueingRoutes) {
-            <ng-container>
+            <span class="service-action-content">
               <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
               Starting import...
-            </ng-container>
+            </span>
             } @else {
-            <ng-container>
+            <span class="service-action-content">
               <mat-icon>playlist_add</mat-icon>
               Import existing routes
-            </ng-container>
+            </span>
             }
           </button>
         </div>
@@ -283,14 +283,14 @@
           [disabled]="isQueueingRouteDeliverySyncBackfill || !canQueueSuuntoToGarminRouteBackfill"
           (click)="queueSuuntoToGarminRouteDelivery($event)">
           @if (isQueueingRouteDeliverySyncBackfill) {
-          <ng-container>
+          <span class="service-action-content">
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
             Starting route send...
-          </ng-container>
+          </span>
           } @else {
-          <ng-container>
+          <span class="service-action-content">
             Send routes
-          </ng-container>
+          </span>
           }
         </button>
 
@@ -348,14 +348,14 @@
           [disabled]="isQueueingWahooRouteDeliverySyncBackfill || !canQueueSuuntoToWahooRouteBackfill"
           (click)="queueSuuntoToWahooRouteDelivery($event)">
           @if (isQueueingWahooRouteDeliverySyncBackfill) {
-          <ng-container>
+          <span class="service-action-content">
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
             Starting route send...
-          </ng-container>
+          </span>
           } @else {
-          <ng-container>
+          <span class="service-action-content">
             Send routes
-          </ng-container>
+          </span>
           }
         </button>
 

@@ -1,11 +1,11 @@
 <section class="assistant-visual-detail">
   <header>
     <span class="visual-icon" aria-hidden="true">
-      <mat-icon>{{ data.visual.kind === 'chart' ? 'monitoring' : 'satellite_alt' }}</mat-icon>
+      <mat-icon>{{ data.visual.kind === 'chart' ? 'monitoring' : 'map' }}</mat-icon>
     </span>
     <div>
       <h2>{{ data.visual.title }}</h2>
-      <p>{{ data.visual.kind === 'chart' ? 'Interactive chart' : 'Satellite map' }}</p>
+      <p>{{ data.visual.kind === 'chart' ? 'Interactive chart' : 'Assistant map style' }}</p>
     </div>
     <button mat-icon-button type="button" aria-label="Close visual" (click)="close()">
       <mat-icon>close</mat-icon>
@@ -23,7 +23,8 @@
   @if (data.visual.kind === 'map') {
     <p class="map-disclosure">
       <mat-icon aria-hidden="true">privacy_tip</mat-icon>
-      Viewing this map sends the displayed map area to Mapbox for satellite tiles.
+      Use the layers button to switch style. Saved only for Assistant maps.
+      Viewing this map sends the displayed map area to Mapbox for map tiles.
     </p>
   }
 </section>

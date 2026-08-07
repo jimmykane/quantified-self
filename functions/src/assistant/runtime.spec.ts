@@ -1039,6 +1039,61 @@ describe('Assistant runtime', () => {
     });
   });
 
+  it('passes the validated tool input into deterministic visual projection', async () => {
+    const activityRef = 'opaque-record-activity-reference';
+    const close = vi.fn().mockResolvedValue(undefined);
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        items: [{
+          index: 0,
+          timestampMs: 624_000,
+          distanceMeters: 10.41,
+        }],
+        nextCursor: null,
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use jump details.',
+      tools: [{
+        name: 'list_activity_jumps',
+        title: 'List activity jumps',
+        description: 'Return jump records.',
+        inputSchema: {
+          type: 'object',
+          properties: { activityRef: { type: 'string' } },
+          required: ['activityRef'],
+        },
+      }],
+      callTool,
+      close,
+    };
+    const createVisualSource = vi.fn().mockReturnValue(null);
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      createVisualSource,
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({ activityRef });
+        return 'Your record jump was 10.41 metres.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Where was my record jump?',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(createVisualSource).toHaveBeenCalledWith(
+      'list_activity_jumps',
+      expect.any(Object),
+      'source_1',
+      'Europe/Helsinki',
+      { activityRef },
+    );
+  });
+
   it('does not add a timezone to unbounded activity discovery', async () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const callTool = vi.fn().mockResolvedValue({
@@ -1221,7 +1276,7 @@ describe('Assistant runtime', () => {
           generatedAtMs: endTimeMs,
         },
         averageHrvMs: 42,
-        timestampMs: 320,
+        timestampMs: 320_000,
       },
     });
     const runtime = createAssistantRuntime({
@@ -1236,7 +1291,7 @@ describe('Assistant runtime', () => {
             generatedAt: '2026-07-31T14:30:45.000Z',
           },
           averageHrvMs: 42,
-          timestampMs: 320,
+          elapsedTimeSeconds: 320,
         });
         return 'The activity started on July 31, 2026.';
       },

@@ -70,6 +70,8 @@ interface DeviceNameDisplayItem {
   trackKey: string;
 }
 
+export type EventTablePresentation = 'dashboard' | 'browse';
+
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
@@ -87,6 +89,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() events!: EventInterface[];
   @Input() targetUser!: User;
   @Input() showActions!: boolean;
+  @Input() presentation: EventTablePresentation = 'dashboard';
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
@@ -145,6 +148,31 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     super(changeDetector);
   }
 
+  get isBrowsePresentation(): boolean {
+    return this.presentation === 'browse';
+  }
+
+  get showToolbar(): boolean {
+    return !this.isBrowsePresentation;
+  }
+
+  get canManageEvents(): boolean {
+    return !this.isBrowsePresentation && !!this.showActions;
+  }
+
+  get tableSortActive(): string {
+    return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
+  }
+
+  get tableSortDirection(): 'asc' | 'desc' {
+    return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
+  }
+
+  get tablePageSize(): number {
+    const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
+    return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
+  }
+
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
     this.isLoading ? this.loading() : this.loaded();
@@ -164,7 +192,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       this.updateDisplayedColumns();
     }
-    if (simpleChanges.showActions) {
+    if (simpleChanges.showActions || simpleChanges.presentation) {
+      if (this.isBrowsePresentation) {
+        this.searchTerm = '';
+        this.tagFilter = '';
+        this.selection.clear();
+        this.applyTableFilter();
+      }
       this.updateDisplayedColumns();
     }
   }
@@ -229,6 +263,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return terms.some(term => rowText.includes(term));
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
+      if (this.isBrowsePresentation) {
+        return;
+      }
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
       if (!tableSettings) {
         return;
@@ -768,9 +805,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const remainingSelectedColumns = activityTypeColumn
       ? sortedSelectedColumns.filter(column => column !== activityTypeColumn)
       : sortedSelectedColumns;
+    const tagColumn = this.isBrowsePresentation ? [] : ['Tags'];
     const dataColumns = this.isHandset
-      ? [...(activityTypeColumn ? [activityTypeColumn] : []), 'Tags', ...remainingSelectedColumns]
-      : [...sortedSelectedColumns, 'Tags'];
+      ? [...(activityTypeColumn ? [activityTypeColumn] : []), ...tagColumn, ...remainingSelectedColumns]
+      : [...sortedSelectedColumns, ...tagColumn];
 
     const columns = [
       'Checkbox',
@@ -781,7 +819,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       'Actions',
     ];
 
-    this.displayedColumns = this.showActions
+    this.displayedColumns = this.canManageEvents
       ? columns
       : columns.filter(column => column !== 'Checkbox' && column !== 'Shared' && column !== 'Actions');
   }
@@ -810,6 +848,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.isBrowsePresentation) {
+      return;
+    }
     // @important This is nasty because it's called if anything almost changes
     if (this.user.settings?.dashboardSettings?.tableSettings) {
       if (this.user.settings.dashboardSettings.tableSettings.eventsPerPage === pageEvent.pageSize) {
@@ -1004,6 +1045,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async selectedColumnsChange(event: string[]) {
+    if (this.isBrowsePresentation) {
+      return;
+    }
     this.selectedColumns = event
     this.updateDisplayedColumns();
     this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns

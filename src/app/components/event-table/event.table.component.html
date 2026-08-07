@@ -1,5 +1,6 @@
 <!-- Table Section -->
 <div class="qs-glass-card-panel table-container">
+  @if (showToolbar) {
   <div class="table-toolbar">
     <div class="table-toolbar-main">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
@@ -27,7 +28,7 @@
       </div>
     </div>
 
-    @if (showActions && selection.selected.length > 0) {
+    @if (canManageEvents && selection.selected.length > 0) {
       <div class="table-selection-toolbar" aria-live="polite">
         <div class="selection-summary">
           <mat-icon>check_circle</mat-icon>
@@ -110,29 +111,30 @@
       </div>
     }
   </div>
+  }
 
   <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
     [errorMessage]="'No events yet'" [errorHint]="'Import activities or adjust filters to see rows'"
     [errorIcon]="'table_rows'" [showSkeleton]="false" height="auto" borderRadius="12px">
     <div class="table-wrapper qs-scrollbar">
-      <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
-        [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
+      <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
+        [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
         <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
-          @if (isFirst && showActions) {
+          @if (isFirst && canManageEvents) {
           <th mat-header-cell *matHeaderCellDef>
             <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
               [indeterminate]="selection.hasValue() && !isAllSelected()">
             </mat-checkbox>
           </th>
           }
-          @if (isLast && showActions) {
+          @if (isLast && canManageEvents) {
           <th mat-header-cell *matHeaderCellDef>
             <app-event-table-actions [selectedDataTypes]="selectedColumns"
               (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
           </th>
           }
-          @if ((!(isFirst && showActions) && !(isLast && showActions))) {
+          @if ((!(isFirst && canManageEvents) && !(isLast && canManageEvents))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
@@ -178,7 +180,7 @@
             </span>
             }
             @if (column === 'Tags') {
-            @if (showActions) {
+            @if (canManageEvents) {
             <button mat-button type="button" class="event-tags-cell-button"
               [matTooltip]="row['Tags Title']" [matTooltipDisabled]="!row['Tags Title']"
               [attr.aria-label]="row['Tag Action Label']"
@@ -260,7 +262,7 @@
     </div>
 
     <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-      [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
+      [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
       [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
   </app-loading-overlay>
 </div>

@@ -93,6 +93,25 @@ describe('Assistant tool input boundary', () => {
     });
   });
 
+  it('canonicalizes a user-friendly Enduro context for aggregate metric queries', () => {
+    expect(normalizeAssistantToolInput('query_metric', {
+      metric: 'distance',
+      activityTypes: ['Enduro'],
+      start: '2026-01-01',
+      end: '2026-08-07',
+      aggregation: 'total',
+      groupBy: 'date',
+      interval: 'weekly',
+    }, 'Europe/Helsinki')).toMatchObject({
+      metric: 'Distance',
+      activityTypes: ['Enduro MTB'],
+      aggregation: 'total',
+      groupBy: 'date',
+      interval: 'weekly',
+      timeZone: 'Europe/Helsinki',
+    });
+  });
+
   it('normalizes local date-only ranges without adding a timezone to activity tools', () => {
     expect(normalizeAssistantToolInput('query_activities', {
       start: '2026-03-29',

@@ -1,0 +1,35 @@
+<section class="activity-range-table-section" [attr.aria-busy]="isLoading()">
+  <header class="activity-range-table-section-header">
+    <div>
+      <h2>{{ heading() }}</h2>
+      @if (periodLabel()) {
+      <span>{{ periodLabel() }}</span>
+      }
+    </div>
+  </header>
+
+  @if (isLoading()) {
+  <div class="activity-range-table-state activity-range-table-state--loading" role="status">
+    <mat-progress-bar mode="indeterminate" aria-label="Loading activities"></mat-progress-bar>
+    <span>Loading activities</span>
+  </div>
+  } @else if (hasError()) {
+  <div class="activity-range-table-state activity-range-table-state--error" role="alert">
+    <mat-icon aria-hidden="true">error_outline</mat-icon>
+    <span>{{ resolvedErrorMessage() }}</span>
+    <button mat-stroked-button type="button" (click)="retry()">
+      <mat-icon aria-hidden="true">refresh</mat-icon>
+      <span>Retry</span>
+    </button>
+  </div>
+  } @else if (isReady() && events().length === 0) {
+  <div class="activity-range-table-state activity-range-table-state--empty">
+    <mat-icon aria-hidden="true">table_rows</mat-icon>
+    <span>{{ resolvedEmptyMessage() }}</span>
+  </div>
+  } @else if (isReady() && user(); as user) {
+  <app-event-table presentation="browse" [user]="user" [targetUser]="targetUser() || user"
+    [events]="events()" [showActions]="false" [isLoading]="false">
+  </app-event-table>
+  }
+</section>

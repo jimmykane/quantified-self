@@ -95,4 +95,10 @@
     </section>
     }
   }
+
+  @if (currentUser(); as user) {
+  <app-activity-range-table-section [user]="user" [range]="primaryActivityRange()" heading="Activities"
+    [periodLabel]="calendarModel().periodLabel">
+  </app-activity-range-table-section>
+  }
 </main>

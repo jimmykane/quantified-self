@@ -95,6 +95,7 @@ import {
     type DerivedTrainingPowerSystemsMetricPayload,
     type DerivedTrainingPowerSystemsSnapshot,
     type DerivedTrainingBuildDurabilityComparison,
+    type DerivedTrainingContextSummary,
     type DerivedTrainingDiscipline,
     type DerivedTrainingDisciplineSummary,
     type DerivedTrainingBuildBenchmarkReference,
@@ -156,9 +157,16 @@ import {
     type SleepProvider,
 } from '../../../shared/sleep';
 import {
+    createTrainingSportRecord,
+    getTrainingProfileMetricDefinition,
+    getTrainingSportDefinition,
     POWER_CAPACITY_DISCIPLINES,
     TRAINING_DISCIPLINES,
+    TRAINING_SPORT_CONTEXT_IDS,
     resolveTrainingDisciplineFromActivityType,
+    resolveTrainingSportContextFromActivityType,
+    type ResolvedTrainingSportContext,
+    type TrainingProfileMetricId,
 } from '../../../shared/training-disciplines';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import { getEventTags } from '../../../shared/event-tags';
@@ -1114,6 +1122,19 @@ interface TrainingSummaryWindowAccumulator {
     easySeconds: number;
     moderateSeconds: number;
     hardSeconds: number;
+    contexts: Map<string, TrainingContextAccumulator>;
+}
+
+interface TrainingProfileMetricAccumulator {
+    total: number;
+    weight: number;
+    sourceActivityCount: number;
+}
+
+interface TrainingContextAccumulator {
+    context: ResolvedTrainingSportContext;
+    activityCount: number;
+    metrics: Map<TrainingProfileMetricId, TrainingProfileMetricAccumulator>;
 }
 
 interface TrainingSummaryDisciplineAccumulator {
@@ -1128,6 +1149,7 @@ function createTrainingSummaryWindowAccumulator(): TrainingSummaryWindowAccumula
         easySeconds: 0,
         moderateSeconds: 0,
         hardSeconds: 0,
+        contexts: new Map<string, TrainingContextAccumulator>(),
     };
 }
 
@@ -1136,6 +1158,135 @@ function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDiscipline
         current: createTrainingSummaryWindowAccumulator(),
         baseline: createTrainingSummaryWindowAccumulator(),
     };
+}
+
+function resolveTrainingProfileMetricObservation(
+    eventData: Record<string, unknown>,
+    metric: TrainingProfileMetricId,
+): { value: number; weight: number } | null {
+    const definition = getTrainingProfileMetricDefinition(metric);
+    if (!definition) {
+        return null;
+    }
+
+    if (definition.aggregation === 'distance-weighted-pace') {
+        const distanceMeters = getTrainingProfileMetricDefinition('distance')?.statTypes
+            .map(statType => toFinitePositiveNumber(resolveRawStatNumericValue(eventData, statType)))
+            .find(value => value !== null)
+            ?? null;
+        const movingTimeDefinition = getTrainingProfileMetricDefinition('moving-time');
+        const durationSeconds = movingTimeDefinition?.statTypes
+            .map(statType => toFinitePositiveNumber(resolveRawStatNumericValue(eventData, statType)))
+            .find(value => value !== null)
+            ?? (() => {
+                const startMs = toMillis(eventData.startDate);
+                const endMs = toMillis(eventData.endDate);
+                return startMs !== null && endMs !== null && endMs > startMs
+                    ? (endMs - startMs) / 1000
+                    : null;
+            })();
+        return distanceMeters !== null && durationSeconds !== null
+            ? { value: (durationSeconds / distanceMeters) * 500, weight: distanceMeters }
+            : null;
+    }
+
+    if (metric === 'elapsed-time') {
+        const [elapsedTimeType, durationType] = definition.statTypes;
+        const elapsedSeconds = elapsedTimeType
+            ? toFinitePositiveNumber(resolveRawStatNumericValue(eventData, elapsedTimeType))
+            : null;
+        if (elapsedSeconds !== null) {
+            return { value: elapsedSeconds, weight: 1 };
+        }
+        const startMs = toMillis(eventData.startDate);
+        const endMs = toMillis(eventData.endDate);
+        if (startMs !== null && endMs !== null && endMs > startMs) {
+            return { value: (endMs - startMs) / 1000, weight: 1 };
+        }
+        const durationSeconds = durationType
+            ? toFinitePositiveNumber(resolveRawStatNumericValue(eventData, durationType))
+            : null;
+        return durationSeconds === null ? null : { value: durationSeconds, weight: 1 };
+    }
+
+    const value = definition.statTypes
+        .map(statType => toFiniteNumber(resolveRawStatNumericValue(eventData, statType)))
+        .find(candidate => candidate !== null && candidate >= 0);
+    return value === undefined || value === null
+        ? null
+        : { value, weight: 1 };
+}
+
+function addTrainingContextMetrics(
+    contexts: Map<string, TrainingContextAccumulator>,
+    eventData: Record<string, unknown>,
+    context: ResolvedTrainingSportContext,
+): void {
+    const accumulator = contexts.get(context.context) || {
+        context,
+        activityCount: 0,
+        metrics: new Map<TrainingProfileMetricId, TrainingProfileMetricAccumulator>(),
+    };
+    accumulator.activityCount += 1;
+    context.profileMetrics.forEach((metric) => {
+        const definition = getTrainingProfileMetricDefinition(metric);
+        const observation = resolveTrainingProfileMetricObservation(eventData, metric);
+        if (!definition || !observation) {
+            return;
+        }
+        const metricAccumulator = accumulator.metrics.get(metric) || {
+            total: 0,
+            weight: 0,
+            sourceActivityCount: 0,
+        };
+        if (definition.aggregation === 'maximum') {
+            metricAccumulator.total = metricAccumulator.sourceActivityCount === 0
+                ? observation.value
+                : Math.max(metricAccumulator.total, observation.value);
+        } else {
+            metricAccumulator.total += definition.aggregation === 'sum'
+                ? observation.value
+                : observation.value * observation.weight;
+        }
+        metricAccumulator.weight += observation.weight;
+        metricAccumulator.sourceActivityCount += 1;
+        accumulator.metrics.set(metric, metricAccumulator);
+    });
+    contexts.set(context.context, accumulator);
+}
+
+function buildTrainingContextSummaries(
+    contexts: Map<string, TrainingContextAccumulator>,
+    normalizationFactor = 1,
+): DerivedTrainingContextSummary[] {
+    return [...contexts.values()]
+        .sort((left, right) => TRAINING_SPORT_CONTEXT_IDS.indexOf(left.context.context)
+            - TRAINING_SPORT_CONTEXT_IDS.indexOf(right.context.context))
+        .map((context) => ({
+            context: context.context.context,
+            profile: context.context.profile,
+            activityCount: toRoundedNumber(context.activityCount * normalizationFactor, 2),
+            metrics: context.context.profileMetrics.flatMap((metric) => {
+                const definition = getTrainingProfileMetricDefinition(metric);
+                const accumulator = context.metrics.get(metric);
+                if (!definition || !accumulator || accumulator.sourceActivityCount === 0) {
+                    return [];
+                }
+                const value = definition.aggregation === 'sum'
+                    ? accumulator.total * normalizationFactor
+                    : definition.aggregation === 'maximum'
+                        ? accumulator.total
+                        : accumulator.total / accumulator.weight;
+                return [{
+                    metric,
+                    value: toRoundedNumber(value, 2),
+                    sourceActivityCount: toRoundedNumber(
+                        accumulator.sourceActivityCount * normalizationFactor,
+                        2,
+                    ),
+                }];
+            }),
+        }));
 }
 
 export function joinTrainingActivitySources(
@@ -2021,6 +2172,7 @@ function buildTrainingSummaryWindow(
         easySeconds: toRoundedNumber(accumulator.easySeconds * normalizationFactor, 2),
         moderateSeconds: toRoundedNumber(accumulator.moderateSeconds * normalizationFactor, 2),
         hardSeconds: toRoundedNumber(accumulator.hardSeconds * normalizationFactor, 2),
+        contexts: buildTrainingContextSummaries(accumulator.contexts, normalizationFactor),
     };
 }
 
@@ -2032,11 +2184,7 @@ export function buildTrainingSummaryMetricPayload(
     const currentStartDayMs = asOfDayMs - ((TRAINING_SUMMARY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
     const baselineEndDayMs = currentStartDayMs - DAY_MS;
     const baselineStartDayMs = baselineEndDayMs - ((TRAINING_SUMMARY_BASELINE_WINDOW_DAYS - 1) * DAY_MS);
-    const accumulators: Record<DerivedTrainingDiscipline, TrainingSummaryDisciplineAccumulator> = {
-        running: createTrainingSummaryDisciplineAccumulator(),
-        cycling: createTrainingSummaryDisciplineAccumulator(),
-        swimming: createTrainingSummaryDisciplineAccumulator(),
-    };
+    const accumulators = createTrainingSportRecord(() => createTrainingSummaryDisciplineAccumulator());
     let sourceEventCount = 0;
 
     activities.forEach((activity) => {
@@ -2052,16 +2200,20 @@ export function buildTrainingSummaryMetricPayload(
 
         const accumulator = accumulators[discipline];
         const window = eventDayMs >= currentStartDayMs ? accumulator.current : accumulator.baseline;
+        const context = resolveTrainingSportContextFromActivityType(eventData.type);
         const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
         const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-        const zones = powerZones.reduce((sum, value) => sum + value, 0) > 0
-            ? powerZones
-            : heartRateZones;
+        const zones = context?.intensityPolicy === 'zones'
+            ? (powerZones.reduce((sum, value) => sum + value, 0) > 0 ? powerZones : heartRateZones)
+            : [];
         window.activityCount += 1;
         window.durationSeconds += toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type)) || 0;
         window.easySeconds += (zones[0] || 0) + (zones[1] || 0);
         window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
         window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+        if (context) {
+            addTrainingContextMetrics(window.contexts, eventData, context);
+        }
 
         sourceEventCount += 1;
     });
@@ -2101,9 +2253,7 @@ interface TrainingExplanationParentEvent {
 }
 
 const TRAINING_EXPLANATION_SPORT_BUCKETS: readonly DerivedTrainingExplanationSportBucket[] = [
-    'running',
-    'cycling',
-    'swimming',
+    ...TRAINING_DISCIPLINES,
     'other',
     'unclassified',
 ];
@@ -2143,15 +2293,13 @@ function resolveTrainingExplanationSportBucket(activityType: unknown): DerivedTr
 }
 
 function getTrainingExplanationSportLabel(bucket: DerivedTrainingExplanationSportBucket): string {
-    return bucket === 'running'
-        ? 'Running'
-        : bucket === 'cycling'
-            ? 'Cycling'
-            : bucket === 'swimming'
-                ? 'Swimming'
-                : bucket === 'other'
-                    ? 'Other'
-                    : 'Unclassified';
+    if (bucket === 'other') {
+        return 'Other';
+    }
+    if (bucket === 'unclassified') {
+        return 'Unclassified';
+    }
+    return getTrainingSportDefinition(bucket)?.label || bucket;
 }
 
 function buildTrainingExplanationCoverage(
@@ -2249,7 +2397,7 @@ function buildTrainingExplanationSportLoads(
         const bucket = resolveTrainingExplanationSportBucket(activity.activityData.type);
         const accumulator = accumulators.get(bucket)!;
         accumulator.activityCount += 1;
-        const load = resolveTrainingStressScore(activity.activityData);
+        const load = resolveTrainingExplanationActivityLoad(activity);
         if (load !== null) {
             accumulator.loadActivityCount += 1;
             accumulator.trainingStressScore += load;
@@ -2276,6 +2424,15 @@ function buildTrainingExplanationSportLoads(
     });
 }
 
+function resolveTrainingExplanationActivityLoad(
+    activity: DerivedTrainingActivitySource,
+): number | null {
+    const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
+    return sportContext?.loadPolicy === 'volume-only'
+        ? null
+        : resolveTrainingStressScore(activity.activityData);
+}
+
 function buildTrainingExplanationWindow(
     parentEvents: readonly TrainingExplanationParentEvent[],
     activities: readonly DerivedTrainingActivitySource[],
@@ -2293,7 +2450,7 @@ function buildTrainingExplanationWindow(
         return load === null ? [] : [load];
     });
     const childLoads = windowActivities.flatMap((activity) => {
-        const load = resolveTrainingStressScore(activity.activityData);
+        const load = resolveTrainingExplanationActivityLoad(activity);
         return load === null ? [] : [load];
     });
     const classifiedActivityCount = windowActivities.filter(
@@ -2524,6 +2681,15 @@ function parsePersistedDurabilityEvidence(
     if (!raw) {
         return null;
     }
+    const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
+    if (
+        (sportContext?.profile === 'gravity' || sportContext?.profile === 'mixed-gravity')
+        && (raw.eligibility.eligible || raw.eligibility.reason !== 'unsupported-context')
+    ) {
+        // Sports Lib previously applied the steady cycling adapter to every MTB
+        // type. Do not surface that legacy gravity evidence while reparsing.
+        return null;
+    }
     const evidence = raw.evidence
         ? raw.evidence as unknown as Record<string, unknown>
         : {};
@@ -2578,7 +2744,10 @@ function summarizeDurabilityContext(
 export function aggregatePersistedTrainingDurability(
     activities: readonly DerivedTrainingActivitySource[],
 ): DerivedTrainingDurabilityWindowMetrics {
-    const candidateActivities = activities.filter(isClassifiedTrainingActivitySource);
+    const candidateActivities = activities.filter((activity): activity is ClassifiedTrainingActivitySource => (
+        isClassifiedTrainingActivitySource(activity)
+        && resolveTrainingDurabilityScope(activity) !== null
+    ));
     const parsedByActivity = candidateActivities.map(activity => ({
         activity,
         parsed: parsePersistedDurabilityEvidence(activity),
@@ -2776,7 +2945,7 @@ export function buildTrainingDurabilityMetricPayload(
         - (((TRAINING_DURABILITY_BASELINE_BLOCK_COUNT + 1) * TRAINING_DURABILITY_WINDOW_DAYS - 1) * DAY_MS);
     return {
         sourceEventCount: activities.filter(
-            activity => isClassifiedTrainingActivitySource(activity)
+            activity => resolveTrainingDurabilityScope(activity) !== null
                 && activity.startMs <= nowMs
                 && activity.startDayMs >= earliestBaselineDayMs,
         ).length,
@@ -2813,6 +2982,7 @@ interface TrainingBuildWindowAccumulator {
     openWaterWeightedPaceSeconds: number;
     openWaterPaceDistanceMeters: number;
     openWaterPaceActivityCount: number;
+    contexts: Map<string, TrainingContextAccumulator>;
 }
 
 type ResolvedTrainingBuildEvent = ClassifiedTrainingActivitySource;
@@ -2840,6 +3010,7 @@ function createTrainingBuildWindowAccumulator(): TrainingBuildWindowAccumulator 
         openWaterWeightedPaceSeconds: 0,
         openWaterPaceDistanceMeters: 0,
         openWaterPaceActivityCount: 0,
+        contexts: new Map<string, TrainingContextAccumulator>(),
     };
 }
 
@@ -2924,6 +3095,7 @@ function addTrainingBuildEventToWindow(
     windowStartDayMs: number,
 ): void {
     const { activityData: eventData, startDayMs } = event;
+    const sportContext = resolveTrainingSportContextFromActivityType(eventData.type);
     accumulator.activityCount += 1;
     accumulator.activeWeekBuckets.add(Math.floor((startDayMs - windowStartDayMs) / (7 * DAY_MS)));
 
@@ -2936,18 +3108,22 @@ function addTrainingBuildEventToWindow(
         );
     }
 
-    const distanceMeters = toFiniteNumber(resolveRawStatNumericValue(
-        eventData,
-        event.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
-    )) ?? (event.discipline === 'swimming'
-        ? toFiniteNumber(resolveRawStatNumericValue(eventData, DataDistance.type))
-        : null);
+    const distanceMeters = sportContext?.distancePolicy === 'omit'
+        ? null
+        : toFiniteNumber(resolveRawStatNumericValue(
+            eventData,
+            event.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
+        )) ?? (event.discipline === 'swimming'
+            ? toFiniteNumber(resolveRawStatNumericValue(eventData, DataDistance.type))
+            : null);
     if (distanceMeters !== null && distanceMeters >= 0) {
         accumulator.distanceMeters += distanceMeters;
         accumulator.distanceEventCount += 1;
     }
 
-    const trainingStressScore = resolveTrainingStressScore(eventData);
+    const trainingStressScore = sportContext?.loadPolicy === 'recorded'
+        ? resolveTrainingStressScore(eventData)
+        : null;
     if (trainingStressScore !== null && trainingStressScore >= 0) {
         accumulator.trainingStressScore += trainingStressScore;
         accumulator.trainingStressScoreEventCount += 1;
@@ -2957,7 +3133,9 @@ function addTrainingBuildEventToWindow(
     const powerZoneTotal = powerZones.reduce((sum, value) => sum + value, 0);
     const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
     const heartRateZoneTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
-    const zones = powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null);
+    const zones = sportContext?.intensityPolicy === 'zones'
+        ? (powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null))
+        : null;
     if (zones) {
         accumulator.easySeconds += (zones[0] || 0) + (zones[1] || 0);
         accumulator.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
@@ -2978,6 +3156,9 @@ function addTrainingBuildEventToWindow(
                 accumulator.poolPaceActivityCount += 1;
             }
         }
+    }
+    if (sportContext) {
+        addTrainingContextMetrics(accumulator.contexts, eventData, sportContext);
     }
 }
 
@@ -3025,6 +3206,7 @@ function buildTrainingBuildWindow(
             ? toRoundedNumber(accumulator.openWaterWeightedPaceSeconds / accumulator.openWaterPaceDistanceMeters, 2)
             : null,
         openWaterPaceActivityCount: accumulator.openWaterPaceActivityCount,
+        contexts: buildTrainingContextSummaries(accumulator.contexts),
     };
 }
 
@@ -3073,15 +3255,24 @@ function buildTrainingBuildEventSuggestion(
         const available = values.filter((value): value is number => value !== null && value >= 0);
         return available.length ? available.reduce((sum, value) => sum + value, 0) : null;
     };
-    const distanceMeters = sumOptional(events.map(item => (
-        toFiniteNumber(resolveRawStatNumericValue(
+    const distanceMeters = sumOptional(events.map((item) => {
+        const sportContext = resolveTrainingSportContextFromActivityType(item.activityData.type);
+        if (sportContext?.distancePolicy === 'omit') {
+            return null;
+        }
+        return toFiniteNumber(resolveRawStatNumericValue(
             item.activityData,
             item.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
         )) ?? (item.discipline === 'swimming'
             ? toFiniteNumber(resolveRawStatNumericValue(item.activityData, DataDistance.type))
-            : null)
-    )));
-    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.activityData)));
+            : null);
+    }));
+    const trainingStressScore = sumOptional(events.map((item) => {
+        const sportContext = resolveTrainingSportContextFromActivityType(item.activityData.type);
+        return sportContext?.loadPolicy === 'recorded'
+            ? resolveTrainingStressScore(item.activityData)
+            : null;
+    }));
     const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.activityData)));
     return {
         eventId: event.eventId,
@@ -3822,11 +4013,7 @@ function buildTrainingRecoveryComparison(
 function groupTrainingBuildActivitiesByDiscipline(
     activities: readonly DerivedTrainingActivitySource[],
 ): Record<DerivedTrainingDiscipline, ResolvedTrainingBuildEvent[]> {
-    const grouped: Record<DerivedTrainingDiscipline, ResolvedTrainingBuildEvent[]> = {
-        running: [],
-        cycling: [],
-        swimming: [],
-    };
+    const grouped = createTrainingSportRecord<ResolvedTrainingBuildEvent[]>(() => []);
     activities.forEach((activity) => {
         if (isClassifiedTrainingActivitySource(activity)) {
             grouped[activity.discipline].push(activity);

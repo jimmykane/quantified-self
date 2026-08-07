@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDashboardBucketDateByInterval,
   formatDashboardAxisNumericValue,
+  formatDashboardAxisNumericValueWithoutUnit,
   formatDashboardDataDisplay,
   formatDashboardDateByInterval,
   formatDashboardDateRange,
@@ -26,7 +27,8 @@ import {
   getDashboardAxisDateFormat,
   getDashboardChartDateFormat,
   getDashboardChartSortComparator,
-  getDashboardSummaryMetaLabel
+  getDashboardSummaryMetaLabel,
+  resolveDashboardAxisDisplayUnit,
 } from './dashboard-chart-data.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
@@ -178,6 +180,14 @@ describe('dashboard-chart-data.helper', () => {
     );
 
     expect(value).toBe('6.22 mi');
+    expect(formatDashboardNumericValue(
+      DataDistance.type,
+      10000,
+      undefined,
+      normalizeUserUnitSettings({
+        distanceUnits: DistanceUnits.Kilometers,
+      }),
+    )).toBe('10.00 km');
   });
 
   it('should format distance axis values with a stable compact unit', () => {
@@ -202,6 +212,53 @@ describe('dashboard-chart-data.helper', () => {
       normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
       20000,
     )).toBe('6.22 mi');
+  });
+
+  it('should expose reusable axis units and unit-free labels for compact charts', () => {
+    const metric = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Kilometers,
+    });
+    const imperial = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    });
+
+    expect(resolveDashboardAxisDisplayUnit(DataDistance.type, 70_000, metric)).toBe('km');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      70_000,
+      undefined,
+      metric,
+      70_000,
+    )).toBe('70');
+    expect(resolveDashboardAxisDisplayUnit(DataDistance.type, 700, metric)).toBe('m');
+    expect(resolveDashboardAxisDisplayUnit(DataDistance.type, 70_000, imperial)).toBe('mi');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      70_000,
+      undefined,
+      imperial,
+      70_000,
+    )).toBe('43.5');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      70_000,
+      undefined,
+      metric,
+    )).toBe('70');
+    expect(formatDashboardAxisNumericValue(
+      DataDistance.type,
+      1_000,
+      undefined,
+      metric,
+      999,
+    )).toBe('1,000 m');
+    expect(formatDashboardAxisNumericValueWithoutUnit(
+      DataDistance.type,
+      1_000,
+      undefined,
+      metric,
+      999,
+    )).toBe('1,000');
   });
 
   it('should format ascent and descent axis values without misreading grouped meters as decimals', () => {

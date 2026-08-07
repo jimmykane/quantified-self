@@ -64,10 +64,10 @@
                   <article class="assistant-visual-card">
                     <header>
                       <span class="assistant-visual-heading">
-                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'satellite_alt' }}</mat-icon>
+                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'map' }}</mat-icon>
                         <span>
                           <strong>{{ visual.title }}</strong>
-                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Satellite map' }}</small>
+                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Assistant map style' }}</small>
                         </span>
                       </span>
                       <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
@@ -89,7 +89,8 @@
                         </button>
                       }
                       <p class="assistant-map-disclosure">
-                        Viewing sends the displayed map area to Mapbox for satellite tiles.
+                        Use the layers button to switch style. Saved only for Assistant maps.
+                        Viewing sends the displayed map area to Mapbox for map tiles.
                       </p>
                     }
                   </article>
@@ -174,24 +175,19 @@
           </section>
         }
         <section class="composer-shell">
-          <form class="composer" (submit)="handleComposerSubmit($event)">
+          <form class="composer" [class.composer-sending]="sending()" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-            <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
-              [attr.aria-label]="sending() ? 'Assistant is responding' : 'Send message'">
-              <span class="composer-submit-content">
-                @if (sending()) {
-                  <span class="composer-progress" aria-hidden="true">
-                    <mat-spinner diameter="18" strokeWidth="3"></mat-spinner>
-                  </span>
-                } @else {
+            @if (!sending()) {
+              <button mat-icon-button class="composer-submit" type="submit"
+                [disabled]="quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+                <span class="composer-submit-content">
                   <mat-icon>arrow_upward</mat-icon>
-                }
-              </span>
-            </button>
+                </span>
+              </button>
+            }
           </form>
           <div class="composer-footer">
             <span>{{ quotaText() }}</span>

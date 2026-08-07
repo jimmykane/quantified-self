@@ -18,6 +18,7 @@ import {
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
   resolveActivityCalendarEventLabel,
+  resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
 } from './activity-calendar.helper';
 
@@ -70,6 +71,20 @@ describe('activity-calendar helper', () => {
     expect(new Date(week.endExclusiveMs)).toEqual(new Date(2026, 7, 10));
     expect(new Date(month.startMs)).toEqual(new Date(2026, 6, 27));
     expect(new Date(month.endExclusiveMs)).toEqual(new Date(2026, 8, 7));
+    expect(new Date(year.startMs)).toEqual(new Date(2026, 0, 1));
+    expect(new Date(year.endExclusiveMs)).toEqual(new Date(2027, 0, 1));
+  });
+
+  it('resolves primary table ranges without adjacent month-grid dates', () => {
+    const anchor = new Date(2026, 7, 5, 14, 0);
+    const week = resolveActivityCalendarPrimaryRange('week', anchor, DaysOfTheWeek.Sunday);
+    const month = resolveActivityCalendarPrimaryRange('month', anchor, DaysOfTheWeek.Monday);
+    const year = resolveActivityCalendarPrimaryRange('year', anchor, DaysOfTheWeek.Monday);
+
+    expect(new Date(week.startMs)).toEqual(new Date(2026, 7, 2));
+    expect(new Date(week.endExclusiveMs)).toEqual(new Date(2026, 7, 9));
+    expect(new Date(month.startMs)).toEqual(new Date(2026, 7, 1));
+    expect(new Date(month.endExclusiveMs)).toEqual(new Date(2026, 8, 1));
     expect(new Date(year.startMs)).toEqual(new Date(2026, 0, 1));
     expect(new Date(year.endExclusiveMs)).toEqual(new Date(2027, 0, 1));
   });

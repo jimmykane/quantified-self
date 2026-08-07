@@ -898,6 +898,36 @@ describe('AppUserUtilities', () => {
             expect((settings.mapSettings as any)?.showPoints).toBeUndefined();
         });
 
+        it('should default the Assistant map style independently from the app map style', () => {
+            const user = {
+                settings: {
+                    mapSettings: {
+                        mapStyle: 'satellite'
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.mapSettings?.mapStyle).toBe('satellite');
+            expect(settings.mapSettings?.assistantMapStyle).toBe('default');
+        });
+
+        it('should preserve an explicit Assistant map style', () => {
+            const user = {
+                settings: {
+                    mapSettings: {
+                        mapStyle: 'satellite',
+                        assistantMapStyle: 'outdoors'
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.mapSettings?.assistantMapStyle).toBe('outdoors');
+        });
+
         it('should migrate legacy Spiral dashboard tiles to LinesVertical', () => {
             const user = {
                 settings: {

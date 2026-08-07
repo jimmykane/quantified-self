@@ -12,6 +12,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { map, Observable, of, startWith, tap } from 'rxjs';
 import type { ActivityCalendarQueryWindow } from '../helpers/activity-calendar.helper';
+import { isNormalActivityEvent } from '../helpers/normal-activity-event.helper';
 import { AppEventService, type EventDocumentData } from './app.event.service';
 
 @Injectable({ providedIn: 'root' })
@@ -47,7 +48,7 @@ export class ActivityCalendarService {
       value: window.endExclusiveMs,
     }], 'startDate', true, 0).pipe(
       map(documents => [...(documents || [])]
-        .filter(document => !isMergeOrBenchmarkDocument(document))
+        .filter(isNormalActivityEvent)
         .map(toActivityCalendarEvent)
         .filter((event): event is EventInterface => !!event)
         .sort((left, right) => resolveStartTime(left) - resolveStartTime(right))),
@@ -148,14 +149,6 @@ function resolveActivityTypes(value: unknown): ActivityTypes[] {
     .map(activityType => ActivityTypesHelper.resolveActivityType(activityType))
     .filter((activityType): activityType is ActivityTypes => !!activityType);
   return [...new Set(activityTypes)];
-}
-
-function isMergeOrBenchmarkDocument(document: EventDocumentData): boolean {
-  return document.isMerge === true
-    || document.hasBenchmark === true
-    || !!document.benchmarkResults
-    || !!document.benchmarkResult
-    || (Array.isArray(document.benchmarkDevices) && document.benchmarkDevices.length > 0);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

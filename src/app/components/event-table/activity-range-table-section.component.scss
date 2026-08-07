@@ -1,0 +1,96 @@
+:host {
+  display: block;
+}
+
+.activity-range-table-section {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.activity-range-table-section-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.activity-range-table-section-header h2 {
+  margin: 0;
+  font: var(--mat-sys-title-large);
+  letter-spacing: 0;
+}
+
+.activity-range-table-section-header span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-range-table-state {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.activity-range-table-state--loading {
+  position: relative;
+  flex-direction: column;
+}
+
+.activity-range-table-state--loading mat-progress-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.activity-range-table-state--error {
+  justify-content: flex-start;
+  border: 1px solid var(--mat-sys-error);
+  border-radius: 6px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  text-align: left;
+}
+
+.activity-range-table-state--error button {
+  margin-left: auto;
+}
+
+.activity-range-table-state mat-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  font-size: 20px;
+  line-height: 20px;
+}
+
+@media (max-width: 560px) {
+  .activity-range-table-section {
+    margin-top: 24px;
+    padding-top: 16px;
+  }
+
+  .activity-range-table-state--error {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .activity-range-table-state--error button {
+    margin-left: 30px;
+  }
+}

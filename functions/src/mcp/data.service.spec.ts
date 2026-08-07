@@ -35,14 +35,20 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
+import { TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   createMcpDataService,
   McpDataError,
   McpDataServiceDependencies,
+  projectDerivedMetricPayloadForMcp,
   resolveMcpActivitySourcePath,
   resolveMcpRouteSourcePath,
   SAFE_ACTIVITY_LOCATION_FIELDS,
 } from './data.service';
+import {
+  MCP_DERIVED_PAYLOAD_SCHEMAS,
+  MCP_TRAINING_METRIC_SCHEMA_VERSION,
+} from './derived-output-schemas';
 import { McpActivityChartRateLimitError } from './activity-chart-rate-limit';
 import { createMcpOutputSchemaRegistry } from './tool-output-schemas';
 
@@ -348,7 +354,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         events: [{
           [DataJumpEvent.type]: {
-            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            timestamp: 624,
             jumpData: {
               distance: 2.069,
               height: 0.42,
@@ -381,7 +387,7 @@ describe('MCP data service', () => {
     expect(jumps).toEqual({
       items: [{
         index: 0,
-        timestampMs: Date.parse('2026-07-01T08:30:00.000Z'),
+        timestampMs: 624_000,
         distanceMeters: 2.069,
         heightMeters: 0.42,
         hangTimeSeconds: 0.36,
@@ -401,6 +407,49 @@ describe('MCP data service', () => {
       'jumps',
       true,
     );
+  });
+
+  it('normalizes historical absolute jump timestamps to elapsed milliseconds', async () => {
+    const startTimeMs = Date.parse('2026-07-01T08:00:00.000Z');
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({ startDate: startTimeMs }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        startDate: startTimeMs,
+        events: [{
+          [DataJumpEvent.type]: {
+            timestamp: startTimeMs + 624_000,
+            jumpData: { distance: 10.41, score: 92 },
+          },
+        }, {
+          [DataJumpEvent.type]: {
+            timestamp: (startTimeMs + 900_000) / 1_000,
+            jumpData: { distance: 8.2, score: 80 },
+          },
+        }],
+      },
+    });
+
+    const jumps = await service.listActivityJumps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(jumps.items.map(jump => jump.timestampMs)).toEqual([
+      624_000,
+      900_000,
+    ]);
   });
 
   it('includes both start and end coordinate leaves in nearby-activity reads', () => {
@@ -466,7 +515,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         events: [{
           [DataJumpEvent.type]: {
-            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            timestamp: 624,
             jumpData: {
               distance: 2,
               score: 60,
@@ -2991,6 +3040,14 @@ describe('MCP data service', () => {
       }),
     ]);
     expect(dependencies.importEvent).toHaveBeenCalledTimes(1);
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-03-01T00:00:00.000Z'),
+      Date.parse('2024-04-30T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
+      25,
+      undefined,
+    );
   });
 
   it('queries several canonical metrics through one bounded import pass', async () => {
@@ -3066,6 +3123,14 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+    );
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-04-01T00:00:00.000Z'),
+      Date.parse('2024-04-02T00:00:00.000Z'),
+      [DataDistance.type, DataAscent.type, DataActivityTypes.type],
+      25,
+      undefined,
     );
     expect(JSON.stringify(result)).not.toContain('private-source-key');
   });
@@ -3235,6 +3300,14 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('private-source-key');
     expect(serialized).not.toContain('private-previous-source');
     expect(serialized).not.toContain('Private scale');
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-03-30T00:00:00.000Z'),
+      Date.parse('2024-04-02T00:00:00.000Z'),
+      [DataWeight.type],
+      25,
+      undefined,
+    );
   });
 
   it('keeps even-count medians finite when all persisted values are finite', async () => {
@@ -3433,7 +3506,7 @@ describe('MCP data service', () => {
   it('fails explicitly when an event query exceeds the safety limit', async () => {
     let nextEventIndex = 0;
     vi.mocked(dependencies.fetchEventDocuments).mockImplementation(
-      async (_uid, _startTimeMs, _endTimeMs, limit) => Array.from(
+      async (_uid, _startTimeMs, _endTimeMs, _statTypes, limit) => Array.from(
         { length: Math.min(limit, 2001 - nextEventIndex) },
         () => {
           const index = nextEventIndex;
@@ -3557,6 +3630,7 @@ describe('MCP data service', () => {
       'user-1',
       Date.parse('2024-01-01T00:00:00.000Z'),
       Date.parse('2024-02-01T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
       25,
       undefined,
     );
@@ -3565,6 +3639,7 @@ describe('MCP data service', () => {
       'user-1',
       Date.parse('2024-01-01T00:00:00.000Z'),
       Date.parse('2024-02-01T00:00:00.000Z'),
+      [DataDistance.type, DataActivityTypes.type],
       25,
       'cursor-24',
     );
@@ -3757,6 +3832,7 @@ describe('MCP data service', () => {
       DERIVED_METRIC_KINDS.TrainingReadiness,
     );
 
+    expect(result.schemaVersion).toBe(MCP_TRAINING_METRIC_SCHEMA_VERSION);
     expect(result.payload).toEqual({
       score: 88,
       event: {
@@ -3786,6 +3862,256 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('event-3');
     expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+  });
+
+  it('projects expanded internal Training summaries through the frozen three-sport MCP contract', async () => {
+    const contextByDiscipline = {
+      running: ['running', 'endurance'],
+      cycling: ['downhill', 'gravity'],
+      swimming: ['pool-swimming', 'pool'],
+      rowing: ['on-water-rowing', 'rowing'],
+      'walking-hiking': ['hiking', 'vertical-endurance'],
+      'nordic-skiing': ['roller-skiing', 'vertical-endurance'],
+      strength: ['strength', 'strength'],
+      paddling: ['kayaking', 'paddling'],
+    } as const;
+    const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      activityCount: 1,
+      durationSeconds: 3_600,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+      contexts: [{
+        context: contextByDiscipline[discipline][0],
+        profile: contextByDiscipline[discipline][1],
+        activityCount: 1,
+        metrics: discipline === 'cycling'
+          ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
+          : [{ metric: 'distance', value: 10_000, sourceActivityCount: 1 }],
+        privateContextNote: 'must-not-leak',
+      }],
+    });
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 8,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+          discipline,
+          current28d: window(discipline),
+          baseline28d: window(discipline),
+        })),
+        excludesMergedEvents: true,
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingSummary,
+    );
+    const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.TrainingSummary]
+      .parse(result.payload);
+    const serialized = JSON.stringify(result.payload);
+
+    expect(parsed.disciplines.map(item => item.discipline))
+      .toEqual(['running', 'cycling', 'swimming']);
+    expect(serialized).not.toContain('contexts');
+    expect(serialized).not.toContain('downhill');
+    expect(serialized).not.toContain('rowing');
+    expect(serialized).not.toContain('walking-hiking');
+    expect(serialized).not.toContain('privateContextNote');
+    expect(serialized).not.toContain('max-jump-distance');
+  });
+
+  it('strips internal context metrics and added families from Training build projection', () => {
+    const buildWindow = {
+      periodWeeks: 8,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      activityCount: 1,
+      durationSeconds: 3_600,
+      distanceMeters: 10_000,
+      distanceEventCount: 1,
+      trainingStressScore: null,
+      trainingStressScoreEventCount: 0,
+      activeWeekCount: 1,
+      longestActivityDurationSeconds: 3_600,
+      easySeconds: null,
+      moderateSeconds: null,
+      hardSeconds: null,
+      intensitySourceEventCount: 0,
+      durability: null,
+      poolAveragePaceSecondsPer100m: null,
+      poolPaceActivityCount: 0,
+      openWaterAveragePaceSecondsPer100m: null,
+      openWaterPaceActivityCount: 0,
+      contexts: [{
+        context: 'downhill',
+        profile: 'gravity',
+        activityCount: 1,
+        metrics: [
+          { metric: 'descent', value: 900, sourceActivityCount: 1 },
+          { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 },
+        ],
+      }],
+    };
+    const projected = projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.TrainingBuildComparison,
+      {
+        disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+          discipline,
+          status: discipline === 'cycling' ? 'ready' : 'not-configured',
+          selection: null,
+          current: discipline === 'cycling' ? buildWindow : null,
+          benchmark: discipline === 'cycling' ? buildWindow : null,
+          recovery: null,
+          durabilityComparisons: [],
+          suggestedRaces: [],
+          suggestedEvents: [],
+        })),
+      },
+    );
+    const projectedBuild = projected as {
+      disciplines: Array<{ discipline: string }>;
+    };
+    const serialized = JSON.stringify(projected);
+
+    expect(serialized).not.toContain('contexts');
+    expect(serialized).not.toContain('descent');
+    expect(serialized).not.toContain('max-jump-distance');
+    expect(serialized).not.toContain('rowing');
+    expect(projectedBuild.disciplines.map(item => item.discipline))
+      .toEqual(['running', 'cycling', 'swimming']);
+  });
+
+  it('folds added Training families into legacy explanation Other rows without leaking contributor labels', async () => {
+    const loads = ([
+      ['running', 'Running', 10],
+      ['cycling', 'Cycling', 20],
+      ['swimming', 'Swimming', 30],
+      ['rowing', 'Rowing', 40],
+      ['walking-hiking', 'Walking & Hiking', 50],
+      ['nordic-skiing', 'Nordic Skiing', 60],
+      ['strength', 'Strength', null],
+      ['paddling', 'Paddling', 70],
+      ['other', 'Other', 80],
+      ['unclassified', 'Unclassified', 90],
+    ] as Array<[string, string, number | null]>).map(([sport, label, trainingStressScore]) => ({
+      sport,
+      label,
+      activityCount: 1,
+      loadActivityCount: trainingStressScore === null ? 0 : 1,
+      trainingStressScore,
+      loadSharePercent: trainingStressScore === null ? null : 10,
+    }));
+    const coverage = {
+      totalCount: 10,
+      loadedCount: 9,
+      classifiedCount: 9,
+      unclassifiedCount: 1,
+      ratio: 0.9,
+    };
+    const windowMetrics = {
+      parentEventCount: 10,
+      parentLoadEventCount: 9,
+      parentTrainingStressScore: 450,
+      parentLoadCoverage: coverage,
+      childActivityCount: 10,
+      childLoadActivityCount: 9,
+      childTrainingStressScore: 450,
+      childLoadCoverage: coverage,
+      sportLoads: loads,
+      rhythms: TRAINING_DISCIPLINES.map(discipline => ({
+        discipline,
+        sessionCount: 1,
+        activeDayCount: 1,
+        activeWeekCount: 1,
+        longestInactivityGapDays: 0,
+        longestSessionDurationSeconds: 3_600,
+      })),
+    };
+    const window = {
+      ...windowMetrics,
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+    };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 10,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineBlockCount: 3,
+        excludesMergedEvents: true,
+        excludesMissingDates: true,
+        excludesFutureEvents: true,
+        current: window,
+        baselineBlocks: [window, window, window],
+        baselineMedian: windowMetrics,
+        topContributors: [{
+          eventId: 'private-event',
+          label: 'Private workout',
+          startDayMs: 2,
+          trainingStressScore: 50,
+          loadSharePercent: 10,
+          childComposition: [loads[0], loads[3], loads[6]],
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingExplanation,
+    );
+    const payload = MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.TrainingExplanation]
+      .parse(result.payload);
+
+    expect(payload.current.sportLoads.map(load => load.sport))
+      .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
+    expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
+      activityCount: 6,
+      loadActivityCount: 5,
+      trainingStressScore: 300,
+    });
+    expect(payload.topContributors[0].childComposition).toEqual([
+      expect.objectContaining({ sport: 'running', trainingStressScore: 10 }),
+      expect.objectContaining({ sport: 'other', activityCount: 2, trainingStressScore: 40 }),
+    ]);
+    expect(payload.topContributors[0].childComposition.every(load => !('label' in load))).toBe(true);
+  });
+
+  it('fails closed when an expanded Training payload is malformed before projection', () => {
+    expect(() => projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.TrainingSummary,
+      { disciplines: [{ discipline: 'running' }] },
+    )).not.toThrow();
+    expect(projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.TrainingSummary,
+      { disciplines: [{ discipline: 'running' }] },
+    )).toBeNull();
+    expect(projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.TrainingSummary,
+      {
+        disciplines: [
+          { discipline: 'running' },
+          { discipline: 'running' },
+          { discipline: 'cycling' },
+          { discipline: 'swimming' },
+        ],
+      },
+    )).toBeNull();
   });
 
   it('exposes the ready body-weight trend with only its safe daily values', async () => {
@@ -3826,7 +4152,7 @@ describe('MCP data service', () => {
 
     expect(result).toEqual({
       metricKind: DERIVED_METRIC_KINDS.BodyWeightTrend,
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
       sourceEventCount: 4,
       payload: {
@@ -3965,7 +4291,7 @@ describe('MCP data service', () => {
 
     expect(result).toMatchObject({
       metricKind: DERIVED_METRIC_KINDS.TrainingPowerSystems,
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       payload: {
         activityTypes: [{
           current: {
@@ -5141,6 +5467,17 @@ describe('MCP data service', () => {
 
   it('withholds stale or partial Training Summary snapshots from the daily briefing', async () => {
     const staleSummaryDayMs = Date.parse('2026-07-26T00:00:00.000Z');
+    const summaryWindow = {
+      periodDays: 28,
+      windowStartDayMs: staleSummaryDayMs - (27 * 24 * 60 * 60 * 1000),
+      windowEndDayMs: staleSummaryDayMs,
+      activityCount: 0,
+      durationSeconds: 0,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+      contexts: [],
+    };
     vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
       async (_uid, metricKind) => {
         if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
@@ -5156,7 +5493,11 @@ describe('MCP data service', () => {
             currentWindowDays: 28,
             baselineWindowDays: 84,
             excludesMergedEvents: true,
-            disciplines: [],
+            disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+              discipline,
+              current28d: summaryWindow,
+              baseline28d: summaryWindow,
+            })),
           },
         };
       },

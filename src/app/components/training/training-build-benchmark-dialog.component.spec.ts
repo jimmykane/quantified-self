@@ -150,6 +150,18 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     expect(component.visibleSuggestedEvents[0].detailsText).not.toContain('km');
   });
 
+  it('derives new sport-family labels from the shared registry', () => {
+    const { component } = createDialog({
+      discipline: 'rowing',
+      asOfDayMs: Date.UTC(2026, 3, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [],
+    });
+
+    expect(component.disciplineLabel).toBe('rowing');
+  });
+
   it('clears only this sport benchmark', async () => {
     const { component, functionsService } = createDialog({
       discipline: 'cycling',

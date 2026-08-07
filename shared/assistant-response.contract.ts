@@ -139,10 +139,13 @@ function isChartVisual(value: Record<string, unknown>): boolean {
     || !isBoundedString(value.title, 1, 160)
     || !['line', 'bar'].includes(`${value.chartType}`)
     || !isRecord(xAxis)
-    || !hasOnlyKeys(xAxis, ['type', 'label', 'unit', 'timeZone'])
+    || !hasOnlyKeys(xAxis, ['type', 'label', 'unit', 'dataType', 'timeZone'])
     || !['time', 'linear', 'category'].includes(`${xAxis.type}`)
     || !isBoundedString(xAxis.label, 1, 80)
     || (xAxis.unit !== null && !isBoundedString(xAxis.unit, 1, 80))
+    || (xAxis.dataType !== undefined
+      && xAxis.dataType !== null
+      && !isBoundedString(xAxis.dataType, 1, 120))
     || (xAxis.type === 'time'
       ? !isIanaTimeZone(xAxis.timeZone)
       : xAxis.timeZone !== null)
@@ -155,10 +158,13 @@ function isChartVisual(value: Record<string, unknown>): boolean {
   const labels = new Set<string>();
   return value.series.every((series) => {
     if (!isRecord(series)
-      || !hasOnlyKeys(series, ['label', 'unit', 'points'])
+      || !hasOnlyKeys(series, ['label', 'unit', 'dataType', 'points'])
       || !isBoundedString(series.label, 1, 120)
       || labels.has(series.label)
       || (series.unit !== null && !isBoundedString(series.unit, 1, 80))
+      || (series.dataType !== undefined
+        && series.dataType !== null
+        && !isBoundedString(series.dataType, 1, 120))
       || !Array.isArray(series.points)
       || series.points.length < 1
       || series.points.length > ASSISTANT_MAX_CHART_POINTS_PER_SERIES) {
@@ -186,7 +192,7 @@ function isMapVisual(value: Record<string, unknown>): boolean {
   if (!hasOnlyKeys(value, ['kind', 'title', 'style', 'markers', 'path'])
     || value.kind !== 'map'
     || !isBoundedString(value.title, 1, 160)
-    || value.style !== 'satellite'
+    || (value.style !== 'user_preference' && value.style !== 'satellite')
     || !Array.isArray(value.markers)
     || value.markers.length > ASSISTANT_MAX_MAP_MARKERS
     || !Array.isArray(value.path)

@@ -417,9 +417,9 @@ h1 {
 }
 
 .assistant-composer-dock {
+  position: relative;
   display: grid;
   flex: 0 0 auto;
-  gap: 5px;
   padding-top: 1px;
 }
 
@@ -439,6 +439,10 @@ h1 {
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: end;
   gap: 8px;
+}
+
+.composer-sending {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .composer-input {
@@ -493,19 +497,6 @@ h1 {
   line-height: 24px;
 }
 
-.composer-progress {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  line-height: 0;
-}
-
-.composer-progress mat-spinner {
-  display: block;
-  margin: 0;
-}
-
 .composer-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -517,6 +508,11 @@ h1 {
 }
 
 .assistant-error {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;

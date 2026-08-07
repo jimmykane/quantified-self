@@ -354,6 +354,28 @@ describe('EventTableComponent', () => {
         expect(mainRow.contains(filtersRow)).toBe(true);
     });
 
+    it('renders a browse presentation without controls or persisted table changes', async () => {
+        component.presentation = 'browse';
+        component.showActions = true;
+        component.ngOnChanges({
+            presentation: new SimpleChange('dashboard', 'browse', false),
+            showActions: new SimpleChange(false, true, false),
+        });
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.table-toolbar')).toBeNull();
+        expect(component.displayedColumns).not.toContain('Checkbox');
+        expect(component.displayedColumns).not.toContain('Actions');
+        expect(component.displayedColumns).not.toContain('Shared');
+        expect(component.displayedColumns).not.toContain('Tags');
+
+        await component.pageChanges({ pageSize: 50 } as any);
+        await component.selectedColumnsChange(['Name', 'Start Date']);
+        component.sort.sortChange.next({ active: 'Start Date', direction: 'asc' });
+
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    });
+
     it('should render selected-event actions outside the main toolbar row', () => {
         fixture.componentRef.setInput('showActions', true);
         component.selection.select({ Event: new MockEvent('selected') } as any);

@@ -37,6 +37,11 @@ configuration, or titles. Coordinate-free sessions cannot request chart breadcru
 displayed tile area to Mapbox, independently of whether place-name geocoding was used. This prevents the Assistant from
 becoming a parallel data or calculation API.
 
+Assistant chart values remain in the canonical units returned by MCP. The deterministic projection retains an optional,
+bounded canonical Sports Lib data type for each supported series (and for a distance-based X axis), and the Angular
+renderer applies the signed-in user's current unit settings to axis labels and tooltips. This presentation metadata is
+not shown to Gemini, does not change the stored canonical values, and is not part of the registered public MCP contract.
+
 The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
 tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the
 Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
@@ -468,7 +473,9 @@ timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
 Server instructions define absolute output fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus
 `bucketStartMs`, as Unix epoch milliseconds that must be converted exactly before a client states a calendar date.
 Metric values such as HRV milliseconds and relative offsets such as jump `timestampMs` are explicitly not calendar
-timestamps. The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
+timestamps. A jump `timestampMs` is milliseconds elapsed from the activity start. The MCP projection normalizes current
+elapsed-second values plus historical epoch-second or epoch-millisecond values against the selected activity's start.
+The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
 Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
 and granting one location domain never widens the other.
 
@@ -580,15 +587,16 @@ This is intentionally not a curated MCP metric list. A correctly exported and pe
 becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
 expose precise position.
 
-`query_metric` imports stored event JSON through `EventImporterJSON` and reuses the shared event-stat aggregation engine.
-It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
-their prior local-time behavior when they omit the timezone.
+`query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
+cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
+aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
+non-MCP callers keep their prior local-time behavior when they omit the timezone.
 
 `query_metrics` uses the same range, paging, byte, stat-entry, filtering, import, and aggregation primitives. It accepts
 one to four canonical metric/aggregation selectors, deduplicates identical selectors, fetches the bounded event range
-once, and imports each eligible event once with only the selected stats plus activity type. It then builds one result
-per selector with the shared grouping, interval, timezone, and activity-type filters. It does not create a metric
-catalog document or any other persisted cache.
+once through a Firestore field mask containing only those stats plus activity type, and imports each eligible event
+once. It then builds one result per selector with the shared grouping, interval, timezone, and activity-type filters. It
+does not create a metric catalog document or any other persisted cache.
 
 `get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
@@ -687,7 +695,8 @@ whole activity document or position map.
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
-height, hang time, speed, rotations, and score. With `activity-location:read`, they may also expose latitude/longitude,
+height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in
+milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
 coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
 from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
@@ -830,12 +839,29 @@ geocoding budget. This read-only lookup does not change public internet state, s
 
 MCP returns Training snapshot payloads only from `status: "ready"` documents with the exact current schema in
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
-exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
+exists. The response uses the frozen public wire-schema version plus snapshot freshness metadata, and recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
 the payload. It then validates the result against the exact schema for that `metricKind`; undeclared fields fail closed
 instead of being serialized. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
+
+Internal derived schema 17 includes the eight sport families and context/profile summaries introduced in schema 16,
+plus the reusable maximum aggregation used for MTB longest-jump distance. The registered MCP contract maps current
+snapshots to its frozen wire schema version 15 and legacy three-family shape through an explicit projection before
+redaction and strict validation:
+
+- `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
+  exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
+- `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
+  and Paddling into Other for complete load/composition totals, and exposes rhythm only for the registered three.
+- `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes.
+
+The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
+eight internal families, gravity/rowing contexts, the internal maximum-jump profile metric, and undeclared private
+fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
+instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
+registered-app rescan nor a local plugin sync.
 
 `list_training_metrics` adds presentation and routing metadata without adding another kind registry: its descriptor map
 is compile-time exhaustive against `DERIVED_METRIC_KINDS`. It reads only snapshot envelope metadata for the matching
@@ -966,8 +992,9 @@ requires no new Firestore composite index.
 - Event and sleep date ranges are at most 366 days.
 - Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
   2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.
-- An event metric query reads at most 25 events per Firestore page and rejects matches above 2,000 events, more than
-  4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
+- An event metric query selects only the requested canonical stats plus activity type, reads at most 25 events per
+  Firestore page, and rejects matches above 2,000 events, more than 4 MiB of cumulative serialized selected stats, or
+  more than 20,000 cumulative selected top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
   activity-type stat needed for filtering.
 - Multi-metric queries accept at most four selectors, share the same 2,000-event, 4 MiB, and 20,000-entry work budgets,

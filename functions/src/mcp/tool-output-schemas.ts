@@ -6,7 +6,6 @@ import {
 import { z } from 'zod';
 import {
   DERIVED_METRIC_KINDS,
-  DERIVED_METRIC_SCHEMA_VERSION,
   DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import {
@@ -17,6 +16,7 @@ import {
   READINESS_FORMULA_VERSION,
   READINESS_TOTAL_SIGNAL_COUNT,
 } from '../../../shared/readiness';
+import { PUBLIC_TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
   MCP_ACTIVITY_CHART_DEFAULT_POINTS,
@@ -26,6 +26,7 @@ import {
 } from './activity-chart.service';
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
+  MCP_TRAINING_METRIC_SCHEMA_VERSION,
   validateMcpDerivedPayload,
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
@@ -275,7 +276,7 @@ const derivedPayloadConditionals = Object.entries(
 });
 const trainingMetricOutput = z.strictObject({
   metricKind: derivedMetricKind,
-  schemaVersion: z.literal(DERIVED_METRIC_SCHEMA_VERSION),
+  schemaVersion: z.literal(MCP_TRAINING_METRIC_SCHEMA_VERSION),
   updatedAtMs: nullableNonNegativeTimestampMs,
   sourceEventCount: count.nullable(),
   payload: derivedPayloadUnion,
@@ -295,7 +296,7 @@ const trainingMetricOutput = z.strictObject({
       enum: Object.values(DERIVED_METRIC_KINDS),
     },
     schemaVersion: {
-      const: DERIVED_METRIC_SCHEMA_VERSION,
+      const: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       type: 'number',
     },
     updatedAtMs: {
@@ -666,7 +667,7 @@ const dailyTrainingSummaryUsualWindow = z.strictObject({
 }).meta({ title: 'McpDailyBriefingUsualTrainingWindow' });
 
 const dailyTrainingSummaryDiscipline = z.strictObject({
-  discipline: z.enum(['running', 'cycling', 'swimming']),
+  discipline: z.enum(PUBLIC_TRAINING_DISCIPLINES),
   current28d: dailyTrainingSummaryCurrentWindow,
   usual28d: dailyTrainingSummaryUsualWindow,
 }).meta({ title: 'McpDailyBriefingTrainingDiscipline' });
@@ -679,7 +680,7 @@ const dailyTrainingSummary = z.strictObject({
   baselineSourceWindowDays: z.literal(84).nullable(),
   current28d: dailyTrainingSummaryCurrentWindow.nullable(),
   usual28d: dailyTrainingSummaryUsualWindow.nullable(),
-  disciplines: z.array(dailyTrainingSummaryDiscipline).max(3),
+  disciplines: z.array(dailyTrainingSummaryDiscipline).max(PUBLIC_TRAINING_DISCIPLINES.length),
 }).superRefine((value, context) => {
   const summaryFields = [
     value.baselineSourceWindowDays,

@@ -4,14 +4,33 @@ import {
   resolveTrainingExplanationMetricPayload,
   resolveTrainingReadinessMetricPayload,
 } from './training-derived-metrics.helper';
+import { TRAINING_DISCIPLINES, TRAINING_SPORT_DEFINITIONS } from '@shared/training-disciplines';
 
 const loadCoverage = { totalCount: 2, loadedCount: 1, classifiedCount: 2, unclassifiedCount: 0, ratio: 0.5 };
 const sportLoad = { sport: 'running', label: 'Running', activityCount: 2, loadActivityCount: 1, trainingStressScore: 100, loadSharePercent: 100 };
+const explanationSportLoads = [
+  ...TRAINING_SPORT_DEFINITIONS.map(sport => sport.id === 'running'
+    ? sportLoad
+    : {
+      sport: sport.id, label: sport.label, activityCount: 0, loadActivityCount: 0,
+      trainingStressScore: null, loadSharePercent: null,
+    }),
+  { sport: 'other', label: 'Other', activityCount: 0, loadActivityCount: 0, trainingStressScore: null, loadSharePercent: null },
+  { sport: 'unclassified', label: 'Unclassified', activityCount: 0, loadActivityCount: 0, trainingStressScore: null, loadSharePercent: null },
+];
+const explanationRhythms = TRAINING_DISCIPLINES.map(discipline => ({
+  discipline,
+  sessionCount: discipline === 'running' ? 2 : 0,
+  activeDayCount: discipline === 'running' ? 2 : 0,
+  activeWeekCount: discipline === 'running' ? 2 : 0,
+  longestInactivityGapDays: discipline === 'running' ? 7 : 28,
+  longestSessionDurationSeconds: discipline === 'running' ? 3_600 : null,
+}));
 const explanationMetrics = {
   parentEventCount: 2, parentLoadEventCount: 1, parentTrainingStressScore: 100, parentLoadCoverage: loadCoverage,
   childActivityCount: 2, childLoadActivityCount: 1, childTrainingStressScore: 100, childLoadCoverage: loadCoverage,
-  sportLoads: [sportLoad],
-  rhythms: [{ discipline: 'running', sessionCount: 2, activeDayCount: 2, activeWeekCount: 2, longestInactivityGapDays: 7, longestSessionDurationSeconds: 3600 }],
+  sportLoads: explanationSportLoads,
+  rhythms: explanationRhythms,
 };
 const explanationWindow = { periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, ...explanationMetrics };
 
@@ -171,6 +190,14 @@ describe('training derived metric normalizers', () => {
       dayBoundary: 'UTC', asOfDayMs: 2, currentWindowDays: 28, baselineBlockCount: 3,
       excludesMergedEvents: true, excludesMissingDates: true, excludesFutureEvents: true,
       current: explanationWindow, baselineBlocks: [explanationWindow], baselineMedian: explanationMetrics, topContributors: [],
+    })).toBeNull();
+    expect(resolveTrainingExplanationMetricPayload({
+      dayBoundary: 'UTC', asOfDayMs: 2, currentWindowDays: 28, baselineBlockCount: 3,
+      excludesMergedEvents: true, excludesMissingDates: true, excludesFutureEvents: true,
+      current: { ...explanationWindow, rhythms: explanationRhythms.slice(0, -1) },
+      baselineBlocks: [explanationWindow, explanationWindow, explanationWindow],
+      baselineMedian: explanationMetrics,
+      topContributors: [],
     })).toBeNull();
   });
 

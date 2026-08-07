@@ -7,13 +7,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppThemes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
 import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
@@ -126,7 +127,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
-    expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('All 3');
+    expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('No sports');
+    expect(element.textContent).toContain('No sport-specific details · Overall comparison uses all training');
+    expect(element.textContent).toContain('No sport-specific benchmark cards qualify yet');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
     for (const actionClass of [
       'training-sport-visibility-action',
@@ -142,14 +145,14 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
-    expect(element.textContent).toContain('Settings vs recent evidence');
+    expect(element.textContent).not.toContain('Settings vs recent evidence');
     expect(element.textContent).toContain('Recorded body weight');
     const performanceGrid = element.querySelector('.training-performance-grid');
     const bodyContextSection = element.querySelector('.training-body-context-section');
-    expect(performanceGrid?.querySelector('.training-body-weight-panel')).toBeNull();
+    expect(performanceGrid).toBeNull();
     expect(bodyContextSection?.querySelector('.training-body-weight-panel')).not.toBeNull();
     expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
-    expect(element.querySelector('app-durability-reading-guide[context="training"]')).not.toBeNull();
+    expect(element.querySelector('app-durability-reading-guide[context="training"]')).toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
     const recoveryContext = element.querySelector('.training-recovery-context');
@@ -176,8 +179,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
-    expect(element.textContent).toContain('Preparing imported capacity markers');
+    expect(element.textContent).toContain('No eligible sport workouts in the last 28 days.');
+    expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.textContent).toContain('Preparing rolling power capacity');
     expect(element.querySelector('.training-power-systems-section')).not.toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -746,12 +749,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
       .toContain('Building derived metrics');
-    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming workouts.');
+    expect(fixture.nativeElement.textContent).toContain('Reading your recent workouts across the Training sport groups.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
-    expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
-    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(7);
+    expect(fixture.nativeElement.textContent).not.toContain('Preparing cycling power profile');
+    expect(fixture.nativeElement.querySelector('.training-performance-grid')).toBeNull();
     expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
@@ -789,7 +792,10 @@ describe('TrainingWorkspaceComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
-        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
+        },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
@@ -1505,6 +1511,7 @@ describe('TrainingWorkspaceComponent', () => {
       },
       poolAveragePaceSecondsPer100m: 95, poolPaceActivityCount: 3,
       openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
+      contexts: [],
     };
     const swimRows = (component as any).buildTrainingBuildMetricRows({
       current: swimWindow,
@@ -1530,6 +1537,67 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ label: 'TSS', deltaTone: 'positive' }),
     ]));
     expect(swimRows).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Power / HR' })]));
+    const gravityWindow = {
+      ...swimWindow,
+      trainingStressScore: null,
+      trainingStressScoreEventCount: 0,
+      durability: null,
+      poolAveragePaceSecondsPer100m: null,
+      poolPaceActivityCount: 0,
+      contexts: [{
+        context: 'downhill', profile: 'gravity', activityCount: 4,
+        metrics: [
+          { metric: 'descent', value: 4_000, sourceActivityCount: 4 },
+          { metric: 'descent-time', value: 2_400, sourceActivityCount: 4 },
+          { metric: 'jump-count', value: 18, sourceActivityCount: 3 },
+          { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 3 },
+        ],
+      }],
+    };
+    const gravityRows = (component as any).buildTrainingBuildMetricRows({
+      current: gravityWindow,
+      benchmark: {
+        ...gravityWindow,
+        contexts: [{
+          ...gravityWindow.contexts[0],
+          metrics: [
+            { metric: 'descent', value: 3_000, sourceActivityCount: 4 },
+            { metric: 'descent-time', value: 2_100, sourceActivityCount: 4 },
+            { metric: 'jump-count', value: 12, sourceActivityCount: 3 },
+            { metric: 'max-jump-distance', value: 5.8, sourceActivityCount: 3 },
+          ],
+        }],
+      },
+    }, 'cycling');
+    expect(gravityRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Downhill MTB · Descent', deltaTone: 'neutral' }),
+      expect.objectContaining({ label: 'Downhill MTB · Descent time', deltaTone: 'neutral' }),
+      expect.objectContaining({ label: 'Downhill MTB · Jumps', deltaText: '+6' }),
+      expect.objectContaining({
+        label: 'Downhill MTB · Longest jump',
+        currentText: '7.4 m',
+        benchmarkText: '5.8 m',
+        deltaText: '+1.6 m',
+      }),
+    ]));
+    expect(gravityRows).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'TSS' }),
+      expect.objectContaining({ label: 'Intensity mix' }),
+    ]));
+    expect(component.formatTrainingBuildFootnote('cycling')).toContain('Enduro and Downhill');
+    expect(component.formatTrainingBuildFootnote('rowing')).toContain('durability is not available');
+    expect((component as any).formatTrainingProfileMetric('stroke-distance', 10, 'rowing')).toBe('10.0 m');
+    expect((component as any).formatTrainingProfileMetric('descent', 4_000, 'cycling')).toMatch(/^4[,.]000 m$/);
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect((component as any).formatTrainingProfileMetric('max-jump-distance', 7.4, 'cycling')).toBe('24.3 ft');
+    component.unitSettings = null;
+    expect((component as any).buildTrainingContextMetricViews([{
+      context: 'strength', profile: 'strength', activityCount: 2,
+      metrics: [{ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 }],
+    }], [], 'strength', true)).toEqual([expect.objectContaining({
+      context: 'strength',
+      metrics: [expect.objectContaining({ metric: 'elapsed-time', currentText: '2h 00m' })],
+    })]);
     const durabilityContext = {
       contextKey: 'pool:25:freestyle', scope: 'pool-swimming', outputSource: 'pool-length-speed',
       outputUnit: 'm/s', poolLengthMeters: 25, stroke: 'freestyle',
@@ -1726,6 +1794,7 @@ describe('TrainingWorkspaceComponent', () => {
         ],
       },
     } as any;
+    component.visibleDisciplines = ['cycling'];
     (component as any).trainingBuildBenchmarkDialogRef = { componentInstance: { updateEventSuggestions } };
     (component as any).trainingBuildBenchmarkDialogDiscipline = 'cycling';
 
@@ -1855,6 +1924,26 @@ describe('TrainingWorkspaceComponent', () => {
       recoveryNow: { totalSeconds: 3_600, endTimeMs: nowMs },
     });
     (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
+  it('ignores durability failures unless a visible sport supports durability', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({ trainingDurabilityStatus: 'failed' });
+    component.visibleTrainingCapabilities = new Set(['best-build']);
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.visibleTrainingCapabilities = new Set(['best-build', 'durability']);
     (component as any).refreshDerivedMetricsRouteStatus();
     expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });

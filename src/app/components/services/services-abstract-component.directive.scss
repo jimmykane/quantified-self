@@ -226,6 +226,29 @@ mat-icon {
     gap: 8px;
 }
 
+.connection-action-content,
+.service-action-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 20px;
+    line-height: 20px;
+    vertical-align: middle;
+}
+
+.connection-action-content mat-icon,
+.connection-action-content mat-spinner,
+.service-action-content mat-icon,
+.service-action-content mat-spinner {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    font-size: 20px;
+    line-height: 20px;
+}
+
 .tool-actions .active-sync-warning-pill {
     flex: 0 1 auto;
 }

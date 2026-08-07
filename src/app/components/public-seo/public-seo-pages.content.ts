@@ -291,10 +291,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     eyebrow: 'Training Analysis',
     title: 'Training Analysis for Endurance Athletes',
-    description: 'Analyze running, cycling, mountain biking, and swimming training with readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
+    description: 'Analyze eight sport families—from running, cycling, swimming, and rowing to walking and hiking, Nordic skiing, strength, and paddling—with readiness, load trends, intensity, durability, sleep context, and historical build comparisons, all through context-aware summaries.',
     h1: 'Training analysis for endurance athletes',
     intro: 'Training is a curated workspace for understanding your current workload in context: compare it with your usual training, see what changed, and inspect the evidence behind readiness, performance, and long-session durability.',
-    chips: ['Training readiness', 'Load trends', 'Running', 'Cycling & MTB', 'Swimming', 'Best build'],
+    chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Open Training', '/training'),
@@ -326,7 +326,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Running, Cycling including mountain biking, and Swimming are handled as separate disciplines, including individual legs from multisport activities.',
+        copy: 'Eight conservative sport families keep materially different contexts separate, including individual registered legs from multisport activities.',
         items: [
           {
             icon: 'directions_run',
@@ -340,8 +340,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'show_chart',
-            title: 'Load and intensity trends',
-            copy: 'Follow CTL, ATL, Form, ramp rate, monotony, strain, and weekly Easy, Moderate, and Hard intensity distribution from derived training load.',
+            title: 'Context-aware sport summaries',
+            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
           },
         ],
       },
@@ -375,7 +375,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports does Training support?',
-        answer: 'Training supports Running and Trail Running, Cycling including road, indoor, virtual, e-bike, and mountain biking, plus Pool and Open Water Swimming. Multisport files are split into their individual activity legs when available.',
+        answer: 'Training supports eight conservative families: Running; Cycling including road, indoor, virtual, e-bike, standard MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Multisport files are split into their registered activity legs when available. Nearby unlisted sports remain Other rather than being guessed into a family.',
       },
       {
         question: 'Does Training tell me what workout to do?',
@@ -537,7 +537,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Deterministic charts and activity maps',
-            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A satellite map can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
+            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A map rendered with the user’s separate Assistant map style can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
           },
         ],
       },
@@ -554,7 +554,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'location_on',
             title: 'Precise activity locations stay opt-in',
-            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a satellite map sends the displayed tile area to Mapbox. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
+            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a map sends the displayed tile area to Mapbox, regardless of the selected Assistant map style. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
           },
           {
             icon: 'timer',

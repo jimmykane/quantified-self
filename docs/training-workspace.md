@@ -6,9 +6,9 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `15`
-- `@sports-alliance/sports-lib`: `18.0.0`
-- Training disciplines: Running, Cycling, and Swimming
+- Quantified Self derived-metric schema: `17`
+- `@sports-alliance/sports-lib`: `18.1.2`
+- Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -48,6 +48,10 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
+- Standard mountain biking retains the steady-aerobic Cycling durability protocol. Enduro MTB and Downhill Cycling are
+  gravity contexts: they use reliable recorded summaries only, are volume-only for Training load/intensity, and are
+  explicitly ineligible for durability. Training does not infer downhill runs or lift/uplift segments.
+- Rowing participates in Training Mix and Best Build, but it does not have a durability adapter in this release.
 - The parser does not generate CP, W′, Pmax, or three-dimensional workout strain. Rolling power-system capacity is a
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
@@ -236,9 +240,9 @@ device provenance may fall back to the parent when the child does not carry it. 
 activity source per valid parent/child relationship. When Training Explanation is dirty, unsupported activity types
 remain in that source with no curated discipline so it can report them as Other or Unclassified. When
 `training_power_systems` is dirty, those sources are also retained so every canonical activity type with a usable power
-curve can be fitted independently. Discipline-specific builders still ignore sources outside Running, Cycling, and
-Swimming. The join retains references to the selected child and parent data instead of cloning a second activity metric
-object.
+curve can be fitted independently. Registry-driven Training Summary and Best Build builders use the eight curated
+families and ignore unregistered sources; Explanation retains unregistered sources only for Other/Unclassified coverage.
+The join retains references to the selected child and parent data instead of cloning a second activity metric object.
 
 ### Sleep sessions
 
@@ -262,12 +266,8 @@ The settings branch is:
 
 ```ts
 trainingSettings: {
-  visibleDisciplines?: Array<'running' | 'cycling' | 'swimming'>;
-  buildBenchmarks?: {
-    running?: TrainingBuildBenchmarkSelection;
-    cycling?: TrainingBuildBenchmarkSelection;
-    swimming?: TrainingBuildBenchmarkSelection;
-  };
+  visibleDisciplines?: TrainingSportId[];
+  buildBenchmarks?: Partial<Record<TrainingSportId, TrainingBuildBenchmarkSelection>>;
 }
 ```
 
@@ -295,30 +295,46 @@ Every metric kind has its own snapshot document. The important fields are:
 The coordinator owns `generation`, `eventMutationVersion`, dirty kinds, processing state, timestamps, and the last error.
 A generation claim prevents an old Cloud Task from overwriting a newer request.
 
-## Training Disciplines and Activity Groups
+## Training Sport Registry and Contexts
 
-`shared/training-disciplines.ts` is the Quantified Self registry. It resolves provider aliases through sports-lib and then
-maps sports-lib groups to the three curated disciplines.
+`shared/training-disciplines.ts` is the Quantified Self sport registry. Sports-lib owns canonical activity types and alias
+resolution; this registry owns Training families, context separation, presentation metadata, capability flags, and
+analysis policies. Builders, callables, visibility, normalizers, and generic profile-metric rendering derive from it.
 
-| Training discipline | sports-lib groups | Current canonical activity types |
+| Training family | Registered contexts and profiles | Conservative canonical membership |
 | --- | --- | --- |
-| Running | `RunningGroup`, `TrailRunningGroup` | Running, Treadmill, Indoor Running, Virtual Running, Trail Running |
-| Cycling | `CyclingGroup`, `MountainBikingGroup` | Cycling, Indoor Cycling, Biking, Virtual Cycling, E-Biking, Mountain Biking, Enduro MTB, Downhill Cycling |
-| Swimming | `SwimmingGroup` | Swimming, Open Water Swimming |
+| Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`) | Running; Trail Running; Treadmill, Indoor Running, Virtual Running |
+| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, E-Biking; Indoor Cycling, Virtual Cycling; Mountain Biking; Enduro MTB; Downhill Cycling |
+| Swimming | Pool swimming (`pool`), Open-water swimming (`open-water`) | Swimming; Open Water Swimming |
+| Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing; Rowing |
+| Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking; Hiking, Trekking |
+| Nordic Skiing | Snow and Roller skiing (`vertical-endurance`) | Crosscountry Skiing, Nordic Skiing; Roller Skiing |
+| Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell |
+| Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking; Paddling; Stand Up Paddling |
 
 Important behavior:
 
-- Mountain biking is part of Cycling; it is not a fourth Training discipline.
-- A triathlon or multisport aggregate type is not classified. Its normalized running, cycling, and swimming child legs
-  are classified individually.
+- Every registered family supports Training Mix and Best Build. Specialist surfaces are capability-gated: durability,
+  imported capacity, power profiles, and swimming performance are enabled only where declared. Reusable context
+  summaries are driven directly by each context's profile and metric declarations.
+- Standard Mountain Biking is an endurance Cycling context. Enduro MTB and Downhill Cycling stay in Cycling but use
+  `mixed-gravity` and `gravity` profiles with `volume-only` load and intensity policies. Strength is also volume-only
+  and omits distance. Other registered contexts use recorded load/intensity and distance when available.
+- A triathlon or multisport aggregate type is not classified. Its normalized registered child legs are classified
+  individually.
 - Each child leg counts as a session in its discipline.
-- One multisport parent event can anchor separate Running, Cycling, and Swimming benchmarks.
+- One multisport parent event can anchor a separate benchmark for every registered family represented by a child leg.
 - Known unsupported sports are reported as `Other` in load explanation when possible. Unknown strings are
   `Unclassified`.
+- Membership is intentionally conservative. CrossFit, ski touring/backcountry skiing, snowshoeing, surfing, sailing,
+  and other unlisted types remain Other rather than inheriting a nearby Training profile.
 - The overall state and explanation remain global even if a discipline is hidden from detailed cards.
 
-When sports-lib changes a relevant group, update and test the shared registry. The registry spec enumerates every member
-of all five relevant groups so new activity types cannot silently become unclassified.
+The registry also declares context metrics and their aggregation semantics: additive distance/time/ascent/descent,
+descent time and jumps; the maximum recorded jump distance across contributing workouts; arithmetic-mean grit, flow,
+cadence, and stroke distance; and distance-weighted 500 m rowing pace. Each emitted metric carries its contributing
+activity count. A future family or context should be added to this registry with focused registry, builder, normalizer,
+presentation, and documentation tests; it must not require another set of family-specific accumulators or UI branches.
 
 ## Derived-Metric Refresh Pipeline
 
@@ -338,13 +354,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
 | `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
 | `intensity_distribution` | Global intensity chart | Parent event power/HR zones |
-| `training_summary` | Overall comparison and discipline Training Mix | Joined normalized activities |
+| `training_summary` | Overall comparison, eight-family Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP and VO2 max observations | Joined activities |
 | `training_power_systems` | Exact-type current CP/W′/Pmax capacity and 12-week sparse history | Persisted activity power curves plus parent event eligibility |
 | `power_curve` | Running/Cycling one-year curves and 90-day retention | Persisted activity power curves |
 | `training_explanation` | What drove this | Parent events plus joined child activities |
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
-| `training_build_comparison` | Best Build and sleep context | Activities, settings, parent events, sleep |
+| `training_build_comparison` | Eight-family Best Build, context/profile summaries, and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
 | `body_weight_trend` | Neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Persisted positive Sports-lib `Weight` values from form documents |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
@@ -356,7 +372,10 @@ The legacy MCP daily briefing uses only the two headline snapshots from this tab
 current-versus-usual 28-day Training context and `training_readiness` for current readiness. The additive
 `get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
 Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
-total and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp,
+total and the frozen public Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Internal
+schema-16 snapshots contain all eight families and context/profile fields; MCP projection removes those fields and
+folds the five additional families into Other where an explanation payload needs a complete composition total. Form,
+CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
 than being silently recast as a daily workout recommendation.
 
@@ -523,12 +542,12 @@ changes from moving the value cards or initially presenting stale values without
 
 Sport visibility has two modes:
 
-- **Automatic:** use any discipline with current 28-day activity or a saved benchmark. If nothing qualifies, show all
-  three disciplines.
+- **Automatic:** use any registered family with current 28-day activity or a saved benchmark. While evidence is loading,
+  or when nothing qualifies, show no sport-detail cards. Global state, load, readiness, and explanation sections remain.
 - **Fixed:** show the persisted non-empty subset selected by the user.
 
-The action label compacts to one sport, `2 sports`, or `All 3`; its accessible label lists the actual disciplines and
-whether selection is automatic.
+The action label compacts to one sport, `N sports`, `All sports`, or `No sports`; its accessible label lists the actual
+families and whether selection is automatic.
 
 The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
 overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
@@ -538,10 +557,8 @@ Visibility affects:
 
 - Best Build cards;
 - discipline Training Mix cards;
-- imported capacity cards;
-- Swimming Pace;
-- durability tabs; and
-- Running/Cycling power profiles.
+- all specialist cards selected by the visible families' capabilities, including imported capacity, Swimming Pace,
+  durability, Running/Cycling power profiles, and generic context/profile summaries.
 
 Visibility does not affect:
 
@@ -574,7 +591,20 @@ For every discipline:
 - Moderate: zones 3-4.
 - Hard: zones 5-7.
 
-The top training time and workout values sum all three disciplines, regardless of detailed-card visibility.
+The summary and Best Build payloads also preserve each observed registered context. Contexts emit only the metrics
+declared by the shared registry: distance, moving/elapsed time, ascent/descent, descent time, jumps, longest jump,
+grit/flow, rowing 500 m pace, cadence, and stroke distance as applicable. Additive metrics are summed; longest jump is
+the maximum persisted `Maximum Jump Distance` across the window; grit, flow, cadence, and stroke distance are arithmetic
+activity means; rowing pace is distance-weighted. Elapsed time prefers a stored elapsed stat, then timestamps, then
+duration. Each metric includes its source-activity count.
+
+The 84-day summary baseline normalizes activity counts, additive metric values, and metric source counts by `28 / 84`.
+Maximum, mean, and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows
+use their raw 8-, 10-, or 12-week totals and counts.
+
+The top training time and workout values sum all eight registered families, regardless of detailed-card visibility.
+Gravity Cycling and Strength contexts contribute reliable time/workout volume, but their profile policy prevents zones
+or TSS from being presented as sport-specific intensity/load evidence. Strength omits distance.
 
 #### Training state
 
@@ -714,7 +744,8 @@ Sleep values remain visible without deltas when coverage or provider comparabili
 
 ### 2. Best Build vs Now
 
-`training_build_comparison` builds one independent card per visible discipline.
+`training_build_comparison` builds one independent card per visible registered family. All eight families support one
+saved benchmark; specialist rows remain capability- and evidence-gated.
 
 #### Benchmark selection
 
@@ -779,6 +810,13 @@ Each current and benchmark window contains:
 - distance-weighted pool pace; and
 - distance-weighted open-water pace.
 
+It also contains the same registry-driven context summaries as Training Mix. The frontend renders the available profile
+metrics generically, so adding a context metric to the registry does not require another family-specific table. Enduro
+and Downhill comparisons can show reliable distance/time, ascent or descent, descent time, jump count, longest recorded
+jump, grit, and flow when recorded, but they do not synthesize run segments and do not show zone/TSS intensity as
+gravity evidence. Strength uses elapsed time and omits distance. Indoor and on-water rowing remain separate and can
+show distance-weighted 500 m pace, cadence, and stroke distance when those sources exist.
+
 Pool and open-water pace are never combined. Swimming distance uses swim units. Pace deltas are described as faster or
 slower, where lower seconds per 100 m/yd is better.
 
@@ -806,7 +844,7 @@ the detailed numeric comparison.
 It intentionally separates parent-event load from child-activity composition:
 
 - Parent events determine total TSS and top contributors. This avoids double-counting multisport legs.
-- Child activities determine Running/Cycling/Swimming/Other/Unclassified composition and rhythm.
+- Child activities determine the eight registered families plus Other/Unclassified composition and rhythm.
 
 The cards show:
 
@@ -826,9 +864,9 @@ The four driver cards use one balanced row on wide screens, a two-by-two tablet 
 Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
 levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
 supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
-event label and its load share do not split into an ambiguous separator-delimited sentence. Running, Cycling, and
-Swimming load and rhythm headings reuse the shared activity-type component so their icon comes from the sports-lib
-activity-group family; overall load, contributor, Other, and Unclassified cards remain text-only.
+event label and its load share do not split into an ambiguous separator-delimited sentence. Registered-family load and
+rhythm headings reuse the shared registry icon activity type; overall load, contributor, Other, and Unclassified cards
+remain text-only.
 
 The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
 turning missing data into a negative or positive training judgment.
@@ -889,19 +927,19 @@ Each discipline summary states whether its current zone balance is close to usua
 It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is
 material enough to investigate.
 
-On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
+On desktop, Training Mix uses its actual visible-family count rather than auto-fitting empty grid tracks: one
 discipline pairs a matched-height summary with the intensity chart. The summary keeps activity totals at the top and uses
 the otherwise available vertical space for a clear current-versus-usual intensity balance: each zone has a current share,
 normalized baseline share, current fill, and baseline marker. It deliberately does not add redundant load, readiness, or
 capacity metrics just to fill the card. The chart's nested loading host participates in the card's flex height so the plot
-occupies the remaining canvas. Two and three disciplines use compact balanced summary rows with the global chart below.
-Tablet and mobile retain the stacked responsive layout.
+occupies the remaining canvas. Multiple visible families use compact responsive summary rows with the global chart
+below. Tablet and mobile retain the stacked layout.
 
 ### 6. Power Systems
 
 `training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
 every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
-Running/Cycling/Swimming visibility setting and has no combined or all-sports option.
+eight-family sport visibility setting and has no combined or all-sports option.
 
 The Training page renders this section for every authenticated account. When no exact activity type has a usable stored
 power curve, it shows the normal preparing, unavailable, or confirmed-empty state instead of hiding the feature.
@@ -971,8 +1009,8 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 #### Parser and continuous-stream boundary
 
 The pinned Sports-lib parser does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 15 rebuilds existing
-snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so derived snapshot rebuilds use
+existing data without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 
 The capacity estimator includes 720 seconds in newly generated default curves. New curve calculation removes isolated
@@ -990,8 +1028,9 @@ calibrate fitness/fatigue response.
 
 ### 7. Settings vs Recent Evidence
 
-This section contains imported capacity observations, swimming performance, durability, and Running/Cycling power
-profiles.
+This section contains capability-gated imported capacity observations, swimming performance, durability, and
+Running/Cycling power profiles. Generic context/profile summaries live with each family's Training Mix and Best Build
+cards rather than creating eight bespoke specialist sections.
 
 #### Imported capacity observations
 
@@ -1073,10 +1112,18 @@ score for every workout.
 The engine currently supports:
 
 - Running, Treadmill, Indoor Running, Virtual Running, and Trail Running.
-- Cycling, Indoor Cycling, Biking, Virtual Cycling, E-Biking, Mountain Biking, Enduro MTB, and Downhill Cycling.
+- Cycling, Indoor Cycling, Biking, Virtual Cycling, E-Biking, and standard Mountain Biking.
 - Swimming and Open Water Swimming.
 
 Support means the engine understands the activity type. An individual activity can still be explicitly ineligible.
+Enduro MTB and Downhill Cycling are recognized separately as gravity MTB and always produce
+`unsupported-context` ineligibility. They must never enter steady-aerobic Cycling durability, even if an older compact
+stat marked them eligible. Quantified Self defensively rejects that legacy evidence until the matching sports-lib
+release has been installed and affected sources have been reparsed. The policy stays on protocol v1; it does not add a
+durability v2 or attempt downhill-run/lift segmentation.
+
+Rowing and the other four newly curated families have no durability adapter in this release. Their generic Training and
+Best Build summaries remain available without implying a long-session durability result.
 
 ### Input selection
 
@@ -1180,9 +1227,11 @@ the real sports-lib registry without importing `DataDurabilityEvidence`; importi
 it as a side effect and mask a bundling or tree-shaking regression. Add an explicit runtime registration import only if a
 deployed bundle reproduces the missing-registration warning.
 
-The source fingerprint includes the protocol, effective activity type and duration, relevant output/HR/grade streams,
-zone durations, and pool-length context. When any effective input changes, sports-lib recalculates the stat. An unchanged,
-canonical stat is reused. A valid summary-only stat is preserved when raw inputs are no longer available.
+The source fingerprint includes the protocol, effective activity type and duration, selected adapter policy, relevant
+output/HR/grade streams, zone durations, and pool-length context. When any effective input changes, sports-lib
+recalculates the stat. An unchanged, canonical stat is reused. A valid summary-only stat is preserved when raw inputs are
+no longer available, except that a gravity MTB activity can always replace stale eligible evidence with the explicit
+policy-only `unsupported-context` summary because that decision needs no retained stream.
 
 Compact aerobic evidence rounds its persisted base output and heart-rate values before calculating efficiency, retention,
 decoupling, and drift. This keeps the serialized summary arithmetically self-consistent at its stored precision, including
@@ -1348,32 +1397,30 @@ state without extending recursive deletion handling and deletion guards.
 ### Adding an activity to an existing discipline
 
 1. Add or normalize the activity type in sports-lib.
-2. Add it to the correct sports-lib activity group.
-3. Confirm the shared discipline-registry enumeration spec now expects it.
-4. Decide whether the existing durability adapter has meaningful output for it.
-5. Add sports-lib durability tests if it should be supported; otherwise keep it explicitly unsupported.
-6. Rebuild and publish sports-lib before updating Quantified Self dependency locks.
+2. Add the exact canonical type to one existing context in `TRAINING_SPORT_DEFINITIONS`; duplicate assignment fails at
+   registry initialization.
+3. Confirm the context's profile, load/intensity/distance policies, metrics, and family capabilities are still correct.
+4. Update the registry membership and resolver tests, including an explicit nearby type that must stay Other.
+5. Decide independently whether sports-lib durability has a physiologically valid adapter. Add sports-lib tests when it
+   should be supported; otherwise leave it unsupported or add an explicit policy ineligibility when stale evidence must
+   be invalidated.
+6. If sports-lib changed, rebuild and publish it before updating Quantified Self dependency locks.
 
 Do not add provider aliases directly to the Training builder.
 
 ### Adding a new Training discipline
 
-This is intentionally larger than adding a card. Update:
+Add one definition to `TRAINING_SPORT_DEFINITIONS` with its presentation metadata, disjoint contexts, exact canonical
+activity types, profile, policies, metrics, and capabilities. The registry-derived family union, visible-discipline and
+benchmark contracts, accumulators, callable validation, automatic/fixed visibility, and generic profile tables should
+then extend without another family branch. Add focused tests that prove those consumers picked it up, plus help and this
+document. If a new requirement cannot be expressed as registry data or a reusable capability, add one reusable policy
+primitive rather than branching on the new family throughout the backend and UI.
 
-- sports-lib group and activity support;
-- `TRAINING_DISCIPLINES` and activity-group mapping;
-- visible-discipline and benchmark contracts;
-- all three-discipline accumulators and payload normalizers;
-- callables and validation copy;
-- automatic/fixed visibility behavior;
-- build comparison formatting and metric semantics;
-- responsive grids;
-- help content; and
-- backend, frontend, shared-contract, rules, and browser tests.
-
-Imported FTP/VO2 capacity support must remain independently modeled. Do not automatically add a new discipline to
-`POWER_CAPACITY_DISCIPLINES`. Rolling power-system capacity does not require a curated Training discipline; a canonical
-exact activity type and a usable persisted power curve are its capability boundary.
+Imported FTP/VO2 capacity support must remain independently modeled. Do not grant a new discipline the `capacity`
+capability merely because it joins Training; `POWER_CAPACITY_DISCIPLINES` derives automatically from that explicit
+capability. Rolling power-system capacity does not require a curated Training discipline; a canonical exact activity
+type and a usable persisted power curve are its capability boundary.
 
 ### Adding a new durability context
 
@@ -1387,8 +1434,9 @@ Prefer a capability-based sports-lib adapter with:
 - a stable context key.
 
 Do not reuse raw outdoor speed where terrain, current, wind, motor assistance, or machine resistance makes it
-physiologically incomparable. Indoor rowing is a strong future candidate; strength, team sports, climbing, downhill
-skiing, and multisport aggregates need different fatigue models rather than this steady aerobic protocol.
+physiologically incomparable. Rowing would require a separately justified adapter and validation before gaining the
+durability capability. Strength, team sports, climbing, gravity MTB, downhill skiing, and multisport aggregates need
+different fatigue models rather than this steady aerobic protocol.
 
 ### Adding a derived metric
 
@@ -1606,9 +1654,19 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 15 is sufficient for rolling power-system capacity when
-persisted curves already exist. A new parser-owned activity stat may additionally require a reparse; changing only the
-derived schema cannot create a missing activity stat or reconstruct a missing continuous stream.
+Existing snapshots rebuild lazily after a schema bump. Schema 16 added the eight-family context/profile summaries;
+schema 17 adds their reusable maximum aggregation and longest-jump metric. The longest-jump rebuild reads the canonical
+Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
+require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
+still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
+events. The repository pins sports-lib `18.1.2`, whose companion
+gravity-durability policy emits explicit `unsupported-context` evidence for Enduro/Downhill activities. The Functions
+aggregator also rejects legacy eligible Enduro/Downhill durability evidence defensively. Reparse affected existing
+activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
+result. This is a policy correction within durability protocol v1, not a v2 migration.
+
+A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
+missing activity stat or reconstruct a missing continuous stream.
 
 ## Maintenance Checklist
 

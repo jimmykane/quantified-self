@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { Component, Input, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -16,7 +16,20 @@ import {
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { CalendarPageComponent } from './calendar-page.component';
+
+@Component({
+  selector: 'app-activity-range-table-section',
+  standalone: true,
+  template: '',
+})
+class ActivityRangeTableSectionStubComponent {
+  @Input() user: unknown;
+  @Input() range: { startMs: number; endExclusiveMs: number } | null = null;
+  @Input() heading = '';
+  @Input() periodLabel = '';
+}
 
 describe('CalendarPageComponent', () => {
   const user = {
@@ -50,6 +63,9 @@ describe('CalendarPageComponent', () => {
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
       ],
+    }).overrideComponent(CalendarPageComponent, {
+      remove: { imports: [ActivityRangeTableSectionComponent] },
+      add: { imports: [ActivityRangeTableSectionStubComponent] },
     }).compileComponents();
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(navigate);
     vi.spyOn(TestBed.inject(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
@@ -86,6 +102,26 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-month')).toHaveLength(12);
+  });
+
+  it('passes an exact primary range to the reusable activity table section', async () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const section = fixture.debugElement.query(By.directive(ActivityRangeTableSectionStubComponent))
+      .componentInstance as ActivityRangeTableSectionStubComponent;
+    expect(new Date(section.range?.startMs || 0)).toEqual(new Date(2026, 7, 1));
+    expect(new Date(section.range?.endExclusiveMs || 0)).toEqual(new Date(2026, 8, 1));
+
+    queryParams.next(convertToParamMap({ view: 'week', date: '2026-08-03' }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(new Date(section.range?.startMs || 0)).toEqual(new Date(2026, 7, 3));
+    expect(new Date(section.range?.endExclusiveMs || 0)).toEqual(new Date(2026, 7, 10));
   });
 
   it('renders duration-based family bars with all positive recorded totals', async () => {

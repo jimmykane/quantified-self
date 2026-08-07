@@ -102,11 +102,15 @@ export class AppRemoteConfigService {
 
         try {
             await fetchAndActivate(this.remoteConfig);
-            this.updateMaintenanceState();
-            this._configLoaded.set(true);
             this.logger.log('[RemoteConfig] Configuration initialized');
         } catch (err) {
-            this.logger.error('[RemoteConfig] Failed to fetch remote config', err);
+            // A failed network fetch does not prevent Remote Config from exposing its
+            // previously activated or in-app default values. Treat this as a
+            // recoverable condition rather than reporting it as an application error.
+            this.logger.warn('[RemoteConfig] Failed to fetch remote config; using cached/default values', err);
+        } finally {
+            this.updateMaintenanceState();
+            this._configLoaded.set(true);
         }
     }
 

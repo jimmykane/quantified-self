@@ -664,6 +664,7 @@ export class AppUserUtilities {
         settings.mapSettings.lapTypes = Array.isArray(settings.mapSettings.lapTypes) ? settings.mapSettings.lapTypes : AppUserUtilities.getDefaultMapLapTypes();
         settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserUtilities.getDefaultMapType();
         settings.mapSettings.mapStyle = settings.mapSettings.mapStyle || 'default';
+        settings.mapSettings.assistantMapStyle = settings.mapSettings.assistantMapStyle || 'default';
         settings.mapSettings.is3D = settings.mapSettings.is3D === true;
         settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserUtilities.getDefaultMapStrokeWidth();
         delete (settings.mapSettings as any).showPoints;

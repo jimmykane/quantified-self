@@ -77,6 +77,19 @@ function formatDurationSeconds(value: number): string {
   return `${roundedSeconds}s`;
 }
 
+function formatElapsedMilliseconds(value: number): string {
+  const totalSeconds = Math.max(0, Math.round(value / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [
+    ...(hours > 0 ? [`${hours}h`] : []),
+    ...(minutes > 0 ? [`${minutes}m`] : []),
+    ...(seconds > 0 || (hours === 0 && minutes === 0) ? [`${seconds}s`] : []),
+  ];
+  return parts.join(' ');
+}
+
 function isDurationSecondsField(key: string): boolean {
   return /(?:duration|sleep).*seconds$/i.test(key);
 }
@@ -85,11 +98,18 @@ function isTimestampMillisecondsField(key: string): boolean {
   return /(?:time|date|day|at)ms$/i.test(key);
 }
 
+function isActivityRelativeTimestampMillisecondsField(key: string): boolean {
+  return /^timestampMs$/i.test(key);
+}
+
 function formatFactValue(key: string, value: string | number | boolean): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'number') {
+    if (isActivityRelativeTimestampMillisecondsField(key)) {
+      return formatElapsedMilliseconds(value);
+    }
     if (isDurationSecondsField(key)) {
       return formatDurationSeconds(value);
     }
@@ -138,7 +158,9 @@ function collectFacts(
     if (typeof child === 'string' || typeof child === 'number' || typeof child === 'boolean') {
       const formattedValue = formatFactValue(key, child);
       const fact = normalizeAssistantEvidenceFact({
-        label: humanizeFieldName(key),
+        label: isActivityRelativeTimestampMillisecondsField(key)
+          ? 'Activity time'
+          : humanizeFieldName(key),
         value: formattedValue,
       });
       const { label } = fact;

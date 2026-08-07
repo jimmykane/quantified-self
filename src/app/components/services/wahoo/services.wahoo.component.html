@@ -45,7 +45,9 @@
         </div>
         <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
           [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
-          <mat-icon>link_off</mat-icon> {{ isDisconnecting ? 'Disconnecting...' : 'Disconnect' }}
+          <span class="connection-action-content">
+            <mat-icon>link_off</mat-icon> {{ isDisconnecting ? 'Disconnecting...' : 'Disconnect' }}
+          </span>
         </button>
       </div>
       }
@@ -56,8 +58,17 @@
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting"
         (click)="connectWithService($event)">
-        <mat-icon>{{ canConnectServiceWithCurrentAccess ? 'link' : 'workspace_premium' }}</mat-icon>
-        {{ isConnecting ? 'Connecting...' : (canConnectServiceWithCurrentAccess ? 'Connect' : 'View Pro plans') }}
+        @if (isConnecting) {
+        <span class="connection-action-content">
+          <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+          Connecting...
+        </span>
+        } @else {
+        <span class="connection-action-content">
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? 'link' : 'workspace_premium' }}</mat-icon>
+          {{ canConnectServiceWithCurrentAccess ? 'Connect' : 'View Pro plans' }}
+        </span>
+        }
       </button>
       }
     </div>

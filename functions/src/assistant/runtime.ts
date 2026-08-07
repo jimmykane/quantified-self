@@ -163,7 +163,7 @@ export const ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS = [
   'Use coordinate-bearing activity data only when it is relevant to the user\'s location, nearby-search, map, trail, or jump-location question.',
   'For where-was-my-record-jump questions, first use list_activity_types to discover the exact Mountain Biking activityGroup, then rank Maximum Jump Distance across that server-expanded group, then inspect only that top activity with list_activity_jumps and match the relevant maximum jump record; never substitute a recent or unrelated activity.',
   'A place-name nearby search sends only the supplied location text to Mapbox; direct-coordinate searches do not use Mapbox.',
-  'For a requested activity breadcrumb or satellite map, call get_activity_chart_data with includeLocation true only after identifying the relevant activity.',
+  'For a requested activity breadcrumb or map, call get_activity_chart_data with includeLocation true only after identifying the relevant activity.',
   'Saved-route bounds, route geometry, route waypoints, original files, write actions, and dashboard settings remain unavailable.',
   'Do not claim that precise locations are unavailable when an enabled tool result provides them.',
 ].join(' ');
@@ -206,6 +206,12 @@ function projectAssistantToolResultForModel(
   const projected: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(source)) {
     if (key === 'appUrl') {
+      continue;
+    }
+    if (key === 'timestampMs' && typeof child === 'number') {
+      if (source.elapsedTimeSeconds === undefined) {
+        projected.elapsedTimeSeconds = child / 1_000;
+      }
       continue;
     }
     const isAbsoluteTimestamp = typeof child === 'number'
@@ -599,6 +605,7 @@ export function createAssistantRuntime(
                 typeof resolvedToolInput.timeZone === 'string'
                   ? resolvedToolInput.timeZone
                   : input.timeZone,
+                resolvedToolInput,
               );
             } catch (error) {
               logger.warn('[Assistant] Optional visual source projection failed.', {

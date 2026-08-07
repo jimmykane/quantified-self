@@ -26,6 +26,7 @@ export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 
 export interface AppMapSettingsInterface extends UserMapSettingsInterface {
     mapStyle?: AppMapStyleName;
+    assistantMapStyle?: AppMapStyleName;
     is3D?: boolean;
 }
 

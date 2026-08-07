@@ -8,6 +8,7 @@ import {
   getSportsLibNumericMetricCatalog,
   resolveSportsLibNumericMetric,
 } from '../mcp/metric-catalog';
+import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import type { AssistantMcpToolName } from './mcp-session';
 
 const ASSISTANT_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -75,6 +76,46 @@ function normalizeAssistantMetricValue(value: unknown): unknown {
     return value;
   }
   return resolveAssistantMetricType(value) || value;
+}
+
+function normalizeAssistantActivityTypeValue(value: unknown): readonly unknown[] {
+  if (typeof value !== 'string') {
+    return [value];
+  }
+  const canonicalType = ActivityTypesHelper.resolveActivityType(value);
+  if (canonicalType) {
+    return [canonicalType];
+  }
+  const normalized = normalizeAssistantCatalogTerm(value);
+  let matchedActivityTypes: readonly string[] | null = null;
+  for (const sport of TRAINING_SPORT_DEFINITIONS) {
+    for (const context of sport.contexts) {
+      if (context.activityTypes.length !== 1
+        || (
+          normalizeAssistantCatalogTerm(context.id) !== normalized
+          && normalizeAssistantCatalogTerm(context.label) !== normalized
+        )) {
+        continue;
+      }
+      if (matchedActivityTypes) {
+        return [value];
+      }
+      matchedActivityTypes = context.activityTypes;
+    }
+  }
+  return matchedActivityTypes || [value];
+}
+
+function normalizeAssistantActivityTypes(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(input.activityTypes)) {
+    return input;
+  }
+  return {
+    ...input,
+    activityTypes: input.activityTypes.flatMap(normalizeAssistantActivityTypeValue),
+  };
 }
 
 function normalizeAssistantSportsLibMetricInputs(
@@ -231,6 +272,7 @@ export function normalizeAssistantToolInput(
     toolName,
     defaultedInput,
   );
+  normalizedInput = normalizeAssistantActivityTypes(normalizedInput);
   if (toolName === 'rank_activities_by_metric') {
     const activityGroup = typeof normalizedInput.activityGroup === 'string'
       ? resolveAssistantActivityGroup(normalizedInput.activityGroup)

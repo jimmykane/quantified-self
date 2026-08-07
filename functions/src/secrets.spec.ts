@@ -4,7 +4,10 @@ import {
   FUNCTION_SECRET_BINDINGS,
   SECRET_PARAMS,
 } from './secrets';
-import { validateFunctionSecretBindings } from './secret-bindings-check';
+import {
+  getExportedFirebaseFunctionNames,
+  validateFunctionSecretBindings,
+} from './secret-bindings-check';
 
 const COROS = ['COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET'];
 const GARMIN = ['GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET'];
@@ -146,5 +149,13 @@ describe('Function Secret Manager policy', () => {
       expect.stringContaining('duplicateSecret'),
       expect.stringContaining('orphanedPolicyEntry'),
     ]));
+  });
+
+  it('discovers only exported Firebase endpoints', () => {
+    expect(getExportedFirebaseFunctionNames({
+      helper: () => undefined,
+      secondFunction: { __endpoint: {} },
+      firstFunction: { __endpoint: {} },
+    })).toEqual(['firstFunction', 'secondFunction']);
   });
 });

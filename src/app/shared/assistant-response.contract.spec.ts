@@ -45,6 +45,7 @@ function buildResponse(): AssistantChatResponse {
             series: [{
               label: 'Overnight HRV',
               unit: 'ms',
+              dataType: 'HeartRateVariability',
               points: [
                 { x: '2026-08-02T00:00:00.000Z', y: 52 },
                 { x: '2026-08-03T00:00:00.000Z', y: null },
@@ -53,7 +54,7 @@ function buildResponse(): AssistantChatResponse {
           }, {
             kind: 'map',
             title: 'Activity location',
-            style: 'satellite',
+            style: 'user_preference',
             markers: [{
               kind: 'start',
               label: 'Start',
@@ -86,6 +87,16 @@ function buildResponse(): AssistantChatResponse {
 describe('Assistant response contract', () => {
   it('accepts a complete bounded response', () => {
     expect(validateAssistantChatResponse(buildResponse()).ok).toBe(true);
+  });
+
+  it('keeps existing satellite map replies readable', () => {
+    const response = buildResponse();
+    const visual = response.conversation.messages[1].visuals?.[1];
+    if (visual?.kind === 'map') {
+      visual.style = 'satellite';
+    }
+
+    expect(validateAssistantChatResponse(response).ok).toBe(true);
   });
 
   it('accepts a valid pending request identity and rejects missing or malformed state', () => {
@@ -147,6 +158,22 @@ describe('Assistant response contract', () => {
     expect(validateAssistantConversation(buildResponse().conversation).ok).toBe(true);
   });
 
+  it('accepts optional canonical chart types and rejects malformed ones', () => {
+    const legacy = buildResponse();
+    const legacyChart = legacy.conversation.messages[1].visuals![0];
+    if (legacyChart.kind === 'chart') {
+      delete legacyChart.series[0].dataType;
+    }
+    expect(validateAssistantConversation(legacy.conversation).ok).toBe(true);
+
+    const malformed = buildResponse();
+    const malformedChart = malformed.conversation.messages[1].visuals![0];
+    if (malformedChart.kind === 'chart') {
+      malformedChart.series[0].dataType = 'x'.repeat(121);
+    }
+    expect(validateAssistantConversation(malformed.conversation).ok).toBe(false);
+  });
+
   it('rejects malformed, duplicate, or user-owned visual payloads', () => {
     const duplicateKinds = buildResponse();
     duplicateKinds.conversation.messages[1].visuals = [
@@ -161,6 +188,13 @@ describe('Assistant response contract', () => {
       map.markers[0].latitudeDegrees = 91;
     }
     expect(validateAssistantConversation(invalidCoordinate.conversation).ok).toBe(false);
+
+    const arbitraryMapStyle = buildResponse();
+    const styledMap = arbitraryMapStyle.conversation.messages[1].visuals![1];
+    if (styledMap.kind === 'map') {
+      (styledMap as unknown as Record<string, unknown>).style = 'attacker-authored-style';
+    }
+    expect(validateAssistantConversation(arbitraryMapStyle.conversation).ok).toBe(false);
 
     const rawConfig = buildResponse();
     const chart = rawConfig.conversation.messages[1].visuals![0] as unknown as Record<string, unknown>;

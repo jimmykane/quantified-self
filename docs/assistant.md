@@ -83,7 +83,7 @@ are included in summaries and can themselves contain user- or provider-assigned 
 
 ## Deterministic visual answers
 
-An answer may store at most one chart and one satellite map. Gemini decides whether a visual would materially clarify
+An answer may store at most one chart and one map. Gemini decides whether a visual would materially clarify
 the answer and selects only a server-advertised per-turn source ID, chart presentation (`line` or `bar`), and up to four
 allowlisted series keys. It never supplies plotted values, coordinates, colors, URLs, ECharts options, Mapbox
 configuration, or visual titles. `functions/src/assistant/visuals.ts` deterministically copies those fields from the
@@ -97,6 +97,14 @@ or bounded chart-breadcrumb coordinates only when the conversation already has `
 coordinates and geometry remain unavailable. Visual labels and units come from the existing MCP sleep, Training, and
 activity-chart catalogs. Form charts feed the persisted daily loads through the shared `buildTrainingLoadPoints` engine
 used by the app and derived-metric service, so fitness, fatigue, and Form are not recalculated by a parallel formula.
+For supported Sports Lib metrics, the deterministic chart projection also retains the canonical data type as bounded
+presentation metadata. Stored points remain in MCP's canonical units, while the frontend reuses the app's Sports Lib
+unit conversion path for axes and tooltips. Distance totals therefore render as kilometers or miles according to the
+signed-in user's current unit settings without changing the MCP result or asking Gemini to scale values.
+For a record-jump location request, the backend binds the jump-detail read to the ranked activity reference and matches
+the relevant Sports Lib maximum metric value to the individual record. It renders only the matching marker or tied
+markers; if that record is not present in the bounded jump page, it omits the map rather than showing unrelated jumps.
+A jump-detail read without a matching record ranking retains the normal all-jump map.
 
 The shared storage contract limits charts to four series and 300 points per series, maps to 50 markers and a 500-point
 path, each assistant message to 64 KiB of visual JSON, and the full public conversation to 512 KiB. Missing values stay
@@ -104,12 +112,19 @@ path, each assistant message to 64 KiB of visual JSON, and the full public conve
 endpoint-preserving sampling. Time axes persist the server-selected IANA timezone (or UTC for UTC-bound Training
 payloads), so calendar labels remain consistent when the answer is reopened from another timezone. The frontend
 renders through the existing ECharts host/theme/tooltip helpers and Mapbox
-loader/style/resize/marker/track manager. Maps never load merely because a conversation is opened: the user must choose
-**Show map** or **Expand**. Only one inline Mapbox instance is active, and expanding a map temporarily suspends it. Desktop uses a
+loader/style/resize/marker/track manager. Map visuals persist the compatible `user_preference` marker rather than a
+concrete tile style. When opened, the frontend resolves the signed-in user's separate
+`mapSettings.assistantMapStyle` through the shared `MapStyleService`; it defaults independently to `default` and never
+changes `mapSettings.mapStyle`. The shared layers control lets the user switch Default, Satellite, or Outdoors on the
+live map and persists that selection for all Assistant maps. The legacy `satellite` marker remains valid for
+stored-conversation compatibility, but those maps also render with the current Assistant preference. Maps never load
+merely because a conversation is opened: the user must
+choose **Show map** or **Expand**. Only one inline Mapbox instance is active, and expanding a map temporarily suspends it. Desktop uses a
 Material dialog and mobile uses the app's Material bottom sheet. A visual-rendering failure leaves the text answer and
 evidence available.
 
-Opening an Assistant satellite map sends the displayed geographic area to Mapbox to retrieve map tiles. This is
+Opening an Assistant map sends the displayed geographic area to Mapbox to retrieve map tiles, regardless of the saved
+Assistant map style. This is
 separate from place-name geocoding: direct-coordinate searches still avoid the geocoder, but viewing their resulting
 map necessarily discloses the viewed tile area to Mapbox. The inline map and expanded view show this disclosure.
 
@@ -151,7 +166,8 @@ The model receives only:
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
   model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
   are renamed and converted to ISO-8601 strings at this internal boundary. Measurement values such as HRV milliseconds
-  and relative offsets such as a jump `timestampMs` remain numeric. In a `precise_activity` conversation, relevant
+  remain numeric. A jump's relative `timestampMs` is renamed and converted to `elapsedTimeSeconds` so it cannot be
+  mistaken for a calendar timestamp. In a `precise_activity` conversation, relevant
   selected results can also contain validated activity start/end or MTB jump coordinates and nearby activity matches.
 - a server-owned visual descriptor when the selected result supports a chart or map. It contains only a per-turn source
   ID, safe series labels and units, and marker/path counts. Gemini chooses among those keys; the backend constructs the
@@ -193,6 +209,8 @@ not authored by the model. The evidence adapter:
 - caps evidence at six tool results, six compact facts per result, and three app links;
 - gives activity rankings a deterministic winner-first projection containing the activity type, metric value and unit,
   exact ISO start time, rank, and scan count;
+- presents a jump's relative `timestampMs` as human-readable elapsed activity time rather than a raw implementation
+  field;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;

@@ -15,8 +15,10 @@ import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import {
@@ -125,6 +127,10 @@ describe('AssistantPageComponent', () => {
         { provide: AssistantQuotaService, useValue: quotaService },
         { provide: Auth, useValue: auth },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        {
+          provide: AppUserSettingsQueryService,
+          useValue: { unitSettings: signal(normalizeUserUnitSettings({})) },
+        },
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
       ],
@@ -227,7 +233,7 @@ describe('AssistantPageComponent', () => {
           }, {
             kind: 'map' as const,
             title: 'Activity location',
-            style: 'satellite' as const,
+            style: 'user_preference' as const,
             markers: [{
               kind: 'start' as const,
               label: 'Start',
@@ -250,8 +256,9 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('app-assistant-visual-chart')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-assistant-visual-map')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Show map');
+    expect(fixture.nativeElement.textContent).toContain('Saved only for Assistant maps.');
     expect(fixture.nativeElement.textContent).toContain(
-      'Viewing sends the displayed map area to Mapbox for satellite tiles.',
+      'Viewing sends the displayed map area to Mapbox for map tiles.',
     );
     expect(component.activeMapKey()).toBeNull();
 
@@ -270,7 +277,7 @@ describe('AssistantPageComponent', () => {
     const visual = {
       kind: 'map' as const,
       title: 'Activity location',
-      style: 'satellite' as const,
+      style: 'user_preference' as const,
       markers: [{
         kind: 'start' as const,
         label: 'Start',
@@ -300,11 +307,11 @@ describe('AssistantPageComponent', () => {
     openSpy.mockRestore();
   });
 
-  it('centers both send states inside the action', () => {
-    const sendButton = fixture.nativeElement.querySelector(
+  it('removes the send action while a response is in progress', () => {
+    let sendButton = fixture.nativeElement.querySelector(
       '.composer-submit',
     ) as HTMLButtonElement;
-    let content = sendButton.querySelector(
+    const content = sendButton.querySelector(
       '.composer-submit-content',
     ) as HTMLElement;
     const styles = readFileSync(resolve(
@@ -317,12 +324,11 @@ describe('AssistantPageComponent', () => {
 
     component.sending.set(true);
     fixture.detectChanges();
-    content = sendButton.querySelector('.composer-submit-content') as HTMLElement;
+    sendButton = fixture.nativeElement.querySelector('.composer-submit') as HTMLButtonElement;
+    const composer = fixture.nativeElement.querySelector('.composer') as HTMLElement;
 
-    expect(sendButton.querySelector('mat-spinner')).toBeTruthy();
-    expect(sendButton.querySelector('.composer-progress')).toBeTruthy();
-    expect(sendButton.getAttribute('aria-label')).toBe('Assistant is responding');
-    expect(content).toBeTruthy();
+    expect(sendButton).toBeNull();
+    expect(composer.classList.contains('composer-sending')).toBe(true);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*place-items:\s*center;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*width:\s*40px;/s);
@@ -330,10 +336,7 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*position:\s*absolute;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*display:\s*grid;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*place-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*width:\s*24px;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*height:\s*24px;/s);
+    expect(styles).toMatch(/\.composer-sending\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {
@@ -1176,7 +1179,7 @@ describe('AssistantPageComponent', () => {
     expect(scrollStartSpy).toHaveBeenCalledOnce();
   });
 
-  it('keeps a send error in the dock above the composer', () => {
+  it('overlays a send error above the composer without resizing the dock', () => {
     component.errorMessage.set('Something went wrong while preparing the answer.');
     fixture.detectChanges();
     const dock = fixture.nativeElement.querySelector('.assistant-composer-dock') as HTMLElement;
@@ -1189,6 +1192,17 @@ describe('AssistantPageComponent', () => {
     expect(error.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(dismiss.getAttribute('aria-label')).toBe('Dismiss Assistant error');
+
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/assistant/assistant-page.component.scss',
+    ), 'utf8');
+    expect(styles).toMatch(
+      /\.assistant-composer-dock\s*{[^}]*position:\s*relative;/s,
+    );
+    expect(styles).toMatch(
+      /\.assistant-error\s*{[^}]*position:\s*absolute;[^}]*bottom:\s*calc\(100% \+ 8px\);/s,
+    );
   });
 
   it('sends a starter prompt and renders the grounded response evidence', async () => {

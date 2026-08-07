@@ -92,6 +92,8 @@ export interface AssistantChartPoint {
 export interface AssistantChartSeries {
   label: string;
   unit: string | null;
+  /** Canonical Sports Lib type used only for deterministic, unit-aware display. */
+  dataType?: string | null;
   points: AssistantChartPoint[];
 }
 
@@ -103,6 +105,8 @@ export interface AssistantChartVisual {
     type: AssistantChartXAxisType;
     label: string;
     unit: string | null;
+    /** Canonical Sports Lib type used only for deterministic, unit-aware display. */
+    dataType?: string | null;
     timeZone: string | null;
   };
   series: AssistantChartSeries[];
@@ -128,7 +132,7 @@ export interface AssistantMapMarker extends AssistantMapPosition {
 export interface AssistantMapVisual {
   kind: 'map';
   title: string;
-  style: 'satellite';
+  style: 'user_preference' | 'satellite';
   markers: AssistantMapMarker[];
   path: AssistantMapPosition[];
 }
