@@ -52,10 +52,8 @@ The following rules are architectural constraints:
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
   FTP, and only components that pass Sports-lib's `ready` gates expose a value.
-- The Power systems presentation is currently limited in the frontend to one designated account. This is a visibility
-  gate only: snapshot generation, persistence, and the fitting policy remain unchanged. The account identifier is kept
-  in the component source and intentionally omitted from this document. Do not treat this frontend condition as an
-  authorization boundary.
+- Power systems is part of the Training workspace for every authenticated user. Its empty, preparing, failed, and ready
+  states remain visible independently of the Running/Cycling/Swimming detail-card selection.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -159,10 +157,10 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav. The route header includes a Feedback action that opens the
-configured support email with a Training-specific subject. Dashboard offers one
-**Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
-configurable tiles.
+Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
+primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
+**Calendar** and **Dashboard** route actions. Dashboard offers **Open Training** and **Calendar** route actions, but does
+not add curated Training snapshots as default Dashboard dependencies or configurable tiles.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
@@ -504,15 +502,19 @@ Failures mark affected snapshots failed, preserve an error, and are rethrown so 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
 
-The route header owns one fixed-height status line above the `Training` title. While any snapshot that backs a visible
-Training surface is missing, queued, processing, building, or stale, that line replaces the normal `28-day training
-analysis` eyebrow instead of inserting a banner into the analytical content. A stale snapshot says that any available
-last completed values remain visible while the replacement finishes. A failed visible snapshot takes precedence,
+The shared route header owns one stable context line above the `Training` title. When the visible scope is healthy, the
+normal `28-day training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC
+date>` subtitle appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
+represents the actual derived-data cutoff, never the browser clock. While any snapshot that backs a visible Training
+surface is missing, queued, processing, building, or stale, the projected status context replaces that eyebrow instead
+of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
+remain visible while the replacement finishes. A failed visible snapshot takes precedence,
 uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
-visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines and the account-gated
-Power systems surface. The optional imported recovery snapshot participates only while its active `Recovery left`
-estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route header in an updating
-state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form or freshness-forecast
+visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines, while the always-
+visible Power systems surface always participates. The optional imported recovery snapshot participates only while its
+active `Recovery left` estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route
+header in an updating state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form
+or freshness-forecast
 series cannot supply the displayed fallback value. Dashboard uses the same continuity rule in its existing top
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
@@ -901,8 +903,8 @@ Tablet and mobile retain the stacked responsive layout.
 every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
 Running/Cycling/Swimming visibility setting and has no combined or all-sports option.
 
-The Training page renders this section only for the currently designated account. The derived metric continues to build
-for every account so removing the presentation gate later does not require a data migration or a policy change.
+The Training page renders this section for every authenticated account. When no exact activity type has a usable stored
+power curve, it shows the normal preparing, unavailable, or confirmed-empty state instead of hiding the feature.
 
 Policy version 1 is fixed:
 
@@ -1259,6 +1261,9 @@ viewports continue to show the summary by default. The event summary translates 
 implementation labels such as `decoupling`, `paired coverage`, or `qualifying data`: it states whether a steady-effort
 comparison is available, the total duration and matched output/heart-rate duration after warm-up and cool-down exclusion,
 then narrates the second-half change in output relative to heart rate, output retained, and average heart-rate change.
+When every supported selected activity has only `missing-output` evidence and no timeline can render, Event Details hides
+the Durability tab and shows a compact data-requirements notice instead. Other ineligible states keep the tab because their
+per-activity eligibility explanation remains useful.
 For cycling, a positive stored decoupling becomes “Power relative to heart rate was <n>% lower in the second half.” The
 event durability ECharts grid reserves explicit left and bottom insets for numeric axis labels; do not rely only on
 automatic outer-bound containment, which can crop the leading digit on narrow plot hosts.
@@ -1278,6 +1283,9 @@ is treated as stale and re-requested.
 
 UI principles:
 
+- The Training route root uses the shared `qs-workspace-page` shell, so its outer 1440 px width and responsive gutters
+  match Dashboard, Calendar, Routes, and Compare files. Training cards and charts retain their own responsive constraints
+  inside that shell.
 - Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. In mixed
   stat copy, only numeric expressions and their attached units use Barlow Condensed; comparison words and other context
   inherit Inter. Headings, labels, status words, and narrative explanations remain in Inter. ECharts continues to use its
@@ -1290,8 +1298,9 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
-- Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
-  keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
+- Responsive icon-only Training actions use plain Material buttons rather than outlined containers, hide only their
+  projected text label, and reset Material's icon-and-text margins. This keeps their visible icons consistent with
+  Dashboard header actions while preserving Material focus, ripple, and touch-target elements.
 - Readiness history and body-weight trend use compact ECharts canvases inside their parent card surfaces rather than
   nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
   the detail readable without being cropped by the card.
@@ -1423,6 +1432,13 @@ average/overnight HRV plus average/minimum sleep HR for the latest grouped main 
 Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
 by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
 selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
+
+The built-in Assistant consumes this same strict `get_training_metric` projection. Its optional deterministic chart
+adapter takes Training titles from the MCP catalog and plots only supported trend arrays. For the `form` payload it
+passes the projected daily loads through `shared/training-load.ts` so CTL, ATL, and Form match the workspace and derived
+backend exactly; it does not maintain another formula. The adapter refuses an implausible expansion beyond 20 years,
+downsamples the resulting display series within the shared Assistant payload budget, and never exposes raw snapshots or
+provider/device provenance to Gemini as visual configuration.
 
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map

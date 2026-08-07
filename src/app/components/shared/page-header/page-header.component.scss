@@ -1,0 +1,135 @@
+:host {
+  display: block;
+}
+
+.qs-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.qs-page-header__content,
+.qs-page-header__context,
+.qs-page-header__actions {
+  min-width: 0;
+}
+
+.qs-page-header__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.qs-page-header__title-row--leading-action {
+  gap: 2px;
+}
+
+.qs-page-header__eyebrow,
+.qs-page-header__subtitle,
+.qs-page-header h1,
+.qs-page-header h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.qs-page-header__eyebrow {
+  margin-bottom: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.qs-page-header h1 {
+  min-width: 0;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-headline-medium);
+  line-height: 1.12;
+}
+
+.qs-page-header h2 {
+  min-width: 0;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-large);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.qs-page-header__subtitle {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qs-page-header__status-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--mat-sys-primary);
+  font-size: 20px;
+  line-height: 20px;
+}
+
+.qs-page-header--status .qs-page-header__subtitle {
+  margin-top: 2px;
+}
+
+.qs-page-header--status.qs-page-header--compact .qs-page-header__content {
+  min-width: 0;
+}
+
+.qs-page-header--status.qs-page-header--compact .qs-page-header__title-row,
+.qs-page-header--status.qs-page-header--compact .qs-page-header__subtitle {
+  overflow: hidden;
+}
+
+.qs-page-header--status.qs-page-header--compact h2,
+.qs-page-header--status.qs-page-header--compact .qs-page-header__subtitle {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qs-page-header--status.qs-page-header--compact.qs-page-header--warning .qs-page-header__status-icon {
+  color: var(--mat-sys-error);
+}
+
+.qs-page-header__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.qs-page-header--actions-only {
+  grid-template-columns: 1fr auto;
+}
+
+@media (max-width: 800px) {
+  .qs-page-header:not(.qs-page-header--compact):not(.qs-page-header--actions-only) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .qs-page-header:not(.qs-page-header--compact):not(.qs-page-header--actions-only) .qs-page-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .qs-page-header h1 {
+    font: var(--mat-sys-headline-small);
+    line-height: 1.12;
+  }
+
+  .qs-page-header__subtitle {
+    font: var(--mat-sys-label-large);
+  }
+}

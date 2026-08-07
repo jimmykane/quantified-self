@@ -88,6 +88,14 @@ const timestampMs = z.number()
   .int()
   .min(Number.MIN_SAFE_INTEGER)
   .max(Number.MAX_SAFE_INTEGER);
+const isoTimestamp = z.string()
+  .length(24)
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  .refine((value) => {
+    const timestampMs = Date.parse(value);
+    return Number.isFinite(timestampMs)
+      && new Date(timestampMs).toISOString() === value;
+  });
 const nullableTimestampMs = timestampMs.nullable();
 const nullableNonNegativeTimestampMs = timestampMs.nonnegative().nullable();
 const cursor = z.string().min(1).max(512).nullable();
@@ -1263,18 +1271,9 @@ const activityOverviewDetailAvailability = z.strictObject({
 const rankedActivity = z.strictObject({
   rank: z.number().int().positive().max(25),
   activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
-  startTimeMs: timestampMs,
-  endTimeMs: timestampMs,
+  startTime: isoTimestamp,
   activityType: z.string().max(120).nullable(),
   value: number,
-}).superRefine((value, context) => {
-  if (value.endTimeMs < value.startTimeMs) {
-    context.addIssue({
-      code: 'custom',
-      path: ['endTimeMs'],
-      message: 'Ranked activity end time must not precede its start time.',
-    });
-  }
 });
 
 function paginatedItems<T extends z.ZodType>(items: T) {
@@ -1562,11 +1561,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       }),
     }),
     rank_activities_by_metric: z.strictObject({
+      activities: z.array(rankedActivity).max(25),
       metric: MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA,
       order: z.enum(['highest', 'lowest']),
       scannedActivityCount: count.max(2_000),
       matchedActivityCount: count.max(2_000),
-      activities: z.array(rankedActivity).max(25),
     }).superRefine((value, context) => {
       if (value.matchedActivityCount > value.scannedActivityCount) {
         context.addIssue({
@@ -1607,11 +1606,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         if (
           previous
           && activity.value === previous.value
-          && activity.startTimeMs > previous.startTimeMs
+          && Date.parse(activity.startTime) > Date.parse(previous.startTime)
         ) {
           context.addIssue({
             code: 'custom',
-            path: ['activities', index, 'startTimeMs'],
+            path: ['activities', index, 'startTime'],
             message: 'Equal ranked values must use newest activity first.',
           });
         }

@@ -1,10 +1,28 @@
-<section class="activity-calendar-tile" aria-labelledby="activity-calendar-tile-title">
+<section class="activity-calendar-tile"
+  [attr.aria-labelledby]="showHeading() ? 'activity-calendar-tile-title' : null"
+  [attr.aria-label]="showHeading() ? null : 'Activity calendar'">
+  @if (showHeading()) {
   <header class="activity-calendar-tile-header">
     <div>
       <h2 id="activity-calendar-tile-title">Activity calendar</h2>
       <span>{{ calendarModel().periodLabel }}</span>
     </div>
   </header>
+  }
+
+  @if (showNavigation()) {
+  <nav class="activity-calendar-tile-navigation" aria-label="Calendar month navigation">
+    <button mat-icon-button type="button" appHapticTap matTooltip="Previous month" aria-label="Previous month"
+      (click)="navigateMonth(-1)">
+      <mat-icon aria-hidden="true">chevron_left</mat-icon>
+    </button>
+    <span aria-live="polite">{{ calendarModel().periodLabel }}</span>
+    <button mat-icon-button type="button" appHapticTap matTooltip="Next month" aria-label="Next month"
+      (click)="navigateMonth(1)">
+      <mat-icon aria-hidden="true">chevron_right</mat-icon>
+    </button>
+  </nav>
+  }
 
   <div class="activity-calendar-tile-progress">
     @if (isLoading()) {

@@ -47,6 +47,43 @@ describe('help.content', () => {
     });
   });
 
+  it('should document the bounded MCP-backed Assistant and external MCP alternative', () => {
+    const assistantSection = HELP_SECTIONS.find(section => section.id === 'ai-insights');
+
+    expect(assistantSection?.title).toBe('Assistant');
+    expect(assistantSection?.content).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(assistantSection?.content).toContain('Expand **Data used**');
+    expect(assistantSection?.content).toContain("browser's IANA timezone");
+    expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
+    expect(assistantSection?.content).toContain('opaque reference or cursor is rejected');
+    expect(assistantSection?.content).toContain('latest six completed turns');
+    expect(assistantSection?.content).toContain('refresh while an answer is in progress');
+    expect(assistantSection?.content).toContain('account-bound, bounded question and request metadata');
+    expect(assistantSection?.content).toContain('different signed-in account cannot restore');
+    expect(assistantSection?.content).toContain('safely resends the same request ID');
+    expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
+    expect(assistantSection?.content).toContain('at most four extra minutes');
+    expect(assistantSection?.content).toContain('deletes the expired record asynchronously');
+    expect(assistantSection?.content).toContain('coordinate-free by default');
+    expect(assistantSection?.content).toContain('**Precise activity locations**');
+    expect(assistantSection?.content).toContain('exact activity start/end and MTB jump coordinates');
+    expect(assistantSection?.content).toContain('one interactive chart and one satellite map');
+    expect(assistantSection?.content).toContain('displayed geographic area to Mapbox');
+    expect(assistantSection?.content).toContain('constructs all plotted values, coordinates, labels, and renderer settings deterministically');
+    expect(assistantSection?.content).toContain('Changing this setting starts a new chat');
+    expect(assistantSection?.content).toContain('route geometry');
+    expect(assistantSection?.content).toContain('ranks the matching Mountain Biking activities');
+    expect(assistantSection?.content).toContain('instead of comparing jump counts');
+    expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
+    expect(assistantSection?.links).toContainEqual({
+      label: 'MCP Connections',
+      icon: 'devices',
+      kind: 'route',
+      target: '/services',
+      queryParams: { serviceName: 'mcp' },
+    });
+  });
+
   it('should document the ChatGPT MCP setup path and production endpoint', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
@@ -66,6 +103,9 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(dataAndPrivacySection?.content).toContain('same-provider baseline medians');
+    expect(dataAndPrivacySection?.content).toContain('processing-bounded all-history scan');
+    expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
+    expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-baseline states');
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
     expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
@@ -157,6 +197,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
     expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
     expect(gettingStartedSection?.content).toContain('Open Training');
+    expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
@@ -186,6 +227,7 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('Dashboard and Training headers each include a **Calendar** action');
     expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
     expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
@@ -242,7 +284,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
     expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
-    expect(trainingSection?.content).toContain('**Power systems** is shown only where it is available to your account');
+    expect(trainingSection?.content).toContain('**Power systems** is available to every signed-in Training user');
     expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');
     expect(trainingSection?.content).toContain('preceding 42 completed UTC days');
     expect(trainingSection?.content).toContain('smaller set of workouts that actually supplied');

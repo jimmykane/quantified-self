@@ -17,6 +17,10 @@ const requestMocks = {
     get: vi.fn(),
 };
 
+const callableMocks = vi.hoisted(() => ({
+    options: undefined as unknown,
+}));
+
 vi.mock('../request-helper', () => ({
     default: {
         post: (...args: any[]) => requestMocks.post(...args),
@@ -129,6 +133,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
 vi.mock('firebase-functions/v2/https', () => {
     return {
         onCall: (options: any, handler: any) => {
+            callableMocks.options = options;
             return handler;
         },
         HttpsError: class HttpsError extends Error {
@@ -255,6 +260,14 @@ describe('importActivityToSuuntoApp', () => {
                 set: setMock,
             }),
         );
+    });
+
+    it('configures enough memory for the base64 activity upload buffer', () => {
+        expect(callableMocks.options).toEqual(expect.objectContaining({
+            memory: '512MiB',
+            timeoutSeconds: 300,
+            maxInstances: 10,
+        }));
     });
 
     it('should successfully upload an activity', async () => {

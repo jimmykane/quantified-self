@@ -95,6 +95,21 @@ describe('EventSummaryComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('keeps the event detail summary out of an outer glass card surface', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
+            'utf8'
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.scss'),
+            'utf8'
+        );
+
+        expect(template).toContain('class="event-summary-content"');
+        expect(template).not.toContain('qs-glass-card-panel');
+        expect(styles).toContain('--summary-primary-info-padding-top: 0;');
+    });
+
     it('renders event tags read-only for public viewers', () => {
         fixture.componentRef.setInput('event', { ...mockEvent, tags: ['Race', '2026'] } as any);
         fixture.componentRef.setInput('isOwner', false);

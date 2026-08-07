@@ -13,7 +13,7 @@ Try the hosted app at [quantified-self.io](https://www.quantified-self.io/).
 - Explore configurable dashboards, training readiness, load trends, power curves, intensity zones, laps, and durability metrics.
 - View activities and saved routes with Mapbox-powered maps and route tools.
 - Compare recordings from multiple devices, share selected activities, and export your data.
-- Generate optional AI-assisted activity insights.
+- Ask grounded fitness-data questions through the built-in Assistant.
 
 ## Technology and repository layout
 
@@ -43,6 +43,7 @@ For the frontend and the repository's CI-compatible workflow, install:
 - Git.
 - Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
 - npm, which is included with Node.js.
+- [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
 - A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
 
 For Firebase emulators and Rules tests, also install:
@@ -82,7 +83,7 @@ Do not copy a maintainer token or commit this file. A valid token is required fo
 > [!WARNING]
 > The current development configuration is **hybrid, not fully isolated**. Callable Functions are routed to the Functions emulator, but browser Auth, Firestore, Storage, Analytics, App Check, and Remote Config still use the configured hosted Firebase project. Starting additional emulators does not connect those browser SDKs automatically.
 
-Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Credentials placed in `functions/.env` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
+Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials placed in `functions/.secret.local` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
 
 ### 4. Build Functions and start the emulators
 
@@ -108,7 +109,16 @@ Open:
 - Application: [http://localhost:4200](http://localhost:4200)
 - Firebase Emulator UI: [http://localhost:4000](http://localhost:4000)
 
-The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material.
+The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material. The `certs/` directory is ignored and must never be committed:
+
+```bash
+mkdir -p certs
+umask 077
+openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
+  -keyout certs/localhost.key -out certs/localhost.crt \
+  -subj '/CN=localhost' \
+  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1'
+```
 
 Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are useful first smoke tests. Authenticated flows additionally require correctly configured Firebase Auth providers, authorized domains, and App Check settings.
 
@@ -116,16 +126,16 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 
 ## Optional backend and provider configuration
 
-`functions/.env` is ignored and is not required to install dependencies, build the code, or run unit tests. Add only the credentials needed for the integration you are developing.
+Copy `functions/.secret.local.example` to the ignored `functions/.secret.local` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
 
 | Feature | Configuration names |
 | --- | --- |
-| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINHEALTHAPI_CONSUMER_KEY`, `GARMINHEALTHAPI_CONSUMER_SECRET` |
+| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
-| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, optional `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY` or `STRIPE_API_KEY` |
-| AI Insights | `GEMINI_API_KEY` |
+| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
+| Stripe | `STRIPE_SECRET_KEY` |
+| Built-in Assistant | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
 | Release source maps | `SENTRY_AUTH_TOKEN` |
@@ -148,6 +158,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
+| Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
 | MCP pre-push checks | `npm run hooks:mcp:pre-push` | Runs the registered-contract gate and focused MCP output/server tests |
 | Local plugin tooling | `npm run plugin:tools` | Installs the isolated pinned Codex CLI dependency |
 | Local plugin setup | `npm run plugin:setup` | Explicitly builds, validates, registers, and installs the configured plugin |
@@ -182,7 +193,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | Collection | Retention | TTL field | Purpose |
 | --- | --- | --- | --- |
 | `mail` | About 90 days | `expireAt` | Transactional email records |
-| `aiInsightsPromptRepairs` | About 90 days | `expireAt` | AI prompt-repair backlog |
+| `aiInsightsPromptRepairs` | Until the retired AI Insights purge completes | `expireAt` | Temporary TTL protection for historical prompt-repair data; no active writer remains |
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
@@ -191,6 +202,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
 | `mcpOAuthRateLimits` | About 5 minutes | `expireAt` | Distributed MCP request counters |
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
+| `users/*/assistantConversations` | 7 days after the latest completed turn or reset; an active turn is protected for at most 4 extra minutes | `expireAt` | One bounded server-owned active Assistant conversation plus private, unindexed replay fingerprints per user |
 | `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
@@ -200,8 +212,11 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Frontend UI composition and shared route headers](docs/frontend-ui.md)
+- [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [Read-only MCP server](docs/mcp-server.md)
+- [Firebase Function secret management](docs/function-secret-management.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
 - [Email lifecycle](docs/email-lifecycle.md)

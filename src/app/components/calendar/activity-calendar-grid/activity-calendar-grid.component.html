@@ -30,7 +30,7 @@
             [attr.aria-label]="day.ariaLabel"
             matRipple
             (click)="selectDay(day)">
-            <span class="activity-calendar-day-number">{{ day.dayNumber }}</span>
+            <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
             <span class="activity-calendar-marker-stage"
               [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
               @for (family of day.visibleFamilies; track family.id) {
@@ -51,7 +51,7 @@
             [class.activity-calendar-day--today]="day.isToday"
             [class.activity-calendar-day--weekend]="day.isWeekend"
             [attr.aria-label]="day.ariaLabel">
-            <span class="activity-calendar-day-number">{{ day.dayNumber }}</span>
+            <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
           </div>
           }
         } @else {

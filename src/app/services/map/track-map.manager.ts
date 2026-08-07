@@ -282,7 +282,10 @@ export class TrackMapManager {
     }
   }
 
-  public fitBoundsToTracks(animate: boolean = true): boolean {
+  public fitBoundsToTracks(
+    animate: boolean = true,
+    maxZoom?: number,
+  ): boolean {
     const fitStartedAt = this.nowMs();
     if (!this.map || !this.mapboxgl || !this.currentTracks.length) {
       this.logger.log(`[${this.logPrefix}Perf] fitBoundsToTracks:skipped`, {
@@ -317,13 +320,18 @@ export class TrackMapManager {
       return false;
     }
 
+    const boundedMaxZoom = typeof maxZoom === 'number' && Number.isFinite(maxZoom)
+      ? Math.min(24, Math.max(0, maxZoom))
+      : null;
     this.map.fitBounds(bounds, {
       padding: 50,
       animate,
+      ...(boundedMaxZoom !== null ? { maxZoom: boundedMaxZoom } : {}),
     });
     this.logPerformance('fitBoundsToTracks:complete', fitStartedAt, {
       trackCount: this.currentTracks.length,
       animate,
+      maxZoom: boundedMaxZoom,
       hasPoints,
     });
     return true;
@@ -388,14 +396,15 @@ export class TrackMapManager {
   private renderCombinedTracks(): void {
     this.activeLayersByTrackId.forEach((_ids, trackId) => this.removeTrack(trackId));
 
-    const renderableTracks = (this.currentTracks || []).map(track => ({
+    const trackItems = (this.currentTracks || []).map(track => ({
       track,
       coordinates: (track.positions || [])
         .filter(position => isValidTrackMapPosition(position))
         .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]),
-    })).filter(item => item.track?.id && item.coordinates.length > 1);
+    })).filter(item => item.track?.id);
+    const renderableTracks = trackItems.filter(item => item.coordinates.length > 1);
 
-    this.syncCombinedTrackMarkers(renderableTracks);
+    this.syncCombinedTrackMarkers(trackItems);
 
     const ids = this.getCombinedTrackLayerIds();
     if (renderableTracks.length === 0) {
@@ -581,6 +590,7 @@ export class TrackMapManager {
 
     if (coordinates.length <= 1) {
       this.removeTrack(track.id);
+      this.renderTrackMarkers(track, coordinates);
       return;
     }
 
@@ -701,14 +711,14 @@ export class TrackMapManager {
   }
 
   private renderTrackMarkers(track: TrackMapRenderData, coordinates: [number, number][]): void {
-    if (!this.map || !this.mapboxgl || !coordinates.length) {
+    if (!this.map || !this.mapboxgl) {
       return;
     }
 
     this.removeTrackMarkers(track.id);
-    const start = coordinates[0];
-    const end = coordinates[coordinates.length - 1];
-    if (this.currentOptions.showEndpointMarkers) {
+    if (this.currentOptions.showEndpointMarkers && coordinates.length > 1) {
+      const start = coordinates[0];
+      const end = coordinates[coordinates.length - 1];
       this.startMarkers.set(track.id, this.createMarker(
         this.createEndpointMarker(track, 'start'),
         start[0],

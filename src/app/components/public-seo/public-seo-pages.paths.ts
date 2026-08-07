@@ -3,7 +3,7 @@ export type PublicSeoPageKey =
   | 'activityCalendar'
   | 'trainingAnalysis'
   | 'mcpServer'
-  | 'aiInsights'
+  | 'assistant'
   | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
   | 'routeFiles'
@@ -22,7 +22,7 @@ export const PUBLIC_FEATURE_PATHS = {
   activityCalendar: 'features/activity-calendar',
   trainingAnalysis: 'features/training-analysis',
   mcpServer: 'features/mcp-server',
-  aiInsights: 'features/ai-insights',
+  assistant: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
   routeFiles: 'features/fit-gpx-route-files',

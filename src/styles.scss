@@ -70,6 +70,8 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
   --qs-dashboard-chart-title-font-size: 0.92rem;
   --qs-dashboard-chart-title-font-weight: 600;
   --qs-dashboard-chart-title-line-height: 1.1;
+  --qs-workspace-max-width: 1440px;
+  --qs-workspace-inline-padding: clamp(16px, 3vw, 40px);
 
   --gradient-running: linear-gradient(135deg, #FDD300, #FF9100);
   --gradient-trail-running: linear-gradient(135deg, #c7ef0c, #8bc34a);
@@ -90,6 +92,22 @@ $app-dark-theme: mat.define-theme((color: (theme-type: dark,
   font-size: var(--qs-dashboard-chart-title-font-size);
   font-weight: var(--qs-dashboard-chart-title-font-weight);
   line-height: var(--qs-dashboard-chart-title-line-height);
+}
+
+/* Shared outer shell for authenticated workspaces. */
+.qs-workspace-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--qs-workspace-max-width);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 24px var(--qs-workspace-inline-padding) 48px;
+}
+
+@media (max-width: 720px) {
+  .qs-workspace-page {
+    padding-top: 16px;
+  }
 }
 
 // Include theme styles for core and each component used in your app.
@@ -665,6 +683,11 @@ mat-table {
   overflow: hidden;
 }
 
+/* The dashboard month picker is dense; its header and calendar tile own their spacing. */
+.cdk-overlay-pane.qs-calendar-month-picker-sheet .mat-bottom-sheet-container {
+  padding: 0 !important;
+}
+
 /* Normalize custom wrapper usage so inner content can own scrolling. */
 .mat-bottom-sheet-container>.bottom-sheet-container {
   flex: 1 1 auto;
@@ -687,10 +710,12 @@ mat-table {
   }
 }
 
-@media (max-width: 599.98px) {
+/* Keep mobile-sized sheets wide through Material's medium breakpoint. */
+@media (max-width: 959.98px) {
   .cdk-overlay-pane.qs-bottom-sheet-container .mat-bottom-sheet-container {
-    min-width: 100%;
-    width: 100%;
+    min-width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
   }
 }
 

@@ -12,6 +12,7 @@ import {
 } from '../../OAuth2';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
@@ -26,6 +27,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.getSuuntoAPIAuthRequestTokenRedirectURI,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10
@@ -65,6 +67,7 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetSuuntoAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region,
+  secrets: FUNCTION_SECRET_BINDINGS.requestAndSetSuuntoAPIAccessToken,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10
@@ -118,6 +121,7 @@ interface DeauthorizeResponse {
  */
 export const deauthorizeSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.deauthorizeSuuntoApp.region,
+  secrets: FUNCTION_SECRET_BINDINGS.deauthorizeSuuntoApp,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10

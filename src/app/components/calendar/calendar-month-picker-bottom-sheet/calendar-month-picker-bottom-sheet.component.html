@@ -1,0 +1,12 @@
+<section class="calendar-month-picker-bottom-sheet" aria-label="Activity calendar">
+  <app-bottom-sheet-header title="Calendar" icon="calendar_month">
+    <button mat-icon-button type="button" aria-label="Close calendar" matTooltip="Close" (click)="dismiss()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+
+  <div class="bottom-sheet-content calendar-month-picker-content">
+    <app-activity-calendar-tile [user]="data.user" [showHeading]="false" [showNavigation]="true">
+    </app-activity-calendar-tile>
+  </div>
+</section>

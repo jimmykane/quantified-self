@@ -1,5 +1,5 @@
 import { environment } from '../../environments/environment';
-import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
@@ -53,7 +53,7 @@ const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 
 const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
-- **Training** is a fixed analytical workspace rather than a set of draggable dashboard tiles. It brings together a **28-day status** compared with your usual training, **Readiness today**, **What drove this**, **Load trajectory**, **Training mix**, **Durability**, and **Settings vs recent evidence**, plus **Power systems** where it is available to your account.
+- **Training** is a fixed analytical workspace rather than a set of draggable dashboard tiles. Its **Data through** date identifies the UTC day covered by the derived 28-day analysis, rather than your device clock. It brings together a **28-day status** compared with your usual training, **Readiness today**, **What drove this**, **Load trajectory**, **Training mix**, **Power systems**, **Durability**, and **Settings vs recent evidence**.
 - While visible Training snapshots are building or refreshing, the compact line above the **Training** title shows that state before any analytical values. It uses the existing header space, so content does not shift when the state changes. Any available last completed values stay visible during a refresh; a failed update adds **Retry** there. The optional imported recovery snapshot affects this route-level status only while an active **Recovery left** estimate is visible.
 - Use **Sports shown** to personalize the Running, Cycling, and Swimming detail cards. Until you save a choice, Training selects sports automatically from activities in the latest 28 days and any saved sport benchmark; if none qualifies, all three stay visible. A saved choice remains fixed until you change it, and **Use automatic selection** restores the automatic behavior.
 
@@ -61,7 +61,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 - Running includes the Running and Trail Running activity groups. Cycling includes the Cycling and Mountain Biking groups, including road, indoor, virtual, e-bike, and mountain-bike activities. Swimming uses the Swimming group for both pool and open-water sessions. Unsupported activity types and multisport aggregate records are not assigned to a Training discipline.
 - Multisport files are evaluated one activity leg at a time. A triathlon can therefore add one session to Running, one to Cycling, and one to Swimming; the parent event itself is not counted as an extra session. Merged events and activities without an eligible parent event are excluded.
-- Hiding a sport removes only that sport's **Best build vs now**, Training Mix, durability tab, and sport-specific performance cards. It does not filter the overall comparison, **What drove this**, or **Power systems** when that section is available to your account. Power systems discovers every exact canonical activity type with usable stored power curves independently; it never combines related types into an all-sports value. Load and intensity charts can still include other eligible activities when their source data provides TSS or zones.
+- Hiding a sport removes only that sport's **Best build vs now**, Training Mix, durability tab, and sport-specific performance cards. It does not filter the overall comparison, **What drove this**, or **Power systems**. Power systems discovers every exact canonical activity type with usable stored power curves independently; it never combines related types into an all-sports value. Load and intensity charts can still include other eligible activities when their source data provides TSS or zones.
 
 ## Best build vs now
 
@@ -91,7 +91,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 - When a derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible activity leg was found in the latest 28 days.
 - **Durability** replaces the old aggregate efficiency trend on Training. Its Running, Cycling, Pool, and Open water tabs compare the current 28 days with the median of the prior three 28-day blocks, expose candidate and eligible activity coverage, preserve output and pool-length/stroke contexts, and show primary exclusion reasons. A context needs eligible evidence in at least two prior blocks before Training calls it usual. Each context also plots a readable 12-week durability trend: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. A Cycling Power Curve proves that power was recorded, but it does not by itself make the ride comparable durability evidence; cycling also needs paired heart rate, sufficient duration and coverage, steady output, and no more than 20% in zones 4–7. Cycling trajectory bars show power-recorded activities while their labels show eligible / power-recorded counts. Weeks without a comparable session explain their primary exclusions instead of being called simply empty, and lines never bridge those gaps. A lower output-to-heart-rate ratio later in one session can suggest a fade only when you intended a similarly steady effort; intentional easing, terrain changes, coasting, or a pace change can produce it too. Use repeated comparable sessions as a trend, and treat missing durability as no suitable comparison rather than zero. Evidence is generated when supported activities are processed; older activities that have not yet been reprocessed stay explicitly missing. Activity-level timelines remain on event detail pages and are not persisted in Training snapshots.
 - **Body-weight trend** appears last on Training as secondary, neutral context from recorded persisted Weight values only. It reduces multiple measurements on one UTC day to a median, shows the latest value plus 7- and 28-day medians in your chosen units, and plots the latest 28 days without joining gaps. A 7- or 28-day change appears only when both equal-length windows have at least three recorded days. It is not a health assessment and does not change the Training state, Form, Readiness, or a workout recommendation.
-- **Power systems** is shown only where it is available to your account. It estimates current CP, W′, and Pmax for each exact canonical activity type from its stored power curves. For a calculation date, it uses only that type's preceding 42 completed UTC days: the same day and all future workouts are excluded. The selector has no all-sports value, and Cycling is not pooled with Indoor Cycling, mountain biking, Rowing, or any other type.
+- **Power systems** is available to every signed-in Training user. It estimates current CP, W′, and Pmax for each exact canonical activity type from its stored power curves. For a calculation date, it uses only that type's preceding 42 completed UTC days: the same day and all future workouts are excluded. The selector has no all-sports value, and Cycling is not pooled with Indoor Cycling, mountain biking, Rowing, or any other type.
 - Power systems shows today plus sparse workout-date points from the latest 12 weeks. A value appears only when Sports-lib marks that component ready; partial, insufficient, poor-fit, unstable, and invalid evidence remains explicit instead of becoming zero. CP is the modeled sustained-power boundary, W′ is the modeled work capacity above CP, and Pmax is the modeled short-duration power ceiling. CP and W′ have separate stability decisions: stable CP can remain visible when W′ is unstable, while dependent Pmax stays unavailable. When W′ is withheld, **What this means** explains whether one workout supplied all retained sustained bests, whether removing it leaves no CP/W′ refit, the competing W′ estimate range, and why Pmax remains unavailable; that range is evidence of disagreement, not a reported W′ value. Diagnostics distinguish every usable power curve from the smaller set of workouts that actually supplied the retained sustained and short-duration envelope anchors, and show fitting-method disagreement, single-anchor removal, and whole-workout removal separately. A type selector appears only when more than one exact activity type is available. New power curves remove isolated one-sample recording artifacts before persistence; the fitter also rejects and counts their short-curve signature in older stored curves. This is capacity evidence—not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
 - Parsing a workout no longer generates CP, W′, Pmax, or power-system strain. Existing Training snapshots rebuild from stored power curves without reparsing source files. A future workout-strain phase would need the original continuous power stream because a power curve does not preserve the order of work and recovery; this release does not calculate or aggregate strain.
 - Imported capacity markers remain separate from rolling power systems. **FTP setting** is the latest positive FTP imported with an eligible Running or Cycling activity; repeated carried values are deduplicated and shown with when that setting was first and last seen. A value that exactly matches the session-derived estimate of 95% of that activity's 20-minute best is not presented as an imported setting.
@@ -102,6 +102,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - New dashboards start with a 1 x 1 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
+- The Dashboard and Training headers each include a **Calendar** action for opening the full [Calendar](/calendar).
 - Existing editable dashboards that do not contain the Activity Calendar receive it once automatically. Use **Undo** on the notice, remove the tile, or use Dashboard manager **Remove all** to keep it from returning; adding it again manually restores it to the dashboard.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
 - The selected view and date are kept in the URL, so refreshing or sharing the authenticated route preserves the same calendar position.
@@ -198,7 +199,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Activity Calendar** is the default 1 x 1 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing editable dashboards that do not contain it receive it once automatically; **Undo** or removing it keeps it dismissed. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header begins with the same TSS-only **Training state** shown in Training, then shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, Overnight HR, and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
+- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header begins with the same TSS-only **Training state** shown in Training, then shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR alongside the **Open Training** action. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
 - **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
 - Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
@@ -412,93 +413,87 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'ai-insights',
-    icon: 'insights',
-    title: 'AI Insights',
-    summary: 'How prompt execution, result types, quotas, and restore behavior work in the AI Insights page.',
+    icon: 'auto_awesome',
+    title: 'Assistant',
+    summary: 'How grounded chat, evidence, quotas, short retention, and external MCP differ.',
     content: `## Access and quota
 
-- AI Insights is available for **Free**, **Basic**, and **Pro** accounts.
-- Prompts are currently **English only**.
-- The public [AI Insights for Endurance Training Data](/features/ai-insights) page explains the search-facing version of this feature.
-- For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
-- We only send the minimum derived stats needed to generate answers.
-- **Why do I get the same answer for the same prompt?**
-  - AI Insights is mostly deterministic for the same prompt and same data scope.
-  - Answers change when the underlying stats change, like new activities, a different date range, or a changed prompt.
+- The Assistant is available for **Free**, **Basic**, and **Pro** accounts.
+- It is the zero-setup choice inside Quantified Self. You do not need to install an MCP client.
+- The public [Quantified Self Assistant](/features/ai-insights) page explains the feature before sign-in.
 - Request limits:
-  - Free: up to **${AI_INSIGHTS_REQUEST_LIMITS.free}** requests per calendar month
-  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests per billing period
-  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests per billing period
-- The prompt card always shows your live remaining requests and reset timing.
+  - Free: up to **${ASSISTANT_REQUEST_LIMITS.free}** requests per calendar month
+  - Basic: up to **${ASSISTANT_REQUEST_LIMITS.basic}** requests per billing period
+  - Pro: up to **${ASSISTANT_REQUEST_LIMITS.pro}** requests per billing period
+- The composer shows your live remaining allowance.
+- A request consumes one allowance once grounded-answer processing begins. Loading or resetting the saved conversation does not.
 
-## Prompt flow and execution
+## How chat works
 
-- Type a prompt and press **Ask AI** to execute.
-- Hero rotating examples at the top now **fill the input only**. They do not run automatically.
-- **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
-- If your prompt does not include a date range, AI Insights defaults to **current year to date**.
-- Mention an optional location directly in your prompt, such as a city, region, country, or latitude/longitude coordinates.
-- You can also mention a radius in the prompt, for example \`within 20 km of Athens\`.
-- AI Insights tries to infer a location from the prompt when it can do so deterministically.
-- The backend geocodes locations with **Mapbox** and, if needed, makes one AI fallback attempt to repair an unresolved location string.
-- Country and region requests use Mapbox's returned **bounding box** as a best-effort scope, not an exact border polygon.
-- City, locality, and place requests use the resolved center point plus your chosen **radius**.
-- Event-backed AI Insights results can show a **map** below the result when surfaced events have recorded start positions.
-- When a location is resolved, the map also draws the resolved search scope: a **radius** circle for point-based places or a **bbox** region for country/region matches, and camera framing includes both scope and surfaced event starts.
-- Add **all time** to query your full history.
-- For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
+- Ask a question and press **Send**. Press **Shift + Enter** for a new line.
+- Starter prompts fill the composer; they do not send automatically.
+- Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
+- If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
+- Every current answer must use at least one read-only Quantified Self result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
+- Use **New chat** to clear the stored messages, return precise activity locations to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
-## Supported result modes
+## What the Assistant can read
 
-- **Aggregate**: narrative + summary cards + chart, with optional ranked event links.
-- **Compare delta explanation**: compare-mode aggregate results include deterministic period deltas with likely contributor series, and deterministic event evidence remains available in the expandable evidence panel.
-- **Event lookup**: best matching event plus top-ranked matching events.
-- **Latest event**: most recent matching event in scope (single primary event card).
-- **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
-- **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
-- **Advisory**: metric-generic deterministic advisory payloads with structured fields (\`semanticKind\`, \`estimate\`, \`interval\`, \`observed\`, \`confidence\`, \`method\`, and \`evidence\`).
-  - For max-heart-rate advisory, \`semanticKind\` can be **current ceiling** (current achievable max based on observed tail) or **potential ceiling** (deterministic potential estimate constrained by observed evidence quality).
-  - Current-ceiling max-heart-rate output anchors the point estimate to the strongest observed max-heart-rate sample in scope after deterministic quality filtering.
-  - Potential-ceiling max-heart-rate output can estimate above observed max when deterministic headroom is justified by tail/coverage/recency signals.
-  - Max-heart-rate advisory requires enough effort-quality signal (at least 8 valid sessions across at least 3 training weeks, plus tail-quality checks near observed max).
-  - Low-intensity-only scopes (for example hiking, walking, or yoga), sparse samples, stale recency, or weak tail signal return **insufficient data** with an explicit reason code and a suggested executable fallback query.
-  - Confidence includes both a deterministic tier and score, and method metadata includes an explicit deterministic method id/version.
-- **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
-- **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
-- **Interpreted badge**: shown when query synthesis rewrites your prompt and the synthesized prompt passes score-gated deterministic validation.
-- **Empty**: the request shape is valid but no matching data was found in scope.
-- **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
+- **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
+- **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
+- **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
+- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps, swim lengths, and bounded on-demand workout chart series. Activity start/end, chart breadcrumbs, and MTB jump coordinates are redacted by default. In **Examples & data access**, you can start a new chat with **Precise activity locations** enabled for exact activity positions, chart breadcrumbs, and nearby activity searches. For an MTB jump record, the Assistant ranks the matching Mountain Biking activities by the relevant maximum-jump metric and treats that persisted maximum as authoritative instead of comparing jump counts or only recent activities. It reads individual jump records only when you ask for those details.
+- **Saved routes:** coordinate-free route names, activity types, bounded summary metrics and counts, and import or update times, filterable by sport, name, or recency. Route names can contain user- or provider-assigned place information.
+- **Activity metrics:** one or several bounded aggregate metric queries through the canonical MCP metric catalog.
 
-## Supported metric highlights
+## Charts and maps
 
-- Power profiling includes **FTP**, **Critical Power**, and **Power-to-Weight (W/kg)** prompts.
-- Running dynamics includes **Ground Contact Time**, **Vertical Oscillation**, **Vertical Ratio**, and **Leg Stiffness** prompts.
-- Zone prompts support deterministic aggregate trends such as **time in Heart Rate Zone 2**, **Power Zone 2**, and **Speed Zone 2** over time.
+- When a visual materially helps, the Assistant can add one interactive chart and one satellite map to an answer. Maps wait for you to choose **Show map** or **Expand**; opening or refreshing a conversation never loads map tiles automatically.
+- Gemini chooses only from safe chart-series or map sources advertised by the current validated tool result. Quantified Self constructs all plotted values, coordinates, labels, and renderer settings deterministically; Gemini cannot author arbitrary chart configuration or move map points.
+- Charts reuse existing measurement, sleep, Training, aggregate metric, ranking, jump, and workout-chart results. Missing readings remain gaps instead of becoming zero.
+- Maps use only activity coordinates already allowed by the current **Precise activity locations** chat. Saved-route bounds, geometry, and waypoints are still unavailable.
+- Opening a satellite map sends the displayed geographic area to Mapbox to load map tiles. This applies even after a direct-coordinate search that did not use Mapbox geocoding. If a map cannot load, the text answer and **Data used** remain available.
 
-## Confidence and anomaly guardrails
+## Privacy boundaries
 
-- Confidence tiers are deterministic and based on coverage, sample size, and signal strength.
-- Evidence chips only render when deterministic references exist (for example buckets, series, or event IDs).
-- Low-signal ranges suppress anomaly callouts so weak/noisy ranges do not produce alerts.
+- The built-in Assistant is coordinate-free by default. When you explicitly enable **Precise activity locations** for a fresh chat, activity tools selected during that chat may send Gemini exact activity start/end and MTB jump coordinates plus nearby activity results. Place-name nearby searches send only the location text to Mapbox; direct-coordinate searches do not use Mapbox. Changing this setting starts a new chat so coordinate-bearing history cannot cross back into a coordinate-free conversation.
+- Saved-route bounds, route geometry, route waypoints, full-resolution or unrequested sensor streams, original files, write tools, and dashboard settings remain unavailable even when precise activity locations are enabled.
+- Gemini receives your message, the browser's IANA timezone for local-day context, bounded recent conversation context, and the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and an answer that repeats an opaque reference or cursor is rejected. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
+- Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
+- The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
 
-## Saved latest result behavior
+## Retention and control
 
-- The latest completed AI result is restored automatically when you open the page.
-- Restored results are marked with a **Restored** chip and saved-date metadata.
-- Invalid latest snapshots are automatically cleared and ignored.
-- **Refresh with latest data & dates** reruns the current result prompt with fresh data.
+- Quantified Self stores one active conversation per user, with at most the latest six completed turns. If bounded charts, maps, and grounded details make that transcript too large, the oldest whole turn is removed first so the newest completed answer can still be saved. Text, compact evidence, and any bounded chart or map payload use the same retention period.
+- The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
+- Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
+- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations to **off**.
+
+## Built-in Assistant or external MCP?
+
+- Use the **Assistant** for a zero-setup, app-funded conversation. It is coordinate-free by default and offers explicit per-chat precise **activity** location access.
+- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, need separately approved saved-route location or geometry access, or want usage billed by that external client.
+- External MCP calls do not consume the in-app Assistant allowance. External clients have their own privacy and retention practices.
 
 ## Troubleshooting quick checks
 
 - **App verification failed**: refresh and retry.
-- **Invalid request**: include one metric, an activity/sport, and a date scope.
-- **Location could not be resolved**: try a clearer city, region, country, or coordinate pair.
-- **Permission denied**: ensure your account has Basic or Pro access.
-- **Quota reached**: wait for reset or upgrade.
-- If you need a metric that is not currently supported, contact support.`,
+- **Conversation changed**: another tab or New chat replaced the active conversation; reload and retry.
+- **Another response is in progress**: wait for the current turn to finish. A stale turn lock expires automatically.
+- **Quota reached**: wait for reset, upgrade, or use your own compatible AI client through MCP.
+- **No data found**: ask which measurement, sleep vital, Training metric, activity type, or activity metric is available before assuming it is unsupported.
+- For exact activity start/end or MTB jump locations and nearby activity searches, enable **Precise activity locations** in **Examples & data access**. For saved-route location, route geometry, or waypoint questions, use an external MCP client and explicitly approve the related permission.`,
     links: [
-      { label: 'AI Insights', icon: 'insights', kind: 'route', target: '/ai-insights' },
-      { label: 'AI Insights Overview', icon: 'query_stats', kind: 'route', target: '/features/ai-insights' },
+      { label: 'Assistant', icon: 'auto_awesome', kind: 'route', target: '/ai-insights' },
+      { label: 'Assistant Overview', icon: 'travel_explore', kind: 'route', target: '/features/ai-insights' },
+      {
+        label: 'MCP Connections',
+        icon: 'devices',
+        kind: 'route',
+        target: '/services',
+        queryParams: { serviceName: 'mcp' },
+      },
+      { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
@@ -846,8 +841,8 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
-- For AI Insights, we do **not** share your raw activity data with AI providers.
-- Only the minimum derived stats required to answer your prompt are sent.
+- The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question. It is coordinate-free by default. If you explicitly start a chat with **Precise activity locations** enabled, selected activity-tool results may also send Gemini exact activity start/end and MTB jump coordinates and nearby activity results during that chat. Place-name searches send only the supplied location text to Mapbox. Changing the setting starts a new chat, and **New chat** returns it to off.
+- The Assistant can send Gemini coordinate-free saved-route summaries selected for a question, including route names that may contain place information. It cannot access or send raw activity or route files, saved-route bounds, route geometry, waypoints, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 - The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 
@@ -864,7 +859,7 @@ Review and revoke authorized MCP clients under [**Connections -> MCP**](/service
 ## MCP client access
 
 - An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Body measurements**, **Individual activity details**, **Activity locations**, **Sleep summaries**, **Saved-route summaries**, and **Saved-route locations and geometry** are separate, optional read-only permissions. Activity locations require activity details; saved-route locations require saved-route summaries. Removing a parent permission also removes its location permission.
-- Metric access covers persisted numeric activity metrics and ready Training-derived snapshots. Clients can compare up to four activity metrics over one bounded range and can first check the human-readable Training metric catalog to distinguish ready, rebuilding, stale, missing, and incompatible snapshots. When individual activity detail access is also granted, a client can inspect which metrics, laps, jumps, swim lengths, and chart streams are available for one referenced activity, request up to 25 explicitly selected canonical numeric Sports Lib metrics, or rank activities by one metric over a bounded range. These paths do not add a separate stored metric catalog. Precise latitude/longitude and first-class body-measurement metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
+- Metric access covers persisted numeric activity metrics and ready Training-derived snapshots. Clients can compare up to four activity metrics over one bounded range and can first check the human-readable Training metric catalog to distinguish ready, rebuilding, stale, missing, and incompatible snapshots. When individual activity detail access is also granted, a client can inspect which metrics, laps, jumps, swim lengths, and chart streams are available for one referenced activity, request up to 25 explicitly selected canonical numeric Sports Lib metrics, or rank activities by one metric over an explicit bounded range or a processing-bounded all-history scan. Oversized rankings fail instead of returning partial records. MTB jump superlatives reuse that ranking and treat the persisted maximum as authoritative; individual jump records remain an optional detail read, and jump count is not treated as jump quality. These paths do not add a separate stored metric catalog. Precise latitude/longitude and first-class body-measurement metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
 - Body-measurement access covers first-class body-measurement history. Body-weight history is available for bounded ranges up to 366 days as identity-free day, week, or month values using median, average, minimum, maximum, or latest aggregation. It contains recorded measurements only and is not a medical or health assessment. It excludes exact source measurement timestamps, event/activity identity, names, provider/device metadata, and source provenance.
 - Any authorized MCP client can discover canonical Sports Lib activity types for filters; that static catalog contains no account data. Individual activity detail access covers non-location summaries, laps, swim lengths, MTB jump measurements, signed-in app links, selected persisted numeric metrics, and bounded chart-ready heart-rate, power, cadence, altitude, grade, distance, speed, and activity-appropriate pace streams. Clients can filter newest-first activity scans by one or more types and request **today** or **yesterday** in an explicit IANA timezone. Bounded pages report scan completion so a client can distinguish a complete no-match result from older history that remains to be checked. Chart streams are parsed temporarily from an existing FIT, GPX, TCX, Suunto JSON/SML, or gzip original file, downsampled over the complete activity, and discarded without a reparse, backfill, cache, or additional activity storage. Historical chart access therefore depends on the original file still being available and within the documented limits.
 - Activity location access separately covers exact activity start/end coordinates, nearby activity searches, MTB jump coordinates, and bounded breadcrumb traces returned with a chart. Without it, summaries and jump measurements remain available with coordinates omitted. Exact activity locations can reveal your home, workplace, frequent trailhead, or other sensitive places.

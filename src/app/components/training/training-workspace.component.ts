@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -134,8 +134,6 @@ import {
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
 import { environment } from '../../../environments/environment';
-
-export const TRAINING_POWER_SYSTEMS_ACCESS_USER_ID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
@@ -297,9 +295,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingPowerSystemsActivityTypes: TrainingPowerSystemsActivityTypeViewModel[] = [];
   public selectedTrainingPowerSystemsActivityType: string | null = null;
   public selectedTrainingPowerSystems: TrainingPowerSystemsActivityTypeViewModel | null = null;
-  public hasTrainingPowerSystemsAccess = false;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
+  public trainingDataAsOfText: string | null = null;
   public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
     type: 'pending',
     title: 'Building derived metrics',
@@ -363,6 +361,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     @Optional() private readonly ngZone: NgZone | null = null,
     @Optional() private readonly analyticsService: AppAnalyticsService | null = null,
     @Optional() breakpointObserver: BreakpointObserver | null = null,
+    @Inject(LOCALE_ID) private readonly locale: string,
   ) {
     this.useTrainingStateDetailsDialog = breakpointObserver
       ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
@@ -393,7 +392,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
 
       this.currentUserUID = uid || null;
-      this.hasTrainingPowerSystemsAccess = this.currentUserUID === TRAINING_POWER_SYSTEMS_ACCESS_USER_ID;
       this.dataSubscriptions.unsubscribe();
       this.dataSubscriptions = new Subscription();
       this.resetWorkspace();
@@ -543,6 +541,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.selectedTrainingPowerSystems = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
+    this.trainingDataAsOfText = null;
     this.derivedMetricsRouteStatus = {
       type: 'pending',
       title: 'Building derived metrics',
@@ -715,9 +714,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (this.isSwimmingVisible) {
       statuses.push(this.derivedState.trainingSwimPerformanceStatus);
     }
-    if (this.hasTrainingPowerSystemsAccess) {
-      statuses.push(this.derivedState.trainingPowerSystemsStatus);
-    }
+    statuses.push(this.derivedState.trainingPowerSystemsStatus);
 
     const refreshPhase = resolveDerivedMetricsRefreshPhase(statuses);
     if (refreshPhase === 'failed') {
@@ -1038,7 +1035,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
       const anchorDayMs = selection.windowEndDayMs + TRAINING_DAY_MS;
       return Number.isFinite(anchorDayMs)
-        ? `Event on ${this.formatTrainingBuildDate(anchorDayMs)}`
+        ? `Event on ${this.formatTrainingUtcDate(anchorDayMs)}`
         : 'Historical event';
     }
     return 'Manual historical period';
@@ -1048,10 +1045,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (!Number.isFinite(startDayMs) || !Number.isFinite(endDayMs)) {
       return '';
     }
-    return `${this.formatTrainingBuildDate(startDayMs as number)} – ${this.formatTrainingBuildDate(endDayMs as number)}`;
+    return `${this.formatTrainingUtcDate(startDayMs as number)} – ${this.formatTrainingUtcDate(endDayMs as number)}`;
   }
 
-  private formatTrainingBuildDate(dayMs: number): string {
+  private formatTrainingUtcDate(dayMs: number): string {
     const formatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
@@ -1061,8 +1058,27 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return formatter.format(new Date(dayMs));
   }
 
+  private formatTrainingDataAsOfDate(dayMs: number): string {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    };
+    try {
+      return new Intl.DateTimeFormat(this.locale || undefined, options).format(new Date(dayMs));
+    } catch {
+      return new Intl.DateTimeFormat(undefined, options).format(new Date(dayMs));
+    }
+  }
+
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
+    const trainingSummaryAsOfDayMs = this.derivedState.trainingSummary?.asOfDayMs;
+    this.trainingDataAsOfText = Number.isFinite(trainingSummaryAsOfDayMs)
+      ? `Data through ${this.formatTrainingDataAsOfDate(trainingSummaryAsOfDayMs as number)}`
+      : null;
     const formPoints = this.derivedState.formPoints;
     const currentTrainingState = buildCurrentTrainingStateContext({
       formPoints,

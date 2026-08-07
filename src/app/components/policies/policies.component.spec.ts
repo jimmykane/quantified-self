@@ -79,8 +79,14 @@ describe('PoliciesComponent', () => {
     const sectionCopy = fixture.nativeElement.textContent as string;
 
     expect(sectionCopy).toContain('Google GenAI / Gemini');
-    expect(sectionCopy).toContain('uploaded FIT/GPX/TCX/JSON/SML files');
-    expect(sectionCopy).toContain('not sent to the AI provider');
+    expect(sectionCopy).toContain('latest six completed conversation turns');
+    expect(sectionCopy).toContain('Original FIT/GPX/TCX/JSON/SML files');
+    expect(sectionCopy).toContain('unavailable to the Assistant');
+    expect(sectionCopy).toContain('becomes unavailable about seven days after');
+    expect(sectionCopy).toContain('displayed geographic tile area');
+    expect(sectionCopy).toContain('server-advertised visual source');
+    expect(sectionCopy).toContain('at most four extra minutes');
+    expect(sectionCopy).toContain('Firestore TTL then deletes it asynchronously');
   });
 
   it('renders public controller and contact details', () => {

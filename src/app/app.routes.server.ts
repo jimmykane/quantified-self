@@ -16,7 +16,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
   PUBLIC_FEATURE_PATHS.activityCalendar,
   PUBLIC_FEATURE_PATHS.trainingAnalysis,
   PUBLIC_FEATURE_PATHS.mcpServer,
-  PUBLIC_FEATURE_PATHS.aiInsights,
+  PUBLIC_FEATURE_PATHS.assistant,
   PUBLIC_FEATURE_PATHS.workoutFileComparison,
   PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
   PUBLIC_FEATURE_PATHS.routeFiles,

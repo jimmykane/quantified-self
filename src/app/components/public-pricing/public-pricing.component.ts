@@ -5,7 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
-import { getAiInsightsRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 import { Observable, catchError, defer, map, of, shareReplay, timeout } from 'rxjs';
 import { AppPaymentService, StripePrice, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
@@ -237,7 +237,7 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
             ...baseFeatures,
             { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads' },
             { icon: standardIcon, iconClass: standardIconClass, label: 'Core analysis tools' },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAiInsightsLimitLabel(role) },
+            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
         ];
     }
 
@@ -245,7 +245,7 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
         return [
             ...baseFeatures,
             { icon: standardIcon, iconClass: standardIconClass, label: 'Manual uploads' },
-            { icon: standardIcon, iconClass: standardIconClass, label: getAiInsightsLimitLabel(role) },
+            { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
             { icon: 'favorite', iconClass: 'qs-color-primary', label: 'Supports independent, privacy-first development' },
         ];
     }
@@ -254,7 +254,7 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
         ...baseFeatures,
         { icon: standardIcon, iconClass: standardIconClass, label: 'Automatic activity imports from your watch' },
         { icon: standardIcon, iconClass: standardIconClass, label: 'Cross-device sync' },
-        { icon: standardIcon, iconClass: standardIconClass, label: getAiInsightsLimitLabel(role) },
+        { icon: standardIcon, iconClass: standardIconClass, label: getAssistantLimitLabel(role) },
         { icon: 'favorite', iconClass: 'qs-color-warn', label: 'Helps fund faster feature releases' },
     ];
 }
@@ -269,14 +269,14 @@ function getRouteLimitLabel(role: PublicPlanRole): string {
     return limit === null ? 'Unlimited saved routes' : `Up to ${limit} saved routes`;
 }
 
-function getAiInsightsLimitLabel(role: PublicPlanRole): string {
-    const limit = getAiInsightsRequestLimitForRole(role);
+function getAssistantLimitLabel(role: PublicPlanRole): string {
+    const limit = getAssistantRequestLimitForRole(role);
     if (limit <= 0) {
-        return 'AI Insights not included';
+        return 'Assistant not included';
     }
 
     const period = role === 'free' ? 'calendar month' : 'billing period';
-    return `AI Insights up to ${limit} requests per ${period}`;
+    return `Assistant up to ${limit} requests per ${period}`;
 }
 
 function getRecurringCadence(price: StripePrice): RecurringCadence | null {

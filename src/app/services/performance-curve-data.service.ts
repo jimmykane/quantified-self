@@ -127,6 +127,7 @@ export interface PerformanceCurveBestEffortMarker {
 export interface PerformanceCurveAvailability {
   hasPowerCurve: boolean;
   hasDurability: boolean;
+  durabilityOutputUnavailable: boolean;
   hasCadencePower: boolean;
   hasAny: boolean;
 }
@@ -143,6 +144,7 @@ export class PerformanceCurveDataService {
       return {
         hasPowerCurve: false,
         hasDurability: false,
+        durabilityOutputUnavailable: false,
         hasCadencePower: false,
         hasAny: false,
       };
@@ -154,8 +156,11 @@ export class PerformanceCurveDataService {
       ...buildOptions,
       maxPointsPerSeries: 2,
     });
-    const hasDurability = durabilityResult.renderSeries.length > 0
-      || durabilityResult.activitySummaries.length > 0;
+    const durabilityOutputUnavailable = durabilityResult.renderSeries.length === 0
+      && durabilityResult.activitySummaries.length > 0
+      && durabilityResult.activitySummaries.every(({ summary }) => summary.eligibility.reason === 'missing-output');
+    const hasDurability = !durabilityOutputUnavailable && (durabilityResult.renderSeries.length > 0
+      || durabilityResult.activitySummaries.length > 0);
     const hasCadencePower = this.buildCadencePowerSeries(activities, {
       ...buildOptions,
       maxPointsPerSeries: 2,
@@ -164,8 +169,9 @@ export class PerformanceCurveDataService {
     return {
       hasPowerCurve,
       hasDurability,
+      durabilityOutputUnavailable,
       hasCadencePower,
-      hasAny: hasPowerCurve || hasDurability || hasCadencePower,
+      hasAny: hasPowerCurve || hasDurability || durabilityOutputUnavailable || hasCadencePower,
     };
   }
 

@@ -432,184 +432,102 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe('AI Insights Latest Snapshot (users/{uid}/aiInsightsRequests/latest)', () => {
-            it('should deny owner from writing the latest doc', async () => {
+        describe('Assistant Usage (users/{uid}/assistantUsage/{periodDocId})', () => {
+            const usageDocId = 'period_1740787200000_1743465600000';
+
+            it('should deny owner from reading Assistant usage period docs', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
+                        version: 1,
+                        role: 'pro',
+                        limit: 100,
+                        periodStart: '2026-03-01T00:00:00.000Z',
+                        periodEnd: '2026-04-01T00:00:00.000Z',
+                        periodKind: 'subscription',
+                        successfulRequestCount: 12,
+                        reservationMap: {},
+                        updatedAt: new Date(),
+                    });
+                });
+
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).get());
+            });
+
+            it('should deny owner from writing Assistant usage period docs', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                     version: 1,
-                    savedAt: '2026-03-18T12:00:00.000Z',
-                    prompt: 'Show my total distance all time',
-                    response: {
-                        status: 'unsupported',
-                        narrative: 'Unsupported request',
-                        reasonCode: 'unsupported_capability',
-                        suggestedPrompts: ['Show my total distance this year']
-                    }
+                    role: 'pro',
+                    limit: 100,
+                    periodStart: '2026-03-01T00:00:00.000Z',
+                    periodEnd: '2026-04-01T00:00:00.000Z',
+                    periodKind: 'subscription',
+                    successfulRequestCount: 12,
+                    reservationMap: {},
+                    updatedAt: new Date(),
                 }));
             });
 
-            it('should allow owner to read the fixed latest doc', async () => {
+            it('should deny other users from reading Assistant usage period docs', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                    await context.firestore().doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                         version: 1,
-                        savedAt: '2026-03-18T12:00:00.000Z',
-                        prompt: 'Show my total distance all time',
-                        response: {
-                            status: 'unsupported',
-                            narrative: 'Unsupported request',
-                            reasonCode: 'unsupported_capability',
-                            suggestedPrompts: ['Show my total distance this year']
-                        }
-                    });
-                });
-
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.doc(`users/${userId}/aiInsightsRequests/latest`).get());
-            });
-
-            it('should allow owner to delete the fixed latest doc', async () => {
-                await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
-                        version: 1,
-                        savedAt: '2026-03-18T12:00:00.000Z',
-                        prompt: 'Show my total distance all time',
-                        response: {
-                            status: 'unsupported',
-                            narrative: 'Unsupported request',
-                            reasonCode: 'unsupported_capability',
-                            suggestedPrompts: ['Show my total distance this year']
-                        }
-                    });
-                });
-
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertSucceeds(db.doc(`users/${userId}/aiInsightsRequests/latest`).delete());
-            });
-
-            it('should deny owner from writing any doc id other than latest', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/history_1`).set({
-                    version: 1
-                }));
-            });
-
-            it('should deny other users from reading latest AI insight snapshots', async () => {
-                await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
-                        version: 1,
-                        savedAt: '2026-03-18T12:00:00.000Z',
-                        prompt: 'Show my total distance all time',
-                        response: {
-                            status: 'unsupported',
-                            narrative: 'Unsupported request',
-                            reasonCode: 'unsupported_capability',
-                            suggestedPrompts: ['Show my total distance this year']
-                        }
+                        role: 'pro',
+                        limit: 100,
+                        periodStart: '2026-03-01T00:00:00.000Z',
+                        periodEnd: '2026-04-01T00:00:00.000Z',
+                        periodKind: 'subscription',
+                        successfulRequestCount: 12,
+                        reservationMap: {},
+                        updatedAt: new Date(),
                     });
                 });
 
                 const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).get());
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).get());
             });
 
-            it('should deny other users from writing latest AI insight snapshots', async () => {
+            it('should deny other users from writing Assistant usage period docs', async () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).set({
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                     version: 1,
-                    savedAt: '2026-03-18T12:00:00.000Z',
-                    prompt: 'Show my total distance all time'
+                    role: 'pro',
+                    limit: 100,
+                    periodStart: '2026-03-01T00:00:00.000Z',
+                    periodEnd: '2026-04-01T00:00:00.000Z',
+                    periodKind: 'subscription',
+                    successfulRequestCount: 12,
+                    reservationMap: {},
+                    updatedAt: new Date(),
                 }));
-            });
-
-            it('should deny other users from deleting latest AI insight snapshots', async () => {
-                await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsRequests/latest`).set({
-                        version: 1,
-                        savedAt: '2026-03-18T12:00:00.000Z',
-                        prompt: 'Show my total distance all time',
-                        response: {
-                            status: 'unsupported',
-                            narrative: 'Unsupported request',
-                            reasonCode: 'unsupported_capability',
-                            suggestedPrompts: ['Show my total distance this year']
-                        }
-                    });
-                });
-
-                const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsRequests/latest`).delete());
             });
         });
 
-        describe('AI Insights Usage (users/{uid}/aiInsightsUsage/{periodDocId})', () => {
-            const usageDocId = 'period_1740787200000_1743465600000';
+        describe('Assistant conversations (users/{uid}/assistantConversations/active)', () => {
+            const assistantPath = `users/${userId}/assistantConversations/active`;
 
-            it('should deny owner from reading AI insights usage period docs', async () => {
+            beforeEach(async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                    await context.firestore().doc(assistantPath).set({
                         version: 1,
-                        role: 'pro',
-                        limit: 100,
-                        periodStart: '2026-03-01T00:00:00.000Z',
-                        periodEnd: '2026-04-01T00:00:00.000Z',
-                        periodKind: 'subscription',
-                        successfulRequestCount: 12,
-                        reservationMap: {},
-                        updatedAt: new Date(),
+                        conversationId: 'conversation-1',
+                        messages: [],
+                        expireAt: new Date('2026-08-10T00:00:00.000Z'),
                     });
                 });
+            });
 
+            it('should deny direct owner reads, writes, and deletes', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+                await assertFails(db.doc(assistantPath).get());
+                await assertFails(db.doc(assistantPath).set({ messages: [] }));
+                await assertFails(db.doc(assistantPath).delete());
             });
 
-            it('should deny owner from writing AI insights usage period docs', async () => {
-                const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
-                    version: 1,
-                    role: 'pro',
-                    limit: 100,
-                    periodStart: '2026-03-01T00:00:00.000Z',
-                    periodEnd: '2026-04-01T00:00:00.000Z',
-                    periodKind: 'subscription',
-                    successfulRequestCount: 12,
-                    reservationMap: {},
-                    updatedAt: new Date(),
-                }));
-            });
-
-            it('should deny other users from reading AI insights usage period docs', async () => {
-                await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
-                        version: 1,
-                        role: 'pro',
-                        limit: 100,
-                        periodStart: '2026-03-01T00:00:00.000Z',
-                        periodEnd: '2026-04-01T00:00:00.000Z',
-                        periodKind: 'subscription',
-                        successfulRequestCount: 12,
-                        reservationMap: {},
-                        updatedAt: new Date(),
-                    });
-                });
-
+            it('should deny other users from reading the conversation', async () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
-            });
-
-            it('should deny other users from writing AI insights usage period docs', async () => {
-                const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
-                    version: 1,
-                    role: 'pro',
-                    limit: 100,
-                    periodStart: '2026-03-01T00:00:00.000Z',
-                    periodEnd: '2026-04-01T00:00:00.000Z',
-                    periodKind: 'subscription',
-                    successfulRequestCount: 12,
-                    reservationMap: {},
-                    updatedAt: new Date(),
-                }));
+                await assertFails(db.doc(assistantPath).get());
             });
         });
 
@@ -1589,53 +1507,53 @@ describe('Firestore Security Rules', () => {
         });
     });
 
-    describe('AI Insights Prompt Repair Backlog (aiInsightsPromptRepairs/{docId})', () => {
-        const docId = 'repair-intent-1';
-
-        it('should deny authenticated users from reading repair backlog docs', async () => {
+    describe('Retired AI Insights storage paths', () => {
+        it('keeps the retired usage ledger inaccessible even to its owner', async () => {
+            const retiredUserId = 'retired-insights-usage-user';
+            const usagePath = `users/${retiredUserId}/aiInsightsUsage/period_1_2`;
             await testEnv.withSecurityRulesDisabled(async (context) => {
-                await context.firestore().doc(`aiInsightsPromptRepairs/${docId}`).set({
-                    canonicalPrompt: 'show max heart rate by activity type',
-                    normalizedQuerySignature: '{"q":"sig"}',
-                    normalizedQuery: { resultKind: 'aggregate' },
-                    seenCount: 3,
+                await context.firestore().doc(usagePath).set({
+                    successfulRequestCount: 12,
                 });
             });
 
-            const db = testEnv.authenticatedContext('repair-user').firestore();
-            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).get());
+            const db = testEnv.authenticatedContext(retiredUserId).firestore();
+            await assertFails(db.doc(usagePath).get());
+            await assertFails(db.doc(usagePath).set({ successfulRequestCount: 0 }));
+            await assertFails(db.doc(usagePath).delete());
         });
 
-        it('should deny authenticated users from writing repair backlog docs', async () => {
-            const db = testEnv.authenticatedContext('repair-user').firestore();
-            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).set({
-                canonicalPrompt: 'show max heart rate by activity type',
-                normalizedQuerySignature: '{"q":"sig"}',
-                seenCount: 1,
-            }));
-        });
-
-        it('should deny unauthenticated users from reading repair backlog docs', async () => {
+        it('keeps legacy latest snapshots inaccessible even to their owner', async () => {
+            const retiredUserId = 'retired-insights-user';
+            const snapshotPath = `users/${retiredUserId}/aiInsightsRequests/latest`;
             await testEnv.withSecurityRulesDisabled(async (context) => {
-                await context.firestore().doc(`aiInsightsPromptRepairs/${docId}`).set({
-                    canonicalPrompt: 'show max heart rate by activity type',
-                    normalizedQuerySignature: '{"q":"sig"}',
-                    normalizedQuery: { resultKind: 'aggregate' },
-                    seenCount: 3,
+                await context.firestore().doc(snapshotPath).set({
+                    version: 1,
+                    prompt: 'historical prompt',
                 });
             });
 
-            const db = testEnv.unauthenticatedContext().firestore();
-            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).get());
+            const db = testEnv.authenticatedContext(retiredUserId).firestore();
+            await assertFails(db.doc(snapshotPath).get());
+            await assertFails(db.doc(snapshotPath).set({ version: 2 }));
+            await assertFails(db.doc(snapshotPath).delete());
         });
 
-        it('should deny unauthenticated users from writing repair backlog docs', async () => {
-            const db = testEnv.unauthenticatedContext().firestore();
-            await assertFails(db.doc(`aiInsightsPromptRepairs/${docId}`).set({
-                canonicalPrompt: 'show max heart rate by activity type',
-                normalizedQuerySignature: '{"q":"sig"}',
-                seenCount: 1,
-            }));
+        it('keeps historical prompt-repair records inaccessible to clients', async () => {
+            const repairPath = 'aiInsightsPromptRepairs/historical-repair';
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(repairPath).set({
+                    canonicalPrompt: 'historical prompt',
+                    expireAt: new Date(),
+                });
+            });
+
+            const authenticatedDb = testEnv.authenticatedContext('retired-repair-user').firestore();
+            const unauthenticatedDb = testEnv.unauthenticatedContext().firestore();
+            await assertFails(authenticatedDb.doc(repairPath).get());
+            await assertFails(authenticatedDb.doc(repairPath).set({ canonicalPrompt: 'replacement' }));
+            await assertFails(authenticatedDb.doc(repairPath).delete());
+            await assertFails(unauthenticatedDb.doc(repairPath).get());
         });
     });
 

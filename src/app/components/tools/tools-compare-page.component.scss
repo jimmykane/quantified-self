@@ -7,14 +7,6 @@
   background: var(--mat-sys-surface);
 }
 
-.tools-compare-page {
-  box-sizing: border-box;
-  max-width: 86rem;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
-  width: 100%;
-}
-
 .hero-section {
   display: grid;
   gap: 1.25rem;
@@ -42,11 +34,6 @@ h1 {
   font-size: 4rem;
   line-height: 1.02;
   letter-spacing: 0;
-}
-
-.workspace-header h1 {
-  font-size: 2rem;
-  line-height: 1.12;
 }
 
 h2 {
@@ -141,18 +128,7 @@ h2 {
 }
 
 .workspace-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: flex-end;
-  justify-content: space-between;
   padding: 0.75rem 0 0.25rem;
-}
-
-.workspace-title-block {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
 }
 
 .workspace-header-actions {
@@ -1076,33 +1052,12 @@ mat-paginator {
 }
 
 @include bp.max-768 {
-  .tools-compare-page {
-    padding: 1.25rem 0.875rem 2.5rem;
-  }
-
   h1 {
     font-size: 2.55rem;
   }
 
   h2 {
     font-size: 1.85rem;
-  }
-
-  .workspace-header h1 {
-    font-size: 1.65rem;
-  }
-
-  .workspace-header {
-    align-items: stretch;
-  }
-
-  .workspace-title-block,
-  .workspace-header-actions {
-    width: 100%;
-  }
-
-  .workspace-header-actions {
-    justify-content: flex-start;
   }
 
   .upload-composer,

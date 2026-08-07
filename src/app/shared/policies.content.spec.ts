@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
   POLICY_CONTENT,
+  POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
@@ -16,6 +17,39 @@ describe('Policy consent fields', () => {
       .map(policy => policy.formControlName);
 
     expect(requiredPolicyControls).toEqual([...REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES]);
+  });
+});
+
+describe('Built-in Assistant policy', () => {
+  it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {
+    const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT);
+    const content = topic?.content.join(' ') || '';
+
+    expect(CONNECTED_SERVICES_POLICY_SECTION.summary).toContain('built-in Assistant');
+    expect(content).toContain("browser's IANA timezone");
+    expect(content).toContain('latest six completed conversation turns');
+    expect(content).toContain('bounded validated results from the read-only tools');
+    expect(content).toContain('Results are coordinate-free by default');
+    expect(content).toContain('Precise activity locations enabled');
+    expect(content).toContain('exact activity start/end and MTB jump coordinates');
+    expect(content).toContain('Changing the setting starts a fresh chat');
+    expect(content).toContain('Coordinate-free saved-route summaries may be selected');
+    expect(content).toContain('Direct in-app URLs are withheld from Gemini');
+    expect(content).toContain('opaque reference or cursor is rejected');
+    expect(content).toContain('route names can contain user- or provider-assigned place information');
+    expect(content).toContain('saved-route bounds, route geometry, waypoints');
+    expect(content).toContain('bounded chart or map payload share the same server-owned active conversation');
+    expect(content).toContain('becomes unavailable about seven days after');
+    expect(content).toContain('at most four extra minutes');
+    expect(content).toContain('Firestore TTL then deletes it asynchronously');
+    expect(content).toContain('built-in Assistant can make the same bounded place-name lookup');
+    expect(content).toContain('only the supplied location text');
+    expect(content).toContain('displayed geographic tile area');
+    expect(content).toContain('deterministically constructs any chart values, map coordinates, labels, and renderer settings');
+    expect(content).toContain('saved-route access remains limited to coordinate-free summaries');
+    expect(content).not.toContain('AI Insights');
+    expect(content).not.toContain('rollback');
   });
 });
 
@@ -51,6 +85,9 @@ describe('MCP client access policy', () => {
       'excludes precise latitude/longitude and first-class body-measurement metrics',
     );
     expect(content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
+    expect(content).toContain('processing-bounded all-history scan');
+    expect(content).toContain('Oversized rankings fail instead of returning a partial result');
+    expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
     expect(content).toContain('Body-measurement permission');
     expect(content).toContain('Activity locations depend on activity details');

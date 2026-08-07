@@ -36,6 +36,24 @@
   letter-spacing: 0;
 }
 
+.activity-calendar-tile-navigation {
+  display: grid;
+  min-height: 40px;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.activity-calendar-tile-navigation > span {
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+  letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .activity-calendar-tile-progress {
   height: 3px;
   margin-bottom: 3px;

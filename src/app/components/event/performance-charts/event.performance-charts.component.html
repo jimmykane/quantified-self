@@ -1,4 +1,13 @@
 <div class="performance-charts-container">
+  @if (durabilityOutputUnavailable) {
+  <section class="performance-durability-notice" aria-label="Durability unavailable">
+    <mat-icon aria-hidden="true">info_outline</mat-icon>
+    <div>
+      <strong>Durability unavailable</strong>
+      <span>No selected activity has supported output data. Durability compares sustained power, pace, or speed with heart rate.</span>
+    </div>
+  </section>
+  }
   @if (shouldShowTabs) {
   <mat-tab-group class="performance-charts-tabs">
     @for (tab of availableTabs; track tab) {

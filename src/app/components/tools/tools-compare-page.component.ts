@@ -43,6 +43,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
 import type { ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../data-type-icon/data-type-icon.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import {
   AppAnalyticsService,
   ToolCompareCreateAnalytics,
@@ -225,6 +226,7 @@ const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)
     MatTooltipModule,
     ActivityTypeIconComponent,
     DataTypeIconComponent,
+    PageHeaderComponent,
   ],
   templateUrl: './tools-compare-page.component.html',
   styleUrls: ['./tools-compare-page.component.scss'],

@@ -143,6 +143,30 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('does not retain the retired AI Insights activity-type date index', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).not.toContainEqual({
+            collectionGroup: 'events',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'stats.`Activity Types`',
+                    arrayConfig: 'CONTAINS',
+                },
+                {
+                    fieldPath: 'startDate',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps route reparse job failure query and TTL config deployable', () => {
         const config = loadFirestoreIndexes();
 
@@ -191,6 +215,102 @@ describe('firestore indexes', () => {
                 indexes: [],
             });
         }
+    });
+
+    it('keeps private Assistant conversations short-lived and unindexed', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'assistantConversations',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+        for (const fieldPath of [
+            'version',
+            'conversationId',
+            'locationAccess',
+            'messages',
+            'pendingTurn',
+            'replayReceipts',
+            'createdAt',
+            'updatedAt',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'assistantConversations',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+    });
+
+    it('indexes only the Assistant usage field used by an ordered admin fallback', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const fieldPath of [
+            'version',
+            'role',
+            'limit',
+            'periodStart',
+            'periodKind',
+            'successfulRequestCount',
+            'reservationMap',
+            'lastSuccessfulRequestAt',
+            'updatedAt',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'assistantUsage',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+
+        expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
+            collectionGroup: 'assistantUsage',
+            fieldPath: 'periodEnd',
+        }));
+    });
+
+    it('keeps retired AI Insights data unindexed until the one-time purge drains it', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const fieldPath of [
+            'version',
+            'role',
+            'limit',
+            'periodStart',
+            'periodKind',
+            'successfulRequestCount',
+            'reservationMap',
+            'lastSuccessfulRequestAt',
+            'updatedAt',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'aiInsightsUsage',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'aiInsightsPromptRepairs',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
+    it('keeps the cleanup TTL active while retired prompt-repair records drain', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'aiInsightsPromptRepairs',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
     });
 
     it('keeps event merge operation TTL deployable without an automatic index', () => {

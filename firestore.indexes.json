@@ -549,25 +549,6 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "startDate",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "stats.`Activity Types`",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "stats.PowerCurve",
           "order": "ASCENDING"
         },
@@ -1484,6 +1465,168 @@
       "collectionGroup": "aiInsightsPromptRepairs",
       "fieldPath": "expireAt",
       "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "role",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "limit",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "periodStart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "periodKind",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "successfulRequestCount",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "reservationMap",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "lastSuccessfulRequestAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "role",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "limit",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "periodStart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "periodKind",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "successfulRequestCount",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "reservationMap",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "lastSuccessfulRequestAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantUsage",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "conversationId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "locationAccess",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "messages",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "pendingTurn",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "replayReceipts",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "createdAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "updatedAt",
+      "ttl": false,
       "indexes": []
     },
     {

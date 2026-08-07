@@ -368,12 +368,21 @@ describe('cleanupUserAccounts', () => {
     });
 
     it('registers durable retry for account-deletion cleanup', () => {
-        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS).toEqual({
-            failurePolicy: true,
-        });
-        expect(registeredCleanupRuntimeOptions).toEqual({
-            failurePolicy: true,
-        });
+        const expectedSecretNames = [
+            'COROSAPI_CLIENT_ID',
+            'COROSAPI_CLIENT_SECRET',
+            'GARMINAPI_CLIENT_ID',
+            'GARMINAPI_CLIENT_SECRET',
+            'SUUNTOAPP_CLIENT_ID',
+            'SUUNTOAPP_CLIENT_SECRET',
+            'WAHOOAPI_CLIENT_ID',
+            'WAHOOAPI_CLIENT_SECRET',
+        ];
+
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.failurePolicy).toBe(true);
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
+        expect(registeredCleanupRuntimeOptions?.failurePolicy).toBe(true);
+        expect(registeredCleanupRuntimeOptions?.secrets.map(secret => secret.name)).toEqual(expectedSecretNames);
     });
 
     it('continues later deletion stages and requests a retry when MCP OAuth cleanup fails', async () => {

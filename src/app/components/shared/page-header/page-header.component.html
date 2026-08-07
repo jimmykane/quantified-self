@@ -1,0 +1,40 @@
+<header
+  class="qs-page-header"
+  [class.qs-page-header--compact]="variant() === 'compact'"
+  [class.qs-page-header--status]="!!status()"
+  [class.qs-page-header--warning]="status() === 'warning'"
+  [class.qs-page-header--actions-only]="!title()"
+  [attr.aria-labelledby]="titleId() || null"
+  [attr.aria-label]="ariaLabel() || null"
+  [attr.role]="status() === 'warning' ? 'alert' : (status() ? 'status' : null)">
+  <div class="qs-page-header__content">
+    <div class="qs-page-header__context">
+      @if (eyebrow()) {
+        <p class="qs-page-header__eyebrow">{{ eyebrow() }}</p>
+      }
+      <ng-content select="[pageHeaderContext]"></ng-content>
+    </div>
+
+    @if (title()) {
+      <div class="qs-page-header__title-row" [class.qs-page-header__title-row--leading-action]="leadingAction()">
+        <ng-content select="[pageHeaderLeading]"></ng-content>
+        @if (statusIcon(); as icon) {
+          <mat-icon class="qs-page-header__status-icon" aria-hidden="true">{{ icon }}</mat-icon>
+        }
+        @if (headingLevel() === 2) {
+          <h2 [id]="titleId() || null">{{ title() }}</h2>
+        } @else {
+          <h1 [id]="titleId() || null">{{ title() }}</h1>
+        }
+      </div>
+    }
+
+    @if (subtitle()) {
+      <p class="qs-page-header__subtitle">{{ subtitle() }}</p>
+    }
+  </div>
+
+  <div class="qs-page-header__actions">
+    <ng-content select="[pageHeaderActions]"></ng-content>
+  </div>
+</header>

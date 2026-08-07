@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -20,11 +20,9 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import {
-  TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
-  TrainingWorkspaceComponent,
-} from './training-workspace.component';
+import { TrainingWorkspaceComponent } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -55,6 +53,7 @@ function createRouteReadyDerivedState(
     bodyWeightTrendStatus: 'ready',
     powerCurveStatus: 'ready',
     trainingSwimPerformanceStatus: 'ready',
+    trainingPowerSystemsStatus: 'ready',
     ...overrides,
   };
 }
@@ -69,12 +68,13 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
-      imports: [MatMenuModule, MatTooltipModule],
+      imports: [MatMenuModule, MatTooltipModule, PageHeaderComponent],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
 
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
+    const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       formPoints: [],
@@ -88,7 +88,7 @@ describe('TrainingWorkspaceComponent', () => {
       freshnessForecastStatus: 'ready', intensityDistributionStatus: 'ready', efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
       trainingSummary: {
-        asOfDayMs: 0,
+        asOfDayMs: trainingSummaryAsOfDayMs,
         currentWindowDays: 28,
         baselineWindowDays: 84,
         disciplines: [],
@@ -114,15 +114,29 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
     const feedbackAction = element.querySelector('.training-feedback-action');
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
     expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
+    const calendarAction = element.querySelector('.training-calendar-action');
+    expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
+    expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
     expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('All 3');
+    const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
+    for (const actionClass of [
+      'training-sport-visibility-action',
+      'training-feedback-action',
+      'training-calendar-action',
+      'training-dashboard-action',
+    ]) {
+      expect(template).toMatch(new RegExp(`<[^>]+mat-button[^>]+class="${actionClass}"`, 's'));
+      expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
+    }
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
@@ -164,9 +178,53 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
     expect(element.textContent).toContain('Preparing imported capacity markers');
-    expect(element.textContent).not.toContain('Preparing rolling power capacity');
-    expect(element.querySelector('.training-power-systems-section')).toBeNull();
+    expect(element.textContent).toContain('Preparing rolling power capacity');
+    expect(element.querySelector('.training-power-systems-section')).not.toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the validated training-summary cutoff when the route is ready', async () => {
+    const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
+    const derivedState = createRouteReadyDerivedState({
+      trainingSummary: {
+        asOfDayMs: trainingSummaryAsOfDayMs,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    });
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+        { provide: LOCALE_ID, useValue: 'en-GB' },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture: ComponentFixture<TrainingWorkspaceComponent> = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const expectedAsOfDate = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(trainingSummaryAsOfDayMs));
+    const title = fixture.nativeElement.querySelector('#training-title');
+    const subtitle = fixture.nativeElement.querySelector('.qs-page-header__subtitle');
+    expect(subtitle?.textContent?.trim())
+      .toBe(`Data through ${expectedAsOfDate}`);
+    expect(subtitle?.previousElementSibling?.classList).toContain('qs-page-header__title-row');
+    expect(subtitle?.previousElementSibling?.querySelector('#training-title')).toBe(title);
   });
 
   it('keeps every route-header action in one compact row through tablet widths', () => {
@@ -181,6 +239,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
     expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
     expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
+    expect(compactActionsStyles).toContain('.training-calendar-action,');
+    expect(compactActionsStyles).toContain('.training-calendar-action-label,');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-calendar-action mat-icon,');
     expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });
@@ -690,8 +751,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
-    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(7);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -747,7 +809,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).not.toContain('186 W');
   });
 
-  it('renders exact-type rolling power systems for the designated account independently of Training sport visibility', async () => {
+  it('renders exact-type rolling power systems for every account independently of Training sport visibility', async () => {
     const asOfDayMs = Date.UTC(2026, 6, 20);
     const powerSystemsEntry = (
       activityType: string,
@@ -857,7 +919,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
     const authUser$ = new BehaviorSubject({
-      uid: TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+      uid: 'user-1',
       settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
     });
     const derivedMetrics = {
@@ -919,13 +981,13 @@ describe('TrainingWorkspaceComponent', () => {
       .toBeGreaterThan(3);
 
     authUser$.next({
-      uid: 'user-1',
+      uid: 'user-2',
       settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
     });
     fixture.detectChanges();
 
-    expect(component.hasTrainingPowerSystemsAccess).toBe(false);
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {

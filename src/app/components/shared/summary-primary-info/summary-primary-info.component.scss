@@ -12,6 +12,7 @@
   align-items: center;
   flex-wrap: wrap;
   padding: 24px;
+  padding-top: var(--summary-primary-info-padding-top, 24px);
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -195,6 +196,7 @@ app-hero-metrics {
   flex-direction: column;
   position: relative;
   padding: 12px;
+  padding-top: var(--summary-primary-info-padding-top, 12px);
   gap: 12px;
   align-items: stretch;
 }
@@ -269,6 +271,7 @@ app-hero-metrics {
     flex-direction: column;
     position: relative;
     padding: 12px;
+    padding-top: var(--summary-primary-info-padding-top, 12px);
     gap: 16px;
     align-items: stretch;
   }
@@ -325,6 +328,7 @@ app-hero-metrics {
 @include bp.max-480 {
   .summary-primary-info {
     padding: 12px;
+    padding-top: var(--summary-primary-info-padding-top, 12px);
     gap: 12px;
   }
 

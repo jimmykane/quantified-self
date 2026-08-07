@@ -276,7 +276,7 @@ describe('SideNavComponent', () => {
         expect(template).toContain('routerLink="/settings" [queryParams]="{ section: \'profile\' }"');
     });
 
-    it('orders signed-in navigation with AI Insights last', () => {
+    it('orders signed-in navigation with Assistant last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -290,7 +290,7 @@ describe('SideNavComponent', () => {
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
-        const aiInsightsItem = navigationItems.find(item => item.nativeElement.textContent.includes('AI Insights'));
+        const assistantItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
 
         expect(dashboardItem).toBeTruthy();
@@ -298,7 +298,7 @@ describe('SideNavComponent', () => {
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
-        expect(aiInsightsItem).toBeTruthy();
+        expect(assistantItem).toBeTruthy();
         expect(compareFilesItem).toBeTruthy();
         const dashboardIndex = navigationItems.indexOf(dashboardItem!);
         expect([
@@ -308,7 +308,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),
-            navigationItems.indexOf(aiInsightsItem!),
+            navigationItems.indexOf(assistantItem!),
         ]).toEqual([
             dashboardIndex,
             dashboardIndex + 1,
@@ -318,10 +318,9 @@ describe('SideNavComponent', () => {
             dashboardIndex + 5,
             dashboardIndex + 6,
         ]);
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('AI Insights');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Going away');
-        expect(aiInsightsItem?.nativeElement.classList.contains('ai-insights-retiring')).toBe(false);
-        expect(aiInsightsItem?.nativeElement.getAttribute('aria-label')).toBeNull();
+        expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');
+        expect(assistantItem?.nativeElement.getAttribute('aria-label')).toBeNull();
 
         const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
         expect(template).not.toMatch(/beta/i);
@@ -437,7 +436,7 @@ describe('SideNavComponent', () => {
         expect(compareFilesItem).toBeTruthy();
     });
 
-    it('should link AI Insights directly for basic users without a beta badge', () => {
+    it('should link Assistant directly for basic users without a beta badge', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-2',
             displayName: 'Basic User',
@@ -451,17 +450,17 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        const aiInsightsItem = fixture.debugElement
+        const assistantItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
-            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+            .find(item => item.nativeElement.textContent.includes('Assistant'));
 
-        expect(aiInsightsItem).toBeTruthy();
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
+        expect(assistantItem).toBeTruthy();
+        expect(component.assistantRoute).toBe('/ai-insights');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Beta');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('PRO');
     });
 
-    it('should link AI Insights directly for grace users', () => {
+    it('should link Assistant directly for grace users', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-4',
             displayName: 'Grace User',
@@ -476,10 +475,10 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
+        expect(component.assistantRoute).toBe('/ai-insights');
     });
 
-    it('should link free users directly to AI Insights without paid lock state', () => {
+    it('should link free users directly to Assistant without paid lock state', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-3',
             displayName: 'Free User',
@@ -492,13 +491,13 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        const aiInsightsItem = fixture.debugElement
+        const assistantItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
-            .find(item => item.nativeElement.textContent.includes('AI Insights'));
+            .find(item => item.nativeElement.textContent.includes('Assistant'));
 
-        expect(aiInsightsItem).toBeTruthy();
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PAID');
+        expect(assistantItem).toBeTruthy();
+        expect(component.assistantRoute).toBe('/ai-insights');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Beta');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('PAID');
     });
 });

@@ -68,6 +68,23 @@ describe('EventPerformanceChartsComponent', () => {
     expect(nativeElement.querySelector('app-event-durability-curve')).not.toBeNull();
   });
 
+  it('replaces a missing-output durability tab with a compact availability notice', () => {
+    component.hasIntensity = false;
+    component.hasPowerCurve = false;
+    component.hasDurability = false;
+    component.durabilityOutputUnavailable = true;
+    component.hasCadencePower = false;
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+
+    expect(nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(nativeElement.querySelector('app-event-durability-curve')).toBeNull();
+    expect(nativeElement.querySelector('.performance-durability-notice')?.textContent)
+      .toContain('No selected activity has supported output data');
+  });
+
   it('should render direct cadence-power chart without tabs when only cadence-power is available', () => {
     component.hasIntensity = false;
     component.hasPowerCurve = false;

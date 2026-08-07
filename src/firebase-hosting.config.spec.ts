@@ -245,9 +245,6 @@ describe('Firebase Hosting configuration', () => {
   it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
     const expectedLastmod = '2026-06-26';
     const updatedUrls = [
-      `${siteOrigin}/integrations`,
-      `${siteOrigin}/integrations/garmin`,
-      `${siteOrigin}/integrations/suunto`,
       `${siteOrigin}/features/fit-gpx-route-files`,
       `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
     ];
@@ -258,12 +255,17 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-27');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-06');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-08-06');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
@@ -272,9 +274,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-07-29');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-07-29');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-07-29');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });
 
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
@@ -358,10 +360,6 @@ describe('Firebase Hosting configuration', () => {
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
     const indexHtml = readFileSync(resolve(__dirname, 'index.html'), 'utf8');
-    const aiInsightsContract = readFileSync(
-      resolve(__dirname, '../shared/ai-insights-response.contract.ts'),
-      'utf8'
-    );
     const appHtmlFiles = findHtmlFiles(resolve(__dirname, 'app'));
     const filesWithInlineHandlers = appHtmlFiles.filter(filePath => (
       /\son[a-z]+\s*=/i.test(readFileSync(filePath, 'utf8'))
@@ -369,11 +367,6 @@ describe('Firebase Hosting configuration', () => {
 
     expect(indexHtml).toContain('<script src="assets/theme-init.js"></script>');
     expect(indexHtml).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
-    expect(aiInsightsContract).toContain("if (typeof window !== 'undefined')");
-    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeGreaterThan(-1);
-    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeLessThan(
-      aiInsightsContract.indexOf('z.object({')
-    );
     expect(filesWithInlineHandlers).toEqual([]);
 
     for (const configurationName of ['production', 'beta']) {
@@ -392,6 +385,17 @@ describe('Firebase Hosting configuration', () => {
     const assets = angularConfig.projects['track-tools'].architect.build.options.assets;
 
     expect(assets).toContain('src/404.html');
+  });
+
+  it('publishes the canonical favicon at the conventional root path', () => {
+    const assets = angularConfig.projects['track-tools'].architect.build.options.assets;
+
+    expect(assets).toContainEqual({
+      glob: 'favicon.ico',
+      input: 'src/assets/favicons',
+      output: '/',
+    });
+    expect(assets).not.toContain('src/favicon.ico');
   });
 
   it('keeps the static Firebase 404 page noindexed and useful without JavaScript', () => {

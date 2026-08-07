@@ -77,6 +77,8 @@ mat-nav-list {
 
 .calendar-day-event-metrics {
   display: block;
+
+  --calendar-volume-stats-column-gap: 8px;
 }
 
 .calendar-day-event-detail {

@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, Subject, Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -25,6 +26,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
 import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -42,6 +44,7 @@ import { DASHBOARD_READINESS_SLEEP_MAX_AGE_MS } from '../../helpers/dashboard-tr
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
+import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -58,6 +61,7 @@ describe('SummariesComponent', () => {
   let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
+  let mockBottomSheet: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
@@ -133,6 +137,7 @@ describe('SummariesComponent', () => {
         afterClosed: () => of({ saved: false }),
       }),
     };
+    mockBottomSheet = { open: vi.fn() };
     buildDashboardTileViewModelsSpy = vi.spyOn(dashboardTileViewModelHelper, 'buildDashboardTileViewModels');
     originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
@@ -152,6 +157,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
+      imports: [PageHeaderComponent],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
@@ -163,6 +169,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
+        { provide: MatBottomSheet, useValue: mockBottomSheet },
         { provide: LOCALE_ID, useValue: 'en-US' },
       ],
     }).compileComponents();
@@ -184,7 +191,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('exposes the Training action beside Dashboard manager', () => {
+  it('exposes the Training action without a duplicate Calendar action', () => {
     component.showActions = true;
 
     fixture.detectChanges();
@@ -193,6 +200,10 @@ describe('SummariesComponent', () => {
     expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
     expect(trainingLink.textContent).toContain('Open Training');
     expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
+    const template = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html'), 'utf8');
+    expect(template).toContain('<a mat-button class="dashboard-training-link"');
+    expect(template).not.toContain('<a mat-stroked-button class="dashboard-training-link"');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -226,7 +237,7 @@ describe('SummariesComponent', () => {
       size: { columns: 1, rows: 1 },
     } as any;
 
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [kpiTile, mainGridTile, mainMapTile];
     component.kpiLaneTiles = [kpiTile];
@@ -238,8 +249,15 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
     expect(dashboardHeader).not.toBeNull();
+    const todayCalendarButton = dashboardHeader?.querySelector('.dashboard-today-calendar-button') as HTMLButtonElement | null;
+    expect(todayCalendarButton?.getAttribute('aria-label')).toBe("Open this month's activity calendar");
+    todayCalendarButton?.click();
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
+      data: { user: component.user },
+      panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
+    });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(dashboardHeader?.querySelector('.dashboard-section-subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
     expect(dashboardHeader?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
     expect(dashboardHeader?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
@@ -329,7 +347,7 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('font-size: 1rem;');
   });
 
-  it('keeps narrow derived-status actions compact and accessibly named', () => {
+  it('keeps narrow derived-status and Training actions compact and accessibly named', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
     const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
     const template = readFileSync(templatePath, 'utf8');
@@ -338,9 +356,13 @@ describe('SummariesComponent', () => {
     expect(template).toContain('aria-label="Retry derived metrics update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
+    expect(template).toContain('class="dashboard-today-calendar-button"');
+    expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
     expect(styles).toContain('.dashboard-training-link-label');
+    expect(styles).toContain('.dashboard-today-calendar-button');
+    expect(styles).not.toContain('.dashboard-calendar-link');
   });
 
   it('does not mutate dashboard tile arrays during live drag sorting', () => {
@@ -636,8 +658,9 @@ describe('SummariesComponent', () => {
     const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
     expect(component.showTodaySummary).toBe(false);
     expect(dashboardHeader).not.toBeNull();
-    expect(dashboardHeader?.classList.contains('dashboard-summary-header-actions-only')).toBe(true);
-    expect(dashboardHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    const sharedHeader = dashboardHeader?.querySelector('.qs-page-header');
+    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(true);
+    expect(sharedHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
     expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
@@ -2198,7 +2221,7 @@ describe('SummariesComponent', () => {
 
     fixture.detectChanges();
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const status = nativeElement.querySelector('.dashboard-derived-metrics-status');
+    const status = nativeElement.querySelector('.qs-page-header--status');
     const statusHeader = status?.closest('.dashboard-summary-header');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();

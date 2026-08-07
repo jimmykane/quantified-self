@@ -10,6 +10,7 @@ import {
   DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
+  DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
   DataPowerAvg,
@@ -1027,12 +1028,12 @@ describe('MCP data service', () => {
         rank: 1,
         activityType: ActivityTypes.Running,
         value: 300,
-        startTimeMs: Date.parse('2026-07-02T08:00:00.000Z'),
+        startTime: '2026-07-02T08:00:00.000Z',
       }, {
         rank: 2,
         activityType: ActivityTypes.Running,
         value: 300,
-        startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        startTime: '2026-07-01T08:00:00.000Z',
       }],
     });
     expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledWith(
@@ -1040,6 +1041,7 @@ describe('MCP data service', () => {
       Date.parse('2026-07-01T00:00:00.000Z'),
       Date.parse('2026-07-04T00:00:00.000Z'),
       DataAscent.type,
+      [ActivityTypes.Running],
       25,
       undefined,
     );
@@ -1077,6 +1079,118 @@ describe('MCP data service', () => {
       order: 'highest',
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
+    });
+  });
+
+  it('ranks all available matching activity history without returning a partial scan', async () => {
+    const mountainBikeActivity = activityDocument({
+      eventID: 'event-mtb-1',
+      eventStartDate: Date.parse('2024-05-01T08:00:00.000Z'),
+      type: ActivityTypes.MountainBiking,
+      startDate: Date.parse('2024-05-01T08:00:00.000Z'),
+      endDate: Date.parse('2024-05-01T09:00:00.000Z'),
+      stats: {
+        [DataJumpDistanceMax.type]: 8.4,
+        providerPayload: 'private-provider-data',
+      },
+    });
+    mountainBikeActivity.id = 'activity-mtb-1';
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
+      mountainBikeActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+
+    const result = await service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityGroup: 'mountain_biking_group',
+      order: 'highest',
+      limit: 1,
+    });
+
+    expect(result).toMatchObject({
+      metric: { type: DataJumpDistanceMax.type },
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        startTime: '2024-05-01T08:00:00.000Z',
+        activityType: ActivityTypes.MountainBiking,
+        value: 8.4,
+      }],
+    });
+    expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      DataJumpDistanceMax.type,
+      [
+        ActivityTypes.DownhillCycling,
+        'Enduro MTB',
+        ActivityTypes.MountainBiking,
+      ],
+      25,
+      undefined,
+    );
+    expect(result.activities[0]).not.toHaveProperty('startTimeMs');
+    expect(result.activities[0]).not.toHaveProperty('endTimeMs');
+    expect(result.activities[0]).not.toHaveProperty('endTime');
+    expect(JSON.stringify(result)).not.toContain('private-provider-data');
+
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockClear();
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      startTimeMs: Date.parse('2026-01-01T00:00:00.000Z'),
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityGroup: 'invented_group',
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+
+    await expect(service.rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataJumpDistanceMax.type,
+      activityGroup: 'unspecified_group',
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+  });
+
+  it('skips ranked activities whose stored start time cannot be represented as ISO', async () => {
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
+      activityDocument({
+        startDate: Number.MAX_SAFE_INTEGER,
+        endDate: Number.MAX_SAFE_INTEGER,
+        stats: { [DataAscent.type]: 500 },
+      }),
+    ]);
+
+    await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataAscent.type,
+      order: 'highest',
+    })).resolves.toMatchObject({
+      scannedActivityCount: 1,
+      matchedActivityCount: 0,
+      activities: [],
     });
   });
 

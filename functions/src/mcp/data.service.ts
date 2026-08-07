@@ -463,9 +463,10 @@ export interface McpDataServiceDependencies {
   ) => Promise<boolean>;
   fetchActivityRankingDocuments: (
     uid: string,
-    startTimeMs: number,
-    endTimeMs: number,
+    startTimeMs: number | undefined,
+    endTimeMs: number | undefined,
     metricType: string,
+    activityTypes: readonly string[],
     limit: number,
     cursor?: unknown,
   ) => Promise<RawDocument[]>;
@@ -871,17 +872,30 @@ const defaultDependencies: McpDataServiceDependencies = {
     startTimeMs,
     endTimeMs,
     metricType,
+    activityTypes,
     limit,
     cursor,
   ) => {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
-      .collection('activities')
-      .where('eventStartDate', '>=', new Date(startTimeMs))
-      .where('eventStartDate', '<=', new Date(endTimeMs))
-      .orderBy('eventStartDate', 'desc')
-      .orderBy(FieldPath.documentId(), 'desc')
+      .collection('activities') as admin.firestore.Query;
+    if (startTimeMs !== undefined && endTimeMs !== undefined) {
+      query = query
+        .where('eventStartDate', '>=', new Date(startTimeMs))
+        .where('eventStartDate', '<=', new Date(endTimeMs))
+        .orderBy('eventStartDate', 'desc')
+        .orderBy(FieldPath.documentId(), 'desc');
+    } else if (activityTypes.length > 0) {
+      query = query
+        .where('type', 'in', activityTypes)
+        .orderBy(FieldPath.documentId(), 'desc');
+    } else {
+      query = query
+        .orderBy('eventStartDate', 'desc')
+        .orderBy(FieldPath.documentId(), 'desc');
+    }
+    query = query
       .limit(limit)
       .select(
         'eventID',
@@ -1611,6 +1625,15 @@ function asTimestampMs(value: unknown): number | null {
   return asFiniteNumber(value);
 }
 
+function asIsoTimestamp(value: number): string | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+  const isoTimestamp = date.toISOString();
+  return isoTimestamp.length === 24 ? isoTimestamp : null;
+}
+
 function asBoundedString(
   value: unknown,
   maximumLength: number,
@@ -2251,6 +2274,47 @@ function resolveCanonicalActivityTypes(
   ].sort();
 }
 
+function resolveRankingActivityTypes(
+  activityTypes: readonly string[] | undefined,
+  activityGroup: string | undefined,
+): string[] {
+  const resolved = resolveCanonicalActivityTypes(activityTypes);
+  if (activityGroup === undefined) {
+    return resolved;
+  }
+  const normalizedGroup = `${activityGroup}`.trim();
+  const group = ActivityTypesHelper.getActivityTypeGroupsAsUniqueArray()
+    .find(candidate => candidate === normalizedGroup);
+  if (!group) {
+    throw new McpDataError(
+      'invalid_request',
+      `Unknown activity group: ${normalizedGroup}`,
+    );
+  }
+  const groupActivityTypes = ActivityTypesHelper
+    .getActivityTypesForActivityGroup(group)
+    .map(String);
+  if (groupActivityTypes.length === 0) {
+    throw new McpDataError(
+      'invalid_request',
+      `Activity group has no canonical activity types: ${normalizedGroup}`,
+    );
+  }
+  const combined = [
+    ...new Set([
+      ...resolved,
+      ...groupActivityTypes,
+    ]),
+  ].sort();
+  if (combined.length > 20) {
+    throw new McpDataError(
+      'invalid_request',
+      'At most 20 activity types can be requested after activity-group expansion.',
+    );
+  }
+  return combined;
+}
+
 function normalizeRouteSearch(search: string | undefined): string | null {
   const normalized = `${search || ''}`.trim().toLowerCase();
   if (normalized.length > 120) {
@@ -2319,7 +2383,10 @@ function resolveRelativeActivityRange(
 
 function resolveActivityListQuery(
   dependencies: Pick<McpDataServiceDependencies, 'now'>,
-  input: ListActivitiesInput,
+  input: Omit<
+    ListActivitiesInput,
+    'appBaseUrl' | 'includeLocation' | 'limit'
+  >,
 ): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -3886,9 +3953,10 @@ export interface RankActivitiesByMetricInput {
   uid: string;
   connectionId: string;
   metric: string;
-  startTimeMs: number;
-  endTimeMs: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
   activityTypes?: readonly string[];
+  activityGroup?: string;
   order: 'highest' | 'lowest';
   limit?: number;
 }
@@ -4699,7 +4767,7 @@ async function fetchBoundedActivityRankingDocuments(
   dependencies: McpDataServiceDependencies,
   input: Pick<
     RankActivitiesByMetricInput,
-    'uid' | 'startTimeMs' | 'endTimeMs'
+    'uid' | 'startTimeMs' | 'endTimeMs' | 'activityTypes'
   >,
   metricType: string,
 ): Promise<RawDocument[]> {
@@ -4717,13 +4785,14 @@ async function fetchBoundedActivityRankingDocuments(
       input.startTimeMs,
       input.endTimeMs,
       metricType,
+      input.activityTypes || [],
       pageLimit,
       cursor,
     );
     if (page.length > pageLimit) {
       throw new McpDataError(
         'query_too_large',
-        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
       );
     }
     for (const document of page) {
@@ -4734,7 +4803,7 @@ async function fetchBoundedActivityRankingDocuments(
       if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
         throw new McpDataError(
           'query_too_large',
-          'The ranking query contains too much activity metric data. Narrow the date range.',
+          'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
         );
       }
       documents.push({
@@ -4744,7 +4813,7 @@ async function fetchBoundedActivityRankingDocuments(
       if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
         throw new McpDataError(
           'query_too_large',
-          `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+          `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
         );
       }
     }
@@ -4765,7 +4834,13 @@ async function rankActivitiesByMetric(
   dependencies: McpDataServiceDependencies,
   input: RankActivitiesByMetricInput,
 ) {
-  validateBoundedRange(input.startTimeMs, input.endTimeMs);
+  const { query } = resolveActivityListQuery(dependencies, {
+    ...input,
+    activityTypes: resolveRankingActivityTypes(
+      input.activityTypes,
+      input.activityGroup,
+    ),
+  });
   const metric = resolveSportsLibNumericMetric(input.metric);
   if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
     throw new McpDataError(
@@ -4779,11 +4854,15 @@ async function rankActivitiesByMetric(
       'Ranking order must be highest or lowest.',
     );
   }
-  const activityTypes = resolveActivityTypes(input.activityTypes).map(String);
   const limit = Math.min(25, Math.max(1, Math.floor(input.limit || 10)));
   const documents = await fetchBoundedActivityRankingDocuments(
     dependencies,
-    input,
+    {
+      uid: input.uid,
+      startTimeMs: query.startTimeMs,
+      endTimeMs: query.endTimeMs,
+      activityTypes: query.activityTypes,
+    },
     metric.type,
   );
   const candidates = documents.flatMap((document) => {
@@ -4791,6 +4870,7 @@ async function rankActivitiesByMetric(
     const sortTimeMs = asTimestampMs(document.data.eventStartDate);
     const startTimeMs = asTimestampMs(document.data.startDate);
     const endTimeMs = asTimestampMs(document.data.endDate);
+    const startTime = startTimeMs === null ? null : asIsoTimestamp(startTimeMs);
     const activityType = normalizeActivityType(document.data.type);
     const rawStats = document.data.stats;
     const value = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
@@ -4803,13 +4883,14 @@ async function rankActivitiesByMetric(
       !isValidFirestoreDocumentId(document.id)
       || !isValidFirestoreDocumentId(eventId)
       || sortTimeMs === null
-      || sortTimeMs < input.startTimeMs
-      || sortTimeMs > input.endTimeMs
+      || (query.startTimeMs !== undefined && sortTimeMs < query.startTimeMs)
+      || (query.endTimeMs !== undefined && sortTimeMs > query.endTimeMs)
       || startTimeMs === null
+      || startTime === null
       || endTimeMs === null
       || endTimeMs < startTimeMs
       || value === null
-      || !activityTypeMatches(activityType, activityTypes)
+      || !activityTypeMatches(activityType, query.activityTypes)
     ) {
       return [];
     }
@@ -4820,6 +4901,7 @@ async function rankActivitiesByMetric(
         eventId,
       }, input.uid, input.connectionId),
       startTimeMs,
+      startTime,
       endTimeMs,
       activityType,
       value,
@@ -4834,18 +4916,17 @@ async function rankActivitiesByMetric(
       || left.id.localeCompare(right.id);
   });
   const result = {
+    activities: candidates.slice(0, limit).map((candidate, index) => ({
+      rank: index + 1,
+      activityRef: candidate.activityRef,
+      startTime: candidate.startTime,
+      activityType: candidate.activityType,
+      value: candidate.value,
+    })),
     metric,
     order: input.order,
     scannedActivityCount: documents.length,
     matchedActivityCount: candidates.length,
-    activities: candidates.slice(0, limit).map((candidate, index) => ({
-      rank: index + 1,
-      activityRef: candidate.activityRef,
-      startTimeMs: candidate.startTimeMs,
-      endTimeMs: candidate.endTimeMs,
-      activityType: candidate.activityType,
-      value: candidate.value,
-    })),
   };
   requireJsonBudget(
     result,

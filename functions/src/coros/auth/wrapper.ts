@@ -12,6 +12,7 @@ import {
 import { SERVICE_NAME } from '../constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 
 interface GetAuthRedirectURIRequest {
@@ -23,7 +24,10 @@ interface GetAuthRedirectURIResponse {
 }
 
 export const getCOROSAPIAuthRequestTokenRedirectURI = functions
-  .runWith({ memory: '256MB' })
+  .runWith({
+    memory: '256MB',
+    secrets: FUNCTION_SECRET_BINDINGS.getCOROSAPIAuthRequestTokenRedirectURI,
+  })
   .region(FUNCTIONS_MANIFEST.getCOROSAPIAuthRequestTokenRedirectURI.region)
   .https.onCall(async (data: GetAuthRedirectURIRequest, context): Promise<GetAuthRedirectURIResponse> => {
     // App Check verification
@@ -62,7 +66,10 @@ interface SetAccessTokenRequest {
 }
 
 export const requestAndSetCOROSAPIAccessToken = functions
-  .runWith({ memory: '256MB' })
+  .runWith({
+    memory: '256MB',
+    secrets: FUNCTION_SECRET_BINDINGS.requestAndSetCOROSAPIAccessToken,
+  })
   .region(FUNCTIONS_MANIFEST.requestAndSetCOROSAPIAccessToken.region)
   .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
     // App Check verification
@@ -115,7 +122,10 @@ interface DeauthorizeResponse {
  * Deauthorizes a COROS account
  */
 export const deauthorizeCOROSAPI = functions
-  .runWith({ memory: '256MB' })
+  .runWith({
+    memory: '256MB',
+    secrets: FUNCTION_SECRET_BINDINGS.deauthorizeCOROSAPI,
+  })
   .region(FUNCTIONS_MANIFEST.deauthorizeCOROSAPI.region)
   .https.onCall(async (_data: unknown, context): Promise<DeauthorizeResponse> => {
     // App Check verification

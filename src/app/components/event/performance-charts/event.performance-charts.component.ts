@@ -20,6 +20,7 @@ export class EventPerformanceChartsComponent {
   @Input() hasIntensity = false;
   @Input() hasPowerCurve = false;
   @Input() hasDurability = false;
+  @Input() durabilityOutputUnavailable = false;
   @Input() hasCadencePower = false;
 
   get shouldShowTabs(): boolean {

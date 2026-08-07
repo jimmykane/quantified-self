@@ -111,7 +111,7 @@ describe('AppUpdateService', () => {
         expect(mockWindow.location.reload).toHaveBeenCalled();
     });
 
-    it('should not show snackbar more than once for the same version hash', () => {
+    it('should not show snackbar more than once for the same version hash in one app runtime', () => {
         const event = {
             type: 'VERSION_READY',
             currentVersion: { hash: 'v1-current', appData: {} },
@@ -140,7 +140,7 @@ describe('AppUpdateService', () => {
         expect(snackBarMock.open).toHaveBeenCalledTimes(2);
     });
 
-    it('should not show snackbar when version hash was already stored', () => {
+    it('should not suppress an update because another tab stored its version hash', () => {
         localStorageState['app.update.seen-version-hashes'] = JSON.stringify(['v1-latest']);
 
         versionUpdatesSubject.next({
@@ -149,6 +149,31 @@ describe('AppUpdateService', () => {
             latestVersion: { hash: 'v1-latest', appData: {} }
         } as VersionReadyEvent);
 
-        expect(snackBarMock.open).not.toHaveBeenCalled();
+        expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+        expect(mockWindow.localStorage.getItem).not.toHaveBeenCalled();
+        expect(mockWindow.localStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('should allow the same version to be offered again after activation fails', async () => {
+        const activationError = new Error('Activation failed');
+        const event = {
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent;
+        swUpdateMock.activateUpdate.mockRejectedValueOnce(activationError);
+
+        versionUpdatesSubject.next(event);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(loggerMock.error).toHaveBeenCalledWith(
+            '[AppUpdateService] Failed to activate update',
+            activationError
+        );
+        expect(mockWindow.location.reload).not.toHaveBeenCalled();
+
+        versionUpdatesSubject.next(event);
+
+        expect(snackBarMock.open).toHaveBeenCalledTimes(2);
     });
 });

@@ -43,6 +43,7 @@ import {
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
@@ -589,6 +590,7 @@ async function requireWahooRouteUploadAccess(request: { auth?: { uid: string } |
 
 export const importRouteToWahooAPI = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToWahooAPI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importRouteToWahooAPI,
   ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request): Promise<WahooRouteUploadResult> => {

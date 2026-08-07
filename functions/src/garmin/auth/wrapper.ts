@@ -17,6 +17,7 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../../service-auth-lifecycle';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
@@ -31,7 +32,10 @@ interface SetAccessTokenRequest {
   redirectUri: string;
 }
 
-export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region).https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
+export const getGarminAPIAuthRequestTokenRedirectURI = functions
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.getGarminAPIAuthRequestTokenRedirectURI })
+  .region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region)
+  .https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -79,7 +83,10 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTION
   }
 });
 
-export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region).https.onCall(async (data: SetAccessTokenRequest, context) => {
+export const requestAndSetGarminAPIAccessToken = functions
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
+  .region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region)
+  .https.onCall(async (data: SetAccessTokenRequest, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -130,7 +137,10 @@ export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANI
 });
 
 
-export const deauthorizeGarminAPI = functions.region(FUNCTIONS_MANIFEST.deauthorizeGarminAPI.region).https.onCall(async (data: any, context) => {
+export const deauthorizeGarminAPI = functions
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPI })
+  .region(FUNCTIONS_MANIFEST.deauthorizeGarminAPI.region)
+  .https.onCall(async (data: any, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(

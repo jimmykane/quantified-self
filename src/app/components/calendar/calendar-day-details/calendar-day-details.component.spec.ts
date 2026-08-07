@@ -115,6 +115,7 @@ describe('CalendarDayDetailsComponent', () => {
       /\.calendar-day-event-item-with-metrics \.calendar-day-event-icon\s*\{[^}]*align-self:\s*center !important[^}]*margin-top:\s*0 !important/s,
     );
     expect(styles).toMatch(/\.calendar-day-event-supporting\s*\{[^}]*display:\s*grid[^}]*overflow:\s*visible/s);
+    expect(styles).toMatch(/\.calendar-day-event-metrics\s*\{[^}]*--calendar-volume-stats-column-gap:\s*8px/s);
   });
 });
 

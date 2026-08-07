@@ -266,7 +266,7 @@ describe('UserSettingsComponent', () => {
         expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
     });
 
-    it('centers settings and its save action on the 760px page column', () => {
+    it('keeps the settings form in its centered 760px column', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
             'utf8'

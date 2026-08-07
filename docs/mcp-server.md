@@ -18,6 +18,30 @@ and re-check this override whenever the MCP SDK changes.
 This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
 write activities, mutate Training state, or require a public `/integrations/<provider>` page.
 
+### Internal Assistant adapter
+
+The built-in Assistant reuses this server through an SDK `Client` and linked `InMemoryTransport`. It calls
+`createMcpServer` with a fixed first-party identity, conservative coordinate-free read scopes including saved-route
+summaries, and a second explicit tool allowlist. A server-owned, conversation-bound opt-in can additionally grant the
+existing `activity-location:read` scope and preferred nearby-activity search tool; it never grants route-location access.
+Changing that setting replaces the conversation generation, and New chat returns it to coordinate-free. It does not
+call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
+scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
+Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
+references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
+offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and
+data tools. A deterministic adapter can turn supported validated MCP results into a shared Assistant chart or satellite
+map payload; Gemini selects only an advertised per-turn source and series key, never values, coordinates, renderer
+configuration, or titles. Coordinate-free sessions cannot request chart breadcrumbs, while the explicit existing
+`activity-location:read` mode can. Saved-route geometry remains excluded. Viewing an in-app satellite map sends its
+displayed tile area to Mapbox, independently of whether place-name geocoding was used. This prevents the Assistant from
+becoming a parallel data or calculation API.
+
+The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
+tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the
+Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
+`docs/assistant.md` for the exact internal boundary and maintenance checklist.
+
 ## Public endpoints
 
 Hosting routes these paths to `mcpApi`:
@@ -339,11 +363,6 @@ bindings implement UI event handlers instead of inline event attributes.
 The narrower `wasm-unsafe-eval` source is present because the app uses Mapbox Standard Style WebAssembly; it does not
 permit JavaScript string evaluation.
 
-In browsers, the shared AI Insights response contract configures Zod with `jitless: true` before constructing its first
-object schema. Zod v4 otherwise probes JavaScript string evaluation when object schemas initialize. Keep that browser
-configuration before schema construction, or remove the dependency on the probe, rather than adding general
-`unsafe-eval` permission. Server-side validation retains its existing JIT behavior.
-
 Production and beta builds keep Angular's `optimization.styles.inlineCritical` disabled. The optimizer otherwise emits
 an inline stylesheet `onload` handler into `index.csr.html`, which is incompatible with `script-src-attr 'none'`.
 If that build setting changes, inspect the generated shell and preserve strict-script compatibility without adding
@@ -390,7 +409,7 @@ The analytics and map entries follow the
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
-| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over a bounded date range |
+| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over an explicit bounded range or a bounded all-history scan |
 | `get_sleep_trend` | `sleep:read` | One-call sleep duration, score, stage, HRV, and other safe aggregate-vital coverage and trend |
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
@@ -446,6 +465,10 @@ level. The only dynamic maps are named wire concepts with constrained values, su
 Power Curve buckets. Optional means the key may be absent; nullable means the key is present but no value is available.
 Historical domain timestamps are signed safe integers so valid dates before 1970 remain representable; operational
 timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
+Server instructions define absolute output fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus
+`bucketStartMs`, as Unix epoch milliseconds that must be converted exactly before a client states a calendar date.
+Metric values such as HRV milliseconds and relative offsets such as jump `timestampMs` are explicitly not calendar
+timestamps. The pending activity-ranking tool avoids that distinction for its record date by returning ISO `startTime`.
 Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
 and granting one location domain never widens the other.
 
@@ -579,8 +602,30 @@ catalog; the source file is not downloaded or parsed. Coordinates and raw detail
 
 `rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
 the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
-value/start-time/document ordering. Its range scan reuses the existing single-field `eventStartDate` ordering plus the
-document-ID tie-break, so it requires no new composite index. First-class body measurements remain excluded.
+value/start-time/document ordering. Ranked results expose an explicit ISO `startTime` string rather than a
+millisecond value so MCP models can cite the winning activity's recorded date without timestamp arithmetic or
+substituting the current date. Callers can provide a paired explicit range of at most 366 days or omit both dates
+to scan all available history. Both modes retain the 2,000-document, cumulative-byte, and response budgets; an
+over-budget scan fails with `query_too_large` instead of returning a partial ranking that could be mistaken for a true
+record. Explicit ranges reuse the single-field `eventStartDate` ordering plus the document-ID tie-break. An unbounded
+ranking with activity filters pushes the canonical types into the Firestore `in` filter and pages by document ID, so
+the processing bound applies to the relevant sport family instead of all account activities. Both shapes use existing
+single-field indexes and require no new composite index. First-class body measurements remain excluded.
+
+The optional `activityGroup` input takes an exact group value returned by `list_activity_types` and expands it through
+Sports Lib's `ActivityTypesHelper`. It is combined with any explicit activity types, canonicalized, deduplicated, and
+kept under the same 20-type input limit before Firestore access. This keeps sport-family membership in the shared
+library instead of relying on each Assistant or MCP client to maintain its own subtype list.
+
+MTB jump superlatives reuse this generic metric path rather than introducing a second jump-ranking store or tool.
+Discover the Mountain Biking group value, pass it as `activityGroup` so the server expands every canonical type, and
+select the corresponding Sports Lib maximum metric:
+`Maximum Jump Distance` for biggest/longest, `Maximum Jump Height` for highest, `Maximum Jump Hang Time` for airtime,
+`Maximum Jump Speed` for fastest, or `Maximum Jump Score` for an explicit score request. Rank the matching activities,
+and treat the winning persisted maximum and its canonical unit as authoritative. Use `list_activity_jumps` only when the
+user asks for jump-level details. When reading those records, follow `nextCursor` until `scanComplete` or state that the
+inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
+jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
 ## First-class body measurements
 
@@ -769,8 +814,9 @@ The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDeg
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
-The shared deterministic Mapbox adapter is also used by AI Insights, where the existing explicitly metered AI fallback
-remains an AI-specific behavior.
+The built-in Assistant receives no location tools by default. After the user explicitly starts a fresh chat with precise
+activity locations enabled, it can use the preferred nearby-activity search. A place-name lookup then follows this same
+bounded Mapbox path; direct coordinates remain internal. Saved-route location tools remain unavailable.
 
 Mapbox responses have a 5-second timeout and 64 KiB body limit. Only the resolved label, feature type, center, and valid
 bounding box enter the application. Authentication, rate-limit, timeout, malformed-response, and provider failures map

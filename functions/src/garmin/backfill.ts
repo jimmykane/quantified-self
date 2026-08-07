@@ -21,10 +21,12 @@ interface BackfillRequest {
 }
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.backfillGarminAPIActivities.region).runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
+  secrets: FUNCTION_SECRET_BINDINGS.backfillGarminAPIActivities,
 }).https.onCall(async (data: BackfillRequest, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {

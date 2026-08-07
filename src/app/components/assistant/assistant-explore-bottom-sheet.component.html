@@ -1,0 +1,63 @@
+<section class="bottom-sheet-container assistant-explore-sheet">
+  <app-bottom-sheet-header title="Explore your data" icon="auto_awesome">
+    <button mat-icon-button type="button" aria-label="Close examples and data access" (click)="close()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+
+  <div class="bottom-sheet-content assistant-explore-content">
+    <p class="assistant-explore-intro">Choose a question to add it to your chat, or ask anything about the data you have connected.</p>
+
+    <section aria-labelledby="assistant-example-questions">
+      <h3 id="assistant-example-questions">Example questions</h3>
+      <div class="assistant-explore-prompts">
+        @for (prompt of prompts; track prompt.id) {
+          <button mat-stroked-button type="button" [attr.aria-label]="'Use suggested question: ' + prompt.prompt"
+            (click)="selectPrompt(prompt.prompt)">
+            <mat-icon aria-hidden="true">{{ prompt.icon }}</mat-icon>
+            <span>{{ prompt.shortLabel }}</span>
+          </button>
+        }
+      </div>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="assistant-data-access" aria-labelledby="assistant-data-access">
+      <h3 id="assistant-data-access">Your data stays in your control</h3>
+      <div>
+        <mat-icon aria-hidden="true">verified_user</mat-icon>
+        <span>Answers use verified, read-only data requests.</span>
+      </div>
+      <div>
+        <mat-icon aria-hidden="true">route</mat-icon>
+        <span>Saved-route summaries are available; route coordinates and geometry stay private.</span>
+      </div>
+    </section>
+
+    <section class="assistant-location-access" aria-labelledby="assistant-location-access">
+      <span class="assistant-location-icon" aria-hidden="true">
+        <mat-icon>{{ data.locationAccess === 'precise_activity' ? 'location_on' : 'location_off' }}</mat-icon>
+      </span>
+      <div class="assistant-location-copy">
+        <h3 id="assistant-location-access">Precise activity locations</h3>
+        <p>Allow activity tools used in this chat to include exact start/end and MTB jump coordinates, plus nearby activity results, for Gemini.</p>
+        <p class="assistant-location-note">Off by default. Changing this setting starts a new chat so precise locations never cross into a coordinate-free conversation. Place-name searches send only the location text to Mapbox. Satellite tiles load only after you choose to view a map.</p>
+      </div>
+      <mat-slide-toggle
+        [checked]="data.locationAccess === 'precise_activity'"
+        [attr.aria-label]="data.locationAccess === 'precise_activity' ? 'Disable precise activity locations and start a new chat' : 'Enable precise activity locations and start a new chat'"
+        (change)="setPreciseActivityLocations($event.checked)">
+      </mat-slide-toggle>
+    </section>
+
+    <section class="assistant-mcp-link" aria-labelledby="assistant-mcp-link">
+      <h3 id="assistant-mcp-link">Use your preferred AI client</h3>
+      <p>Connect ChatGPT or another compatible client through MCP without using your Assistant allowance.</p>
+      <a mat-button routerLink="/services" [queryParams]="{ serviceName: 'mcp' }" (click)="close()">
+        MCP connections
+        <mat-icon>arrow_forward</mat-icon>
+      </a>
+    </section>
+  </div>
+</section>

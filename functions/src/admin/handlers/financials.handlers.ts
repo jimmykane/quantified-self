@@ -8,6 +8,7 @@ import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { FinancialStatsResponse } from '../shared/types';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 /**
  * Gets financial statistics for the current month.
@@ -16,6 +17,7 @@ import { FinancialStatsResponse } from '../shared/types';
  */
 export const getFinancialStats = onAdminCall<void, FinancialStatsResponse>({
     region: FUNCTIONS_MANIFEST.getFinancialStats.region,
+    secrets: FUNCTION_SECRET_BINDINGS.getFinancialStats,
     memory: '256MiB',
 }, async () => {
     try {

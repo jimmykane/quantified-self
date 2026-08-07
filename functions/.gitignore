@@ -8,12 +8,16 @@ coverage/
 typings/
 
 node_modules/
-.runtimeconfig.json
-service-account.json
+**/.runtimeconfig.json
+**/*service-account*.json
+**/*service_account*.json
+**/*serviceAccount*.json
+**/*firebase-adminsdk*.json
 
 # Environment files with secrets
-.env
-.env.local
+.env*
+.secret.local*
+!.secret.local.example
 
 # Exported files
 users_export.csv

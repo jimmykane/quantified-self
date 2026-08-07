@@ -52,8 +52,32 @@ describe('ActivityCalendarTileComponent', () => {
     (fixture.nativeElement.querySelector('.activity-calendar-day-button') as HTMLButtonElement).click();
 
     expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({ userId: 'user-1' }),
+      data: expect.objectContaining({
+        userId: 'user-1',
+        unitSettings: user.settings.unitSettings,
+      }),
     }));
+  });
+
+  it('pages the compact month picker without rendering the tile heading', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showHeading', false);
+    fixture.componentRef.setInput('showNavigation', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const initialPeriod = fixture.componentInstance.calendarModel().periodLabel;
+    const previousMonth = fixture.nativeElement.querySelector('[aria-label="Previous month"]') as HTMLButtonElement;
+    expect(fixture.nativeElement.querySelector('#activity-calendar-tile-title')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation')?.textContent).toContain(initialPeriod);
+
+    previousMonth.click();
+    fixture.detectChanges();
+
+    expect(watchEvents).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.calendarModel().periodLabel).not.toBe(initialPeriod);
   });
 
   it('shows a retry action when the month query fails', async () => {

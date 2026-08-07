@@ -1,9 +1,5 @@
 import * as admin from 'firebase-admin';
-import * as dotenv from 'dotenv';
 import { FUNCTIONS_MANIFEST, SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../shared/functions-manifest';
-
-// Load .env file automatically for local development
-dotenv.config();
 
 interface SuuntoAppConfig {
     client_id: string;
@@ -69,32 +65,54 @@ export const config: AppConfig = {
 
     get suuntoapp() {
         return {
-            client_id: getEnvVar('SUUNTOAPP_CLIENT_ID'),
-            client_secret: getEnvVar('SUUNTOAPP_CLIENT_SECRET'),
-            subscription_key: getEnvVar('SUUNTOAPP_SUBSCRIPTION_KEY'),
+            get client_id() {
+                return getEnvVar('SUUNTOAPP_CLIENT_ID');
+            },
+            get client_secret() {
+                return getEnvVar('SUUNTOAPP_CLIENT_SECRET');
+            },
+            get subscription_key() {
+                return getEnvVar('SUUNTOAPP_SUBSCRIPTION_KEY');
+            },
         };
     },
     get corosapi() {
         return {
-            client_id: getEnvVar('COROSAPI_CLIENT_ID'),
-            client_secret: getEnvVar('COROSAPI_CLIENT_SECRET'),
+            get client_id() {
+                return getEnvVar('COROSAPI_CLIENT_ID');
+            },
+            get client_secret() {
+                return getEnvVar('COROSAPI_CLIENT_SECRET');
+            },
         };
     },
     get garminapi() {
         return {
-            client_id: getEnvVar('GARMINAPI_CLIENT_ID'),
-            client_secret: getEnvVar('GARMINAPI_CLIENT_SECRET'),
+            get client_id() {
+                return getEnvVar('GARMINAPI_CLIENT_ID');
+            },
+            get client_secret() {
+                return getEnvVar('GARMINAPI_CLIENT_SECRET');
+            },
         };
     },
     get wahooapi() {
         return {
-            client_id: getEnvVar('WAHOOAPI_CLIENT_ID'),
-            client_secret: getEnvVar('WAHOOAPI_CLIENT_SECRET'),
-            webhook_token: getEnvVar('WAHOOAPI_WEBHOOK_TOKEN'),
-            allowed_file_hosts: (process.env.WAHOOAPI_ALLOWED_FILE_HOSTS || 'cdn.wahooligan.com')
-                .split(',')
-                .map((host) => host.trim().toLowerCase())
-                .filter(Boolean),
+            get client_id() {
+                return getEnvVar('WAHOOAPI_CLIENT_ID');
+            },
+            get client_secret() {
+                return getEnvVar('WAHOOAPI_CLIENT_SECRET');
+            },
+            get webhook_token() {
+                return getEnvVar('WAHOOAPI_WEBHOOK_TOKEN');
+            },
+            get allowed_file_hosts() {
+                return (process.env.WAHOOAPI_ALLOWED_FILE_HOSTS || 'cdn.wahooligan.com')
+                    .split(',')
+                    .map((host) => host.trim().toLowerCase())
+                    .filter(Boolean);
+            },
         };
     },
     get cloudtasks() {

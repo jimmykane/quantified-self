@@ -1,0 +1,204 @@
+<main #assistantPage class="assistant-page">
+  <header class="assistant-header">
+    <div class="assistant-header-row">
+      <h1>Assistant</h1>
+      <div class="assistant-header-actions">
+        <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
+          <mat-icon>help_outline</mat-icon>
+        </a>
+        <button mat-icon-button type="button" aria-label="Start a new coordinate-free chat" matTooltip="Start a new chat"
+          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
+          @if (resetting()) {
+            <mat-spinner diameter="20"></mat-spinner>
+          } @else {
+            <mat-icon>add_comment</mat-icon>
+          }
+        </button>
+      </div>
+    </div>
+    <button class="assistant-explore-trigger" mat-button type="button"
+      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="openExploreSheet()">
+      <mat-icon>auto_awesome</mat-icon>
+      Examples &amp; data access
+      @if (preciseActivityLocationsEnabled()) {
+        <span class="assistant-location-status">
+          <mat-icon aria-hidden="true">location_on</mat-icon>
+          Precise locations on
+        </span>
+      }
+    </button>
+  </header>
+
+  <section class="assistant-chat">
+    @if (loadingConversation()) {
+      <section class="assistant-loading" aria-live="polite">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>Loading your conversation…</span>
+      </section>
+    } @else if (conversationLoadError()) {
+      <section class="assistant-load-error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <h2>Conversation unavailable</h2>
+        <p>{{ conversationLoadError() }}</p>
+        <button mat-flat-button type="button" (click)="retryConversationLoad()">
+          <mat-icon>refresh</mat-icon>
+          Try again
+        </button>
+      </section>
+    } @else {
+      @if (!isEmpty() || sending()) {
+      <section class="conversation qs-scrollbar" aria-label="Assistant conversation">
+        @for (message of messages(); track message.id) {
+          <article class="message" [class.message-user]="message.role === 'user'"
+            [class.message-assistant]="message.role === 'assistant'"
+            [class.message-has-visuals]="!!message.visuals?.length">
+            <div class="message-role">
+              <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
+              <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
+            </div>
+            <p class="message-text">{{ message.text }}</p>
+
+            @if (message.visuals?.length) {
+              <section class="assistant-visuals" aria-label="Answer visuals">
+                @for (visual of message.visuals; track $index) {
+                  <article class="assistant-visual-card">
+                    <header>
+                      <span class="assistant-visual-heading">
+                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'satellite_alt' }}</mat-icon>
+                        <span>
+                          <strong>{{ visual.title }}</strong>
+                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Satellite map' }}</small>
+                        </span>
+                      </span>
+                      <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
+                        matTooltip="Expand" [disabled]="visualDetailOpen()" (click)="openVisual(visual)">
+                        <mat-icon>open_in_full</mat-icon>
+                      </button>
+                    </header>
+
+                    @if (visual.kind === 'chart') {
+                      <app-assistant-visual-chart [visual]="visual" />
+                    } @else {
+                      @if (!expandedMap() && activeMapKey() === message.id + ':' + $index) {
+                        <app-assistant-visual-map [visual]="visual" />
+                      } @else {
+                        <button mat-button class="assistant-show-map" type="button"
+                          (click)="showInlineMap(message.id + ':' + $index)">
+                          <mat-icon>map</mat-icon>
+                          Show map
+                        </button>
+                      }
+                      <p class="assistant-map-disclosure">
+                        Viewing sends the displayed map area to Mapbox for satellite tiles.
+                      </p>
+                    }
+                  </article>
+                }
+              </section>
+            }
+
+            @if (message.evidence?.length) {
+              <details class="evidence-panel">
+                <summary>
+                  <mat-icon aria-hidden="true">verified</mat-icon>
+                  <span>Data used</span>
+                  <span class="evidence-count">{{ message.evidence?.length }}</span>
+                </summary>
+                <div class="evidence-list">
+                  @for (evidence of message.evidence; track $index) {
+                    <mat-card appearance="outlined" class="evidence-item">
+                      <mat-card-content>
+                        <header class="evidence-item-header">
+                          <span class="evidence-source-icon" aria-hidden="true">
+                            <mat-icon>database</mat-icon>
+                          </span>
+                          <span class="evidence-source-copy">
+                            <strong>{{ evidence.title }}</strong>
+                            <span>{{ evidence.summary }}</span>
+                          </span>
+                        </header>
+                        @if (evidence.facts.length) {
+                          <dl>
+                            @for (fact of evidence.facts; track fact.label) {
+                              <div>
+                                <dt>{{ fact.label }}</dt>
+                                <dd>{{ fact.value }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        }
+                        @if (evidence.links.length) {
+                          <div class="evidence-links">
+                            @for (link of evidence.links; track link.url) {
+                              <a mat-button [href]="link.url" target="_blank" rel="noopener">
+                                <mat-icon>open_in_new</mat-icon>
+                                {{ link.label }}
+                              </a>
+                            }
+                          </div>
+                        }
+                      </mat-card-content>
+                    </mat-card>
+                  }
+                </div>
+              </details>
+            }
+          </article>
+        }
+
+        @if (sending()) {
+          <article class="message message-assistant assistant-thinking" aria-live="polite">
+            <div class="message-role">
+              <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+              <span>Assistant</span>
+            </div>
+            <div class="thinking-content">
+              <mat-spinner diameter="22"></mat-spinner>
+              <span>Checking the relevant Quantified Self data…</span>
+            </div>
+          </article>
+        }
+
+        <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
+      </section>
+      }
+
+      <footer class="assistant-composer-dock">
+        @if (errorMessage()) {
+          <section class="assistant-error" role="alert">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ errorMessage() }}</span>
+            <button mat-icon-button type="button" aria-label="Dismiss Assistant error" (click)="errorMessage.set(null)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </section>
+        }
+        <section class="composer-shell">
+          <form class="composer" (submit)="handleComposerSubmit($event)">
+            <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
+              cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+              [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
+            <button mat-icon-button class="composer-submit" type="submit"
+              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [attr.aria-label]="sending() ? 'Assistant is responding' : 'Send message'">
+              <span class="composer-submit-content">
+                @if (sending()) {
+                  <span class="composer-progress" aria-hidden="true">
+                    <mat-spinner diameter="18" strokeWidth="3"></mat-spinner>
+                  </span>
+                } @else {
+                  <mat-icon>arrow_upward</mat-icon>
+                }
+              </span>
+            </button>
+          </form>
+          <div class="composer-footer">
+            <span>{{ quotaText() }}</span>
+            <span>{{ promptControl.value.length }}/{{ maxMessageChars }}</span>
+          </div>
+        </section>
+      </footer>
+    }
+  </section>
+</main>

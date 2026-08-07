@@ -537,8 +537,30 @@
     }
   ],
   "functions": {
-    "predeploy": [],
-    "source": "functions"
+    "predeploy": [
+      "rm -rf \"$RESOURCE_DIR/lib\"",
+      "node \"$RESOURCE_DIR/node_modules/typescript/bin/tsc\" --project \"$RESOURCE_DIR/tsconfig.json\"",
+      "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-deployment-files.js\" \"$RESOURCE_DIR\"",
+      "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-secret-bindings.js\""
+    ],
+    "source": "functions",
+    "disallowLegacyRuntimeConfig": true,
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".env*",
+      ".secret*",
+      ".runtimeconfig.json",
+      "**/*service-account*.json",
+      "**/*service_account*.json",
+      "**/*serviceAccount*.json",
+      "**/*firebase-adminsdk*.json",
+      "**/*.log",
+      "coverage",
+      "tmp",
+      "emulator-export",
+      "firestore_export"
+    ]
   },
   "firestore": {
     "rules": "firestore.rules",

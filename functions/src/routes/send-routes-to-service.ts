@@ -26,9 +26,11 @@ import {
   prepareSavedRouteForSending,
   sendPreparedRouteToDestination,
 } from './route-send-core';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export const sendRoutesToService = onCall({
   region: FUNCTIONS_MANIFEST.sendRoutesToService.region,
+  secrets: FUNCTION_SECRET_BINDINGS.sendRoutesToService,
   ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request): Promise<SendRoutesToServiceResponse> => {

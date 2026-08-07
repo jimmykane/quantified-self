@@ -14,8 +14,6 @@ process.env.SUUNTOAPP_SUBSCRIPTION_KEY = 'test-suunto-subscription-key';
 process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'test-suunto-notification-secret';
 process.env.COROSAPI_CLIENT_ID = 'test-coros-client-id';
 process.env.COROSAPI_CLIENT_SECRET = 'test-coros-client-secret';
-process.env.GARMINHEALTHAPI_CONSUMER_KEY = 'test-garmin-consumer-key';
-process.env.GARMINHEALTHAPI_CONSUMER_SECRET = 'test-garmin-consumer-secret';
 process.env.GARMINAPI_CLIENT_ID = 'test-garmin-client-id';
 process.env.GARMINAPI_CLIENT_SECRET = 'test-garmin-consumer-secret';
 process.env.WAHOOAPI_CLIENT_ID = 'test-wahoo-client-id';
@@ -188,6 +186,15 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     },
     ActivityTypesHelper: {
         resolveActivityType: actual.ActivityTypesHelper.resolveActivityType.bind(actual.ActivityTypesHelper),
+        getActivityTypeGroupsAsUniqueArray: () => [
+            'cycling_group',
+            'mountain_biking_group',
+            'running_group',
+            'trail_running_group',
+            'swimming_group',
+            'unspecified_group',
+            'water_sports_group',
+        ],
         getActivityTypesAsUniqueArray:
             actual.ActivityTypesHelper.getActivityTypesAsUniqueArray.bind(
                 actual.ActivityTypesHelper,

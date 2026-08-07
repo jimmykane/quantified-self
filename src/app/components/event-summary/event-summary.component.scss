@@ -5,12 +5,16 @@
   margin-bottom: 24px;
 }
 
-.event-summary-card {
+.event-summary-content {
   display: flex !important;
   flex-direction: column;
   padding: 0 !important;
   overflow: visible !important;
   align-items: stretch !important;
+}
+
+app-summary-primary-info {
+  --summary-primary-info-padding-top: 0;
 }
 
 .privacy-mini-wrapper {

@@ -39,6 +39,7 @@ import { EventCardChartPanelComponent } from '../components/event/chart/panel/ev
 import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 import { WorkspaceSectionNavigationComponent } from '../components/shared/workspace-section-navigation/workspace-section-navigation.component';
 import { DurabilityReadingGuideComponent } from '../components/shared/durability-reading-guide/durability-reading-guide.component';
+import { PageHeaderComponent } from '../components/shared/page-header/page-header.component';
 
 @NgModule({
     imports: [
@@ -50,6 +51,7 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
         ServiceSourceIconComponent,
         DataTypeIconComponent,
         ActivityTypeIconComponent,
+        PageHeaderComponent,
     ],
     declarations: [
         ShadeComponent,
@@ -121,6 +123,7 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,
         DurabilityReadingGuideComponent,
+        PageHeaderComponent,
     ]
 })
 

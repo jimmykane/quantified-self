@@ -3,42 +3,22 @@
 }
 
 .calendar-page {
-  box-sizing: border-box;
-  width: min(100%, 1440px);
-  min-width: 0;
-  margin: 0 auto;
-  padding: 24px clamp(16px, 3vw, 40px) 48px;
   color: var(--mat-sys-on-surface);
 }
 
 .calendar-page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
   margin-bottom: 18px;
 }
 
-.calendar-page-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.calendar-page-heading > mat-icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+.calendar-page-header [pageHeaderLeading] {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  position: relative;
+  top: -2px;
   color: var(--mat-sys-primary);
-  font-size: 30px;
-  line-height: 30px;
-}
-
-.calendar-page-heading h1 {
-  margin: 0;
-  font: var(--mat-sys-headline-medium);
-  letter-spacing: 0;
+  font-size: 26px;
+  line-height: 26px;
 }
 
 .calendar-view-option {
@@ -246,16 +226,6 @@
 }
 
 @media (max-width: 720px) {
-  .calendar-page {
-    padding-top: 16px;
-  }
-
-  .calendar-page-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-  }
-
   .calendar-view-toggle {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,4 +1,4 @@
-<div class="event-dashboard-container">
+<main class="event-dashboard-container qs-workspace-page" aria-label="Event details">
 
 
 
@@ -25,6 +25,7 @@
       <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
         [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
         [hasPowerCurve]="hasPowerCurveFlag()" [hasDurability]="hasDurabilityFlag()"
+        [durabilityOutputUnavailable]="durabilityOutputUnavailableFlag()"
         [hasCadencePower]="hasCadencePowerFlag()">
       </app-event-performance-charts>
     </div>
@@ -90,4 +91,4 @@
     </div>
   </app-event-summary>
   }
-</div>
+</main>

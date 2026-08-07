@@ -3,11 +3,9 @@
  * Run with: npx ts-node src/garmin/run-migration-local.ts
  */
 import * as admin from 'firebase-admin';
-import * as dotenv from 'dotenv';
 import { migrateUserToken } from './migrate-tokens';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
-
-dotenv.config();
+import '../scripts/load-local-env';
 
 // Initialize Firebase Admin (adjust credential if valid default not present)
 if (admin.apps.length === 0) {

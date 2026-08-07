@@ -33,6 +33,7 @@ import {
   McpOutputSchemaRegistry,
   PublicMcpToolName,
 } from './tool-output-schemas';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -145,6 +146,40 @@ const MCP_ACTIVITY_LIST_INPUT_SCHEMA = z.object({
     },
   ],
 });
+const MCP_ACTIVITY_RANKING_INPUT_SCHEMA = z.object({
+  metric: z.string().min(1).max(160),
+  start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+  end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+  activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+  activityGroup: z.string().min(1).max(80)
+    .describe('Exact activityGroup from list_activity_types; expands to its canonical types.')
+    .optional(),
+  order: z.enum(['highest', 'lowest']).default('highest'),
+  limit: z.number().int().min(1).max(25).default(10),
+}).superRefine((input, context) => {
+  if ((input.start === undefined) !== (input.end === undefined)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Provide both start and end for an explicit date range, or omit both for all available history.',
+    });
+  }
+}).meta({
+  oneOf: [
+    {
+      title: 'Explicit date range',
+      required: ['start', 'end'],
+    },
+    {
+      title: 'All available history',
+      not: {
+        anyOf: [
+          { required: ['start'] },
+          { required: ['end'] },
+        ],
+      },
+    },
+  ],
+});
 const MCP_NEARBY_ACTIVITY_INPUT_SCHEMA = z.object({
   location: MCP_NEARBY_LOCATION_SCHEMA,
   radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
@@ -204,7 +239,7 @@ const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
 ]);
 const MCP_MEASUREMENT_TYPE_SCHEMA = z.enum(MCP_MEASUREMENT_TYPE_IDS);
 
-interface AuthenticatedMcpRequest {
+export interface AuthenticatedMcpRequest {
   uid: string;
   clientId: string;
   connectionId: string;
@@ -520,7 +555,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
     instructions.push(
-      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric.',
+      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric. For an MTB jump superlative, discover the Mountain Biking activityGroup, pass it to rank_activities_by_metric, and use the corresponding persisted Maximum Jump Distance, Height, Hang Time, Speed, or Score metric. The server expands the group to every canonical type. Treat the ranked metric value as authoritative. When stating when the record happened, use that ranked activity\'s exact ISO startTime; never substitute the current date. Read list_activity_jumps only when jump-level details are requested and preserve pagination completeness. Never rank jump quality by jumpCount.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -551,6 +586,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       'get_today_readiness calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
     );
   }
+  instructions.push(
+    'Absolute output fields ending in TimeMs, DateMs, DayMs, or AtMs, plus bucketStartMs, are Unix epoch milliseconds; convert them exactly before stating a calendar date and never substitute the current date. Measurement values such as HRV milliseconds and relative offsets such as jump timestampMs are not calendar timestamps.',
+  );
   return instructions.join(' ');
 }
 
@@ -1226,15 +1264,8 @@ export function createMcpServer(
 
     server.registerTool('rank_activities_by_metric', {
       title: 'Rank activities by metric',
-      description: 'Rank up to 25 activities by one metric.',
-      inputSchema: {
-        metric: z.string().min(1).max(160),
-        start: MCP_ISO_DATE_TIME_SCHEMA,
-        end: MCP_ISO_DATE_TIME_SCHEMA,
-        activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
-        order: z.enum(['highest', 'lowest']).default('highest'),
-        limit: z.number().int().min(1).max(25).default(10),
-      },
+      description: 'Rank one persisted metric over a range or all history. Oversized scans fail. A ranked Maximum Jump metric is authoritative; read jump details only when requested.',
+      inputSchema: MCP_ACTIVITY_RANKING_INPUT_SCHEMA,
       outputSchema: outputSchemas.rank_activities_by_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1243,9 +1274,14 @@ export function createMcpServer(
         uid: auth.uid,
         connectionId: auth.connectionId,
         metric: input.metric,
-        startTimeMs: parseMcpDateTime(input.start, 'start'),
-        endTimeMs: parseMcpDateTime(input.end, 'end'),
+        startTimeMs: input.start === undefined
+          ? undefined
+          : parseMcpDateTime(input.start, 'start'),
+        endTimeMs: input.end === undefined
+          ? undefined
+          : parseMcpDateTime(input.end, 'end'),
         activityTypes: input.activityTypes,
+        activityGroup: input.activityGroup,
         order: input.order,
         limit: input.limit,
       }),
@@ -1554,6 +1590,7 @@ export function parseMcpBearerToken(value: unknown): string | null {
 
 export const mcpApi = onRequest({
   region: 'europe-west2',
+  secrets: FUNCTION_SECRET_BINDINGS.mcpApi,
   cors: false,
   timeoutSeconds: 120,
   memory: '512MiB',

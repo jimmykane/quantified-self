@@ -15,7 +15,7 @@ function normalizeCount(value: unknown): number {
     return Math.max(0, Math.floor(value));
 }
 
-function buildAiInsightsUsageDocIdForSubscriptionPeriod(
+function buildAssistantUsageDocIdForSubscriptionPeriod(
     periodStart: unknown,
     periodEnd: unknown
 ): string | null {
@@ -29,7 +29,7 @@ function buildAiInsightsUsageDocIdForSubscriptionPeriod(
     return `period_${periodStartMs}_${periodEndMs}`;
 }
 
-function resolveAiInsightsSuccessfulRequestCount(value: unknown): number {
+function resolveAssistantSuccessfulRequestCount(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return 0;
     }
@@ -37,12 +37,12 @@ function resolveAiInsightsSuccessfulRequestCount(value: unknown): number {
     return Math.max(0, Math.floor(value));
 }
 
-function resolveAiCreditsConsumedFromUsageData(value: unknown): number {
+function resolveAssistantRequestsUsedFromUsageData(value: unknown): number {
     if (!value || typeof value !== 'object') {
         return 0;
     }
 
-    return resolveAiInsightsSuccessfulRequestCount(
+    return resolveAssistantSuccessfulRequestCount(
         (value as { successfulRequestCount?: unknown }).successfulRequestCount
     );
 }
@@ -105,8 +105,8 @@ export async function enrichUsers(
         users.map(async (user) => {
             let subscriptionData: EnrichedUser['subscription'] = null;
             const connectedServices: { provider: string; connectedAt: unknown }[] = [];
-            let aiCreditsConsumed = 0;
-            let hasResolvedAiUsageFromCurrentPeriod = false;
+            let assistantRequestsUsed = 0;
+            let hasResolvedAssistantUsageFromCurrentPeriod = false;
             const hasSubscribedOnce = userFlagsByUid.get(user.uid)?.hasSubscribedOnce === true;
 
             try {
@@ -133,7 +133,7 @@ export async function enrichUsers(
                         stripeLink: sub.stripeLink
                     };
 
-                    const usageDocID = buildAiInsightsUsageDocIdForSubscriptionPeriod(
+                    const usageDocID = buildAssistantUsageDocIdForSubscriptionPeriod(
                         sub.current_period_start,
                         sub.current_period_end
                     );
@@ -141,33 +141,33 @@ export async function enrichUsers(
                     if (usageDocID) {
                         const usageSnapshot = await db.collection('users')
                             .doc(user.uid)
-                            .collection('aiInsightsUsage')
+                            .collection('assistantUsage')
                             .doc(usageDocID)
                             .get();
 
                         if (usageSnapshot.exists) {
-                            aiCreditsConsumed = resolveAiCreditsConsumedFromUsageData(usageSnapshot.data());
-                            hasResolvedAiUsageFromCurrentPeriod = true;
+                            assistantRequestsUsed = resolveAssistantRequestsUsedFromUsageData(usageSnapshot.data());
+                            hasResolvedAssistantUsageFromCurrentPeriod = true;
                         }
                     }
                 }
 
-                if (!hasResolvedAiUsageFromCurrentPeriod && !subscriptionData && hasSubscribedOnce) {
+                if (!hasResolvedAssistantUsageFromCurrentPeriod && !subscriptionData && hasSubscribedOnce) {
                     try {
                         const latestUsageSnapshot = await db.collection('users')
                             .doc(user.uid)
-                            .collection('aiInsightsUsage')
+                            .collection('assistantUsage')
                             .orderBy('periodEnd', 'desc')
                             .limit(1)
                             .get();
 
                         if (!latestUsageSnapshot.empty) {
-                            aiCreditsConsumed = resolveAiCreditsConsumedFromUsageData(
+                            assistantRequestsUsed = resolveAssistantRequestsUsedFromUsageData(
                                 latestUsageSnapshot.docs[0].data()
                             );
                         }
                     } catch (fallbackUsageError) {
-                        logger.warn(`Failed to fetch fallback AI usage for ${user.uid}`, fallbackUsageError);
+                        logger.warn(`Failed to fetch fallback Assistant usage for ${user.uid}`, fallbackUsageError);
                     }
                 }
 
@@ -201,7 +201,7 @@ export async function enrichUsers(
                 connectedServices: connectedServices,
                 onboardingCompleted: userFlagsByUid.get(user.uid)?.onboardingCompleted === true,
                 hasSubscribedOnce,
-                aiCreditsConsumed,
+                assistantRequestsUsed,
                 eventStats: eventStatsByUid.get(user.uid) || {
                     total: null,
                 },

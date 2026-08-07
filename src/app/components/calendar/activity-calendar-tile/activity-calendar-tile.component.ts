@@ -15,6 +15,7 @@ import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarViewModel,
+  navigateActivityCalendarDate,
   resolveActivityCalendarQueryWindow,
 } from '../../../helpers/activity-calendar.helper';
 import { SharedModule } from '../../../modules/shared.module';
@@ -43,10 +44,13 @@ export class ActivityCalendarTileComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly locale = inject(LOCALE_ID);
   private readonly anchorDate = signal(startOfCurrentMonth());
+  private readonly followsCurrentMonth = signal(true);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
+  readonly showHeading = input(true);
+  readonly showNavigation = input(false);
   readonly eventState = toSignal(combineLatest([
     toObservable(this.user),
     toObservable(this.anchorDate),
@@ -85,6 +89,9 @@ export class ActivityCalendarTileComponent {
   refreshCalendarDate(): void {
     const now = new Date();
     this.today.set(now);
+    if (!this.followsCurrentMonth()) {
+      return;
+    }
     const currentMonth = startOfCurrentMonth(now);
     if (currentMonth.getTime() !== this.anchorDate().getTime()) {
       this.anchorDate.set(currentMonth);
@@ -95,13 +102,24 @@ export class ActivityCalendarTileComponent {
     this.reloadSequence.update(value => value + 1);
   }
 
+  navigateMonth(direction: -1 | 1): void {
+    this.followsCurrentMonth.set(false);
+    this.anchorDate.set(navigateActivityCalendarDate(this.anchorDate(), 'month', direction));
+  }
+
   openDay(day: ActivityCalendarDayViewModel): void {
     const userId = `${this.user()?.uid || ''}`.trim();
     if (!day.eventCount || !userId) {
       return;
     }
     this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
-      data: { day, userId, locale: this.locale },
+      data: {
+        day,
+        userId,
+        locale: this.locale,
+        unitSettings: this.user()?.settings?.unitSettings ?? null,
+        summariesSettings: this.user()?.settings?.summariesSettings ?? null,
+      },
     });
   }
 }

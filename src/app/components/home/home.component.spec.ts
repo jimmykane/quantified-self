@@ -12,7 +12,7 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
-import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
+import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -71,7 +71,7 @@ describe('HomeComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
-    it('should render provider-focused hero messaging and a standalone AI Insights section', () => {
+    it('should render provider-focused hero messaging and a standalone Assistant section', () => {
         const text = fixture.nativeElement.textContent as string;
         const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
         const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
@@ -80,11 +80,11 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activity data into one private training dashboard.');
         expect(heroText).toContain('Review readiness, load, intensity, durability, and sleep context');
         expect(heroText).toContain('keep supported activities syncing between connected services');
-        expect(heroText).not.toContain('AI Insights');
+        expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
-        expect(aiSectionText).toContain('AI Insights');
-        expect(aiSectionText).toContain('Turn focused training questions into chart-backed answers grounded in your stored activity data.');
-        expect(aiSectionText).toContain('Explore AI Insights');
+        expect(aiSectionText).toContain('Quantified Self Assistant');
+        expect(aiSectionText).toContain('answers grounded in read-only sleep, readiness, Training, measurement, and activity tools');
+        expect(aiSectionText).toContain('Explore the Assistant');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });
@@ -231,13 +231,13 @@ describe('HomeComponent', () => {
     });
 
     it('should render the shared typed prompt rotator in the examples area', () => {
-        const sharedHeroPrompts = getAiInsightsHeroPrompts();
+        const sharedHeroPrompts = ASSISTANT_STARTER_PROMPTS;
         const text = fixture.nativeElement.textContent as string;
         expect(text).toContain('What you can ask');
         expect(text).not.toContain('Auto-rotating:');
         expect(fixture.nativeElement.querySelector('app-typed-prompt-rotator')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.hero-prompt-caret')).toBeTruthy();
-        expect(component.aiPromptExamples).toEqual(sharedHeroPrompts);
+        expect(component.assistantPromptExamples).toEqual(sharedHeroPrompts);
         const promptText = fixture.nativeElement.querySelector('.hero-prompt-text') as HTMLElement | null;
         expect(promptText?.textContent?.trim()).toBe((sharedHeroPrompts[0] ?? '').slice(0, 1));
     });

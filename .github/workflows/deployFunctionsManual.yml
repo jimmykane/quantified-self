@@ -83,24 +83,6 @@ jobs:
           umask 077
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
 
-      - name: Create Functions environment file
-        working-directory: functions
-        run: |
-          echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> .env
-          echo "SUUNTOAPP_CLIENT_ID=${{ secrets.SUUNTOAPP_CLIENT_ID }}" >> .env
-          echo "SUUNTOAPP_CLIENT_SECRET=${{ secrets.SUUNTOAPP_CLIENT_SECRET }}" >> .env
-          echo "SUUNTOAPP_SUBSCRIPTION_KEY=${{ secrets.SUUNTOAPP_SUBSCRIPTION_KEY }}" >> .env
-          echo "COROSAPI_CLIENT_ID=${{ secrets.COROSAPI_CLIENT_ID }}" >> .env
-          echo "COROSAPI_CLIENT_SECRET=${{ secrets.COROSAPI_CLIENT_SECRET }}" >> .env
-          echo "GARMINHEALTHAPI_CONSUMER_KEY=${{ secrets.GARMINHEALTHAPI_CONSUMER_KEY }}" >> .env
-          echo "GARMINHEALTHAPI_CONSUMER_SECRET=${{ secrets.GARMINHEALTHAPI_CONSUMER_SECRET }}" >> .env
-          echo "GARMINAPI_CLIENT_ID=${{ secrets.GARMINAPI_CLIENT_ID }}" >> .env
-          echo "GARMINAPI_CLIENT_SECRET=${{ secrets.GARMINAPI_CLIENT_SECRET }}" >> .env
-          echo "WAHOOAPI_CLIENT_ID=${{ secrets.WAHOOAPI_CLIENT_ID }}" >> .env
-          echo "WAHOOAPI_CLIENT_SECRET=${{ secrets.WAHOOAPI_CLIENT_SECRET }}" >> .env
-          echo "WAHOOAPI_WEBHOOK_TOKEN=${{ secrets.WAHOOAPI_WEBHOOK_TOKEN }}" >> .env
-          echo "WAHOOAPI_ALLOWED_FILE_HOSTS=${{ secrets.WAHOOAPI_ALLOWED_FILE_HOSTS }}" >> .env
-
       - name: Deploy Functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase_service_account.json

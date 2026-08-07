@@ -522,6 +522,43 @@ describe('TrackMapManager', () => {
     expect(map.removeSource).toHaveBeenCalledWith('route-preview-combined-source');
   });
 
+  it('renders custom markers without inventing a path in combined mode', () => {
+    const combinedManager = new TrackMapManager(markerFactory, {
+      log: vi.fn(),
+      warn: vi.fn(),
+    } as unknown as LoggerService, {
+      layerPrefix: 'assistant-visual',
+      logPrefix: 'AssistantVisualMapManager',
+      combineTrackLayers: true,
+    });
+    combinedManager.setMap(map, { Marker: MockMapboxMarker, LngLatBounds: MockLngLatBounds });
+    map.addSource.mockClear();
+    map.addLayer.mockClear();
+
+    combinedManager.renderTrackData([{
+      id: 'assistant-markers',
+      strokeColor: '#38bdf8',
+      positions: [],
+      markers: [{
+        id: 'jump-1',
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.853,
+        element: createMarkerElement(),
+      }],
+    }], {
+      showArrows: false,
+      showEndpointMarkers: false,
+      strokeWidth: 4,
+    });
+
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.addLayer).not.toHaveBeenCalled();
+    const markers = (combinedManager as any).extraMarkers.get('assistant-markers') as MockMapboxMarker[];
+    expect(markers).toHaveLength(1);
+    expect(markers[0].lngLat).toEqual([20.853, 39.665]);
+    expect(markers[0].added).toBe(true);
+  });
+
   it('fits bounds across selected track coordinates and markers', () => {
     manager.renderTrackData([{
       id: 'route-1',
@@ -550,10 +587,11 @@ describe('TrackMapManager', () => {
       strokeWidth: 3,
     });
 
-    expect(manager.fitBoundsToTracks(false)).toBe(true);
+    expect(manager.fitBoundsToTracks(false, 16)).toBe(true);
     expect(map.fitBounds).toHaveBeenCalledWith(expect.any(MockLngLatBounds), expect.objectContaining({
       animate: false,
       padding: 50,
+      maxZoom: 16,
     }));
     const bounds = map.fitBounds.mock.calls[0][0] as MockLngLatBounds;
     expect(bounds.points).toEqual([

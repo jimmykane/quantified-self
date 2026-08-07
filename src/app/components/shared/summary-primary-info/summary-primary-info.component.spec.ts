@@ -3,6 +3,16 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('SummaryPrimaryInfoComponent layout styles', () => {
+  it('allows a host surface to remove only its top padding', () => {
+    const summaryStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/summary-primary-info/summary-primary-info.component.scss'),
+      'utf8',
+    );
+
+    expect(summaryStyles).toContain('padding-top: var(--summary-primary-info-padding-top, 24px);');
+    expect(summaryStyles).toContain('padding-top: var(--summary-primary-info-padding-top, 12px);');
+  });
+
   it('bounds projected metrics and actions so summary content can wrap instead of overflowing', () => {
     const summaryStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/shared/summary-primary-info/summary-primary-info.component.scss'),

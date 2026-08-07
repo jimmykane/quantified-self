@@ -1,5 +1,5 @@
 import {
-    getAiInsightsRequestLimitForRole,
+    getAssistantRequestLimitForRole,
     calculateGracePeriodEnd as calculateGracePeriodEndFromStart,
     getRouteUsageLimitForRole,
     getUsageLimitForRole,
@@ -26,6 +26,7 @@ export interface EmailPlanDetails {
     plan_details_available: boolean;
     activity_description: string;
     route_description: string;
+    // Stable payload key used by already-seeded Firestore templates.
     ai_insights_description: string;
     device_sync_description: string;
 }
@@ -63,14 +64,14 @@ export function buildEmailPlanDetails(role: string): EmailPlanDetails {
         };
     }
 
-    const aiInsightsLimit = getAiInsightsRequestLimitForRole(role);
-    const aiInsightsPeriod = role === 'free' ? 'calendar month' : 'billing period';
+    const assistantLimit = getAssistantRequestLimitForRole(role);
+    const assistantPeriod = role === 'free' ? 'calendar month' : 'billing period';
 
     return {
         plan_details_available: true,
         activity_description: formatLimit(getUsageLimitForRole(role), 'activities'),
         route_description: formatLimit(getRouteUsageLimitForRole(role), 'saved routes'),
-        ai_insights_description: `${NUMBER_FORMATTER.format(aiInsightsLimit)} AI Insights requests per ${aiInsightsPeriod}`,
+        ai_insights_description: `${NUMBER_FORMATTER.format(assistantLimit)} Assistant requests per ${assistantPeriod}`,
         device_sync_description: isDeviceSyncEnabledForRole(role)
             ? 'Device sync with Garmin, Suunto, and COROS'
             : '',

@@ -326,6 +326,37 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });
 
+  it('clears the active tooltip before replacing series for an overlay', async () => {
+    await renderComponent();
+
+    chart.dispatchAction.mockClear();
+    eChartsLoaderMock.setOption.mockClear();
+    component.overlayPanel = buildTestPanel('heartRate', [132, 146], {
+      displayName: 'Heart rate',
+      unit: 'bpm',
+      color: '#00ff00',
+    });
+
+    component.ngOnChanges({
+      overlayPanel: new SimpleChange(null, component.overlayPanel, false),
+    });
+    await flushQueuedChartRefreshes();
+
+    expect(chart.dispatchAction).toHaveBeenNthCalledWith(1, {
+      type: 'hideTip',
+      escapeConnect: true,
+    });
+
+    const structuralUpdateIndex = eChartsLoaderMock.setOption.mock.calls.findIndex(([, option]) => {
+      const series = (option as { series?: unknown } | null)?.series;
+      return Array.isArray(series) && series.length === 2;
+    });
+    expect(structuralUpdateIndex).toBeGreaterThanOrEqual(0);
+    expect(chart.dispatchAction.mock.invocationCallOrder[0]).toBeLessThan(
+      eChartsLoaderMock.setOption.mock.invocationCallOrder[structuralUpdateIndex]
+    );
+  });
+
   it('caps stamina chart y-axis at 100 percent', async () => {
     component.panel = {
       dataType: DataStamina.type,

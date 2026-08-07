@@ -31,6 +31,7 @@ import {
     ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
 } from '../orphaned-service-tokens';
 import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -902,6 +903,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
 export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
     failurePolicy: true,
+    secrets: FUNCTION_SECRET_BINDINGS.cleanupUserAccounts,
 } as const;
 
 export const cleanupUserAccounts = functions

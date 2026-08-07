@@ -364,7 +364,7 @@ describe('AdminUserManagementComponent', () => {
     it('should include uid in displayed columns', () => {
         expect(component.displayedColumns).toContain('uid');
         expect(component.displayedColumns).toContain('subscriptionHistory');
-        expect(component.displayedColumns).toContain('aiCreditsConsumed');
+        expect(component.displayedColumns).toContain('assistantRequestsUsed');
         expect(component.displayedColumns).toContain('eventStats');
         expect(component.displayedColumns).toContain('routeStats');
         expect(component.displayedColumns).not.toContain('subscription');
