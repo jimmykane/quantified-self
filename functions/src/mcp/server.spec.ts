@@ -735,6 +735,38 @@ describe('MCP HTTP scope enforcement', () => {
     }
   });
 
+  it('advertises recent-jump discovery with activity-detail access alone', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'recent-jump-instructions-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain(
+        'select the first activity with jumpCount greater than zero',
+      );
+      expect(instructions).toContain('never an activity start or end position');
+      expect(instructions).not.toContain('rank_activities_by_metric');
+      const tools = (await client.listTools()).tools;
+      expect(tools.map(tool => tool.name)).toContain('query_activities');
+      expect(tools.map(tool => tool.name)).toContain('list_activity_jumps');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('routes specific and latest-workout requests to newest-first activity discovery', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
@@ -815,6 +847,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain('never substitute the current date');
       expect(instructions).toContain('only when jump-level details are requested');
       expect(instructions).toContain('Never rank jump quality by jumpCount');
+      expect(instructions).toContain('select the first activity with jumpCount greater than zero');
+      expect(instructions).toContain('never an activity start or end position');
       expect(listActivityTypes).toBeDefined();
       expect(queryActivities?.description).toContain('relativePeriod/timeZone');
       expect(queryActivities?.description).toContain('unbounded history');

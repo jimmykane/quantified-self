@@ -549,6 +549,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     instructions.push(
       'For a workout, use list_activity_types if needed, then query_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. For nearby history, use search_activities_near_location. Follow nextCursor until matched or scanComplete.',
     );
+    instructions.push(
+      'For recent or latest jump details, query activities newest first, select the first activity with jumpCount greater than zero, then read that activity with list_activity_jumps; preserve the cursor and continue only if no activity in the page has jumps. With activity-location:read, use jump-record coordinates for a jump location, never an activity start or end position.',
+    );
   }
   if (
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)

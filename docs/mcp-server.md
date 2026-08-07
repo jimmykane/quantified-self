@@ -635,6 +635,11 @@ user asks for jump-level details. When reading those records, follow `nextCursor
 inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
 jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
+For a recent or latest jump detail request, use newest-first `query_activities`, choose the first returned activity with
+`jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
+page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
+on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
+
 ## First-class body measurements
 
 `measurement-catalog.ts` is a deliberately narrow semantic projection layered on the automatic numeric Sports Lib

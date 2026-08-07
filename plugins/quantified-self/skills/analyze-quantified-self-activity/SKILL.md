@@ -37,6 +37,10 @@ Resolve activities through opaque public references and request only the detail 
    completeness and say when the inspected records are incomplete. Never rank jump quality by jump count or by sorting
    a newest-first activity sample. If an all-history scan exceeds its processing bound, request or choose an explicit
    period rather than presenting a partial result as an all-time record.
+8. For recent, latest, or last jump details, query activities newest first and select the first returned activity whose
+   `jumpCount` is greater than zero before requesting its jump records. Continue the same cursor only when a page has no
+   jumps. A jump coordinate comes only from the resulting jump record: never present an activity start or end position
+   as the jump location.
 
 ## Permissions and Privacy
 

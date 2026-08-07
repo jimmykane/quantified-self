@@ -4,6 +4,7 @@ import { retry } from 'genkit/model/middleware';
 import {
   ASSISTANT_PROMPT_EXAMPLES,
   findAssistantPromptExample,
+  findAssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
 import { assistantGenkit } from './model';
 import {
@@ -54,6 +55,157 @@ function createSession() {
     close,
   };
   return { session, callTool, close };
+}
+
+function createRecentJumpSession() {
+  const latestJumpActivityRef = 'opaque-latest-jump-activity-reference';
+  const nonJumpActivityRef = 'opaque-non-jump-activity-reference';
+  const close = vi.fn().mockResolvedValue(undefined);
+  const callTool = vi.fn().mockImplementation(async (
+    toolName: AssistantMcpToolName,
+  ) => {
+    if (toolName === 'query_activities') {
+      return {
+        structuredContent: {
+          activities: [{
+            activityRef: nonJumpActivityRef,
+            activityType: 'Running',
+            jumpCount: 0,
+            startPosition: { latitudeDegrees: 39.1, longitudeDegrees: 20.7 },
+            endPosition: { latitudeDegrees: 39.2, longitudeDegrees: 20.8 },
+          }, {
+            activityRef: latestJumpActivityRef,
+            activityType: 'Downhill Cycling',
+            jumpCount: 2,
+            startPosition: { latitudeDegrees: 42.1, longitudeDegrees: 23.5 },
+            endPosition: { latitudeDegrees: 42.2, longitudeDegrees: 23.6 },
+          }],
+          scannedActivityCount: 2,
+          skippedActivityCount: 0,
+          nextCursor: null,
+          scanComplete: true,
+        },
+      };
+    }
+    if (toolName === 'list_activity_jumps') {
+      return {
+        structuredContent: {
+          items: [{
+            index: 0,
+            timestampMs: 124_000,
+            distanceMeters: 10.41,
+            latitudeDegrees: 42.2500837314874,
+            longitudeDegrees: 23.6145888548344,
+          }],
+          nextCursor: null,
+          scanComplete: true,
+        },
+      };
+    }
+    throw new Error(`Unexpected tool ${toolName}.`);
+  });
+  const session: AssistantMcpSession = {
+    instructions: 'Use current account facts only.',
+    tools: [{
+      name: 'query_activities',
+      title: 'Query activities',
+      description: 'Query activities newest first.',
+      inputSchema: { type: 'object', properties: {} },
+    }, {
+      name: 'list_activity_jumps',
+      title: 'List activity jumps',
+      description: 'List jump details.',
+      inputSchema: {
+        type: 'object',
+        properties: { activityRef: { type: 'string' } },
+        required: ['activityRef'],
+      },
+    }],
+    callTool,
+    close,
+  };
+  return { session, callTool, close, latestJumpActivityRef, nonJumpActivityRef };
+}
+
+function createRecordJumpSession() {
+  const recordActivityRef = 'opaque-record-jump-activity-reference';
+  const close = vi.fn().mockResolvedValue(undefined);
+  const callTool = vi.fn().mockImplementation(async (
+    toolName: AssistantMcpToolName,
+  ) => {
+    if (toolName === 'list_activity_types') {
+      return { structuredContent: { activityTypes: [] } };
+    }
+    if (toolName === 'rank_activities_by_metric') {
+      return {
+        structuredContent: {
+          activities: [{
+            rank: 1,
+            activityRef: recordActivityRef,
+            activityType: 'Downhill Cycling',
+            startTime: '2026-07-31T07:50:22.000Z',
+            value: 10.41,
+          }],
+          metric: {
+            type: 'Maximum Jump Distance',
+            displayType: 'Maximum Jump Distance',
+            unit: 'm',
+          },
+          order: 'highest',
+          scannedActivityCount: 20,
+          matchedActivityCount: 1,
+        },
+      };
+    }
+    if (toolName === 'list_activity_jumps') {
+      return {
+        structuredContent: {
+          items: [{
+            index: 0,
+            timestampMs: 124_000,
+            distanceMeters: 9.5,
+            latitudeDegrees: 42.2,
+            longitudeDegrees: 23.5,
+          }, {
+            index: 1,
+            timestampMs: 330_000,
+            distanceMeters: 10.41,
+            latitudeDegrees: 42.2500837314874,
+            longitudeDegrees: 23.6145888548344,
+          }],
+          nextCursor: null,
+          scanComplete: true,
+        },
+      };
+    }
+    throw new Error(`Unexpected tool ${toolName}.`);
+  });
+  const session: AssistantMcpSession = {
+    instructions: 'Use current account facts only.',
+    tools: [{
+      name: 'list_activity_types',
+      title: 'List activity types',
+      description: 'List canonical activity types.',
+      inputSchema: { type: 'object', properties: {} },
+    }, {
+      name: 'rank_activities_by_metric',
+      title: 'Rank activities by metric',
+      description: 'Rank persisted metrics.',
+      inputSchema: { type: 'object', properties: {} },
+    }, {
+      name: 'list_activity_jumps',
+      title: 'List activity jumps',
+      description: 'List jump details.',
+      inputSchema: {
+        type: 'object',
+        properties: { activityRef: { type: 'string' } },
+        required: ['activityRef'],
+      },
+    }],
+    callTool,
+    close,
+  };
+  return { session, callTool, recordActivityRef };
 }
 
 describe('Assistant runtime', () => {
@@ -152,6 +304,231 @@ describe('Assistant runtime', () => {
     expect(findAssistantPromptExample(
       'Show my latest road cycling activity.',
     )).toBeNull();
+  });
+
+  it('routes jump-detail prompts through a deterministic detail workflow', () => {
+    expect(findAssistantPromptWorkflow(
+      'Show me on the map my last jumps.',
+    )).toMatchObject({
+      id: 'recent-jump-details',
+      toolWorkflow: ['query_activities', 'list_activity_jumps'],
+      jumpDetailSource: 'recent_activity_with_jumps',
+      mapSourceToolName: 'list_activity_jumps',
+    });
+    expect(findAssistantPromptWorkflow(
+      'Where on the map was my biggest MTB jump?',
+    )).toMatchObject({
+      id: 'record-mtb-jump-location',
+      toolWorkflow: [
+        'list_activity_types',
+        'rank_activities_by_metric',
+        'list_activity_jumps',
+      ],
+      jumpDetailSource: 'ranked_record',
+      mapSourceToolName: 'list_activity_jumps',
+    });
+  });
+
+  it('grounds a recent jump map in the first discovered activity with jump records', async () => {
+    const {
+      session,
+      callTool,
+      latestJumpActivityRef,
+    } = createRecentJumpSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        expect(input.publishedExample?.id).toBe('recent-jump-details');
+        await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
+        await input.tools.find(tool => tool.name === 'list_activity_jumps')?.execute({
+          activityRef: latestJumpActivityRef,
+        });
+        return {
+          answer: 'Your latest recorded jumps are shown here.',
+          visualRequest: {
+            chart: null,
+            map: { sourceId: 'source_2' },
+          },
+        };
+      },
+    });
+
+    const result = await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show me on the map my last jumps.',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    });
+
+    expect(callTool.mock.calls.map(([toolName]) => toolName)).toEqual([
+      'query_activities',
+      'list_activity_jumps',
+    ]);
+    expect(result.visuals).toEqual([expect.objectContaining({
+      kind: 'map',
+      title: 'Jump locations',
+      markers: [expect.objectContaining({ kind: 'jump' })],
+    })]);
+  });
+
+  it('allows a grounded no-jumps answer only after recent-jump discovery is complete', async () => {
+    const { session, callTool } = createRecentJumpSession();
+    callTool.mockResolvedValue({
+      structuredContent: {
+        activities: [],
+        scannedActivityCount: 25,
+        skippedActivityCount: 0,
+        nextCursor: null,
+        scanComplete: true,
+      },
+    });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
+        return 'No activities with recorded jump details were found.';
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show me on the map my last jumps.',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    })).resolves.toMatchObject({
+      answer: 'No activities with recorded jump details were found.',
+      toolNames: ['query_activities'],
+      visuals: [],
+    });
+
+    const { session: incompleteSession, callTool: incompleteCallTool } = createRecentJumpSession();
+    incompleteCallTool.mockResolvedValue({
+      structuredContent: {
+        activities: [],
+        scannedActivityCount: 25,
+        skippedActivityCount: 0,
+        nextCursor: 'opaque-next-page-cursor',
+        scanComplete: false,
+      },
+    });
+    const incompleteRuntime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(incompleteSession),
+      generateAnswer: async (input) => {
+        await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
+        return 'This answer must not be returned before the search is complete.';
+      },
+    });
+
+    await expect(incompleteRuntime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show me on the map my last jumps.',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    })).rejects.toThrow('did not complete the published recent-jump-details workflow');
+  });
+
+  it('grounds a record jump map in the rank-one jump record rather than an activity summary', async () => {
+    const { session, callTool, recordActivityRef } = createRecordJumpSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        expect(input.publishedExample?.id).toBe('record-mtb-jump-location');
+        await input.tools.find(tool => tool.name === 'list_activity_types')?.execute({});
+        await input.tools.find(tool => tool.name === 'rank_activities_by_metric')?.execute({
+          metric: 'Maximum Jump Distance',
+          activityGroup: 'mountain_biking_group',
+          order: 'highest',
+        });
+        await input.tools.find(tool => tool.name === 'list_activity_jumps')?.execute({
+          activityRef: recordActivityRef,
+        });
+        return {
+          answer: 'Your biggest MTB jump was 10.41 metres.',
+          visualRequest: { chart: null, map: { sourceId: 'source_3' } },
+        };
+      },
+    });
+
+    const result = await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Where on the map was my biggest MTB jump?',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    });
+
+    expect(callTool.mock.calls.map(([toolName]) => toolName)).toEqual([
+      'list_activity_types',
+      'rank_activities_by_metric',
+      'list_activity_jumps',
+    ]);
+    expect(result.visuals).toEqual([expect.objectContaining({
+      kind: 'map',
+      title: 'Record jump location',
+      markers: [{
+        kind: 'jump',
+        latitudeDegrees: 42.2500837314874,
+        longitudeDegrees: 23.6145888548344,
+        label: 'Jump 2',
+      }],
+    })]);
+  });
+
+  it('rejects a recent-jump workflow that uses a non-jump activity or summary map', async () => {
+    const {
+      session,
+      nonJumpActivityRef,
+    } = createRecentJumpSession();
+    const invalidActivityRuntime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
+        await input.tools.find(tool => tool.name === 'list_activity_jumps')?.execute({
+          activityRef: nonJumpActivityRef,
+        });
+        return 'This answer must not be returned.';
+      },
+    });
+
+    await expect(invalidActivityRuntime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show me on the map my last jumps.',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    })).rejects.toThrow('did not use a qualifying activity');
+
+    const { session: mapSession, latestJumpActivityRef } = createRecentJumpSession();
+    const invalidMapRuntime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(mapSession),
+      generateAnswer: async (input) => {
+        await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
+        await input.tools.find(tool => tool.name === 'list_activity_jumps')?.execute({
+          activityRef: latestJumpActivityRef,
+        });
+        return {
+          answer: 'This answer must not be returned.',
+          visualRequest: { chart: null, map: { sourceId: 'source_1' } },
+        };
+      },
+    });
+
+    await expect(invalidMapRuntime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show me on the map my last jumps.',
+      timeZone: 'Europe/Helsinki',
+      locationAccess: 'precise_activity',
+      history: [],
+    })).rejects.toThrow('selected a non-jump map');
   });
 
   it('requires an initial tool request and then permits a final model answer', async () => {
@@ -303,6 +680,12 @@ describe('Assistant runtime', () => {
     expect(getAssistantRuntimeErrorReason(
       new Error('The Assistant did not complete the published weight workflow.'),
     )).toBe('published_workflow_incomplete');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The Assistant did not use a qualifying activity for the supported recent-jump-details workflow.'),
+    )).toBe('jump_workflow_activity_mismatch');
+    expect(getAssistantRuntimeErrorReason(
+      new Error('The Assistant selected a non-jump map for the supported recent-jump-details workflow.'),
+    )).toBe('jump_workflow_map_mismatch');
     expect(getAssistantRuntimeErrorReason(
       new Error('The query_measurements tool could not complete the request.'),
     )).toBe('mcp_tool_failed');
