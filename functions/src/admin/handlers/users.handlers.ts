@@ -17,7 +17,12 @@ import {
 } from '../shared/subscription.constants';
 import { clampListUsersPageSize } from '../shared/date.utils';
 import { enrichUsers } from '../shared/user-enrichment';
-import { buildMcpLogicalConnectionId, MCP_OAUTH_COLLECTIONS } from '../../mcp/oauth.service';
+import {
+    buildMcpLogicalConnectionId,
+    isActiveMcpConnection,
+    MCP_OAUTH_COLLECTIONS,
+    type McpConnection,
+} from '../../mcp/oauth.service';
 import {
     BasicUser,
     ConnectionCountStats,
@@ -458,23 +463,6 @@ function resolveMcpConnectionCandidate(
     };
 }
 
-function isActiveMcpConnection(data: Record<string, unknown>): boolean {
-    if (
-        data.status === 'revoked'
-        || (data.revokedAtMs !== null && data.revokedAtMs !== undefined)
-    ) {
-        return false;
-    }
-
-    if (data.status === 'active') {
-        return true;
-    }
-
-    return (data.status === 'pending' || data.status === undefined)
-        && typeof data.lastUsedAtMs === 'number'
-        && Number.isFinite(data.lastUsedAtMs);
-}
-
 async function calculateConnectionCountStats(
     db: admin.firestore.Firestore,
 ): Promise<StoredConnectionCountStats> {
@@ -508,7 +496,7 @@ async function calculateConnectionCountStats(
 
         const candidate: ActiveMcpConnectionCandidate = {
             ...connection,
-            active: isActiveMcpConnection(document.data() as Record<string, unknown>),
+            active: isActiveMcpConnection(document.data() as McpConnection),
         };
         const userConnections = mcpConnectionsByUserId.get(candidate.uid) || [];
         userConnections.push(candidate);

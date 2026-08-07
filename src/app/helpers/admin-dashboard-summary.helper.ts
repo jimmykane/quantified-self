@@ -123,7 +123,7 @@ export function buildAdminDashboardUserKpiCards(
                 'Service Connected',
                 'link',
                 connectionStats.serviceUsers,
-                'ok',
+                connectionCountSeverity(connectionStats.serviceUsers),
                 connectedServiceSubtitle(connectionStats.serviceUsers, stats.total, connectionStats.providers)
             ),
             numberCard(
@@ -131,7 +131,7 @@ export function buildAdminDashboardUserKpiCards(
                 'MCP Connected',
                 'hub',
                 connectionStats.mcpUsers,
-                'ok',
+                connectionCountSeverity(connectionStats.mcpUsers),
                 connectedUserShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
             ),
             numberCard(
@@ -139,7 +139,7 @@ export function buildAdminDashboardUserKpiCards(
                 'Services + MCP',
                 'account_tree',
                 connectionStats.both,
-                'ok',
+                connectionCountSeverity(connectionStats.both),
                 connectedUserShareSubtitle(connectionStats.both, stats.total, 'Connected to both')
             ),
         ] : []),
@@ -466,6 +466,10 @@ function connectedServiceSubtitle(
     totalUsers: number,
     providers: Record<string, number>,
 ): string | undefined {
+    if (connectedUsers === null) {
+        return 'Unavailable';
+    }
+
     const share = connectedUserShareSubtitle(connectedUsers, totalUsers);
     const providerSummary = ['Garmin', 'Suunto', 'COROS', 'Wahoo']
         .map(provider => `${provider} ${normalizeCount(providers[provider])}`)
@@ -478,12 +482,21 @@ function connectedUserShareSubtitle(
     totalUsers: number,
     prefix?: string,
 ): string | undefined {
-    if (connectedUsers === null || totalUsers <= 0) {
+    if (connectedUsers === null) {
+        return 'Unavailable';
+    }
+
+    const normalizedTotalUsers = finiteNumber(totalUsers);
+    if (normalizedTotalUsers === null || normalizedTotalUsers <= 0) {
         return prefix;
     }
 
-    const share = Math.round((connectedUsers / totalUsers) * 100);
+    const share = Math.round((connectedUsers / normalizedTotalUsers) * 100);
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
+}
+
+function connectionCountSeverity(value: number | null): AdminDashboardSeverity | undefined {
+    return finiteNumber(value) === null ? undefined : 'ok';
 }
 
 function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {

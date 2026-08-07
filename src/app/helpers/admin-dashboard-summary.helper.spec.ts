@@ -100,6 +100,49 @@ describe('admin-dashboard-summary helper', () => {
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
     });
 
+    it('does not present unavailable connection counts as successful or zero', () => {
+        const stats: UserCountStats = {
+            total: 10,
+            pro: 1,
+            basic: 0,
+            free: 9,
+            monthlyPaid: 1,
+            yearlyPaid: 0,
+            everPaid: 1,
+            canceled: 0,
+            cancelScheduled: 0,
+            onboardingCompleted: 8,
+            providers: {},
+            events: { total: 0 },
+            routes: { total: 0 },
+            connections: {
+                serviceUsers: null,
+                mcpUsers: null,
+                both: null,
+                providers: { Garmin: 0, Suunto: 0, COROS: 0, Wahoo: 0 },
+                cacheStatus: 'unavailable',
+            },
+        };
+
+        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+
+        expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
+            value: null,
+            severity: undefined,
+            subtitle: 'Unavailable',
+        });
+        expect(cards.find(card => card.id === 'mcp-connected-users')).toMatchObject({
+            value: null,
+            severity: undefined,
+            subtitle: 'Unavailable',
+        });
+        expect(cards.find(card => card.id === 'service-and-mcp-users')).toMatchObject({
+            value: null,
+            severity: undefined,
+            subtitle: 'Unavailable',
+        });
+    });
+
     it('normalizes malformed KPI counts and financial summary numbers', () => {
         const stats = {
             total: Number.NaN,
