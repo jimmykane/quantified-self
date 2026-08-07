@@ -301,7 +301,7 @@ describe('AssistantPageComponent', () => {
     openSpy.mockRestore();
   });
 
-  it('centers both send states inside the action', () => {
+  it('keeps the send icon visible while disabling the action during a response', () => {
     const sendButton = fixture.nativeElement.querySelector(
       '.composer-submit',
     ) as HTMLButtonElement;
@@ -320,8 +320,10 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
     content = sendButton.querySelector('.composer-submit-content') as HTMLElement;
 
-    expect(sendButton.querySelector('mat-spinner')).toBeTruthy();
-    expect(sendButton.querySelector('.composer-progress')).toBeTruthy();
+    expect(sendButton.disabled).toBe(true);
+    expect(sendButton.querySelector('mat-spinner')).toBeNull();
+    expect(sendButton.querySelector('.composer-progress')).toBeNull();
+    expect(sendButton.querySelector('mat-icon')?.textContent).toContain('arrow_upward');
     expect(sendButton.getAttribute('aria-label')).toBe('Assistant is responding');
     expect(content).toBeTruthy();
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
@@ -331,10 +333,6 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*position:\s*absolute;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*display:\s*grid;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*place-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*width:\s*24px;/s);
-    expect(styles).toMatch(/\.composer-progress\s*{[^}]*height:\s*24px;/s);
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {

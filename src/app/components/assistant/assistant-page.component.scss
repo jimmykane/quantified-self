@@ -493,19 +493,6 @@ h1 {
   line-height: 24px;
 }
 
-.composer-progress {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  line-height: 0;
-}
-
-.composer-progress mat-spinner {
-  display: block;
-  margin: 0;
-}
-
 .composer-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

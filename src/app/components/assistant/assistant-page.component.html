@@ -184,13 +184,7 @@
               [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
               [attr.aria-label]="sending() ? 'Assistant is responding' : 'Send message'">
               <span class="composer-submit-content">
-                @if (sending()) {
-                  <span class="composer-progress" aria-hidden="true">
-                    <mat-spinner diameter="18" strokeWidth="3"></mat-spinner>
-                  </span>
-                } @else {
-                  <mat-icon>arrow_upward</mat-icon>
-                }
+                <mat-icon>arrow_upward</mat-icon>
               </span>
             </button>
           </form>
