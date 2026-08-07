@@ -7,6 +7,16 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 18.1.2 lap pace transition
+
+Sports Lib 18.1.2 fills missing pace, swim-pace, and grade-adjusted-pace summary stats from compatible speed stats on
+events, activities, and laps. Native JSON hydration applies this behavior in memory to existing speed-only Firestore
+documents, so the Laps table benefits immediately without rewriting historical data. New imports and any ordinary
+future reparse serialize the additive derived lap stats through the existing sanitized event/activity writers.
+
+Do not enable the automatic scanner or enqueue a historical reparse solely for this change. Saved routes are unaffected,
+and the MCP lap projection remains unchanged because it does not expose pace fields.
+
 ## Candidate Discovery Model
 
 ### Global mode (production path)
