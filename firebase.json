@@ -591,8 +591,8 @@
     }
   },
   "extensions": {
-    "delete-user-data": "firebase/delete-user-data@0.1.27",
-    "firestore-send-email": "firebase/firestore-send-email@0.2.6",
+    "delete-user-data": "firebase/delete-user-data@0.1.30",
+    "firestore-send-email": "firebase/firestore-send-email@0.2.10",
     "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12"
   },
   "remoteconfig": {

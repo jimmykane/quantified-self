@@ -29,8 +29,8 @@
   "etags": {
     "quantified-self-io": {
       "extensionInstances": {
-        "delete-user-data": "4fa119830db85f56f9140ed2c57543720d127f9f6434364b847db2bbe3b39ffd",
-        "firestore-send-email": "2928b61a239389834c41c239036264a161d07101c8a2070b72670609b3ead851",
+        "delete-user-data": "f07ea5489590304318cab6a4f0f8e1b1ae7c3687ca94d8cde7a01abd2c1b3a23",
+        "firestore-send-email": "e4a21f30662e0b0c940dbd822bbdf6b66f4d87c7a3a2c75b52516b0b4dbb92fb",
         "firestore-stripe-payments": "27da818f1601db655fe2e541b0a3f9303427947633748c6cdb441ca62adf5b7e"
       }
     }
