@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import {
   AppThemes,
-  DataDistance,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
@@ -22,10 +21,10 @@ import type {
   AssistantChartVisual,
 } from '@shared/assistant.types';
 import {
-  resolveUnitAwareDisplayFromValue,
-  stripTrailingDisplayUnit,
-} from '@shared/unit-aware-display';
-import { formatDashboardAxisNumericValue } from '../../helpers/dashboard-chart-data.helper';
+  formatDashboardAxisNumericValueWithoutUnit,
+  formatDashboardNumericValue,
+  resolveDashboardAxisDisplayUnit,
+} from '../../helpers/dashboard-chart-data.helper';
 import {
   buildDashboardEChartsStyleTokens,
   buildDashboardEChartsTooltipChrome,
@@ -280,7 +279,12 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
 
     return [...axes.values()].map(axis => ({
       ...axis,
-      displayUnit: this.resolveDisplayUnit(axis, unitSettings),
+      displayUnit: resolveDashboardAxisDisplayUnit(
+        axis.dataType || undefined,
+        axis.rawMax,
+        unitSettings,
+        axis.rawUnit || 'Value',
+      ),
     }));
   }
 
@@ -297,34 +301,13 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
     };
     return {
       ...axis,
-      displayUnit: this.resolveDisplayUnit(axis, unitSettings, ''),
-    };
-  }
-
-  private resolveDisplayUnit(
-    axis: Omit<AssistantAxisPresentation, 'displayUnit'>,
-    unitSettings: UserUnitSettingsInterface,
-    fallback = 'Value',
-  ): string {
-    if (axis.dataType === DataDistance.type) {
-      const formatted = formatDashboardAxisNumericValue(
-        axis.dataType,
+      displayUnit: resolveDashboardAxisDisplayUnit(
+        axis.dataType || undefined,
         axis.rawMax,
-        undefined,
         unitSettings,
-        axis.rawMax,
-      );
-      const distanceUnit = formatted.match(/\s(km|mi|m)$/i)?.[1];
-      if (distanceUnit) {
-        return this.normalizeDisplayUnit(distanceUnit);
-      }
-    }
-    const display = axis.dataType
-      ? resolveUnitAwareDisplayFromValue(axis.dataType, axis.rawMax, unitSettings, {
-          stripRepeatedUnit: true,
-        })
-      : null;
-    return this.normalizeDisplayUnit(display?.unit || axis.rawUnit || fallback);
+        axis.rawUnit || '',
+      ),
+    };
   }
 
   private formatAxisValue(
@@ -335,16 +318,13 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
     if (!axis.dataType) {
       return this.formatRawValue(value, null);
     }
-    const formatted = formatDashboardAxisNumericValue(
+    return formatDashboardAxisNumericValueWithoutUnit(
       axis.dataType,
       value,
       undefined,
       unitSettings,
       axis.rawMax,
     );
-    return axis.displayUnit
-      ? stripTrailingDisplayUnit(formatted, axis.displayUnit)
-      : formatted;
   }
 
   private formatSeriesValue(
@@ -352,16 +332,15 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
     value: number,
     unitSettings: UserUnitSettingsInterface,
   ): string {
-    const display = series.dataType
-      ? resolveUnitAwareDisplayFromValue(series.dataType, value, unitSettings, {
-          stripRepeatedUnit: true,
-        })
-      : null;
-    if (!display) {
+    if (!series.dataType) {
       return this.formatRawValue(value, series.unit);
     }
-    const unit = this.normalizeDisplayUnit(display.unit);
-    return `${display.value}${unit ? ` ${unit}` : ''}`;
+    return formatDashboardNumericValue(
+      series.dataType,
+      value,
+      undefined,
+      unitSettings,
+    );
   }
 
   private seriesAxisKey(series: AssistantChartSeries): string {
@@ -383,9 +362,5 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
       maximumFractionDigits: 2,
     }).format(value);
     return `${formatted}${unit ? ` ${unit}` : ''}`;
-  }
-
-  private normalizeDisplayUnit(unit: string): string {
-    return unit === 'Km' ? 'km' : unit;
   }
 }

@@ -18,6 +18,7 @@ import {
   normalizeUserUnitSettings,
   resolveUnitAwareDisplayStat,
   resolveUnitAwareDisplayFromValue,
+  stripTrailingDisplayUnit,
   type UnitAwareStatDisplay,
 } from '@shared/unit-aware-display';
 
@@ -355,7 +356,8 @@ export function formatDashboardNumericValue(
     stripRepeatedUnit: true,
   });
   if (display) {
-    return display.text;
+    const unit = normalizeDashboardAxisUnit(display.unit);
+    return `${display.value}${unit ? ` ${unit}` : ''}`;
   }
 
   const data = getDashboardDataInstanceOrNull(chartDataType, numericValue, logger);
@@ -412,6 +414,59 @@ export function formatDashboardAxisNumericValue(
   }
 
   return formatDashboardNumericValue(chartDataType, numericValue, logger, unitSettings);
+}
+
+export function resolveDashboardAxisDisplayUnit(
+  chartDataType: string | undefined,
+  axisMax: number,
+  unitSettings?: UserUnitSettingsInterface | null,
+  fallbackUnit = '',
+): string {
+  const numericAxisMax = Math.abs(toFiniteNumber(axisMax) ?? 0);
+  if (chartDataType === DataDistance.type) {
+    const normalizedUnitSettings = normalizeUserUnitSettings(unitSettings);
+    if (normalizedUnitSettings.distanceUnits === DistanceUnits.Miles) {
+      const display = resolveUnitAwareDisplayFromValue(
+        chartDataType,
+        numericAxisMax,
+        normalizedUnitSettings,
+        { stripRepeatedUnit: true },
+      );
+      return normalizeDashboardAxisUnit(display?.unit || fallbackUnit);
+    }
+    return numericAxisMax >= 1000 ? 'km' : 'm';
+  }
+
+  const display = chartDataType
+    ? resolveUnitAwareDisplayFromValue(chartDataType, numericAxisMax, unitSettings, {
+        stripRepeatedUnit: true,
+      })
+    : null;
+  return normalizeDashboardAxisUnit(display?.unit || fallbackUnit);
+}
+
+export function formatDashboardAxisNumericValueWithoutUnit(
+  chartDataType: string | undefined,
+  value: unknown,
+  logger?: WarnLogger,
+  unitSettings?: UserUnitSettingsInterface | null,
+  axisMax = 0,
+): string {
+  const formatted = formatDashboardAxisNumericValue(
+    chartDataType,
+    value,
+    logger,
+    unitSettings,
+    axisMax,
+  );
+  const displayUnit = resolveDashboardAxisDisplayUnit(
+    chartDataType,
+    axisMax,
+    unitSettings,
+  );
+  return displayUnit
+    ? stripTrailingDisplayUnit(formatted, displayUnit)
+    : formatted;
 }
 
 export function getDashboardChartSortComparator(
