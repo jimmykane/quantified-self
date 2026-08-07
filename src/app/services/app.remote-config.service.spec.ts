@@ -182,8 +182,13 @@ describe('AppRemoteConfigService', () => {
             expect(service.maintenanceMode()).toBe(false);
         });
 
-        it('should return false on fetch error (graceful degradation)', async () => {
+        it('should use cached/default values and finish loading when fetch fails', async () => {
             vi.mocked(fetchAndActivate).mockRejectedValue(new Error('SDK error'));
+            vi.mocked(getString).mockImplementation((_rc, key) => {
+                if (key === 'dev_enabled') return 'true';
+                if (key === 'dev_message') return 'Cached maintenance';
+                return '';
+            });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
@@ -199,7 +204,10 @@ describe('AppRemoteConfigService', () => {
             service = TestBed.inject(AppRemoteConfigService);
             await new Promise(resolve => setTimeout(resolve, 50));
 
-            expect(service.maintenanceMode()).toBe(false);
+            expect(service.configLoaded()).toBe(true);
+            expect(service.isLoading()).toBe(false);
+            expect(service.maintenanceMode()).toBe(true);
+            expect(service.maintenanceMessage()).toBe('Cached maintenance');
         });
 
         it('should bypass maintenance mode with query parameter', async () => {
