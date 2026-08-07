@@ -537,7 +537,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Deterministic charts and activity maps',
-            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A map rendered with the user’s saved app map style can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
+            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A map rendered with the user’s separate Assistant map style can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
           },
         ],
       },
@@ -554,7 +554,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'location_on',
             title: 'Precise activity locations stay opt-in',
-            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a map sends the displayed tile area to Mapbox, regardless of the saved app map style. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
+            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a map sends the displayed tile area to Mapbox, regardless of the selected Assistant map style. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
           },
           {
             icon: 'timer',

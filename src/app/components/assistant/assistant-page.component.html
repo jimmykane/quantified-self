@@ -67,7 +67,7 @@
                         <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'map' }}</mat-icon>
                         <span>
                           <strong>{{ visual.title }}</strong>
-                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Your preferred map style' }}</small>
+                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Assistant map style' }}</small>
                         </span>
                       </span>
                       <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
@@ -89,7 +89,7 @@
                         </button>
                       }
                       <p class="assistant-map-disclosure">
-                        Uses your saved map style.
+                        Use the layers button to switch style. Saved only for Assistant maps.
                         Viewing sends the displayed map area to Mapbox for map tiles.
                       </p>
                     }

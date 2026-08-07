@@ -448,11 +448,11 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Charts and maps
 
-- When a visual materially helps, the Assistant can add one interactive chart and one map to an answer. New maps use your saved app map style. Maps wait for you to choose **Show map** or **Expand**; opening or refreshing a conversation never loads map tiles automatically.
+- When a visual materially helps, the Assistant can add one interactive chart and one map to an answer. Assistant maps have their own saved style, separate from activity maps. After choosing **Show map** or **Expand**, use the layers button to switch between Default, Satellite, and Outdoors in place; the choice is reused by other Assistant maps. Opening or refreshing a conversation never loads map tiles automatically.
 - Gemini chooses only from safe chart-series or map sources advertised by the current validated tool result. Quantified Self constructs all plotted values, coordinates, labels, and renderer settings deterministically; Gemini cannot author arbitrary chart configuration or move map points.
 - Charts reuse existing measurement, sleep, Training, aggregate metric, ranking, jump, and workout-chart results. Missing readings remain gaps instead of becoming zero.
 - Maps use only activity coordinates already allowed by the current **Precise activity locations** chat. Saved-route bounds, geometry, and waypoints are still unavailable.
-- Opening a map sends the displayed geographic area to Mapbox to load map tiles, regardless of your saved map style. This applies even after a direct-coordinate search that did not use Mapbox geocoding. If a map cannot load, the text answer and **Data used** remain available.
+- Opening a map sends the displayed geographic area to Mapbox to load map tiles, regardless of the selected Assistant map style. This applies even after a direct-coordinate search that did not use Mapbox geocoding. If a map cannot load, the text answer and **Data used** remain available.
 
 ## Privacy boundaries
 

@@ -250,7 +250,7 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('app-assistant-visual-chart')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-assistant-visual-map')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Show map');
-    expect(fixture.nativeElement.textContent).toContain('Uses your saved map style.');
+    expect(fixture.nativeElement.textContent).toContain('Saved only for Assistant maps.');
     expect(fixture.nativeElement.textContent).toContain(
       'Viewing sends the displayed map area to Mapbox for map tiles.',
     );

@@ -9,15 +9,19 @@ import {
   OnDestroy,
   SimpleChanges,
   ViewChild,
+  effect,
   inject,
   signal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { Map as MapboxMap, MapOptions } from 'mapbox-gl';
 import type {
   AssistantMapMarker,
   AssistantMapVisual,
 } from '@shared/assistant.types';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import type { AppMapStyleName } from '../../models/app-user.interface';
 import { MaterialModule } from '../../modules/material.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -25,6 +29,11 @@ import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
+import {
+  MapboxLayersControlService,
+  type MapboxLayersControlHandle,
+} from '../../services/map/mapbox-layers-control.service';
+import type { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MarkerFactoryService } from '../../services/map/marker-factory.service';
 import {
   TrackMapManager,
@@ -57,8 +66,10 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
 
   private readonly mapboxLoader = inject(MapboxLoaderService);
   private readonly mapboxAutoResize = inject(MapboxAutoResizeService);
+  private readonly mapboxLayersControl = inject(MapboxLayersControlService);
   private readonly mapStyleService = inject(MapStyleService);
   private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
+  private readonly authService = inject(AppAuthService);
   private readonly themeService = inject(AppThemeService);
   private readonly markerFactory = inject(MarkerFactoryService);
   private readonly logger = inject(LoggerService);
@@ -75,6 +86,21 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
   private viewInitialized = false;
   private lifecycleVersion = 0;
   private fitHandler: (() => void) | null = null;
+  private mapStyleSynchronizer: MapboxStyleSynchronizer | null = null;
+  private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
+  private readonly currentUser = toSignal(this.authService.user$, { initialValue: null });
+
+  constructor() {
+    effect(() => {
+      const mapStyle = this.getAssistantMapStyle();
+      const theme = this.themeService.appTheme() || AppThemes.Normal;
+      this.mapStyleSynchronizer?.update(this.mapStyleService.resolve(mapStyle, theme));
+      this.mapLayersControlHandle?.updateInputs({
+        user: this.currentUser() ?? undefined,
+        mapStyle,
+      });
+    });
+  }
 
   readonly loading = signal(true);
   readonly loadFailed = signal(false);
@@ -107,9 +133,7 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
     this.loadFailed.set(false);
     try {
       const firstPosition = this.visual.path[0] ?? this.visual.markers[0];
-      const mapStyle = this.mapStyleService.normalizeStyle(
-        this.userSettingsQuery.mapSettings()?.mapStyle,
-      );
+      const mapStyle = this.getAssistantMapStyle();
       const resolvedStyle = this.mapStyleService.resolve(
         mapStyle,
         this.themeService.appTheme() || AppThemes.Normal,
@@ -140,6 +164,22 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
       const map = pendingMap;
       this.map = map;
       pendingMap = null;
+      this.mapStyleSynchronizer = this.mapStyleService.createSynchronizer(map, resolvedStyle);
+      this.mapLayersControlHandle = this.mapboxLayersControl.create({
+        inputs: {
+          user: this.currentUser() ?? undefined,
+          mapStyle,
+          enableJumpHeatmapToggle: false,
+          enableLapsToggle: false,
+          enableArrowsToggle: false,
+          enable3DToggle: false,
+          analyticsEventName: 'assistant_map_style_change',
+        },
+        outputs: {
+          mapStyleChange: style => this.updateAssistantMapStyle(style),
+        },
+      });
+      map.addControl(this.mapLayersControlHandle.control, 'top-left');
       this.mapManager.setMap(map, mapboxgl);
       this.mapboxAutoResize.bind(map, {
         container,
@@ -208,6 +248,23 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
     });
   }
 
+  private getAssistantMapStyle(): AppMapStyleName {
+    return this.mapStyleService.normalizeStyle(
+      this.userSettingsQuery.mapSettings()?.assistantMapStyle,
+    );
+  }
+
+  private updateAssistantMapStyle(style: AppMapStyleName): void {
+    const mapStyle = this.mapStyleService.normalizeStyle(style);
+    const resolvedStyle = this.mapStyleService.resolve(
+      mapStyle,
+      this.themeService.appTheme() || AppThemes.Normal,
+    );
+    this.mapStyleSynchronizer?.update(resolvedStyle);
+    this.mapLayersControlHandle?.updateInputs({ mapStyle });
+    void this.userSettingsQuery.updateMapSettings({ assistantMapStyle: mapStyle });
+  }
+
   private destroyMap(incrementLifecycle = true): void {
     if (incrementLifecycle) {
       this.lifecycleVersion += 1;
@@ -218,6 +275,9 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
       map.off?.('idle', this.fitHandler);
     }
     this.fitHandler = null;
+    this.mapLayersControlHandle?.destroy();
+    this.mapLayersControlHandle = null;
+    this.mapStyleSynchronizer = null;
     try {
       this.mapManager.clearAll({ mapWillBeRemoved: true });
       this.mapboxAutoResize.unbind(map);

@@ -135,7 +135,8 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('different signed-in account cannot restore');
     expect(sectionCopy?.innerHTML).toContain('coordinate-free by default');
     expect(sectionCopy?.innerHTML).toContain('Precise activity locations');
-    expect(sectionCopy?.innerHTML).toContain('New maps use your saved app map style');
+    expect(sectionCopy?.innerHTML).toContain('Assistant maps have their own saved style');
+    expect(sectionCopy?.innerHTML).toContain('switch between Default, Satellite, and Outdoors in place');
     expect(sectionCopy?.innerHTML).toContain('displayed geographic area to Mapbox');
     expect(sectionCopy?.innerHTML).toContain('Saved-route bounds, route geometry, route waypoints');
     expect(sectionCopy?.innerHTML).toContain('becomes unavailable about <strong>seven days</strong>');

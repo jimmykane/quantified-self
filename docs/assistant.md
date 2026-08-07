@@ -108,16 +108,19 @@ path, each assistant message to 64 KiB of visual JSON, and the full public conve
 endpoint-preserving sampling. Time axes persist the server-selected IANA timezone (or UTC for UTC-bound Training
 payloads), so calendar labels remain consistent when the answer is reopened from another timezone. The frontend
 renders through the existing ECharts host/theme/tooltip helpers and Mapbox
-loader/style/resize/marker/track manager. New map visuals persist `user_preference` rather than a concrete tile style;
-when opened, the frontend resolves the signed-in user's current saved `mapSettings.mapStyle` through the shared
-`MapStyleService`. The legacy `satellite` marker remains valid for stored-conversation compatibility, but those maps
-also render with the user's current preference. Maps never load merely because a conversation is opened: the user must
+loader/style/resize/marker/track manager. Map visuals persist the compatible `user_preference` marker rather than a
+concrete tile style. When opened, the frontend resolves the signed-in user's separate
+`mapSettings.assistantMapStyle` through the shared `MapStyleService`; it defaults independently to `default` and never
+changes `mapSettings.mapStyle`. The shared layers control lets the user switch Default, Satellite, or Outdoors on the
+live map and persists that selection for all Assistant maps. The legacy `satellite` marker remains valid for
+stored-conversation compatibility, but those maps also render with the current Assistant preference. Maps never load
+merely because a conversation is opened: the user must
 choose **Show map** or **Expand**. Only one inline Mapbox instance is active, and expanding a map temporarily suspends it. Desktop uses a
 Material dialog and mobile uses the app's Material bottom sheet. A visual-rendering failure leaves the text answer and
 evidence available.
 
 Opening an Assistant map sends the displayed geographic area to Mapbox to retrieve map tiles, regardless of the saved
-map style. This is
+Assistant map style. This is
 separate from place-name geocoding: direct-coordinate searches still avoid the geocoder, but viewing their resulting
 map necessarily discloses the viewed tile area to Mapbox. The inline map and expanded view show this disclosure.
 

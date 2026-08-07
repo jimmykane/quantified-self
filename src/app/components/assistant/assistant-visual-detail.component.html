@@ -5,7 +5,7 @@
     </span>
     <div>
       <h2>{{ data.visual.title }}</h2>
-      <p>{{ data.visual.kind === 'chart' ? 'Interactive chart' : 'Your preferred map style' }}</p>
+      <p>{{ data.visual.kind === 'chart' ? 'Interactive chart' : 'Assistant map style' }}</p>
     </div>
     <button mat-icon-button type="button" aria-label="Close visual" (click)="close()">
       <mat-icon>close</mat-icon>
@@ -23,7 +23,7 @@
   @if (data.visual.kind === 'map') {
     <p class="map-disclosure">
       <mat-icon aria-hidden="true">privacy_tip</mat-icon>
-      Uses your saved map style.
+      Use the layers button to switch style. Saved only for Assistant maps.
       Viewing this map sends the displayed map area to Mapbox for map tiles.
     </p>
   }
