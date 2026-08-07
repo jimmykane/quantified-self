@@ -11,25 +11,9 @@ import {
 import { retrySportsLibReparseHeavyJob as retrySportsLibReparseHeavyJobFunction } from './admin';
 import { processSportsLibReparseHeavyTask as processSportsLibReparseHeavyTaskFunction } from './tasks/sports-lib-reparse-worker';
 
+// Firebase still advertises the legacy `.appspot.com` default in
+// FIREBASE_CONFIG. Storage writes intentionally use the migrated EU bucket.
 const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';
-let firebaseConfigStorageBucket: string | null = null;
-if (process.env.FIREBASE_CONFIG) {
-  try {
-    const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
-    if (firebaseConfig.storageBucket) {
-      firebaseConfigStorageBucket = `${firebaseConfig.storageBucket}`;
-    }
-  } catch (e) {
-    logger.warn('Could not parse FIREBASE_CONFIG while resolving storage bucket');
-  }
-}
-
-if (firebaseConfigStorageBucket && firebaseConfigStorageBucket !== PRIMARY_STORAGE_BUCKET) {
-  logger.warn('Ignoring FIREBASE_CONFIG.storageBucket to keep storage writes on primary bucket', {
-    firebaseConfigStorageBucket,
-    primaryStorageBucket: PRIMARY_STORAGE_BUCKET,
-  });
-}
 
 if (admin.apps.length === 0) {
   try {
@@ -45,7 +29,7 @@ if (admin.apps.length === 0) {
     } else {
       throw new Error('service-account.json not found');
     }
-  } catch (e) {
+  } catch {
     logger.warn('Service account not found, initializing with default credentials');
     admin.initializeApp({
       databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,

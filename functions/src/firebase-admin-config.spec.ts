@@ -1,4 +1,10 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -19,6 +25,15 @@ function createTempProject(): string {
 }
 
 describe('resolveServiceAccountPath', () => {
+  it('keeps both Admin initialization paths on the migrated application bucket', () => {
+    const indexSource = readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8');
+
+    expect(indexSource).toContain("const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';");
+    expect(indexSource.match(/storageBucket: PRIMARY_STORAGE_BUCKET/g)).toHaveLength(2);
+    expect(indexSource).not.toContain('firebaseConfigStorageBucket');
+    expect(indexSource).not.toContain('Ignoring FIREBASE_CONFIG.storageBucket');
+  });
+
   it('resolves the service account path from source runtime output', () => {
     const projectDir = createTempProject();
     const functionsDir = path.join(projectDir, 'functions');
@@ -49,7 +64,6 @@ describe('resolveServiceAccountPath', () => {
 
   it('returns null when the deterministic runtime paths do not contain a service account file', () => {
     const projectDir = createTempProject();
-    const functionsDir = path.join(projectDir, 'functions');
     const runtimeDir = path.join(projectDir, 'elsewhere');
 
     mkdirSync(runtimeDir, { recursive: true });
