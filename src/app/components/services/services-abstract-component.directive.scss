@@ -226,6 +226,20 @@ mat-icon {
     gap: 8px;
 }
 
+.connection-action-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.connection-action-content mat-icon,
+.connection-action-content mat-spinner {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
 .tool-actions .active-sync-warning-pill {
     flex: 0 1 auto;
 }
