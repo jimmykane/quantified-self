@@ -17,7 +17,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    environment: beta
+    environment: beta-hosting
     permissions:
       contents: read
       id-token: write

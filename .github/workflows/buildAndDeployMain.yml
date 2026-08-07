@@ -16,9 +16,21 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    environment: production-hosting
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/242713487388/locations/global/workloadIdentityPools/qs-github/providers/github
+          service_account: qs-github-production-hosting@quantified-self-io.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -55,10 +67,5 @@ jobs:
       - name: Remove sourcemaps
         run: find dist -name "*.map" -delete
 
-      - name: Create SA key
-        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
-
       - name: Deploy to Firebase
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
-          firebase deploy --only hosting:production
+        run: firebase deploy --only hosting:production
