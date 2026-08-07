@@ -40,6 +40,7 @@ import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { LoggerService } from '../../../services/logger.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
+import { MapboxAutoResizeService } from '../../../services/map/mapbox-auto-resize.service';
 import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../../services/map/mapbox-style-synchronizer';
 import { AppMapStyleName } from '../../../models/app-user.interface';
@@ -170,6 +171,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     public eventColorService: AppEventColorService,
     private markerFactory: MarkerFactoryService,
     private mapboxLoader: MapboxLoaderService,
+    private mapboxAutoResize: MapboxAutoResizeService,
     private mapStyleService: MapStyleService,
     protected logger: LoggerService,
   ) {
@@ -428,6 +430,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     const map = this.mapInstance();
     try {
       this.unbindMapPopupListeners();
+      this.mapboxAutoResize.unbind(map);
       this.mapManager.clearAll({ mapWillBeRemoved: true });
     } finally {
       if (map?.remove) {
@@ -492,6 +495,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         maxWidth: 100,
         unit: 'metric'
       }), 'bottom-left');
+      this.mapboxAutoResize.bind(map, {
+        container: this.mapDiv.nativeElement,
+        throttleMs: 150,
+        onResize: () => this.zone.run(() => {
+          this.fitBoundsToActivities();
+          this.updateJumpPopupPosition();
+        }),
+      });
 
       type StyleReadySource = 'style.load' | 'style.import.load' | 'styledata' | 'idle' | 'load';
       let initialStyleReadyHandled = false;
