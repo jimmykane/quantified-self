@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `16`
-- `@sports-alliance/sports-lib`: `18.1.1`
+- `@sports-alliance/sports-lib`: `18.1.2`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1654,7 +1654,7 @@ When a Training change depends on a new sports-lib version:
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
 Existing snapshots rebuild lazily after a schema bump. Schema 16 adds the eight-family context/profile summaries. The
-repository pins sports-lib `18.1.1`, whose companion gravity-durability policy emits explicit `unsupported-context`
+repository pins sports-lib `18.1.2`, whose companion gravity-durability policy emits explicit `unsupported-context`
 evidence for Enduro/Downhill activities. The Functions aggregator also rejects legacy eligible Enduro/Downhill
 durability evidence defensively. Reparse affected existing activities through the targeted sports-lib reparse lifecycle
 so their persisted compact evidence adopts the corrected result. This is a policy correction within durability protocol
