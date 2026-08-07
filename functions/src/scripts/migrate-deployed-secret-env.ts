@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import {
+  createGcloudFunctionDeployArgs,
   createFunctionSecretMigrationPlan,
   DeployedFunctionConfiguration,
   DeployedSecretMigrationError,
@@ -171,26 +172,7 @@ function applyAction(
   projectId: string,
   region: string,
 ): void {
-  const args = [
-    'functions',
-    'deploy',
-    action.name,
-    `--project=${projectId}`,
-    `--region=${region}`,
-    '--quiet',
-  ];
-  if (action.environment === 'GEN_2') args.push('--gen2');
-  if (action.removeEnvironmentVariables.length > 0) {
-    args.push(`--remove-env-vars=${action.removeEnvironmentVariables.join(',')}`);
-  }
-  if (action.removeSecrets.length > 0) {
-    args.push(`--remove-secrets=${action.removeSecrets.join(',')}`);
-  }
-  if (action.updateSecrets.length > 0) {
-    args.push(`--update-secrets=${action.updateSecrets
-      .map(name => `${name}=${name}:latest`)
-      .join(',')}`);
-  }
+  const args = createGcloudFunctionDeployArgs(action, projectId, region);
 
   console.info(`[SecretMigration] Updating ${action.name} (${action.environment}).`);
   execFileSync('gcloud', args, { stdio: 'inherit' });

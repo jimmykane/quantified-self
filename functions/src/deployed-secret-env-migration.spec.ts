@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SECRET_PARAMS } from './secrets';
 import {
+  createGcloudFunctionDeployArgs,
   createFunctionSecretMigrationPlan,
   parseDeployedSecretMigrationArgs,
 } from './deployed-secret-env-migration';
@@ -39,6 +40,8 @@ describe('deployed Function secret environment migration', () => {
     expect(plan.actions).toEqual([{
       name: 'boundFunction',
       environment: 'GEN_2',
+      sourceBucket: 'deployments',
+      sourceObject: 'source.zip',
       removeEnvironmentVariables: ['MAPBOX_ACCESS_TOKEN', 'SENTRY_AUTH_TOKEN'],
       removeSecrets: ['GEMINI_API_KEY'],
       updateSecrets: ['MAPBOX_ACCESS_TOKEN'],
@@ -50,6 +53,29 @@ describe('deployed Function secret environment migration', () => {
       expect.stringContaining('boundFunction: expected secrets'),
       expect.stringContaining('publicFunction: legacy plaintext bindings'),
     ]));
+  });
+
+  it('pins updates to the exact deployed source archive', () => {
+    expect(createGcloudFunctionDeployArgs({
+      name: 'boundFunction',
+      environment: 'GEN_2',
+      sourceBucket: 'deployments',
+      sourceObject: 'source.zip',
+      removeEnvironmentVariables: ['MAPBOX_ACCESS_TOKEN'],
+      removeSecrets: [],
+      updateSecrets: ['MAPBOX_ACCESS_TOKEN'],
+    }, 'quantified-self-io', 'europe-west2')).toEqual([
+      'functions',
+      'deploy',
+      'boundFunction',
+      '--project=quantified-self-io',
+      '--region=europe-west2',
+      '--source=gs://deployments/source.zip',
+      '--quiet',
+      '--gen2',
+      '--remove-env-vars=MAPBOX_ACCESS_TOKEN',
+      '--update-secrets=MAPBOX_ACCESS_TOKEN=MAPBOX_ACCESS_TOKEN:latest',
+    ]);
   });
 
   it('reports unmanaged deployed endpoints without mutating clean endpoints', () => {

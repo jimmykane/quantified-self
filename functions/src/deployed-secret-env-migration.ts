@@ -32,6 +32,8 @@ export interface DeployedFunctionConfiguration {
 export interface FunctionSecretMigrationAction {
   name: string;
   environment: DeployedFunctionEnvironment;
+  sourceBucket: string;
+  sourceObject: string;
   removeEnvironmentVariables: string[];
   removeSecrets: string[];
   updateSecrets: string[];
@@ -55,6 +57,41 @@ export interface DeployedSecretMigrationCliOptions {
 
 export class DeployedSecretMigrationError extends Error {
   override readonly name = 'DeployedSecretMigrationError';
+}
+
+export function createGcloudFunctionDeployArgs(
+  action: FunctionSecretMigrationAction,
+  projectId: string,
+  region: string,
+): string[] {
+  if (!action.sourceBucket || !action.sourceObject) {
+    throw new DeployedSecretMigrationError(
+      `${action.name} has no reusable deployed source archive.`,
+    );
+  }
+
+  const args = [
+    'functions',
+    'deploy',
+    action.name,
+    `--project=${projectId}`,
+    `--region=${region}`,
+    `--source=gs://${action.sourceBucket}/${action.sourceObject}`,
+    '--quiet',
+  ];
+  if (action.environment === 'GEN_2') args.push('--gen2');
+  if (action.removeEnvironmentVariables.length > 0) {
+    args.push(`--remove-env-vars=${action.removeEnvironmentVariables.join(',')}`);
+  }
+  if (action.removeSecrets.length > 0) {
+    args.push(`--remove-secrets=${action.removeSecrets.join(',')}`);
+  }
+  if (action.updateSecrets.length > 0) {
+    args.push(`--update-secrets=${action.updateSecrets
+      .map(name => `${name}=${name}:latest`)
+      .join(',')}`);
+  }
+  return args;
 }
 
 function sortedUnique(values: readonly string[]): string[] {
@@ -180,6 +217,8 @@ export function createFunctionSecretMigrationPlan(
       actions.push({
         name: functionName,
         environment: deployed.environment,
+        sourceBucket: deployed.sourceBucket,
+        sourceObject: deployed.sourceObject,
         removeEnvironmentVariables: legacyPlaintext,
         removeSecrets: extraSecrets,
         updateSecrets: expectedSecrets,
