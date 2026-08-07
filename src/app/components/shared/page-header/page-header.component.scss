@@ -19,6 +19,7 @@
 .qs-page-header__title-row {
   display: flex;
   min-width: 0;
+  min-height: 40px;
   align-items: center;
   gap: 10px;
 }
@@ -29,8 +30,7 @@
 
 .qs-page-header__eyebrow,
 .qs-page-header__subtitle,
-.qs-page-header h1,
-.qs-page-header h2 {
+.qs-page-header__title {
   margin: 0;
   letter-spacing: 0;
 }
@@ -43,19 +43,21 @@
   text-transform: uppercase;
 }
 
-.qs-page-header h1 {
+.qs-page-header__title {
   min-width: 0;
   color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-headline-medium);
-  line-height: 1.12;
-}
-
-.qs-page-header h2 {
-  min-width: 0;
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-title-large);
+  font: var(--mat-sys-headline-small);
   font-weight: 600;
   line-height: 1.2;
+}
+
+.qs-page-header__leading-icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  color: var(--mat-sys-primary);
+  font-size: 26px;
+  line-height: 26px;
 }
 
 .qs-page-header__subtitle {
@@ -90,7 +92,7 @@
   overflow: hidden;
 }
 
-.qs-page-header--status.qs-page-header--compact h2,
+.qs-page-header--status.qs-page-header--compact .qs-page-header__title,
 .qs-page-header--status.qs-page-header--compact .qs-page-header__subtitle {
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -124,11 +126,6 @@
 }
 
 @media (max-width: 640px) {
-  .qs-page-header h1 {
-    font: var(--mat-sys-headline-small);
-    line-height: 1.12;
-  }
-
   .qs-page-header__subtitle {
     font: var(--mat-sys-label-large);
   }

@@ -8,13 +8,17 @@ responsive action placement. Import the standalone component directly from a sta
 `SharedModule` in an NgModule-owned route.
 
 Use the `route` variant for a primary workspace heading and the `compact` variant for embedded workspace context such
-as Dashboard Today. The component provides:
+as Dashboard Today. Both variants use the same visible Material `headline-small` title role and a 40 px title row;
+`headingLevel` controls document semantics rather than visual size. This keeps Dashboard Today, Calendar, Training, and
+the other authenticated workspace headings aligned without promoting an embedded section to an `h1`. The component
+provides:
 
 - `title`, `titleId`, and `headingLevel` for the page or section heading.
 - `eyebrow` and `subtitle` for concise context and data currency.
 - `status` for a consistent pending or warning title state.
-- `pageHeaderLeading` for a leading Material icon or an existing icon action. Set `leadingAction` for an icon action to
-  preserve its Material touch target while keeping the title visually compact.
+- `leadingIcon` for a static, theme-colored Material icon in the shared 26 px leading slot.
+- `pageHeaderLeading` for an existing icon action. Set `leadingAction` to preserve its Material touch target while
+  keeping the title visually compact. Do not combine `leadingIcon` and `pageHeaderLeading` on the same header.
 - `pageHeaderContext` for projected, domain-specific status content that replaces the eyebrow without adding a banner.
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.

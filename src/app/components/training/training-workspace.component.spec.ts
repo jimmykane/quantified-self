@@ -115,6 +115,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(element.querySelector('.qs-page-header__leading-icon')?.textContent?.trim()).toBe('monitoring');
     expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
     const feedbackAction = element.querySelector('.training-feedback-action');
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');

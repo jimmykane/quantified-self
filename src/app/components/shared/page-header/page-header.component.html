@@ -17,14 +17,17 @@
 
     @if (title()) {
       <div class="qs-page-header__title-row" [class.qs-page-header__title-row--leading-action]="leadingAction()">
+        @if (leadingIcon(); as icon) {
+          <mat-icon class="qs-page-header__leading-icon" aria-hidden="true">{{ icon }}</mat-icon>
+        }
         <ng-content select="[pageHeaderLeading]"></ng-content>
         @if (statusIcon(); as icon) {
           <mat-icon class="qs-page-header__status-icon" aria-hidden="true">{{ icon }}</mat-icon>
         }
         @if (headingLevel() === 2) {
-          <h2 [id]="titleId() || null">{{ title() }}</h2>
+          <h2 class="qs-page-header__title" [id]="titleId() || null">{{ title() }}</h2>
         } @else {
-          <h1 [id]="titleId() || null">{{ title() }}</h1>
+          <h1 class="qs-page-header__title" [id]="titleId() || null">{{ title() }}</h1>
         }
       </div>
     }
