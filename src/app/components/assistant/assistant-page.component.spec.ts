@@ -307,7 +307,7 @@ describe('AssistantPageComponent', () => {
     openSpy.mockRestore();
   });
 
-  it('removes the send action while a response is in progress', () => {
+  it('keeps a disabled Material spinner send action while a response is in progress', () => {
     let sendButton = fixture.nativeElement.querySelector(
       '.composer-submit',
     ) as HTMLButtonElement;
@@ -327,8 +327,14 @@ describe('AssistantPageComponent', () => {
     sendButton = fixture.nativeElement.querySelector('.composer-submit') as HTMLButtonElement;
     const composer = fixture.nativeElement.querySelector('.composer') as HTMLElement;
 
-    expect(sendButton).toBeNull();
-    expect(composer.classList.contains('composer-sending')).toBe(true);
+    expect(sendButton).toBeTruthy();
+    expect(sendButton.disabled).toBe(true);
+    expect(sendButton.getAttribute('aria-label')).toBe('Sending message');
+    const spinner = sendButton.querySelector('mat-spinner') as HTMLElement;
+    expect(spinner).toBeTruthy();
+    expect(spinner.getAttribute('diameter')).toBe('20');
+    expect(sendButton.querySelector('mat-icon')).toBeNull();
+    expect(composer.classList.contains('composer-sending')).toBe(false);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*place-items:\s*center;/s);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*width:\s*40px;/s);
@@ -336,7 +342,8 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*position:\s*absolute;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
-    expect(styles).toMatch(/\.composer-sending\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
+    expect(styles).not.toMatch(/\.composer-sending\s*{/s);
+    expect(styles).toMatch(/\.composer-submit-spinner\s*{[^}]*display:\s*block;/s);
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {

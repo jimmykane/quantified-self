@@ -441,10 +441,6 @@ h1 {
   gap: 8px;
 }
 
-.composer-sending {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .composer-input {
   display: block;
   width: 100%;
@@ -495,6 +491,10 @@ h1 {
   margin: 0;
   font-size: 24px;
   line-height: 24px;
+}
+
+.composer-submit-spinner {
+  display: block;
 }
 
 .composer-footer {

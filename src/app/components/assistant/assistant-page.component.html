@@ -175,19 +175,22 @@
           </section>
         }
         <section class="composer-shell">
-          <form class="composer" [class.composer-sending]="sending()" (submit)="handleComposerSubmit($event)">
+          <form class="composer" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-            @if (!sending()) {
-              <button mat-icon-button class="composer-submit" type="submit"
-                [disabled]="quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
-                <span class="composer-submit-content">
+            <button mat-icon-button class="composer-submit" type="submit"
+              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
+              <span class="composer-submit-content">
+                @if (sending()) {
+                  <mat-spinner class="composer-submit-spinner" diameter="20" aria-hidden="true"></mat-spinner>
+                } @else {
                   <mat-icon>arrow_upward</mat-icon>
-                </span>
-              </button>
-            }
+                }
+              </span>
+            </button>
           </form>
           <div class="composer-footer">
             <span>{{ quotaText() }}</span>
