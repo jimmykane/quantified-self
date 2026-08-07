@@ -45,7 +45,7 @@
     "mcp:contract:promote": "npm run build && node lib/functions/src/scripts/mcp-contract.js promote",
     "secrets:check": "npm run build && npm run secrets:check:compiled",
     "secrets:check:compiled": "node lib/functions/src/scripts/check-secret-bindings.js",
-    "secrets:migrate-deployed": "npm run build && node lib/functions/src/scripts/migrate-deployed-secret-env.js",
+    "secrets:audit-deployed": "npm run build && node lib/functions/src/scripts/audit-deployed-secret-env.js",
     "deploy:safety:compiled": "node lib/functions/src/scripts/check-deployment-files.js && npm run secrets:check:compiled",
     "seed-emails": "ts-node src/scripts/seed-email-templates.ts",
     "test-emails": "ts-node src/scripts/test-all-emails.ts",
