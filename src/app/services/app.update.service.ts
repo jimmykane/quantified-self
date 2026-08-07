@@ -29,7 +29,7 @@ export class AppUpdateService {
     const everyTenMinutesOnceAppIsStable$ = concat(appIsStable, everyTenMinutes);
 
     everyTenMinutesOnceAppIsStable$.subscribe(() => {
-      this.checkForUpdates(updates, true);
+      this.checkForUpdates(updates);
     });
 
     this.windowService.windowRef.addEventListener('online', () => {
