@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import {
   createGcloudFunctionDeployArgs,
   createFunctionSecretMigrationPlan,
@@ -35,6 +35,7 @@ interface SecretEnvironmentVariableEntry {
 }
 
 const MAX_GCLOUD_OUTPUT_BYTES = 64 * 1024 * 1024;
+const APPLY_CONCURRENCY = 5;
 
 function runGcloud(args: readonly string[]): string {
   return execFileSync('gcloud', args, {
@@ -171,11 +172,64 @@ function applyAction(
   action: FunctionSecretMigrationAction,
   projectId: string,
   region: string,
-): void {
+): Promise<void> {
   const args = createGcloudFunctionDeployArgs(action, projectId, region);
 
   console.info(`[SecretMigration] Updating ${action.name} (${action.environment}).`);
-  execFileSync('gcloud', args, { stdio: 'inherit' });
+  return new Promise((resolve, reject) => {
+    const child = spawn('gcloud', args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-16_384);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        console.info(`[SecretMigration] Updated ${action.name}.`);
+        resolve();
+        return;
+      }
+      const finalErrorLine = stderr.trim().split(/\r?\n/).filter(Boolean).pop();
+      reject(new DeployedSecretMigrationError(
+        `${action.name} failed with exit code ${code ?? 'unknown'}`
+          + (finalErrorLine ? `: ${finalErrorLine}` : '.'),
+      ));
+    });
+  });
+}
+
+async function applyActions(
+  actions: readonly FunctionSecretMigrationAction[],
+  projectId: string,
+  region: string,
+): Promise<void> {
+  let nextActionIndex = 0;
+  const failures: string[] = [];
+  const worker = async (): Promise<void> => {
+    while (nextActionIndex < actions.length) {
+      const action = actions[nextActionIndex];
+      nextActionIndex += 1;
+      try {
+        await applyAction(action, projectId, region);
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.min(APPLY_CONCURRENCY, actions.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  if (failures.length > 0) {
+    throw new DeployedSecretMigrationError(
+      `${failures.length} update(s) failed: ${failures.join('; ')}`,
+    );
+  }
 }
 
 function printPlan(
@@ -213,7 +267,7 @@ function loadPlan(projectId: string, region: string) {
   );
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const options = parseDeployedSecretMigrationArgs(process.argv.slice(2));
   const plan = loadPlan(options.projectId, options.region);
   printPlan(
@@ -258,9 +312,11 @@ function main(): void {
       `${unsafeConfirmedAction.name} has no reusable deployed source archive; refusing to apply.`,
     );
   }
-  for (const action of confirmedPlan.actions) {
-    applyAction(action, options.projectId, options.region);
-  }
+  await applyActions(
+    confirmedPlan.actions,
+    options.projectId,
+    options.region,
+  );
 
   const remainingPlan = loadPlan(options.projectId, options.region);
   if (remainingPlan.actions.length > 0) {
@@ -273,10 +329,8 @@ function main(): void {
   );
 }
 
-try {
-  main();
-} catch (error) {
+void main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[SecretMigration] Failed: ${message}`);
   process.exitCode = 1;
-}
+});
