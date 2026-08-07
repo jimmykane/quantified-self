@@ -6,7 +6,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `16`
+- Quantified Self derived-metric schema: `17`
 - `@sports-alliance/sports-lib`: `18.1.2`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
@@ -331,10 +331,10 @@ Important behavior:
 - The overall state and explanation remain global even if a discipline is hidden from detailed cards.
 
 The registry also declares context metrics and their aggregation semantics: additive distance/time/ascent/descent,
-descent time and jumps; arithmetic-mean grit, flow, cadence, and stroke distance; and distance-weighted 500 m rowing
-pace. Each emitted metric carries its contributing activity count. A future family or context should be added to this
-registry with focused registry, builder, normalizer, presentation, and documentation tests; it must not require another
-set of family-specific accumulators or UI branches.
+descent time and jumps; the maximum recorded jump distance across contributing workouts; arithmetic-mean grit, flow,
+cadence, and stroke distance; and distance-weighted 500 m rowing pace. Each emitted metric carries its contributing
+activity count. A future family or context should be added to this registry with focused registry, builder, normalizer,
+presentation, and documentation tests; it must not require another set of family-specific accumulators or UI branches.
 
 ## Derived-Metric Refresh Pipeline
 
@@ -592,14 +592,15 @@ For every discipline:
 - Hard: zones 5-7.
 
 The summary and Best Build payloads also preserve each observed registered context. Contexts emit only the metrics
-declared by the shared registry: distance, moving/elapsed time, ascent/descent, descent time, jumps, grit/flow, rowing
-500 m pace, cadence, and stroke distance as applicable. Additive metrics are summed; grit, flow, cadence, and stroke
-distance are arithmetic activity means; rowing pace is distance-weighted. Elapsed time prefers a stored elapsed stat,
-then timestamps, then duration. Each metric includes its source-activity count.
+declared by the shared registry: distance, moving/elapsed time, ascent/descent, descent time, jumps, longest jump,
+grit/flow, rowing 500 m pace, cadence, and stroke distance as applicable. Additive metrics are summed; longest jump is
+the maximum persisted `Maximum Jump Distance` across the window; grit, flow, cadence, and stroke distance are arithmetic
+activity means; rowing pace is distance-weighted. Elapsed time prefers a stored elapsed stat, then timestamps, then
+duration. Each metric includes its source-activity count.
 
 The 84-day summary baseline normalizes activity counts, additive metric values, and metric source counts by `28 / 84`.
-Mean and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows use their
-raw 8-, 10-, or 12-week totals and counts.
+Maximum, mean, and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows
+use their raw 8-, 10-, or 12-week totals and counts.
 
 The top training time and workout values sum all eight registered families, regardless of detailed-card visibility.
 Gravity Cycling and Strength contexts contribute reliable time/workout volume, but their profile policy prevents zones
@@ -811,10 +812,10 @@ Each current and benchmark window contains:
 
 It also contains the same registry-driven context summaries as Training Mix. The frontend renders the available profile
 metrics generically, so adding a context metric to the registry does not require another family-specific table. Enduro
-and Downhill comparisons can show reliable distance/time, ascent or descent, descent time, jump count, grit, and flow
-when recorded, but they do not synthesize run segments and do not show zone/TSS intensity as gravity evidence. Strength
-uses elapsed time and omits distance. Indoor and on-water rowing remain separate and can show distance-weighted 500 m
-pace, cadence, and stroke distance when those sources exist.
+and Downhill comparisons can show reliable distance/time, ascent or descent, descent time, jump count, longest recorded
+jump, grit, and flow when recorded, but they do not synthesize run segments and do not show zone/TSS intensity as
+gravity evidence. Strength uses elapsed time and omits distance. Indoor and on-water rowing remain separate and can
+show distance-weighted 500 m pace, cadence, and stroke distance when those sources exist.
 
 Pool and open-water pace are never combined. Swimming distance uses swim units. Pace deltas are described as faster or
 slower, where lower seconds per 100 m/yd is better.
@@ -1008,8 +1009,8 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 #### Parser and continuous-stream boundary
 
 The pinned Sports-lib parser does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 16 rebuilds existing
-snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so derived snapshot rebuilds use
+existing data without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 
 The capacity estimator includes 720 seconds in newly generated default curves. New curve calculation removes isolated
@@ -1653,12 +1654,16 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 16 adds the eight-family context/profile summaries. The
-repository pins sports-lib `18.1.2`, whose companion gravity-durability policy emits explicit `unsupported-context`
-evidence for Enduro/Downhill activities. The Functions aggregator also rejects legacy eligible Enduro/Downhill
-durability evidence defensively. Reparse affected existing activities through the targeted sports-lib reparse lifecycle
-so their persisted compact evidence adopts the corrected result. This is a policy correction within durability protocol
-v1, not a v2 migration.
+Existing snapshots rebuild lazily after a schema bump. Schema 16 added the eight-family context/profile summaries;
+schema 17 adds their reusable maximum aggregation and longest-jump metric. The longest-jump rebuild reads the canonical
+Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
+require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
+still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
+events. The repository pins sports-lib `18.1.2`, whose companion
+gravity-durability policy emits explicit `unsupported-context` evidence for Enduro/Downhill activities. The Functions
+aggregator also rejects legacy eligible Enduro/Downhill durability evidence defensively. Reparse affected existing
+activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
+result. This is a policy correction within durability protocol v1, not a v2 migration.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

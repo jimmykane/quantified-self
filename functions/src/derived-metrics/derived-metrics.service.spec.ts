@@ -37,6 +37,7 @@ import {
     DataPowerZoneTwoDuration,
     DataRecoveryTime,
     DataJumpCount,
+    DataJumpDistanceMax,
     DataSwimDistance,
     DataSwimPaceAvg,
     DataVO2Max,
@@ -1600,6 +1601,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
                     [DataDescent.type]: 800,
                     [DataDescentTime.type]: 600,
                     [DataJumpCount.type]: 8,
+                    [DataJumpDistanceMax.type]: id === 'downhill-current' ? 7.4 : 5.8,
                     [DataGrit.type]: 14,
                     [DataFlow.type]: 7,
                     'Training Stress Score': 90,
@@ -1646,6 +1648,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
                 { metric: 'descent', value: 800, sourceActivityCount: 1 },
                 { metric: 'descent-time', value: 600, sourceActivityCount: 1 },
                 { metric: 'jump-count', value: 8, sourceActivityCount: 1 },
+                { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 },
             ]),
         })]);
         expect(strength?.current?.contexts).toEqual([expect.objectContaining({
@@ -2817,6 +2820,7 @@ describe('buildTrainingSummaryMetricPayload', () => {
                 [DataDescent.type]: 900,
                 [DataDescentTime.type]: 600,
                 [DataJumpCount.type]: 12,
+                [DataJumpDistanceMax.type]: 7.4,
                 [DataGrit.type]: 18,
                 [DataFlow.type]: 6,
             }),
@@ -2856,11 +2860,54 @@ describe('buildTrainingSummaryMetricPayload', () => {
                     { metric: 'descent', value: 900, sourceActivityCount: 1 },
                     { metric: 'descent-time', value: 600, sourceActivityCount: 1 },
                     { metric: 'jump-count', value: 12, sourceActivityCount: 1 },
+                    { metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 },
                     { metric: 'grit', value: 18, sourceActivityCount: 1 },
                     { metric: 'flow', value: 6, sourceActivityCount: 1 },
                 ]),
             }),
         ]));
+    });
+
+    it('keeps the longest MTB jump as a maximum without scaling the normalized baseline', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const docs = [
+            createEvent(Date.UTC(2026, 6, 8), ActivityTypes.DownhillCycling, 'Garmin', {
+                [DataJumpDistanceMax.type]: 4.2,
+            }),
+            createEvent(Date.UTC(2026, 6, 9), ActivityTypes.DownhillCycling, 'Garmin', {
+                [DataJumpDistanceMax.type]: 7.8,
+            }),
+            createEvent(Date.UTC(2026, 6, 7), ActivityTypes.DownhillCycling, 'Garmin', {
+                'Jump Distance Max': 8.6,
+            }),
+            createEvent(Date.UTC(2026, 5, 1), ActivityTypes.DownhillCycling, 'Garmin', {
+                [DataJumpDistanceMax.type]: 8.1,
+            }),
+            createEvent(Date.UTC(2026, 4, 1), ActivityTypes.DownhillCycling, 'Garmin', {
+                [DataJumpDistanceMax.type]: 6.4,
+            }),
+            createEvent(Date.UTC(2026, 3, 1), ActivityTypes.DownhillCycling, 'Garmin', {
+                [DataJumpDistanceMax.type]: 9.2,
+            }),
+        ];
+
+        const result = buildTrainingSummaryMetricPayload(buildTrainingActivitySources(docs), nowMs);
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+        const currentMetric = cycling?.current28d.contexts[0]?.metrics
+            .find(metric => metric.metric === 'max-jump-distance');
+        const baselineMetric = cycling?.baseline28d.contexts[0]?.metrics
+            .find(metric => metric.metric === 'max-jump-distance');
+
+        expect(currentMetric).toEqual({
+            metric: 'max-jump-distance',
+            value: 8.6,
+            sourceActivityCount: 3,
+        });
+        expect(baselineMetric).toEqual({
+            metric: 'max-jump-distance',
+            value: 9.2,
+            sourceActivityCount: 1,
+        });
     });
 });
 

@@ -1239,9 +1239,15 @@ function addTrainingContextMetrics(
             weight: 0,
             sourceActivityCount: 0,
         };
-        metricAccumulator.total += definition.aggregation === 'sum'
-            ? observation.value
-            : observation.value * observation.weight;
+        if (definition.aggregation === 'maximum') {
+            metricAccumulator.total = metricAccumulator.sourceActivityCount === 0
+                ? observation.value
+                : Math.max(metricAccumulator.total, observation.value);
+        } else {
+            metricAccumulator.total += definition.aggregation === 'sum'
+                ? observation.value
+                : observation.value * observation.weight;
+        }
         metricAccumulator.weight += observation.weight;
         metricAccumulator.sourceActivityCount += 1;
         accumulator.metrics.set(metric, metricAccumulator);
@@ -1268,7 +1274,9 @@ function buildTrainingContextSummaries(
                 }
                 const value = definition.aggregation === 'sum'
                     ? accumulator.total * normalizationFactor
-                    : accumulator.total / accumulator.weight;
+                    : definition.aggregation === 'maximum'
+                        ? accumulator.total
+                        : accumulator.total / accumulator.weight;
                 return [{
                     metric,
                     value: toRoundedNumber(value, 2),

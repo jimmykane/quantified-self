@@ -341,7 +341,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'show_chart',
             title: 'Context-aware sport summaries',
-            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume and descent evidence without invented run segmentation.',
+            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
           },
         ],
       },

@@ -311,6 +311,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('does not filter the overall comparison, **What drove this**, or **Power systems**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
     expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
+    expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
+    expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');

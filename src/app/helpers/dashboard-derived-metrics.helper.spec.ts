@@ -276,6 +276,50 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
   });
 
+  it('accepts the registered longest-jump maximum in a gravity MTB context', () => {
+    const emptyWindow = {
+      periodDays: 28,
+      windowStartDayMs: Date.UTC(2026, 5, 13),
+      windowEndDayMs: Date.UTC(2026, 6, 10),
+      activityCount: 0,
+      durationSeconds: 0,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+      contexts: [],
+    };
+    const downhillWindow = {
+      ...emptyWindow,
+      activityCount: 2,
+      durationSeconds: 7_200,
+      contexts: [{
+        context: 'downhill',
+        profile: 'gravity',
+        activityCount: 2,
+        metrics: [{ metric: 'max-jump-distance', value: 7.8, sourceActivityCount: 2 }],
+      }],
+    };
+    const payload = {
+      dayBoundary: 'UTC',
+      asOfDayMs: Date.UTC(2026, 6, 10),
+      currentWindowDays: 28,
+      baselineWindowDays: 84,
+      excludesMergedEvents: true,
+      disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+        discipline,
+        current28d: discipline === 'cycling' ? downhillWindow : emptyWindow,
+        baseline28d: emptyWindow,
+      })),
+    };
+
+    const context = resolveDashboardTrainingSummaryContext(payload);
+
+    expect(context?.disciplines.find(discipline => discipline.discipline === 'cycling')
+      ?.current28d.contexts[0]?.metrics).toEqual([
+      { metric: 'max-jump-distance', value: 7.8, sourceActivityCount: 2 },
+    ]);
+  });
+
   it('normalizes imported capacity markers without a QS-owned power model', () => {
     const context = resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC',

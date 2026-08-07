@@ -840,9 +840,10 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 16 expands Training to eight sport families and adds context/profile summaries. The registered
-MCP contract maps current snapshots to its frozen wire schema version 15 and legacy three-family shape through an
-explicit projection before redaction and strict validation:
+Internal derived schema 17 includes the eight sport families and context/profile summaries introduced in schema 16,
+plus the reusable maximum aggregation used for MTB longest-jump distance. The registered MCP contract maps current
+snapshots to its frozen wire schema version 15 and legacy three-family shape through an explicit projection before
+redaction and strict validation:
 
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
@@ -851,9 +852,10 @@ explicit projection before redaction and strict validation:
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
-eight internal families, gravity/rowing contexts, and undeclared private fields, then prove the public result validates
-and contains none of them. Because advertised tools, schemas, instructions, plugin metadata, and starter prompts do not
-change, this internal expansion needs neither a registered-app rescan nor a local plugin sync.
+eight internal families, gravity/rowing contexts, the internal maximum-jump profile metric, and undeclared private
+fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
+instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
+registered-app rescan nor a local plugin sync.
 
 `list_training_metrics` adds presentation and routing metadata without adding another kind registry: its descriptor map
 is compile-time exhaustive against `DERIVED_METRIC_KINDS`. It reads only snapshot envelope metadata for the matching
