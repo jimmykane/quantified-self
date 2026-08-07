@@ -229,7 +229,11 @@ describe('EventsMapComponent', () => {
       styleUrl: 'mapbox://styles/mapbox/standard',
       preset: 'day',
     }));
-    expect(map.addSource).toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.objectContaining({ cluster: true }));
+    expect(map.addSource).toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.objectContaining({
+      cluster: true,
+      clusterRadius: 40,
+      clusterMaxZoom: 14,
+    }));
     expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_UNCLUSTERED_LAYER_ID }));
     expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_CLUSTER_LAYER_ID }));
     expect(component.noMapData).toBe(false);

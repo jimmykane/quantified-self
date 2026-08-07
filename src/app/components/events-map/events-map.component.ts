@@ -96,6 +96,7 @@ export interface EventsMapFocusLocation {
   standalone: true
 })
 export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit, OnDestroy {
+  private static readonly EVENT_CLUSTER_RADIUS = 40;
   private static readonly EVENTS_SOURCE_ID = 'events-map-events-source';
   private static readonly EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
   private static readonly EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
@@ -477,7 +478,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     upsertGeoJsonSource(map, EventsMapComponent.EVENTS_SOURCE_ID, sourceData, shouldCluster
       ? {
         cluster: true,
-        clusterRadius: 50,
+        // A smaller radius keeps nearby activity areas distinct at overview zooms.
+        clusterRadius: EventsMapComponent.EVENT_CLUSTER_RADIUS,
         clusterMaxZoom: 14,
       }
       : {}
