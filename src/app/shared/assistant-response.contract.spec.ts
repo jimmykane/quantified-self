@@ -53,7 +53,7 @@ function buildResponse(): AssistantChatResponse {
           }, {
             kind: 'map',
             title: 'Activity location',
-            style: 'satellite',
+            style: 'user_preference',
             markers: [{
               kind: 'start',
               label: 'Start',
@@ -86,6 +86,16 @@ function buildResponse(): AssistantChatResponse {
 describe('Assistant response contract', () => {
   it('accepts a complete bounded response', () => {
     expect(validateAssistantChatResponse(buildResponse()).ok).toBe(true);
+  });
+
+  it('keeps existing satellite map replies readable', () => {
+    const response = buildResponse();
+    const visual = response.conversation.messages[1].visuals?.[1];
+    if (visual?.kind === 'map') {
+      visual.style = 'satellite';
+    }
+
+    expect(validateAssistantChatResponse(response).ok).toBe(true);
   });
 
   it('accepts a valid pending request identity and rejects missing or malformed state', () => {
@@ -161,6 +171,13 @@ describe('Assistant response contract', () => {
       map.markers[0].latitudeDegrees = 91;
     }
     expect(validateAssistantConversation(invalidCoordinate.conversation).ok).toBe(false);
+
+    const arbitraryMapStyle = buildResponse();
+    const styledMap = arbitraryMapStyle.conversation.messages[1].visuals![1];
+    if (styledMap.kind === 'map') {
+      (styledMap as unknown as Record<string, unknown>).style = 'attacker-authored-style';
+    }
+    expect(validateAssistantConversation(arbitraryMapStyle.conversation).ok).toBe(false);
 
     const rawConfig = buildResponse();
     const chart = rawConfig.conversation.messages[1].visuals![0] as unknown as Record<string, unknown>;

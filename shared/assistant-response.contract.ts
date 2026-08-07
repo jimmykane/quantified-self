@@ -186,7 +186,7 @@ function isMapVisual(value: Record<string, unknown>): boolean {
   if (!hasOnlyKeys(value, ['kind', 'title', 'style', 'markers', 'path'])
     || value.kind !== 'map'
     || !isBoundedString(value.title, 1, 160)
-    || value.style !== 'satellite'
+    || (value.style !== 'user_preference' && value.style !== 'satellite')
     || !Array.isArray(value.markers)
     || value.markers.length > ASSISTANT_MAX_MAP_MARKERS
     || !Array.isArray(value.path)

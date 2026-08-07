@@ -128,7 +128,7 @@ export interface AssistantMapMarker extends AssistantMapPosition {
 export interface AssistantMapVisual {
   kind: 'map';
   title: string;
-  style: 'satellite';
+  style: 'user_preference' | 'satellite';
   markers: AssistantMapMarker[];
   path: AssistantMapPosition[];
 }

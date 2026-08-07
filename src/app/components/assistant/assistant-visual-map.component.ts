@@ -20,6 +20,7 @@ import type {
 } from '@shared/assistant.types';
 import { MaterialModule } from '../../modules/material.module';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
@@ -57,6 +58,7 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
   private readonly mapboxLoader = inject(MapboxLoaderService);
   private readonly mapboxAutoResize = inject(MapboxAutoResizeService);
   private readonly mapStyleService = inject(MapStyleService);
+  private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
   private readonly themeService = inject(AppThemeService);
   private readonly markerFactory = inject(MarkerFactoryService);
   private readonly logger = inject(LoggerService);
@@ -105,8 +107,11 @@ export class AssistantVisualMapComponent implements AfterViewInit, OnChanges, On
     this.loadFailed.set(false);
     try {
       const firstPosition = this.visual.path[0] ?? this.visual.markers[0];
+      const mapStyle = this.mapStyleService.normalizeStyle(
+        this.userSettingsQuery.mapSettings()?.mapStyle,
+      );
       const resolvedStyle = this.mapStyleService.resolve(
-        'satellite',
+        mapStyle,
         this.themeService.appTheme() || AppThemes.Normal,
       );
       const options: Omit<MapOptions, 'container'> = {

@@ -257,7 +257,7 @@ describe('Assistant visual projection', () => {
     });
     expect(visuals).toEqual([expect.objectContaining({
       kind: 'map',
-      style: 'satellite',
+      style: 'user_preference',
       markers: expect.arrayContaining([
         expect.objectContaining({ kind: 'search', label: 'Ioannina, Greece' }),
         expect.objectContaining({ kind: 'nearby', label: 'Mountain Biking nearest' }),

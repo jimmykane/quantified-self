@@ -1153,7 +1153,7 @@ export function resolveAssistantVisuals(
           title: selectedJumpMarkers
             ? `Record jump location${selectedJumpMarkers.length === 1 ? '' : 's'}`
             : source.map.title,
-          style: 'satellite',
+          style: 'user_preference',
           markers: markers.slice(0, ASSISTANT_MAX_MAP_MARKERS),
           path: downsamplePath(source.map.path),
         });

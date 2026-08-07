@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
@@ -57,6 +58,18 @@ describe('AssistantVisualMapComponent', () => {
     bind: vi.fn(),
     unbind: vi.fn(),
   };
+  const mapStyleService = {
+    normalizeStyle: vi.fn((value: string | undefined) => value || 'default'),
+    resolve: vi.fn((style: string) => ({
+      styleUrl: style === 'outdoors'
+        ? 'mapbox://styles/mapbox/outdoors-v12'
+        : 'mapbox://styles/mapbox/standard-satellite',
+      preset: style === 'outdoors' ? undefined : 'day',
+    })),
+  };
+  const userSettingsQuery = {
+    mapSettings: signal({ mapStyle: 'outdoors' as const }),
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -68,15 +81,8 @@ describe('AssistantVisualMapComponent', () => {
       providers: [
         { provide: MapboxLoaderService, useValue: loader },
         { provide: MapboxAutoResizeService, useValue: autoResize },
-        {
-          provide: MapStyleService,
-          useValue: {
-            resolve: vi.fn(() => ({
-              styleUrl: 'mapbox://styles/mapbox/standard-satellite',
-              preset: 'day',
-            })),
-          },
-        },
+        { provide: MapStyleService, useValue: mapStyleService },
+        { provide: AppUserSettingsQueryService, useValue: userSettingsQuery },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: LoggerService, useValue: { log: vi.fn(), warn: vi.fn() } },
       ],
@@ -85,7 +91,7 @@ describe('AssistantVisualMapComponent', () => {
     fixture.componentInstance.visual = {
       kind: 'map',
       title: 'Activity location',
-      style: 'satellite',
+      style: 'user_preference',
       markers: [{
         kind: 'jump',
         label: 'Biggest jump',
@@ -99,17 +105,18 @@ describe('AssistantVisualMapComponent', () => {
     };
   });
 
-  it('uses the shared satellite loader, track renderer, markers, and bounded camera', async () => {
+  it('uses the preferred map style with the shared renderer and bounded camera', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(autoResize.bind).toHaveBeenCalled());
 
     expect(fixture.nativeElement.querySelector('.assistant-visual-map').getAttribute('role'))
       .toBe('region');
     expect(loader.createMap).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
-      style: 'mapbox://styles/mapbox/standard-satellite',
+      style: 'mapbox://styles/mapbox/outdoors-v12',
       center: [20.85, 39.66],
-      config: { basemap: { lightPreset: 'day' } },
     }));
+    expect(mapStyleService.normalizeStyle).toHaveBeenCalledWith('outdoors');
+    expect(mapStyleService.resolve).toHaveBeenCalledWith('outdoors', AppThemes.Normal);
     expect(autoResize.bind).toHaveBeenCalledWith(map, expect.objectContaining({
       container: expect.any(HTMLElement),
       throttleMs: 150,
@@ -123,6 +130,22 @@ describe('AssistantVisualMapComponent', () => {
     });
     expect(fixture.componentInstance.loading()).toBe(false);
     expect(fixture.componentInstance.loadFailed()).toBe(false);
+  });
+
+  it('uses the current preference for an existing stored satellite visual', async () => {
+    fixture.componentInstance.visual = {
+      ...fixture.componentInstance.visual,
+      style: 'satellite',
+    };
+
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(autoResize.bind).toHaveBeenCalled());
+
+    expect(mapStyleService.normalizeStyle).toHaveBeenCalledWith('outdoors');
+    expect(mapStyleService.resolve).toHaveBeenCalledWith('outdoors', AppThemes.Normal);
+    expect(loader.createMap).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
+      style: 'mapbox://styles/mapbox/outdoors-v12',
+    }));
   });
 
   it('removes the only active map and resize binding on teardown', async () => {

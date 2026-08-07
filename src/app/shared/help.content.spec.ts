@@ -67,7 +67,7 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('coordinate-free by default');
     expect(assistantSection?.content).toContain('**Precise activity locations**');
     expect(assistantSection?.content).toContain('exact activity start/end and MTB jump coordinates');
-    expect(assistantSection?.content).toContain('one interactive chart and one satellite map');
+    expect(assistantSection?.content).toContain('New maps use your saved app map style');
     expect(assistantSection?.content).toContain('displayed geographic area to Mapbox');
     expect(assistantSection?.content).toContain('constructs all plotted values, coordinates, labels, and renderer settings deterministically');
     expect(assistantSection?.content).toContain('Changing this setting starts a new chat');

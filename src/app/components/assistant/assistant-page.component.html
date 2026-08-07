@@ -64,10 +64,10 @@
                   <article class="assistant-visual-card">
                     <header>
                       <span class="assistant-visual-heading">
-                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'satellite_alt' }}</mat-icon>
+                        <mat-icon aria-hidden="true">{{ visual.kind === 'chart' ? 'monitoring' : 'map' }}</mat-icon>
                         <span>
                           <strong>{{ visual.title }}</strong>
-                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Satellite map' }}</small>
+                          <small>{{ visual.kind === 'chart' ? 'Interactive chart' : 'Your preferred map style' }}</small>
                         </span>
                       </span>
                       <button mat-icon-button type="button" [attr.aria-label]="'Expand ' + visual.title"
@@ -89,7 +89,8 @@
                         </button>
                       }
                       <p class="assistant-map-disclosure">
-                        Viewing sends the displayed map area to Mapbox for satellite tiles.
+                        Uses your saved map style.
+                        Viewing sends the displayed map area to Mapbox for map tiles.
                       </p>
                     }
                   </article>
