@@ -52,6 +52,12 @@ import {
   DerivedMetricKind,
   DerivedRampRateMetricPayload,
   DerivedTrainingReadinessMetricPayload,
+  DerivedTrainingBuildComparisonMetricPayload,
+  DerivedTrainingBuildWindow,
+  DerivedTrainingDurabilityMetricPayload,
+  DerivedTrainingExplanationMetricPayload,
+  DerivedTrainingExplanationSportLoad,
+  DerivedTrainingExplanationWindowMetrics,
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
 } from '../../../shared/derived-metrics';
@@ -79,6 +85,11 @@ import {
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
+import {
+  PUBLIC_TRAINING_DISCIPLINES,
+  TRAINING_DISCIPLINES,
+  type PublicTrainingDiscipline,
+} from '../../../shared/training-disciplines';
 import {
   MCP_SLEEP_VITAL_DESCRIPTORS,
   MCP_SLEEP_VITAL_TYPES,
@@ -133,7 +144,10 @@ import {
   consumeActivityChartRateLimit,
   McpActivityChartRateLimitError,
 } from './activity-chart-rate-limit';
-import { MCP_DERIVED_PAYLOAD_SCHEMAS } from './derived-output-schemas';
+import {
+  MCP_DERIVED_PAYLOAD_SCHEMAS,
+  MCP_TRAINING_METRIC_SCHEMA_VERSION,
+} from './derived-output-schemas';
 import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
 import {
   boundsMayBeWithinRadius,
@@ -155,7 +169,7 @@ const MAX_SLEEP_PAGE_SIZE = 100;
 const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
 const DAILY_TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
-const DAILY_TRAINING_SUMMARY_DISCIPLINES = ['running', 'cycling', 'swimming'] as const;
+const DAILY_TRAINING_SUMMARY_DISCIPLINES = PUBLIC_TRAINING_DISCIPLINES;
 const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
 const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
 const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
@@ -2830,6 +2844,307 @@ export interface QueryMeasurementsResult {
   } | null;
 }
 
+const PUBLIC_TRAINING_DISCIPLINE_SET = new Set<string>(PUBLIC_TRAINING_DISCIPLINES);
+
+function isPublicTrainingDiscipline(value: unknown): value is PublicTrainingDiscipline {
+  return typeof value === 'string' && PUBLIC_TRAINING_DISCIPLINE_SET.has(value);
+}
+
+function selectPublicTrainingDisciplineRows<T extends { discipline: unknown }>(
+  rows: readonly T[],
+): T[] | null {
+  const selected = PUBLIC_TRAINING_DISCIPLINES.map((discipline) => {
+    const matches = rows.filter(row => row.discipline === discipline);
+    return matches.length === 1 ? matches[0] : null;
+  });
+  return selected.some(row => row === null) ? null : selected as T[];
+}
+
+function projectTrainingSummaryWindowForMcp(
+  window: DerivedTrainingSummaryMetricPayload['disciplines'][number]['current28d'],
+) {
+  return {
+    periodDays: window.periodDays,
+    windowStartDayMs: window.windowStartDayMs,
+    windowEndDayMs: window.windowEndDayMs,
+    activityCount: window.activityCount,
+    durationSeconds: window.durationSeconds,
+    easySeconds: window.easySeconds,
+    moderateSeconds: window.moderateSeconds,
+    hardSeconds: window.hardSeconds,
+  };
+}
+
+function projectTrainingSummaryForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingSummaryMetricPayload>;
+  if (!Array.isArray(source.disciplines)) {
+    return null;
+  }
+  const disciplines = selectPublicTrainingDisciplineRows(source.disciplines);
+  if (!disciplines) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    currentWindowDays: source.currentWindowDays,
+    baselineWindowDays: source.baselineWindowDays,
+    disciplines: disciplines.map(item => ({
+      discipline: item.discipline,
+      current28d: projectTrainingSummaryWindowForMcp(item.current28d),
+      baseline28d: projectTrainingSummaryWindowForMcp(item.baseline28d),
+    })),
+    excludesMergedEvents: source.excludesMergedEvents,
+  };
+}
+
+function projectExplanationSportLoadsForMcp(
+  loads: readonly DerivedTrainingExplanationSportLoad[],
+  includeEmpty: boolean,
+  requireComplete = true,
+) {
+  const internalOrder = [...TRAINING_DISCIPLINES, 'other', 'unclassified'] as const;
+  const inputSports = new Set(loads.map(load => load.sport));
+  if (
+    inputSports.size !== loads.length
+    || loads.some(load => !internalOrder.includes(load.sport))
+    || (requireComplete && (
+      loads.length !== internalOrder.length
+      || internalOrder.some(sport => !inputSports.has(sport))
+    ))
+  ) {
+    throw new Error('Invalid internal Training explanation sport rows.');
+  }
+  const order = [...PUBLIC_TRAINING_DISCIPLINES, 'other', 'unclassified'] as const;
+  const labels: Record<typeof order[number], string> = {
+    running: 'Running',
+    cycling: 'Cycling',
+    swimming: 'Swimming',
+    other: 'Other',
+    unclassified: 'Unclassified',
+  };
+  const accumulators = new Map(order.map(sport => [sport, {
+    activityCount: 0,
+    loadActivityCount: 0,
+    trainingStressScore: 0,
+  }]));
+  loads.forEach((load) => {
+    const sport = isPublicTrainingDiscipline(load.sport)
+      ? load.sport
+      : load.sport === 'unclassified'
+        ? 'unclassified'
+        : 'other';
+    const accumulator = accumulators.get(sport)!;
+    accumulator.activityCount += load.activityCount;
+    accumulator.loadActivityCount += load.loadActivityCount;
+    accumulator.trainingStressScore += load.trainingStressScore || 0;
+  });
+  const totalLoad = [...accumulators.values()].reduce(
+    (sum, accumulator) => sum + accumulator.trainingStressScore,
+    0,
+  );
+  return order.map((sport) => {
+    const accumulator = accumulators.get(sport)!;
+    return {
+      sport,
+      label: labels[sport],
+      activityCount: accumulator.activityCount,
+      loadActivityCount: accumulator.loadActivityCount,
+      trainingStressScore: accumulator.loadActivityCount > 0
+        ? Math.round(accumulator.trainingStressScore * 100) / 100
+        : null,
+      loadSharePercent: accumulator.loadActivityCount > 0 && totalLoad > 0
+        ? Math.round((accumulator.trainingStressScore / totalLoad) * 10_000) / 100
+        : null,
+    };
+  }).filter(load => includeEmpty || load.activityCount > 0);
+}
+
+function projectExplanationContributorSportLoadsForMcp(
+  loads: readonly DerivedTrainingExplanationSportLoad[],
+) {
+  return projectExplanationSportLoadsForMcp(loads, false, false).map(load => ({
+    sport: load.sport,
+    activityCount: load.activityCount,
+    loadActivityCount: load.loadActivityCount,
+    trainingStressScore: load.trainingStressScore,
+    loadSharePercent: load.loadSharePercent,
+  }));
+}
+
+function projectExplanationWindowMetricsForMcp(
+  window: DerivedTrainingExplanationWindowMetrics,
+): Record<string, unknown> {
+  const rhythms = selectPublicTrainingDisciplineRows(window.rhythms);
+  if (!rhythms) {
+    throw new Error('Invalid internal Training explanation rhythm rows.');
+  }
+  return {
+    parentEventCount: window.parentEventCount,
+    parentLoadEventCount: window.parentLoadEventCount,
+    parentTrainingStressScore: window.parentTrainingStressScore,
+    parentLoadCoverage: window.parentLoadCoverage,
+    childActivityCount: window.childActivityCount,
+    childLoadActivityCount: window.childLoadActivityCount,
+    childTrainingStressScore: window.childTrainingStressScore,
+    childLoadCoverage: window.childLoadCoverage,
+    sportLoads: projectExplanationSportLoadsForMcp(window.sportLoads, true),
+    rhythms,
+  };
+}
+
+function projectTrainingExplanationForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingExplanationMetricPayload>;
+  if (!source.current || !Array.isArray(source.baselineBlocks) || !source.baselineMedian) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    currentWindowDays: source.currentWindowDays,
+    baselineBlockCount: source.baselineBlockCount,
+    excludesMergedEvents: source.excludesMergedEvents,
+    excludesMissingDates: source.excludesMissingDates,
+    excludesFutureEvents: source.excludesFutureEvents,
+    current: {
+      ...projectExplanationWindowMetricsForMcp(source.current),
+      periodDays: source.current.periodDays,
+      windowStartDayMs: source.current.windowStartDayMs,
+      windowEndDayMs: source.current.windowEndDayMs,
+    },
+    baselineBlocks: source.baselineBlocks.map(window => ({
+      ...projectExplanationWindowMetricsForMcp(window),
+      periodDays: window.periodDays,
+      windowStartDayMs: window.windowStartDayMs,
+      windowEndDayMs: window.windowEndDayMs,
+    })),
+    baselineMedian: projectExplanationWindowMetricsForMcp(source.baselineMedian),
+    topContributors: (source.topContributors || []).map(contributor => ({
+      eventId: contributor.eventId,
+      label: contributor.label,
+      startDayMs: contributor.startDayMs,
+      trainingStressScore: contributor.trainingStressScore,
+      loadSharePercent: contributor.loadSharePercent,
+      childComposition: projectExplanationContributorSportLoadsForMcp(contributor.childComposition),
+    })),
+  };
+}
+
+function projectTrainingBuildWindowForMcp(window: DerivedTrainingBuildWindow | null) {
+  if (!window) {
+    return null;
+  }
+  return {
+    periodWeeks: window.periodWeeks,
+    windowStartDayMs: window.windowStartDayMs,
+    windowEndDayMs: window.windowEndDayMs,
+    activityCount: window.activityCount,
+    durationSeconds: window.durationSeconds,
+    distanceMeters: window.distanceMeters,
+    distanceEventCount: window.distanceEventCount,
+    trainingStressScore: window.trainingStressScore,
+    trainingStressScoreEventCount: window.trainingStressScoreEventCount,
+    activeWeekCount: window.activeWeekCount,
+    longestActivityDurationSeconds: window.longestActivityDurationSeconds,
+    easySeconds: window.easySeconds,
+    moderateSeconds: window.moderateSeconds,
+    hardSeconds: window.hardSeconds,
+    intensitySourceEventCount: window.intensitySourceEventCount,
+    durability: window.durability,
+    poolAveragePaceSecondsPer100m: window.poolAveragePaceSecondsPer100m,
+    poolPaceActivityCount: window.poolPaceActivityCount,
+    openWaterAveragePaceSecondsPer100m: window.openWaterAveragePaceSecondsPer100m,
+    openWaterPaceActivityCount: window.openWaterPaceActivityCount,
+  };
+}
+
+function projectTrainingBuildComparisonForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingBuildComparisonMetricPayload>;
+  if (!Array.isArray(source.disciplines)) {
+    return null;
+  }
+  const disciplines = selectPublicTrainingDisciplineRows(source.disciplines);
+  if (!disciplines) {
+    return null;
+  }
+  return {
+    recoveryVersion: source.recoveryVersion,
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    excludesMergedEvents: source.excludesMergedEvents,
+    recovery: source.recovery,
+    disciplines: disciplines.map(item => ({
+      discipline: item.discipline,
+      status: item.status,
+      selection: item.selection,
+      current: projectTrainingBuildWindowForMcp(item.current),
+      benchmark: projectTrainingBuildWindowForMcp(item.benchmark),
+      recovery: item.recovery,
+      durabilityComparisons: item.durabilityComparisons,
+      suggestedRaces: item.suggestedRaces,
+      suggestedEvents: item.suggestedEvents,
+    })),
+  };
+}
+
+function projectTrainingDurabilityForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingDurabilityMetricPayload>;
+  if (!Array.isArray(source.scopes)) {
+    return null;
+  }
+  const publicScopeIds = ['running', 'cycling', 'pool-swimming', 'open-water-swimming'] as const;
+  const scopes = publicScopeIds.map((scope) => {
+    const matches = source.scopes!.filter(candidate => candidate.scope === scope);
+    return matches.length === 1 ? matches[0] : null;
+  });
+  if (scopes.some(scope => scope === null)) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    currentWindowDays: source.currentWindowDays,
+    baselineBlockCount: source.baselineBlockCount,
+    weeklyPointCount: source.weeklyPointCount,
+    excludesMergedEvents: source.excludesMergedEvents,
+    excludesFutureEvents: source.excludesFutureEvents,
+    evidenceSource: source.evidenceSource,
+    scopes,
+  };
+}
+
+export function projectDerivedMetricPayloadForMcp(
+  metricKind: DerivedMetricKind,
+  payload: unknown,
+): unknown {
+  try {
+    switch (metricKind) {
+      case DERIVED_METRIC_KINDS.TrainingSummary:
+        return projectTrainingSummaryForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingExplanation:
+        return projectTrainingExplanationForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingBuildComparison:
+        return projectTrainingBuildComparisonForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingDurability:
+        return projectTrainingDurabilityForMcp(payload);
+      default:
+        return payload;
+    }
+  } catch {
+    // Snapshot payloads are untrusted persisted data. A malformed internal
+    // shape must reach the strict public-schema gate as unavailable, not throw
+    // before validation or leak a partially projected object.
+    return null;
+  }
+}
+
+const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.TrainingSummary,
+  DERIVED_METRIC_KINDS.TrainingExplanation,
+  DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.TrainingDurability,
+]);
+
 function redactDerivedPayload(
   value: unknown,
   parentKey = '',
@@ -3187,7 +3502,7 @@ interface DailyTrainingSummaryWindow {
 }
 
 interface DailyTrainingSummaryDiscipline {
-  discipline: 'running' | 'cycling' | 'swimming';
+  discipline: PublicTrainingDiscipline;
   current28d: DailyTrainingSummaryWindow;
   usual28d: DailyTrainingSummaryWindow;
 }
@@ -3356,7 +3671,10 @@ function projectDailyTrainingSummary(
   }
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
     DERIVED_METRIC_KINDS.TrainingSummary
-  ].safeParse(snapshot.payload);
+  ].safeParse(projectDerivedMetricPayloadForMcp(
+    DERIVED_METRIC_KINDS.TrainingSummary,
+    snapshot.payload,
+  ));
   if (!parsed.success) {
     return unavailableDailyTrainingSummary('not_ready');
   }
@@ -3377,21 +3695,26 @@ function projectDailyTrainingSummary(
   const hasExpectedWindowContract = payload.excludesMergedEvents
     && payload.currentWindowDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
     && payload.baselineWindowDays === DAILY_TRAINING_SUMMARY_BASELINE_WINDOW_DAYS;
-  const hasExpectedDisciplines = payload.disciplines.length
+  const publicDisciplines = payload.disciplines.filter(
+    (discipline): discipline is typeof discipline & { discipline: PublicTrainingDiscipline } => (
+      DAILY_TRAINING_SUMMARY_DISCIPLINES.includes(discipline.discipline as PublicTrainingDiscipline)
+    ),
+  );
+  const hasExpectedDisciplines = publicDisciplines.length
     === DAILY_TRAINING_SUMMARY_DISCIPLINES.length
     && DAILY_TRAINING_SUMMARY_DISCIPLINES.every(expectedDiscipline => (
-      payload.disciplines.filter(
+      publicDisciplines.filter(
         discipline => discipline.discipline === expectedDiscipline,
       ).length === 1
     ))
-    && payload.disciplines.every(discipline => (
+    && publicDisciplines.every(discipline => (
       discipline.current28d.periodDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
       && discipline.baseline28d.periodDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
     ));
   if (!hasExpectedWindowContract || !hasExpectedDisciplines) {
     return unavailableDailyTrainingSummary('not_ready');
   }
-  const disciplines = payload.disciplines.map(discipline => ({
+  const disciplines = publicDisciplines.map(discipline => ({
     discipline: discipline.discipline,
     current28d: projectDailyTrainingSummaryWindow(discipline.current28d),
     usual28d: projectDailyTrainingSummaryWindow(discipline.baseline28d),
@@ -5439,12 +5762,26 @@ export function createMcpDataService(
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
+      const projectedPayload = projectDerivedMetricPayloadForMcp(
+        metricKind,
+        snapshot.payload,
+      );
+      const redactedPayload = redactDerivedPayload(projectedPayload);
+      let safePayload = redactedPayload;
+      if (MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)) {
+        const parsedPayload = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(redactedPayload);
+        if (!parsedPayload.success) {
+          throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
+        }
+        safePayload = parsedPayload.data;
+      }
+
       return {
         metricKind,
-        schemaVersion,
+        schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
         updatedAtMs: asFiniteNumber(snapshot.updatedAtMs),
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
-        payload: redactDerivedPayload(snapshot.payload),
+        payload: safePayload,
       };
     },
 

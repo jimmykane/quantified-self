@@ -5,6 +5,10 @@ import {
   type TrainingSettings,
   type TrainingVisibleDiscipline,
 } from '@shared/derived-metrics';
+import {
+  getTrainingSportDefinition,
+  TRAINING_SPORT_DEFINITIONS,
+} from '@shared/training-disciplines';
 import type { DashboardTrainingSummaryContext } from './dashboard-derived-metrics.helper';
 
 export interface TrainingSportVisibilityResolution {
@@ -17,23 +21,20 @@ interface TrainingVisibleDisciplinePresentation {
   details: string;
 }
 
-const TRAINING_VISIBLE_DISCIPLINE_PRESENTATION: Record<TrainingVisibleDiscipline, TrainingVisibleDisciplinePresentation> = {
-  running: { label: 'Running', details: 'Build, training mix, capacity, and power curve' },
-  cycling: { label: 'Cycling', details: 'Road, indoor, virtual, e-bike, and mountain biking' },
-  swimming: { label: 'Swimming', details: 'Pool and open-water build, pace, and comparable SWOLF' },
-};
-
-const TRAINING_VISIBLE_DISCIPLINE_SCOPE_LABELS: Record<TrainingVisibleDiscipline, string> = {
-  running: 'Running',
-  cycling: 'Cycling/MTB',
-  swimming: 'Swimming',
-};
+function requireSportDefinition(discipline: TrainingVisibleDiscipline) {
+  const definition = getTrainingSportDefinition(discipline);
+  if (!definition) {
+    throw new Error(`Missing Training sport definition: ${discipline}`);
+  }
+  return definition;
+}
 
 export const TRAINING_VISIBLE_DISCIPLINE_OPTIONS: readonly (TrainingVisibleDisciplinePresentation & {
   discipline: TrainingVisibleDiscipline;
-})[] = TRAINING_VISIBLE_DISCIPLINES.map(discipline => ({
-  discipline,
-  ...TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[discipline],
+})[] = TRAINING_SPORT_DEFINITIONS.map(definition => ({
+  discipline: definition.id,
+  label: definition.label,
+  details: definition.details,
 }));
 
 export function resolveTrainingSportVisibility(
@@ -46,20 +47,18 @@ export function resolveTrainingSportVisibility(
   if (explicitDisciplines) {
     return { disciplines: explicitDisciplines, isAutomatic: false };
   }
-  if (!isSummaryReady || !summary) {
-    return { disciplines: [...TRAINING_VISIBLE_DISCIPLINES], isAutomatic: true };
-  }
-
   const disciplines = TRAINING_VISIBLE_DISCIPLINES.filter((discipline) => {
-    const currentActivityCount = summary.disciplines
-      .find(item => item.discipline === discipline)
-      ?.current28d.activityCount || 0;
+    const currentActivityCount = isSummaryReady && summary
+      ? summary.disciplines
+        .find(item => item.discipline === discipline)
+        ?.current28d.activityCount || 0
+      : 0;
     const hasSavedBenchmark = !!getTrainingBuildBenchmarkSelectionKey(buildBenchmarks?.[discipline]);
     return currentActivityCount > 0 || hasSavedBenchmark;
   });
 
   return {
-    disciplines: disciplines.length ? disciplines : [...TRAINING_VISIBLE_DISCIPLINES],
+    disciplines,
     isAutomatic: true,
   };
 }
@@ -73,15 +72,15 @@ export function trainingSportVisibilitySelectionKey(
 export function formatTrainingVisibleDisciplinesLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
 ): string {
-  return disciplines.map(discipline => TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[discipline].label).join(' + ');
+  return disciplines.map(discipline => requireSportDefinition(discipline).label).join(' + ');
 }
 
 export function formatTrainingVisibleDisciplinesScopeLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
 ): string {
-  const labels = disciplines.map(discipline => TRAINING_VISIBLE_DISCIPLINE_SCOPE_LABELS[discipline]);
+  const labels = disciplines.map(discipline => requireSportDefinition(discipline).scopeLabel);
   if (labels.length <= 1) {
-    return labels[0] || 'Selected sports';
+    return labels[0] || 'No sport-specific';
   }
   if (labels.length === 2) {
     return `${labels[0]} and ${labels[1]}`;
@@ -93,10 +92,13 @@ export function formatTrainingVisibleDisciplinesCompactLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
 ): string {
   if (disciplines.length === TRAINING_VISIBLE_DISCIPLINES.length) {
-    return 'All 3';
+    return 'All sports';
+  }
+  if (disciplines.length === 0) {
+    return 'No sports';
   }
   if (disciplines.length === 1) {
-    return TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[disciplines[0]].label;
+    return requireSportDefinition(disciplines[0]).label;
   }
   return `${disciplines.length} sports`;
 }
@@ -105,14 +107,17 @@ export function formatTrainingVisibleDisciplinesAccessibleLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
   isAutomatic: boolean,
 ): string {
-  return `Choose sports shown. ${isAutomatic ? 'Automatic' : 'Fixed'} selection: ${formatTrainingVisibleDisciplinesLabel(disciplines)}.`;
+  const selection = disciplines.length
+    ? formatTrainingVisibleDisciplinesLabel(disciplines)
+    : 'no sport-specific cards';
+  return `Choose sports shown. ${isAutomatic ? 'Automatic' : 'Fixed'} selection: ${selection}.`;
 }
 
 export function formatTrainingVisibleDisciplinesActivityLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
 ): string {
   const labels = disciplines.map(
-    discipline => TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[discipline].label.toLowerCase(),
+    discipline => requireSportDefinition(discipline).label.toLowerCase(),
   );
   if (labels.length <= 1) {
     return `${labels[0] || 'sport'} workouts`;

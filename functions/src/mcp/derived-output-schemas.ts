@@ -11,7 +11,7 @@ import {
 import { READINESS_FORMULA_VERSION } from '../../../shared/readiness';
 import {
   POWER_CAPACITY_DISCIPLINES,
-  TRAINING_DISCIPLINES,
+  PUBLIC_TRAINING_DISCIPLINES,
 } from '../../../shared/training-disciplines';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 
@@ -25,7 +25,15 @@ const timestampMs = z.number().int().nonnegative();
 const utcBoundary = z.literal('UTC');
 const boundedString = z.string().max(200);
 const nullableBoundedString = boundedString.nullable();
-const trainingDiscipline = z.enum(TRAINING_DISCIPLINES);
+
+/**
+ * Frozen wire version for get_training_metric. Internal derived snapshots can
+ * advance independently because Training-only additions are projected out
+ * before this public contract is validated.
+ */
+export const MCP_TRAINING_METRIC_SCHEMA_VERSION = 15 as const;
+
+const trainingDiscipline = z.enum(PUBLIC_TRAINING_DISCIPLINES);
 const powerCapacityDiscipline = z.enum(POWER_CAPACITY_DISCIPLINES);
 const buildDurationWeeks = z.union(
   TRAINING_BUILD_DURATION_WEEKS.map(value => z.literal(value)) as [
@@ -400,7 +408,7 @@ const explanationLoadCoverage = z.strictObject({
 }).meta({ title: 'McpDerivedExplanationLoadCoverage' });
 
 const explanationSport = z.enum([
-  ...TRAINING_DISCIPLINES,
+  ...PUBLIC_TRAINING_DISCIPLINES,
   'other',
   'unclassified',
 ]);

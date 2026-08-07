@@ -74,17 +74,20 @@ describe('setTrainingVisibleDisciplines', () => {
         const result = await (setTrainingVisibleDisciplines as any)({
             auth: { uid: 'user-1' },
             app: { appId: 'app-check' },
-            data: { visibleDisciplines: ['swimming', 'cycling', 'running'] },
+            data: { visibleDisciplines: ['paddling', 'rowing', 'swimming', 'cycling', 'running'] },
         });
 
         expect(hoisted.enforceAppCheck).toHaveBeenCalled();
         expect(hoisted.doc).toHaveBeenCalledWith('users/user-1/config/settings');
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             { path: 'users/user-1/config/settings' },
-            { trainingSettings: { visibleDisciplines: ['running', 'cycling', 'swimming'] } },
+            { trainingSettings: { visibleDisciplines: ['running', 'cycling', 'swimming', 'rowing', 'paddling'] } },
             { merge: true },
         );
-        expect(result).toEqual({ accepted: true, visibleDisciplines: ['running', 'cycling', 'swimming'] });
+        expect(result).toEqual({
+            accepted: true,
+            visibleDisciplines: ['running', 'cycling', 'swimming', 'rowing', 'paddling'],
+        });
     });
 
     it('deletes only the visibility field when automatic mode is restored', async () => {
@@ -110,7 +113,7 @@ describe('setTrainingVisibleDisciplines', () => {
             visibleDisciplines: ['running', 'running'],
         })).toThrow('unique');
         expect(() => parseTrainingVisibleDisciplinesRequest({
-            visibleDisciplines: ['rowing'],
+            visibleDisciplines: ['crossfit'],
         })).toThrow('supported');
     });
 

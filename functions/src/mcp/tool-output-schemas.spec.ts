@@ -10,7 +10,6 @@ import addFormats from 'ajv-formats';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DERIVED_METRIC_KINDS,
-  DERIVED_METRIC_SCHEMA_VERSION,
   DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import {
@@ -21,7 +20,10 @@ import {
   MCP_ACTIVITY_CHART_METRICS,
 } from './activity-chart.service';
 import { McpDataError } from './data.service';
-import { MCP_DERIVED_PAYLOAD_SCHEMAS } from './derived-output-schemas';
+import {
+  MCP_DERIVED_PAYLOAD_SCHEMAS,
+  MCP_TRAINING_METRIC_SCHEMA_VERSION,
+} from './derived-output-schemas';
 import { MCP_OAUTH_SCOPES } from './oauth.service';
 import { createMcpServer } from './server';
 import {
@@ -579,7 +581,7 @@ function createFixtureDataService(
     getTrainingMetric: vi.fn().mockImplementation(
       async (_uid: string, metricKind: DerivedMetricKind) => ({
         metricKind,
-        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
         updatedAtMs: DAY_MS,
         sourceEventCount: 0,
         payload: derivedPayloadFixtures[metricKind],
@@ -1390,14 +1392,14 @@ describe('MCP public output contracts', () => {
 
     expect(registry.get_training_metric.safeParse({
       metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       updatedAtMs: DAY_MS,
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
     }).success).toBe(false);
     expect(registry.get_training_metric.safeParse({
       metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       updatedAtMs: -1,
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.Form],
@@ -1712,7 +1714,7 @@ describe('MCP public output contracts', () => {
     const trainingValidator = validators.get('get_training_metric')!;
     expect(trainingValidator({
       metricKind: DERIVED_METRIC_KINDS.Form,
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
       updatedAtMs: DAY_MS,
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],

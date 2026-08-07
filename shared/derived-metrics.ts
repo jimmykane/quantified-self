@@ -3,7 +3,10 @@ import {
   TRAINING_DISCIPLINES,
   isTrainingDiscipline,
   type PowerCapacityDiscipline,
+  type TrainingAnalysisProfile,
   type TrainingDiscipline,
+  type TrainingProfileMetricId,
+  type TrainingSportContextId,
 } from './training-disciplines';
 import type { SleepProvider } from './sleep';
 import type { ReadinessConfidence, ReadinessLabel } from './readiness';
@@ -90,7 +93,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 15;
+export const DERIVED_METRIC_SCHEMA_VERSION = 16;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -457,6 +460,20 @@ export interface DerivedTrainingSummaryWindow {
   easySeconds: number;
   moderateSeconds: number;
   hardSeconds: number;
+  contexts: DerivedTrainingContextSummary[];
+}
+
+export interface DerivedTrainingProfileMetric {
+  metric: TrainingProfileMetricId;
+  value: number;
+  sourceActivityCount: number;
+}
+
+export interface DerivedTrainingContextSummary {
+  context: TrainingSportContextId;
+  profile: TrainingAnalysisProfile;
+  activityCount: number;
+  metrics: DerivedTrainingProfileMetric[];
 }
 
 export interface DerivedTrainingDisciplineSummary {
@@ -865,6 +882,7 @@ export interface DerivedTrainingBuildWindow {
   poolPaceActivityCount: number;
   openWaterAveragePaceSecondsPer100m: number | null;
   openWaterPaceActivityCount: number;
+  contexts: DerivedTrainingContextSummary[];
 }
 
 export const DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS = 3;
