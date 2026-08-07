@@ -27,6 +27,11 @@
                 "output": "assets/mapbox-gl/esm"
               },
               {
+                "glob": "mapbox-gl.css",
+                "input": "node_modules/mapbox-gl/dist",
+                "output": "assets/mapbox-gl"
+              },
+              {
                 "glob": "favicon.ico",
                 "input": "src/assets/favicons",
                 "output": "/"
