@@ -51,6 +51,13 @@ function parseFunctionName(resourceName: unknown): string {
   return segments[segments.length - 1] || '';
 }
 
+function parseFunctionRegion(resourceName: unknown): string {
+  if (typeof resourceName !== 'string') return '';
+  const segments = resourceName.split('/');
+  const locationsIndex = segments.indexOf('locations');
+  return locationsIndex >= 0 ? segments[locationsIndex + 1] || '' : '';
+}
+
 function parseStringRecordKeys(candidate: unknown): string[] {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return [];
@@ -68,13 +75,13 @@ function parseSecretEnvironmentVariableNames(candidate: unknown): string[] {
 
 function loadDeployedFunctions(
   projectId: string,
-  region: string,
+  regions: readonly string[],
 ): DeployedFunctionConfiguration[] {
   const output = runGcloud([
     'functions',
     'list',
     '--v2',
-    `--regions=${region}`,
+    `--regions=${regions.join(',')}`,
     `--project=${projectId}`,
     '--format=json',
   ]);
@@ -85,11 +92,16 @@ function loadDeployedFunctions(
     );
   }
 
-  return parsed.map((candidate): DeployedFunctionConfiguration => {
+  const deployedFunctions = parsed.map((candidate): DeployedFunctionConfiguration => {
     const entry = candidate as CloudFunctionListEntry;
     const name = parseFunctionName(entry.name);
+    const region = parseFunctionRegion(entry.name);
     const environment = entry.environment;
-    if (!name || (environment !== 'GEN_1' && environment !== 'GEN_2')) {
+    if (
+      !name
+      || !regions.includes(region)
+      || (environment !== 'GEN_1' && environment !== 'GEN_2')
+    ) {
       throw new DeployedSecretMigrationError(
         'Google Cloud returned a Function with invalid identity metadata.',
       );
@@ -98,6 +110,7 @@ function loadDeployedFunctions(
     const storageSource = entry.buildConfig?.source?.storageSource;
     return {
       name,
+      region,
       environment,
       sourceBucket: typeof storageSource?.bucket === 'string' ? storageSource.bucket : '',
       sourceObject: typeof storageSource?.object === 'string' ? storageSource.object : '',
@@ -109,6 +122,21 @@ function loadDeployedFunctions(
       ),
     };
   });
+
+  const seenNames = new Set<string>();
+  const duplicateNames = new Set<string>();
+  for (const deployedFunction of deployedFunctions) {
+    if (seenNames.has(deployedFunction.name)) {
+      duplicateNames.add(deployedFunction.name);
+    }
+    seenNames.add(deployedFunction.name);
+  }
+  if (duplicateNames.size > 0) {
+    throw new DeployedSecretMigrationError(
+      `Function names deployed in multiple selected regions: ${[...duplicateNames].sort().join(', ')}`,
+    );
+  }
+  return deployedFunctions;
 }
 
 function loadRepositoryFunctionNames(): string[] {
@@ -171,11 +199,12 @@ function assertEverySecretHasEnabledVersion(
 function applyAction(
   action: FunctionSecretMigrationAction,
   projectId: string,
-  region: string,
 ): Promise<void> {
-  const args = createGcloudFunctionDeployArgs(action, projectId, region);
+  const args = createGcloudFunctionDeployArgs(action, projectId);
 
-  console.info(`[SecretMigration] Updating ${action.name} (${action.environment}).`);
+  console.info(
+    `[SecretMigration] Updating ${action.region}/${action.name} (${action.environment}).`,
+  );
   return new Promise((resolve, reject) => {
     const child = spawn('gcloud', args, {
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -204,7 +233,6 @@ function applyAction(
 async function applyActions(
   actions: readonly FunctionSecretMigrationAction[],
   projectId: string,
-  region: string,
 ): Promise<void> {
   let nextActionIndex = 0;
   const failures: string[] = [];
@@ -213,7 +241,7 @@ async function applyActions(
       const action = actions[nextActionIndex];
       nextActionIndex += 1;
       try {
-        await applyAction(action, projectId, region);
+        await applyAction(action, projectId);
       } catch (error) {
         failures.push(error instanceof Error ? error.message : String(error));
       }
@@ -246,7 +274,7 @@ function printPlan(
   );
   for (const action of actions) {
     console.info(
-      `[SecretMigration] ${action.name}: remove env [${action.removeEnvironmentVariables.join(', ')}]; `
+      `[SecretMigration] ${action.region}/${action.name}: remove env [${action.removeEnvironmentVariables.join(', ')}]; `
         + `remove secrets [${action.removeSecrets.join(', ')}]; `
         + `bind secrets [${action.updateSecrets.join(', ')}].`,
     );
@@ -259,9 +287,9 @@ function printPlan(
   }
 }
 
-function loadPlan(projectId: string, region: string) {
+function loadPlan(projectId: string, regions: readonly string[]) {
   return createFunctionSecretMigrationPlan(
-    loadDeployedFunctions(projectId, region),
+    loadDeployedFunctions(projectId, regions),
     loadRepositoryFunctionNames(),
     FUNCTION_SECRET_BINDINGS,
   );
@@ -269,7 +297,7 @@ function loadPlan(projectId: string, region: string) {
 
 async function main(): Promise<void> {
   const options = parseDeployedSecretMigrationArgs(process.argv.slice(2));
-  const plan = loadPlan(options.projectId, options.region);
+  const plan = loadPlan(options.projectId, options.regions);
   printPlan(
     plan.actions,
     plan.missingDeployedFunctions,
@@ -303,7 +331,7 @@ async function main(): Promise<void> {
   assertEverySecretHasEnabledVersion(options.projectId);
   // Refresh immediately before the first write so a concurrent deployment
   // cannot make the dry-run plan stale while secret versions are checked.
-  const confirmedPlan = loadPlan(options.projectId, options.region);
+  const confirmedPlan = loadPlan(options.projectId, options.regions);
   const unsafeConfirmedAction = confirmedPlan.actions.find(action => (
     confirmedPlan.unusableSourceFunctions.includes(action.name)
   ));
@@ -315,10 +343,9 @@ async function main(): Promise<void> {
   await applyActions(
     confirmedPlan.actions,
     options.projectId,
-    options.region,
   );
 
-  const remainingPlan = loadPlan(options.projectId, options.region);
+  const remainingPlan = loadPlan(options.projectId, options.regions);
   if (remainingPlan.actions.length > 0) {
     throw new DeployedSecretMigrationError(
       `${remainingPlan.actions.length} preparatory update(s) still required; rerun safely.`,

@@ -11,6 +11,7 @@ describe('deployed Function secret environment migration', () => {
     const plan = createFunctionSecretMigrationPlan([
       {
         name: 'boundFunction',
+        region: 'europe-west2',
         environment: 'GEN_2',
         sourceBucket: 'deployments',
         sourceObject: 'source.zip',
@@ -23,6 +24,7 @@ describe('deployed Function secret environment migration', () => {
       },
       {
         name: 'publicFunction',
+        region: 'europe-west3',
         environment: 'GEN_1',
         sourceBucket: 'deployments',
         sourceObject: 'source.zip',
@@ -37,15 +39,28 @@ describe('deployed Function secret environment migration', () => {
       boundFunction: [SECRET_PARAMS.MAPBOX_ACCESS_TOKEN],
     });
 
-    expect(plan.actions).toEqual([{
-      name: 'boundFunction',
-      environment: 'GEN_2',
-      sourceBucket: 'deployments',
-      sourceObject: 'source.zip',
-      removeEnvironmentVariables: ['MAPBOX_ACCESS_TOKEN', 'SENTRY_AUTH_TOKEN'],
-      removeSecrets: ['GEMINI_API_KEY'],
-      updateSecrets: ['MAPBOX_ACCESS_TOKEN'],
-    }]);
+    expect(plan.actions).toEqual([
+      {
+        name: 'boundFunction',
+        region: 'europe-west2',
+        environment: 'GEN_2',
+        sourceBucket: 'deployments',
+        sourceObject: 'source.zip',
+        removeEnvironmentVariables: ['MAPBOX_ACCESS_TOKEN', 'SENTRY_AUTH_TOKEN'],
+        removeSecrets: ['GEMINI_API_KEY'],
+        updateSecrets: ['MAPBOX_ACCESS_TOKEN'],
+      },
+      {
+        name: 'publicFunction',
+        region: 'europe-west3',
+        environment: 'GEN_1',
+        sourceBucket: 'deployments',
+        sourceObject: 'source.zip',
+        removeEnvironmentVariables: ['STRIPE_SECRET_KEY'],
+        removeSecrets: [],
+        updateSecrets: [],
+      },
+    ]);
     expect(plan.missingDeployedFunctions).toEqual(['missingFunction']);
     expect(plan.unusableSourceFunctions).toEqual([]);
     expect(plan.violations).toEqual(expect.arrayContaining([
@@ -58,13 +73,14 @@ describe('deployed Function secret environment migration', () => {
   it('pins updates to the exact deployed source archive', () => {
     expect(createGcloudFunctionDeployArgs({
       name: 'boundFunction',
+      region: 'europe-west2',
       environment: 'GEN_2',
       sourceBucket: 'deployments',
       sourceObject: 'source.zip',
       removeEnvironmentVariables: ['MAPBOX_ACCESS_TOKEN'],
       removeSecrets: [],
       updateSecrets: ['MAPBOX_ACCESS_TOKEN'],
-    }, 'quantified-self-io', 'europe-west2')).toEqual([
+    }, 'quantified-self-io')).toEqual([
       'functions',
       'deploy',
       'boundFunction',
@@ -78,10 +94,33 @@ describe('deployed Function secret environment migration', () => {
     ]);
   });
 
+  it('builds a cleanup-only deploy for an endpoint that requires no secrets', () => {
+    expect(createGcloudFunctionDeployArgs({
+      name: 'publicFunction',
+      region: 'europe-west3',
+      environment: 'GEN_1',
+      sourceBucket: 'deployments',
+      sourceObject: 'source.zip',
+      removeEnvironmentVariables: ['STRIPE_SECRET_KEY'],
+      removeSecrets: [],
+      updateSecrets: [],
+    }, 'quantified-self-io')).toEqual([
+      'functions',
+      'deploy',
+      'publicFunction',
+      '--project=quantified-self-io',
+      '--region=europe-west3',
+      '--source=gs://deployments/source.zip',
+      '--quiet',
+      '--remove-env-vars=STRIPE_SECRET_KEY',
+    ]);
+  });
+
   it('reports unmanaged deployed endpoints without mutating clean endpoints', () => {
     const plan = createFunctionSecretMigrationPlan([
       {
         name: 'boundFunction',
+        region: 'europe-west2',
         environment: 'GEN_2',
         sourceBucket: 'deployments',
         sourceObject: 'source.zip',
@@ -90,6 +129,7 @@ describe('deployed Function secret environment migration', () => {
       },
       {
         name: 'staleFunction',
+        region: 'europe-west2',
         environment: 'GEN_2',
         sourceBucket: 'deployments',
         sourceObject: 'source.zip',
@@ -112,7 +152,7 @@ describe('deployed Function secret environment migration', () => {
       '--region=europe-west2',
     ])).toEqual({
       projectId: 'quantified-self-io',
-      region: 'europe-west2',
+      regions: ['europe-west2'],
       apply: false,
       confirmProject: undefined,
       requireClean: false,
@@ -128,6 +168,15 @@ describe('deployed Function secret environment migration', () => {
       '--apply',
       '--confirm-project=quantified-self-io',
     ]).apply).toBe(true);
+    expect(parseDeployedSecretMigrationArgs([
+      '--project=quantified-self-io',
+      '--regions=europe-west2,europe-west3',
+    ]).regions).toEqual(['europe-west2', 'europe-west3']);
+    expect(() => parseDeployedSecretMigrationArgs([
+      '--project=quantified-self-io',
+      '--region=europe-west2',
+      '--regions=europe-west2,europe-west3',
+    ])).toThrow('either --region or --regions');
     expect(() => parseDeployedSecretMigrationArgs([
       '--project=quantified-self-io',
       '--region=europe-west2',

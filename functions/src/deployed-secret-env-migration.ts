@@ -22,6 +22,7 @@ export type DeployedFunctionEnvironment = 'GEN_1' | 'GEN_2';
 
 export interface DeployedFunctionConfiguration {
   name: string;
+  region: string;
   environment: DeployedFunctionEnvironment;
   sourceBucket: string;
   sourceObject: string;
@@ -31,6 +32,7 @@ export interface DeployedFunctionConfiguration {
 
 export interface FunctionSecretMigrationAction {
   name: string;
+  region: string;
   environment: DeployedFunctionEnvironment;
   sourceBucket: string;
   sourceObject: string;
@@ -49,7 +51,7 @@ export interface FunctionSecretMigrationPlan {
 
 export interface DeployedSecretMigrationCliOptions {
   projectId: string;
-  region: string;
+  regions: string[];
   apply: boolean;
   confirmProject?: string;
   requireClean: boolean;
@@ -62,7 +64,6 @@ export class DeployedSecretMigrationError extends Error {
 export function createGcloudFunctionDeployArgs(
   action: FunctionSecretMigrationAction,
   projectId: string,
-  region: string,
 ): string[] {
   if (!action.sourceBucket || !action.sourceObject) {
     throw new DeployedSecretMigrationError(
@@ -75,7 +76,7 @@ export function createGcloudFunctionDeployArgs(
     'deploy',
     action.name,
     `--project=${projectId}`,
-    `--region=${region}`,
+    `--region=${action.region}`,
     `--source=gs://${action.sourceBucket}/${action.sourceObject}`,
     '--quiet',
   ];
@@ -116,7 +117,12 @@ export function parseDeployedSecretMigrationArgs(
   args: readonly string[],
 ): DeployedSecretMigrationCliOptions {
   const allowedFlags = new Set(['--apply', '--require-clean']);
-  const allowedPrefixes = ['--project=', '--region=', '--confirm-project='];
+  const allowedPrefixes = [
+    '--project=',
+    '--region=',
+    '--regions=',
+    '--confirm-project=',
+  ];
   const unexpected = args.find(argument => !allowedFlags.has(argument)
     && !allowedPrefixes.some(prefix => argument.startsWith(prefix)));
   if (unexpected) {
@@ -125,6 +131,7 @@ export function parseDeployedSecretMigrationArgs(
 
   const projectId = parseRequiredValue(args, 'project');
   const region = parseRequiredValue(args, 'region');
+  const regionsValue = parseRequiredValue(args, 'regions');
   const apply = args.includes('--apply');
   const confirmProject = parseRequiredValue(args, 'confirm-project');
   const requireClean = args.includes('--require-clean');
@@ -134,9 +141,24 @@ export function parseDeployedSecretMigrationArgs(
       'A valid --project=<firebase-project-id> argument is required.',
     );
   }
-  if (!region || !/^[a-z]+-[a-z]+\d+$/.test(region)) {
+  if (region && regionsValue) {
     throw new DeployedSecretMigrationError(
-      'A valid --region=<google-cloud-region> argument is required.',
+      'Specify either --region or --regions, not both.',
+    );
+  }
+  const regions = regionsValue
+    ? regionsValue.split(',').map(value => value.trim())
+    : region
+      ? [region]
+      : [];
+  if (
+    regions.length === 0
+    || regions.length > 10
+    || new Set(regions).size !== regions.length
+    || regions.some(value => !/^[a-z]+-[a-z]+\d+$/.test(value))
+  ) {
+    throw new DeployedSecretMigrationError(
+      'A valid --region=<region> or comma-separated --regions=<regions> argument is required.',
     );
   }
   if (apply && confirmProject !== projectId) {
@@ -155,7 +177,7 @@ export function parseDeployedSecretMigrationArgs(
     );
   }
 
-  return { projectId, region, apply, confirmProject, requireClean };
+  return { projectId, regions, apply, confirmProject, requireClean };
 }
 
 export function createFunctionSecretMigrationPlan(
@@ -207,15 +229,16 @@ export function createFunctionSecretMigrationPlan(
       );
     }
 
-    // The preparatory migration only updates endpoints that require secrets.
-    // The subsequent full Firebase deployment removes stale ordinary variables
-    // from zero-secret endpoints without encountering a name collision.
-    if (expectedSecrets.length > 0
-      && (legacyPlaintext.length > 0
-        || missingSecrets.length > 0
-        || extraSecrets.length > 0)) {
+    // Firebase redeployments can preserve environment variables configured on
+    // an existing Function outside the current source. Plan cleanup-only
+    // revisions for zero-secret endpoints instead of assuming a later deploy
+    // will remove their inherited plaintext credentials.
+    if (legacyPlaintext.length > 0
+      || missingSecrets.length > 0
+      || extraSecrets.length > 0) {
       actions.push({
         name: functionName,
+        region: deployed.region,
         environment: deployed.environment,
         sourceBucket: deployed.sourceBucket,
         sourceObject: deployed.sourceObject,
