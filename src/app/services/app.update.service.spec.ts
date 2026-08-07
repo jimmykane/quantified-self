@@ -148,7 +148,7 @@ describe('AppUpdateService', () => {
         expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(2);
     });
 
-    it('retries a check shortly after no update is returned', async () => {
+    it('does not retry when no update is returned', async () => {
         vi.useFakeTimers();
         const retryUpdatesMock = {
             ...swUpdateMock,
@@ -168,7 +168,7 @@ describe('AppUpdateService', () => {
         expect(retryUpdatesMock.checkForUpdate).toHaveBeenCalledTimes(1);
 
         await vi.advanceTimersByTimeAsync(30_000);
-        expect(retryUpdatesMock.checkForUpdate).toHaveBeenCalledTimes(2);
+        expect(retryUpdatesMock.checkForUpdate).toHaveBeenCalledTimes(1);
     });
 
     it('logs update installation failures and schedules a recovery check', async () => {
@@ -193,6 +193,29 @@ describe('AppUpdateService', () => {
 
         await vi.advanceTimersByTimeAsync(30_000);
         expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not reschedule recovery for a version that already failed to install', async () => {
+        vi.useFakeTimers();
+        await Promise.resolve();
+        await Promise.resolve();
+        swUpdateMock.checkForUpdate.mockClear();
+
+        const failedUpdate = {
+            type: 'VERSION_INSTALLATION_FAILED',
+            version: { hash: 'failed-version', appData: {} },
+            error: 'Not Found',
+        } as VersionEvent;
+
+        versionUpdatesSubject.next(failedUpdate);
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(1);
+
+        versionUpdatesSubject.next(failedUpdate);
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        expect(swUpdateMock.checkForUpdate).toHaveBeenCalledTimes(1);
+        expect(loggerMock.error).toHaveBeenCalledTimes(1);
     });
 
     it('should not show snackbar more than once for the same version hash in one app runtime', () => {

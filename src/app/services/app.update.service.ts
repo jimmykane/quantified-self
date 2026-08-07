@@ -13,6 +13,7 @@ import { AppWindowService } from './app.window.service';
 export class AppUpdateService {
   public isUpdateAvailable = signal(false);
   private readonly promptedVersionHashes = new Set<string>();
+  private readonly failedVersionHashes = new Set<string>();
   private updateCheckInFlight = false;
   private recoveryCheckScheduled = false;
 
@@ -69,9 +70,15 @@ export class AppUpdateService {
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionInstallationFailedEvent => evt.type === 'VERSION_INSTALLATION_FAILED'))
       .subscribe((event) => {
+        const versionHash = event.version.hash || 'unknown-version-hash';
+        if (this.failedVersionHashes.has(versionHash)) {
+          return;
+        }
+        this.failedVersionHashes.add(versionHash);
+
         this.logger.error('[AppUpdateService] Failed to install app update', {
           error: event.error,
-          versionHash: event.version.hash,
+          versionHash,
         });
         this.scheduleRecoveryCheck(updates);
       });
@@ -89,23 +96,16 @@ export class AppUpdateService {
     this.windowService.windowRef.location.reload();
   }
 
-  private checkForUpdates(updates: SwUpdate, scheduleRecoveryCheck = false): void {
+  private checkForUpdates(updates: SwUpdate): void {
     if (this.updateCheckInFlight) {
       return;
     }
 
     this.updateCheckInFlight = true;
     void Promise.resolve(updates.checkForUpdate())
-      .then((updateAvailable) => {
-        if (!updateAvailable && scheduleRecoveryCheck) {
-          this.scheduleRecoveryCheck(updates);
-        }
-      })
+      .then(() => undefined)
       .catch((error) => {
         this.logger.error('[AppUpdateService] Failed to check for updates', error);
-        if (scheduleRecoveryCheck) {
-          this.scheduleRecoveryCheck(updates);
-        }
       })
       .finally(() => {
         this.updateCheckInFlight = false;
