@@ -149,7 +149,14 @@ describe('AssistantPageComponent', () => {
     expect(text).toContain('Assistant');
     expect(text).toContain('Examples & data access');
     expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
+    const page = fixture.nativeElement.querySelector('main.assistant-page') as HTMLElement;
+    const title = fixture.nativeElement.querySelector('#assistant-page-title') as HTMLElement;
+    const leadingIcon = fixture.nativeElement.querySelector('.qs-page-header__leading-icon') as HTMLElement;
+    expect(page.classList).toContain('qs-workspace-page');
+    expect(page.getAttribute('aria-labelledby')).toBe('assistant-page-title');
+    expect(title.textContent?.trim()).toBe('Assistant');
+    expect(title.classList).toContain('qs-page-header__title');
+    expect(leadingIcon.textContent?.trim()).toBe('auto_awesome');
     expect(fixture.nativeElement.querySelector('.assistant-header p')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-welcome')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-trust-row')).toBeNull();

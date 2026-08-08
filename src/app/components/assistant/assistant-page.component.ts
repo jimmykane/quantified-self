@@ -30,6 +30,7 @@ import {
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { MaterialModule } from '../../modules/material.module';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
   AssistantError,
@@ -78,6 +79,7 @@ type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantR
     RouterModule,
     MaterialModule,
     TextFieldModule,
+    PageHeaderComponent,
     AssistantVisualChartComponent,
     AssistantVisualMapComponent,
   ],

@@ -13,14 +13,16 @@
 .assistant-page {
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 920px;
   height: 100%;
   min-height: 0;
-  margin: 0 auto;
-  padding: 18px 24px calc(16px + env(safe-area-inset-bottom));
   overflow: hidden;
-  box-sizing: border-box;
+}
+
+.assistant-header,
+.assistant-chat {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
 }
 
 .assistant-header {
@@ -30,7 +32,6 @@
   padding: 0 4px 8px;
 }
 
-.assistant-header-row,
 .assistant-header-actions,
 .assistant-explore-trigger,
 .message-role,
@@ -41,19 +42,8 @@
   align-items: center;
 }
 
-.assistant-header-row {
-  justify-content: space-between;
-  gap: 16px;
-}
-
-h1,
 p {
   margin: 0;
-}
-
-h1 {
-  font: var(--mat-sys-headline-medium);
-  font-weight: 600;
 }
 
 .assistant-header-actions {
@@ -533,17 +523,8 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .assistant-page {
-    padding: 12px 12px calc(10px + env(safe-area-inset-bottom));
-  }
-
   .assistant-header {
     padding-inline: 2px;
-  }
-
-  h1 {
-    font: var(--mat-sys-headline-small);
-    font-weight: 600;
   }
 
   .conversation {
