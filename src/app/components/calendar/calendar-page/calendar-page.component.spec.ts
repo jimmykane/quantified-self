@@ -79,6 +79,8 @@ describe('CalendarPageComponent', () => {
 
     expect(watchEvents).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Calendar');
+    expect(fixture.nativeElement.querySelector('.qs-page-header__leading-icon')?.textContent?.trim())
+      .toBe('calendar_month');
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
     const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]

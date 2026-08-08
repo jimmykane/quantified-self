@@ -521,9 +521,11 @@ Failures mark affected snapshots failed, preserve an error, and are rethrown so 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
 
-The shared route header owns one stable context line above the `Training` title. When the visible scope is healthy, the
-normal `28-day training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC
-date>` subtitle appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
+The shared route header owns one stable context line above the `Training` title. Its static Material monitoring icon,
+40 px title row, and `headline-small` title role match Calendar and the embedded Dashboard Today header; Today remains a
+semantic level-two heading because it is a Dashboard section. When the visible scope is healthy, the normal `28-day
+training analysis` eyebrow remains above the title and a Dashboard-style `Data through <weekday, UTC date>` subtitle
+appears below it. The subtitle uses the validated `training_summary` snapshot's `asOfDayMs`; it
 represents the actual derived-data cutoff, never the browser clock. While any snapshot that backs a visible Training
 surface is missing, queued, processing, building, or stale, the projected status context replaces that eyebrow instead
 of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
@@ -934,6 +936,9 @@ normalized baseline share, current fill, and baseline marker. It deliberately do
 capacity metrics just to fill the card. The chart's nested loading host participates in the card's flex height so the plot
 occupies the remaining canvas. Multiple visible families use compact responsive summary rows with the global chart
 below. Tablet and mobile retain the stacked layout.
+
+Within one discipline card, every observed context after the first starts below a matching theme-aware divider. This
+keeps Cycling, Mountain biking, Enduro MTB, and Downhill MTB visually distinct while preserving one shared card surface.
 
 ### 6. Power Systems
 

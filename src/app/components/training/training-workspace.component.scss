@@ -213,8 +213,9 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-mix-compact-zones div { display: flex; justify-content: space-between; gap: 12px; }
 .training-mix-panel dd { margin: 0; font-size: 14px; text-align: right; }
 .training-mix-intensity-note { margin: 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
-.training-mix-contexts { display: grid; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--mat-sys-outline) 28%, transparent); }
+.training-mix-contexts { --training-mix-context-divider-color: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent); display: grid; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--training-mix-context-divider-color); }
 .training-mix-contexts section, .training-mix-contexts dl { display: grid; gap: 8px; margin: 0; }
+.training-mix-contexts section + section { padding-top: 12px; border-top: 1px solid var(--training-mix-context-divider-color); }
 .training-mix-contexts header, .training-mix-contexts dl div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .training-mix-contexts header span, .training-mix-contexts dt, .training-mix-contexts dd span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
 .training-mix-zone-comparison { margin-top: 2px; }

@@ -451,6 +451,9 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Compare files');
+    expect(
+      fixture.nativeElement.querySelector('.qs-page-header__leading-icon')?.textContent?.trim(),
+    ).toBe('compare_arrows');
     expect(fixture.nativeElement.textContent).toContain('New comparison');
     expect(fixture.nativeElement.textContent).toContain('No saved comparisons yet');
     expect(fixture.nativeElement.textContent).not.toContain('Previous comparisons');

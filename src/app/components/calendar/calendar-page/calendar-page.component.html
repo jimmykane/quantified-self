@@ -1,6 +1,6 @@
 <main class="calendar-page qs-workspace-page" aria-labelledby="calendar-page-title">
-  <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title">
-    <mat-icon pageHeaderLeading aria-hidden="true">calendar_month</mat-icon>
+  <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title"
+    leadingIcon="calendar_month">
     <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
       hideSingleSelectionIndicator [value]="routeState().view"
       (change)="selectView($event.value)">
