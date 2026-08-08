@@ -1596,9 +1596,9 @@ export const MCP_API_RUNTIME_OPTIONS = {
   secrets: FUNCTION_SECRET_BINDINGS.mcpApi,
   cors: false,
   timeoutSeconds: 120,
-  memory: '512MiB',
+  memory: '1GiB',
   // Chart parsing can materialize bounded, but sizable, activity payloads.
-  // Keep a few requests isolated per instance instead of sharing 512 MiB across
+  // Keep a few requests isolated per instance instead of sharing 1 GiB across
   // the platform default of 80 concurrent requests.
   concurrency: 4,
 } as const;

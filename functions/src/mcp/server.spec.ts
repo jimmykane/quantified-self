@@ -36,7 +36,7 @@ describe('MCP HTTP scope enforcement', () => {
   it('bounds per-instance concurrency for memory-intensive chart requests', () => {
     expect(MCP_API_RUNTIME_OPTIONS).toMatchObject({
       region: 'europe-west2',
-      memory: '512MiB',
+      memory: '1GiB',
       timeoutSeconds: 120,
       concurrency: 4,
     });
