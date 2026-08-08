@@ -12,7 +12,6 @@ import { AppThemes, DynamicDataLoader, LapTypes } from '@sports-alliance/sports-
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
-import { MapboxAutoResizeService } from '../../../services/map/mapbox-auto-resize.service';
 import { MapStyleService } from '../../../services/map-style.service';
 
 describe('EventCardMapComponent', () => {
@@ -23,7 +22,6 @@ describe('EventCardMapComponent', () => {
   let mockMapStyleService: any;
   let mockSettingsQuery: any;
   let mockActivityCursorService: { cursors: Subject<any[]> };
-  let mockMapboxAutoResize: { bind: ReturnType<typeof vi.fn>; unbind: ReturnType<typeof vi.fn> };
 
   const makeStat = (value: string, unit = '') => ({
     getDisplayValue: () => value,
@@ -84,16 +82,11 @@ describe('EventCardMapComponent', () => {
     mockActivityCursorService = {
       cursors: new Subject<any[]>(),
     };
-    mockMapboxAutoResize = {
-      bind: vi.fn(),
-      unbind: vi.fn(),
-    };
 
     await TestBed.configureTestingModule({
       declarations: [EventCardMapComponent],
       providers: [
         { provide: MapboxLoaderService, useValue: mockMapboxLoader },
-        { provide: MapboxAutoResizeService, useValue: mockMapboxAutoResize },
         { provide: MapStyleService, useValue: mockMapStyleService },
         {
           provide: AppEventColorService,
@@ -168,7 +161,6 @@ describe('EventCardMapComponent', () => {
     component.ngOnDestroy();
 
     expect(clearAllSpy).toHaveBeenCalledWith({ mapWillBeRemoved: true });
-    expect(mockMapboxAutoResize.unbind).toHaveBeenCalledWith(mockMap);
     expect(mockMap.remove).toHaveBeenCalledTimes(1);
   });
 
@@ -179,11 +171,6 @@ describe('EventCardMapComponent', () => {
     expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap, expect.objectContaining({
       styleUrl: 'mapbox://styles/mapbox/standard',
       preset: 'day',
-    }));
-    expect(mockMapboxAutoResize.bind).toHaveBeenCalledWith(mockMap, expect.objectContaining({
-      container: expect.any(HTMLElement),
-      throttleMs: 150,
-      onResize: expect.any(Function),
     }));
   });
 

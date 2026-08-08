@@ -33,7 +33,6 @@ describe('MapboxAutoResizeService', () => {
   afterEach(() => {
     (globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
     (globalThis as any).cancelAnimationFrame = originalCancelAnimationFrame;
-    vi.restoreAllMocks();
   });
 
   it('binds map and window listeners and resizes on map events', () => {
@@ -45,7 +44,6 @@ describe('MapboxAutoResizeService', () => {
     expect(map.on).toHaveBeenCalledWith('style.load', expect.any(Function));
     expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function));
     expect(addSpy).toHaveBeenCalledWith('orientationchange', expect.any(Function));
-    expect(addSpy).toHaveBeenCalledWith('pageshow', expect.any(Function));
 
     const loadHandler = map.on.mock.calls.find((call: any[]) => call[0] === 'load')?.[1];
     loadHandler?.();
@@ -85,25 +83,8 @@ describe('MapboxAutoResizeService', () => {
     expect(map.off).toHaveBeenCalledWith('style.load', expect.any(Function));
     expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function));
     expect(removeSpy).toHaveBeenCalledWith('orientationchange', expect.any(Function));
-    expect(removeSpy).toHaveBeenCalledWith('pageshow', expect.any(Function));
     expect(disconnect).toHaveBeenCalledTimes(1);
 
     (globalThis as any).ResizeObserver = OriginalResizeObserver;
-  });
-
-  it('resizes a restored mobile page after it becomes visible again', () => {
-    const documentAddListener = vi.spyOn(document, 'addEventListener');
-    const windowAddListener = vi.spyOn(window, 'addEventListener');
-    service.bind(map, { triggerInitialResize: false, throttleMs: 0 });
-
-    const visibilityHandler = documentAddListener.mock.calls
-      .find((call: EventListenerOrEventListenerObject[]) => call[0] === 'visibilitychange')?.[1] as EventListener;
-    const pageShowHandler = windowAddListener.mock.calls
-      .find((call: EventListenerOrEventListenerObject[]) => call[0] === 'pageshow')?.[1] as EventListener;
-
-    visibilityHandler?.(new Event('visibilitychange'));
-    pageShowHandler?.(new Event('pageshow'));
-
-    expect(map.resize).toHaveBeenCalledTimes(2);
   });
 });

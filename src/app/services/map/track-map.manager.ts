@@ -767,13 +767,6 @@ export class TrackMapManager {
   }
 
   private createMarker(element: HTMLElement, lng: number, lat: number, anchor: string, track?: TrackMapRenderData): any {
-    // Treat the DOM marker origin and stacking as renderer invariants instead
-    // of relying on Mapbox's stylesheet defaults through mobile viewport
-    // reflows. This keeps all custom marker types aligned with the WebGL map.
-    element.style.position = 'absolute';
-    element.style.left = '0';
-    element.style.top = '0';
-    element.style.zIndex = '1';
     this.bindMarkerClick(element, lng, lat, track);
     const marker = new this.mapboxgl.Marker({
       element,
