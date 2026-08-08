@@ -10,7 +10,6 @@ export interface MapboxAutoResizeConfig {
 
 interface AutoResizeBinding {
   handler: () => void;
-  visibilityHandler: () => void;
   observer: ResizeObserver | null;
   frameId: number | null;
   timeoutId: ReturnType<typeof setTimeout> | null;
@@ -32,7 +31,6 @@ export class MapboxAutoResizeService {
 
     const binding: AutoResizeBinding = {
       handler: () => { },
-      visibilityHandler: () => { },
       observer: null,
       frameId: null,
       timeoutId: null,
@@ -92,11 +90,6 @@ export class MapboxAutoResizeService {
     };
 
     binding.handler = triggerResize;
-    binding.visibilityHandler = () => {
-      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-        triggerResize();
-      }
-    };
     this.bindingsByMap.set(map, binding);
 
     if (map?.on) {
@@ -107,11 +100,7 @@ export class MapboxAutoResizeService {
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', triggerResize);
       window.addEventListener('orientationchange', triggerResize);
-      window.addEventListener('pageshow', triggerResize);
       window.visualViewport?.addEventListener?.('resize', triggerResize);
-    }
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', binding.visibilityHandler);
     }
 
     const container = config.container;
@@ -140,11 +129,7 @@ export class MapboxAutoResizeService {
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', handler);
       window.removeEventListener('orientationchange', handler);
-      window.removeEventListener('pageshow', handler);
       window.visualViewport?.removeEventListener?.('resize', handler);
-    }
-    if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', binding.visibilityHandler);
     }
 
     if (binding.observer) {

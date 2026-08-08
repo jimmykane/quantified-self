@@ -1219,6 +1219,17 @@ describe('RoutesPageComponent', () => {
         expect(sharedTableControls).toContain('.result-summary');
     });
 
+    it('uses the shared route header icon', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),
+            'utf8',
+        );
+
+        expect(template).toContain('title="Routes"');
+        expect(template).toContain('titleId="routes-page-title"');
+        expect(template).toContain('leadingIcon="route"');
+    });
+
     it('renders route type cells with the compare icon and label structure', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/routes/routes-page.component.html'),

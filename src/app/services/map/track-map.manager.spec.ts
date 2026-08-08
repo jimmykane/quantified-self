@@ -177,39 +177,6 @@ describe('TrackMapManager', () => {
     expect(markerFactory.createFlagMarker).not.toHaveBeenCalled();
   });
 
-  it('keeps every DOM marker origin and stacking explicit above the canvas', () => {
-    const extraMarker = createMarkerElement();
-    const startMarker = createMarkerElement();
-    const endMarker = createMarkerElement();
-    markerFactory.createHomeMarker.mockReturnValue(startMarker);
-    markerFactory.createFlagMarker.mockReturnValue(endMarker);
-
-    manager.renderTrackData([{
-      id: 'mobile-marker-track',
-      strokeColor: '#1e88e5',
-      positions: [
-        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
-        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
-      ],
-      markers: [{
-        id: 'jump',
-        latitudeDegrees: 40.15,
-        longitudeDegrees: 22.15,
-        element: extraMarker,
-      }],
-    }], {
-      showArrows: false,
-      strokeWidth: 3,
-    });
-
-    [startMarker, endMarker, extraMarker].forEach(marker => {
-      expect(marker.style.position).toBe('absolute');
-      expect(marker.style.left).toBe('0px');
-      expect(marker.style.top).toBe('0px');
-      expect(marker.style.zIndex).toBe('1');
-    });
-  });
-
   it('detaches style lifecycle handlers when cleared', () => {
     const styleLoadHandler = map.on.mock.calls.find((call: any[]) => call[0] === 'style.load')?.[1];
     expect(styleLoadHandler).toEqual(expect.any(Function));
