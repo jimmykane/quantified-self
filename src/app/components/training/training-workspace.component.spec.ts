@@ -250,6 +250,14 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
+  it('keeps the mobile header actions close to the first section divider', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const styles = readFileSync(stylePath, 'utf8');
+    const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
+
+    expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
+  });
+
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');

@@ -539,8 +539,9 @@ or freshness-forecast
 series cannot supply the displayed fallback value. Dashboard uses the same continuity rule in its existing top
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
-the header or change its height when a single-sport label is selected. These fixed header slots prevent derived status
-changes from moving the value cards or initially presenting stale values without context.
+the header or change its height when a single-sport label is selected. At 640 px and below, the row retains its 48 px
+Material touch targets but leaves only an 8 px external gap before the first section divider. These fixed header slots
+prevent derived status changes from moving the value cards or initially presenting stale values without context.
 
 Sport visibility has two modes:
 
