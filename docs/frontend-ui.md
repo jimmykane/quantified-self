@@ -10,7 +10,7 @@ responsive action placement. Import the standalone component directly from a sta
 Use the `route` variant for a primary workspace heading and the `compact` variant for embedded workspace context such
 as Dashboard Today. Both variants use the same visible Material `headline-small` title role and a 40 px title row;
 `headingLevel` controls document semantics rather than visual size. This keeps Dashboard Today, Calendar, Training,
-Routes, signed-in Compare files, and Assistant aligned without promoting an embedded section to an `h1`. The component
+Routes, and signed-in Compare files aligned without promoting an embedded section to an `h1`. The component
 provides:
 
 - `title`, `titleId`, and `headingLevel` for the page or section heading.
@@ -23,7 +23,7 @@ provides:
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
 
-The Dashboard, Calendar, Training, Routes, signed-in Compare files, Assistant, and Settings workspaces use this component. A
+The Dashboard, Calendar, Training, Routes, signed-in Compare files, and Settings workspaces use this component. A
 page should not add route-local heading font sizes, action-row breakpoints, or a second title treatment. Keep page CSS
 limited to the surrounding layout and domain-specific action groups.
 
@@ -37,8 +37,6 @@ owns the 1440 px maximum page width, border-box sizing, and common responsive in
 alongside the route-specific class; do not add another outer width, margin, or padding rule in the component stylesheet.
 Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
 stretching a form workflow across the workspace width.
-Assistant keeps its conversation and composer in a centered 920 px inner column, while the shared shell owns the route's
-outer width and responsive gutters.
 
 ## Material and accessibility
 

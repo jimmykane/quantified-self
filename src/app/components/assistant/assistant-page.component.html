@@ -1,10 +1,8 @@
-<main #assistantPage class="assistant-page qs-workspace-page" aria-labelledby="assistant-page-title">
-  <div class="assistant-header">
-    <app-page-header
-      title="Assistant"
-      titleId="assistant-page-title"
-      leadingIcon="auto_awesome">
-      <div pageHeaderActions class="assistant-header-actions">
+<main #assistantPage class="assistant-page">
+  <header class="assistant-header">
+    <div class="assistant-header-row">
+      <h1>Assistant</h1>
+      <div class="assistant-header-actions">
         <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
           <mat-icon>help_outline</mat-icon>
         </a>
@@ -17,7 +15,7 @@
           }
         </button>
       </div>
-    </app-page-header>
+    </div>
     <button class="assistant-explore-trigger" mat-button type="button"
       [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="openExploreSheet()">
       <mat-icon>auto_awesome</mat-icon>
@@ -29,7 +27,7 @@
         </span>
       }
     </button>
-  </div>
+  </header>
 
   <section class="assistant-chat">
     @if (loadingConversation()) {
