@@ -67,7 +67,8 @@ The following rules are architectural constraints:
   0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
   inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
   confidence. HRV and Overnight HR use a baseline-centered ±20% display while retaining the exact ratio text and the
-  metric-specific direction (lower Overnight HR may be supportive). Missing evidence leaves an empty track, never zero.
+  metric-specific direction (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
+  their threshold markers. Missing evidence leaves an empty track, never zero.
 - Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
   ACWR, monotony, strain, FTP, VO2 max, recovery time, and power-system capacity must not be normalized into arbitrary
   0–100 bars. Those metrics retain exact values, semantic status/delta treatments, or their existing time-series charts.
@@ -637,8 +638,9 @@ If all state inputs are missing, the page shows an awaiting-data state rather th
 
 The Material info control appears directly beside the calculated State label. It identifies Form as `CTL - ATL`, shows
 the current formatted Form, CTL, ATL, and seven-day CTL ramp values (with unavailable inputs explicit), and explains the
-selected state. For Balanced it also states the specific Building boundary: a ramp of at least `+1` with Form below `+6`
-or unavailable. Sleep, sessions, and the 28-day time comparison do not change the label. A Form refresh can temporarily
+selected state. The State label remains a plain heading rather than a status tag. For Balanced it also states the
+specific Building boundary: a ramp of at least `+1` with Form below `+6` or unavailable. Sleep, sessions, and the 28-day
+time comparison do not change the label. A Form refresh can temporarily
 mark the TSS/load chart as building while the snapshot service retains the prior valid Form series. In that case the
 State card keeps the last complete label for continuity, but adds **Updating from the latest completed TSS calculation…**
 so it is never mistaken for a new result.

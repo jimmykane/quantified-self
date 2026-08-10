@@ -1,7 +1,9 @@
 :host { display: block; min-width: 0; }
 .metric-indicator-track { position: relative; display: block; width: 100%; height: 8px; overflow: hidden; border-radius: 999px; background: var(--mat-sys-surface-container-highest); }
 .metric-indicator-track.compact { height: 6px; }
-.metric-indicator-fill, .metric-indicator-deviation-fill { position: absolute; inset-block: 0; border-radius: inherit; background: var(--mat-sys-primary); }
+.metric-indicator-fill, .metric-indicator-deviation-fill { position: absolute; z-index: 1; inset-block: 0; border-radius: inherit; background: var(--mat-sys-primary); }
+.metric-indicator-fill { inset-inline-start: 0; }
+.metric-indicator-fill[data-tone='ready'], .metric-indicator-fill[data-tone='positive'] { background: var(--mat-sys-primary); }
 .metric-indicator-fill[data-tone='mixed'] { background: var(--mat-sys-secondary); }
 .metric-indicator-fill[data-tone='recover'], .metric-indicator-fill[data-tone='negative'], .metric-indicator-deviation-fill[data-tone='negative'] { background: var(--mat-sys-error); }
 .metric-indicator-fill[data-tone='neutral'], .metric-indicator-deviation-fill[data-tone='neutral'] { background: var(--mat-sys-outline); }

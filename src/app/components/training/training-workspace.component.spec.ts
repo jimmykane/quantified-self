@@ -446,6 +446,8 @@ describe('TrainingWorkspaceComponent', () => {
       const statePanel = fixture.nativeElement.querySelector('.training-state-panel') as HTMLElement;
       expect(statePanel.textContent).toContain('Building');
       expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
+      expect(statePanel.querySelector('.training-state-value-row > strong')?.textContent?.trim()).toBe('Building');
+      expect(statePanel.querySelector('.training-state-value-row app-metric-indicator')).toBeNull();
       const infoButton = statePanel.querySelector('.training-state-info-button');
       expect(infoButton?.getAttribute('aria-label')).toBe('How Building is calculated');
       expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('CTL minus ATL');

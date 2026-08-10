@@ -93,7 +93,7 @@
             <span class="training-metric-label">State</span>
           </div>
           <div class="training-state-value-row">
-            <app-metric-indicator variant="status" [label]="trainingStatus.stateLabel"></app-metric-indicator>
+            <strong>{{ trainingStatus.stateLabel }}</strong>
             @if (useTrainingStateDetailsDialog()) {
               <button
                 mat-icon-button
