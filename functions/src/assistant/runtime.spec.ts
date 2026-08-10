@@ -225,6 +225,9 @@ describe('Assistant runtime', () => {
       'Use list_routes for saved-route summary questions',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'do not silently limit the trend to a recent year',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'Do not repeat opaque references',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(

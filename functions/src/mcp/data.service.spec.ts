@@ -3167,6 +3167,22 @@ describe('MCP data service', () => {
     expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
   });
 
+  it('keeps direct MCP metric calls bounded to one public-compatible year', async () => {
+    await expect(createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataDistance.type,
+      startTimeMs: Date.parse('2020-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2022-01-01T00:00:00.000Z'),
+      aggregation: 'total',
+      groupBy: 'date',
+      interval: 'yearly',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+  });
+
   it('lists first-class body-measurement capabilities', async () => {
     const result = await createMcpDataService(dependencies).listMeasurementTypes();
 

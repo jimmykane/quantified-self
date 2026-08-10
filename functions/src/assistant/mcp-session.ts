@@ -8,6 +8,11 @@ import {
 import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
+import {
+  AssistantMetricHistoryQueryError,
+  mergeAssistantMetricHistoryResponses,
+  splitAssistantMetricHistoryQuery,
+} from './metric-history-query';
 
 export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_types',
@@ -83,7 +88,7 @@ const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   invalid_timezone: 'Use the current IANA time zone supplied with this request.',
   metric_not_ready: 'Use a currently ready Training-derived metric or explain that it is not ready.',
   detail_not_available: 'Select another available record or explain that this detail is unavailable.',
-  query_too_large: 'Use an explicit date range no longer than 366 days.',
+  query_too_large: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
 };
 
 /**
@@ -148,6 +153,40 @@ const defaultDependencies: AssistantMcpSessionDependencies = {
 
 function isAssistantToolName(value: string): value is AssistantMcpToolName {
   return ASSISTANT_TOOL_NAME_SET.has(value);
+}
+
+async function callAssistantMcpTool(
+  client: Client,
+  name: AssistantMcpToolName,
+  args: Record<string, unknown>,
+): Promise<AssistantMcpToolResult> {
+  const result = await client.callTool({
+    name,
+    arguments: args,
+  });
+  if ('isError' in result && result.isError) {
+    const content = 'content' in result && Array.isArray(result.content)
+      ? result.content
+      : [];
+    const message = content
+      .filter(item => item.type === 'text')
+      .map(item => item.text)
+      .join(' ')
+      .trim();
+    const recoverableError = recoverableAssistantToolError(message);
+    if (recoverableError) {
+      throw recoverableError;
+    }
+    throw new Error(message || `The ${name} tool could not complete the request.`);
+  }
+  if (!('structuredContent' in result)
+    || !result.structuredContent
+    || typeof result.structuredContent !== 'object') {
+    throw new Error(`The ${name} tool returned no structured result.`);
+  }
+  return {
+    structuredContent: result.structuredContent as Record<string, unknown>,
+  };
 }
 
 function projectAssistantInputSchema(
@@ -286,32 +325,27 @@ export async function createAssistantMcpSession(
         if (!isAssistantToolName(name)) {
           throw new Error('The requested tool is not available to the Assistant.');
         }
-        const result = await client.callTool({
-          name,
-          arguments: args,
-        });
-        if ('isError' in result && result.isError) {
-          const content = 'content' in result && Array.isArray(result.content)
-            ? result.content
-            : [];
-          const message = content
-            .filter(item => item.type === 'text')
-            .map(item => item.text)
-            .join(' ')
-            .trim();
-          const recoverableError = recoverableAssistantToolError(message);
-          if (recoverableError) {
-            throw recoverableError;
+        let metricHistoryPages: Record<string, unknown>[] | null;
+        try {
+          metricHistoryPages = splitAssistantMetricHistoryQuery(name, args);
+        } catch (error) {
+          if (error instanceof AssistantMetricHistoryQueryError) {
+            throw new AssistantRecoverableMcpToolError(
+              'query_too_large',
+              'Choose an explicit historical range within the Assistant processing limit.',
+            );
           }
-          throw new Error(message || `The ${name} tool could not complete the request.`);
+          throw error;
         }
-        if (!('structuredContent' in result)
-          || !result.structuredContent
-          || typeof result.structuredContent !== 'object') {
-          throw new Error(`The ${name} tool returned no structured result.`);
+        if (!metricHistoryPages) {
+          return callAssistantMcpTool(client, name, args);
+        }
+        const responses: Record<string, unknown>[] = [];
+        for (const page of metricHistoryPages) {
+          responses.push((await callAssistantMcpTool(client, name, page)).structuredContent);
         }
         return {
-          structuredContent: result.structuredContent as Record<string, unknown>,
+          structuredContent: mergeAssistantMetricHistoryResponses(name, responses),
         };
       },
       close: async () => {
