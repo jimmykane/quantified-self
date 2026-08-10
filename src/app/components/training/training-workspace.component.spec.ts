@@ -24,6 +24,7 @@ import {
 import { TrainingWorkspaceComponent } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
+import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -429,6 +430,7 @@ describe('TrainingWorkspaceComponent', () => {
     try {
       await TestBed.configureTestingModule({
         declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        imports: [MetricIndicatorComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
