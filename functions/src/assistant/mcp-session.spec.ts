@@ -5,12 +5,16 @@ import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import {
   ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
+  AssistantRecoverableMcpToolError,
   createAssistantMcpSession,
 } from './mcp-session';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AuthenticatedMcpRequest } from '../mcp/server';
 
-function createTestServer(): McpServer {
+function createTestServer(options: {
+  errorTool?: typeof ASSISTANT_MCP_TOOL_NAMES[number];
+  errorCode?: 'query_too_large' | 'temporarily_unavailable';
+} = {}): McpServer {
   const server = new McpServer({
     name: 'assistant-test',
     version: '1.0.0',
@@ -27,10 +31,21 @@ function createTestServer(): McpServer {
       outputSchema: {
         source: z.literal(name),
       },
-    }, async () => ({
-      content: [{ type: 'text', text: JSON.stringify({ source: name }) }],
-      structuredContent: { source: name },
-    }));
+    }, async () => options.errorTool === name
+      ? {
+        isError: true,
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            error: options.errorCode ?? 'query_too_large',
+            message: 'The MCP tool could not complete the request.',
+          }),
+        }],
+      }
+      : {
+        content: [{ type: 'text', text: JSON.stringify({ source: name }) }],
+        structuredContent: { source: name },
+      });
   }
   server.registerTool('get_route_geometry', {
     description: 'Must never be available internally.',
@@ -205,5 +220,40 @@ describe('Assistant MCP session', () => {
     await expect(createAssistantMcpSession('user-1', 'https://quantified-self.io', {
       createServer: createPartialServer,
     })).rejects.toThrow('Assistant MCP tools are unavailable');
+  });
+
+  it('exposes only server-classified query errors for in-turn Assistant correction', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'query_metric' }),
+    });
+
+    try {
+      await expect(session.callTool('query_metric', {})).rejects.toEqual(
+        expect.objectContaining({
+          name: 'AssistantRecoverableMcpToolError',
+          code: 'query_too_large',
+          guidance: 'Use an explicit date range no longer than 366 days.',
+        }) satisfies Partial<AssistantRecoverableMcpToolError>,
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('keeps temporary MCP failures out of model-visible recovery signals', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({
+        errorTool: 'query_metric',
+        errorCode: 'temporarily_unavailable',
+      }),
+    });
+
+    try {
+      await expect(session.callTool('query_metric', {})).rejects.not.toBeInstanceOf(
+        AssistantRecoverableMcpToolError,
+      );
+    } finally {
+      await session.close();
+    }
   });
 });

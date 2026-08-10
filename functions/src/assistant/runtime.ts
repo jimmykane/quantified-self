@@ -19,6 +19,7 @@ import {
 } from './evidence';
 import {
   createAssistantMcpSession,
+  AssistantRecoverableMcpToolError,
   type AssistantMcpSession,
   type AssistantMcpToolName,
 } from './mcp-session';
@@ -141,6 +142,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability.',
   'Never invent data, calculations, dates, tool results, health claims, diagnoses, or workout prescriptions.',
   'Use explicit ISO date/time fields from tool results when stating when something happened; never substitute the current date. Fields ending in Ms that remain numeric are measurements or relative offsets, not calendar dates.',
+  'If a tool returns assistantToolError, that attempt did not supply account data and cannot ground an answer. Follow its server-owned guidance, then make another supported tool call within the available tool-call budget.',
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
@@ -708,6 +710,14 @@ export function createAssistantRuntime(
             try {
               result = await session.callTool(tool.name, resolvedToolInput);
             } catch (error) {
+              if (error instanceof AssistantRecoverableMcpToolError) {
+                return {
+                  assistantToolError: {
+                    code: error.code,
+                    guidance: error.guidance,
+                  },
+                };
+              }
               throw new AssistantRuntimeStageError('mcp_tool_failed', error, tool.name);
             }
             cumulativeToolOutputBytes += Buffer.byteLength(

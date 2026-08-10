@@ -5,6 +5,7 @@ import {
   createMcpServer,
   type AuthenticatedMcpRequest,
 } from '../mcp/server';
+import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
 
@@ -57,6 +58,49 @@ export interface AssistantMcpToolResult {
   structuredContent: Record<string, unknown>;
 }
 
+const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES = [
+  'invalid_request',
+  'invalid_metric',
+  'invalid_timezone',
+  'metric_not_ready',
+  'detail_not_available',
+  'query_too_large',
+] as const satisfies readonly Exclude<McpDataErrorCode, 'temporarily_unavailable'>[];
+
+type RecoverableAssistantToolErrorCode =
+  typeof RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES[number];
+
+const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET = new Set<string>(
+  RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
+);
+
+const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
+  RecoverableAssistantToolErrorCode,
+  string
+> = {
+  invalid_request: 'Use the advertised input schema. Discover canonical activity types before filtering activity data.',
+  invalid_metric: 'Discover the supported metric before selecting it.',
+  invalid_timezone: 'Use the current IANA time zone supplied with this request.',
+  metric_not_ready: 'Use a currently ready Training-derived metric or explain that it is not ready.',
+  detail_not_available: 'Select another available record or explain that this detail is unavailable.',
+  query_too_large: 'Use an explicit date range no longer than 366 days.',
+};
+
+/**
+ * A deliberately narrow, server-classified MCP error that the model may use
+ * to correct a malformed query within the same bounded Assistant turn.
+ * Unexpected backend errors never become model input.
+ */
+export class AssistantRecoverableMcpToolError extends Error {
+  constructor(
+    readonly code: RecoverableAssistantToolErrorCode,
+    readonly guidance: string,
+  ) {
+    super('The Assistant MCP tool needs corrected input.');
+    this.name = 'AssistantRecoverableMcpToolError';
+  }
+}
+
 export interface AssistantMcpSession {
   instructions: string;
   tools: AssistantMcpToolDefinition[];
@@ -77,6 +121,26 @@ interface AssistantMcpSessionDependencies {
 const ASSISTANT_TOOL_NAME_SET = new Set<string>(ASSISTANT_MCP_TOOL_NAMES);
 const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
+
+function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(message);
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const code = (payload as { error?: unknown }).error;
+  if (typeof code !== 'string' || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
+    return null;
+  }
+  return new AssistantRecoverableMcpToolError(
+    code as RecoverableAssistantToolErrorCode,
+    ASSISTANT_TOOL_ERROR_GUIDANCE[code as RecoverableAssistantToolErrorCode],
+  );
+}
 
 const defaultDependencies: AssistantMcpSessionDependencies = {
   createServer: (auth, publicBaseUrl) => createMcpServer(auth, publicBaseUrl),
@@ -235,6 +299,10 @@ export async function createAssistantMcpSession(
             .map(item => item.text)
             .join(' ')
             .trim();
+          const recoverableError = recoverableAssistantToolError(message);
+          if (recoverableError) {
+            throw recoverableError;
+          }
           throw new Error(message || `The ${name} tool could not complete the request.`);
         }
         if (!('structuredContent' in result)
