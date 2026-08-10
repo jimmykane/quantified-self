@@ -19,6 +19,7 @@ import {
 } from './evidence';
 import {
   createAssistantMcpSession,
+  AssistantRecoverableMcpToolError,
   type AssistantMcpSession,
   type AssistantMcpToolName,
 } from './mcp-session';
@@ -139,8 +140,10 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'For a requested workout chart, discover supported streams with list_activity_chart_metrics and read only the relevant bounded series with get_activity_chart_data.',
   'Use list_routes for saved-route summary questions by sport, name, or recency.',
   'Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability.',
+  'For all available years, all-time, or full-history activity-metric trends, query from 2000-01-01T00:00:00.000Z through the supplied currentTime. The Assistant pages that one metric request through the public-compatible date windows and recombines every result; do not silently limit the trend to a recent year. Use yearly interval for an all-history trend unless the user asks for another resolution.',
   'Never invent data, calculations, dates, tool results, health claims, diagnoses, or workout prescriptions.',
   'Use explicit ISO date/time fields from tool results when stating when something happened; never substitute the current date. Fields ending in Ms that remain numeric are measurements or relative offsets, not calendar dates.',
+  'If a tool returns assistantToolError, that attempt did not supply account data and cannot ground an answer. Follow its server-owned guidance, then make another supported tool call within the available tool-call budget.',
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
@@ -708,6 +711,14 @@ export function createAssistantRuntime(
             try {
               result = await session.callTool(tool.name, resolvedToolInput);
             } catch (error) {
+              if (error instanceof AssistantRecoverableMcpToolError) {
+                return {
+                  assistantToolError: {
+                    code: error.code,
+                    guidance: error.guidance,
+                  },
+                };
+              }
               throw new AssistantRuntimeStageError('mcp_tool_failed', error, tool.name);
             }
             cumulativeToolOutputBytes += Buffer.byteLength(

@@ -37,9 +37,11 @@ describe('EventActionsComponent', () => {
     let mockSnackBar: any;
     let mockDialog: any;
     let mockEventSharingService: any;
+    let mockRouter: any;
 
     beforeEach(async () => {
         mockEventService = {
+            deleteAllEventData: vi.fn().mockResolvedValue(true),
             downloadFile: vi.fn(),
             downloadOriginalFile: vi.fn(),
             getOriginalEventDownloadSources: vi.fn((event: { originalFiles?: any[]; originalFile?: any; startDate?: any }) => (
@@ -126,6 +128,7 @@ describe('EventActionsComponent', () => {
             }),
             copyShareUrl: vi.fn(() => true),
         };
+        mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
@@ -138,7 +141,7 @@ describe('EventActionsComponent', () => {
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: Analytics, useValue: null }, // Mock Analytics
                 { provide: Auth, useValue: { currentUser: { uid: 'test-user' } } }, // Mock Auth
-                { provide: Router, useValue: { navigate: vi.fn() } },
+                { provide: Router, useValue: mockRouter },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
@@ -169,6 +172,27 @@ describe('EventActionsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should stay on the current page after a table action deletes an event', async () => {
+        component.navigateAfterDelete = false;
+        const deleted = vi.fn();
+        component.eventDeleted.subscribe(deleted);
+
+        await component.delete();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(component.user, 'event-123');
+        expect(deleted).toHaveBeenCalledWith('event-123');
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Event deleted', undefined, { duration: 2000 });
+    });
+
+    it('should leave a deleted event details route by default', async () => {
+        await component.delete();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
     it('should enable sharing and copy the event link after confirmation', async () => {

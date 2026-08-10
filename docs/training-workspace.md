@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `17`
-- `@sports-alliance/sports-lib`: `18.1.2`
+- `@sports-alliance/sports-lib`: `18.1.4`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -63,6 +63,17 @@ The following rules are architectural constraints:
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
 - In athlete-facing Training copy, a recorded sport leg is called a **workout**. `Activity` remains the technical term
   for normalized Firestore and sports-lib records, and `sleep session` remains the term for overnight sleep data.
+- Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
+  0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
+  inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
+  confidence. HRV and Overnight HR use a baseline-centered ±20% display while retaining the exact ratio text and the
+  metric-specific direction (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
+  their threshold markers. Missing evidence leaves an empty track, never zero.
+- Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
+  ACWR, monotony, strain, FTP, VO2 max, recovery time, and power-system capacity must not be normalized into arbitrary
+  0–100 bars. Those metrics retain exact values, semantic status/delta treatments, or their existing time-series charts.
+  The shared indicator is native HTML/CSS for accessibility and low per-row cost; ECharts remains reserved for actual
+  trends, distributions, forecasts, and interactive chart surfaces.
 
 ## Ownership: Sports-lib Versus Quantified Self
 
@@ -405,8 +416,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   call `current-training-state.helper.ts`, which prefers the current UTC-day Form series for Form and seven-day CTL
   ramp, then uses the compact Form/Ramp snapshots only while the series is unavailable. It resolves the accompanying
   CTL/ATL context and passes the same four values to `training-state.helper.ts`; there is no Dashboard-specific state
-  formula. Dashboard Today intentionally shows the compact label, caption, and `TSS only` qualifier, while Training
-  provides the full Material info control with the contributing values and state boundaries.
+  formula. Both surfaces render the state as plain heading text rather than a status tag. Dashboard Today intentionally
+  shows the compact label, caption, and `TSS only` qualifier, while Training provides the full Material info control with
+  the contributing values and state boundaries.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
@@ -627,8 +639,9 @@ If all state inputs are missing, the page shows an awaiting-data state rather th
 
 The Material info control appears directly beside the calculated State label. It identifies Form as `CTL - ATL`, shows
 the current formatted Form, CTL, ATL, and seven-day CTL ramp values (with unavailable inputs explicit), and explains the
-selected state. For Balanced it also states the specific Building boundary: a ramp of at least `+1` with Form below `+6`
-or unavailable. Sleep, sessions, and the 28-day time comparison do not change the label. A Form refresh can temporarily
+selected state. The State label remains a plain heading rather than a status tag. For Balanced it also states the
+specific Building boundary: a ramp of at least `+1` with Form below `+6` or unavailable. Sleep, sessions, and the 28-day
+time comparison do not change the label. A Form refresh can temporarily
 mark the TSS/load chart as building while the snapshot service retains the prior valid Form series. In that case the
 State card keeps the last complete label for continuity, but adds **Updating from the latest completed TSS calculation…**
 so it is never mistaken for a new result.
@@ -837,8 +850,8 @@ updating until the snapshot's stable selection key matches the saved choice.
 
 Ready Best Build cards put the outcome above their comparison table (for example, whether the current build is longer,
 shorter, or similar in total time), then state the number of current/reference workouts and TSS coverage. A next-step
-prompt appears only when both windows have enough intensity evidence and a material time difference; the table remains
-the detailed numeric comparison.
+prompt appears only when both windows have enough intensity evidence and a material time difference. The detailed table
+retains exact values and text deltas without adding inline comparison bars.
 
 ### 3. What Drove This
 
@@ -1665,11 +1678,17 @@ schema 17 adds their reusable maximum aggregation and longest-jump metric. The l
 Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
 require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
 still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
-events. The repository pins sports-lib `18.1.2`, whose companion
+events. The repository pins sports-lib `18.1.3`; its 18.1.2 companion
 gravity-durability policy emits explicit `unsupported-context` evidence for Enduro/Downhill activities. The Functions
 aggregator also rejects legacy eligible Enduro/Downhill durability evidence defensively. Reparse affected existing
 activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
 result. This is a policy correction within durability protocol v1, not a v2 migration.
+
+Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
+not join a curated Training discipline, change durability, or require a derived-schema bump or historical reparse.
+The repository now pins sports-lib 18.1.4, whose FIT record-depth mapping supports frontend Event Details dive profiles.
+That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
+not require a Training rebuild or historical reparse.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

@@ -112,12 +112,16 @@ mat-card-header mat-icon {
   }
 }
 
-.performance-charts-summary-wrapper {
+.event-charts-summary-wrapper {
   display: flex;
   flex-direction: column;
   width: 100%;
 }
 
-.performance-charts-summary-wrapper mat-divider {
+.event-charts-summary-wrapper > mat-divider:first-child {
   margin-bottom: 8px;
+}
+
+.event-charts-summary-divider {
+  margin: 16px 0 8px;
 }

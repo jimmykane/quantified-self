@@ -68,6 +68,7 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-summary strong { font-size: 25px; line-height: 1; }
 .training-readiness-summary span { margin-top: 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); }
 .training-readiness-summary small { display: block; margin-top: 5px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; }
+.training-readiness-score-indicator { width: 150px; margin-top: 7px; margin-left: auto; }
 .training-readiness-overview { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(360px, 1.2fr); gap: 18px; align-items: stretch; margin-top: 16px; }
 .training-readiness-current { min-width: 0; }
 .training-readiness-status { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 24px 0 16px; }
@@ -98,6 +99,7 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-metrics dt, .training-readiness-metrics dd, .training-readiness-metrics small { display: block; min-width: 0; }
 .training-readiness-metrics dd { font-size: 16px; }
 .training-readiness-metrics small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); line-height: 1.35; }
+.training-readiness-metrics app-metric-indicator { margin-top: 7px; }
 .training-readiness-source { margin: 12px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.4; }
 .training-recovery-context { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-recovery-context-header strong, .training-recovery-context-header span { display: block; }
@@ -127,8 +129,12 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-recovery-table > div:not(.training-recovery-table-heading) dt { font-size: var(--training-inter-body-font-size); }
 .training-recovery-table dd { font-weight: 650; text-align: right; }
 .training-recovery-table .training-recovery-sleep-window { line-height: 1.2; white-space: pre-line; }
-.training-comparison-delta[data-tone='positive'] { color: var(--mat-sys-primary); }
-.training-comparison-delta[data-tone='negative'] { color: var(--mat-sys-error); }
+.training-comparison-delta[data-tone='positive'], .training-build-delta[data-tone='positive'] { color: var(--mat-sys-primary); }
+.training-comparison-delta[data-tone='negative'], .training-build-delta[data-tone='negative'] { color: var(--mat-sys-error); }
+.training-comparison-delta[data-tone='positive']::before,
+.training-comparison-delta[data-tone='negative']::before,
+.training-comparison-delta[data-tone='neutral']::before { content: ''; display: inline-block; width: 14px; height: 4px; margin-right: 5px; border-radius: 999px; vertical-align: middle; background: currentColor; opacity: .8; }
+.training-comparison-panel app-metric-indicator { margin: 10px 0 8px; }
 .training-recovery-table-heading dt, .training-recovery-table-heading dd { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); font-weight: 650; text-transform: uppercase; }
 .training-recovery-source { margin: 11px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
 .training-metric-label { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; }

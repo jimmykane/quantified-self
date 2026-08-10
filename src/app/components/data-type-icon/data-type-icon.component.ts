@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgClass, NgStyle } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
+import { DataDepthMax, DataDepthMaxFeet, DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
@@ -161,6 +161,9 @@ export class DataTypeIconComponent {
         return 'route';
       case DataDuration.type:
         return 'timer';
+      case DataDepthMax.type:
+      case DataDepthMaxFeet.type:
+        return 'scuba_diving';
       case '#':
         return 'tag';
       case 'Tags':

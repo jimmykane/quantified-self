@@ -93,6 +93,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() targetUserID!: string;
   @Input() user!: User;
   @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() excludedDataTypes: string[] = [];
   @Input() isVisible!: boolean;
   @Input() waterMark?: string;
   @Input() darkTheme = false;
@@ -404,6 +405,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     if (
       simpleChanges.event
       || simpleChanges.selectedActivities
+      || simpleChanges.excludedDataTypes
       || simpleChanges.targetUserID
       || simpleChanges.user
       || simpleChanges.darkTheme
@@ -630,7 +632,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           return;
         }
 
-        this.allChartPanels = nextChartPanels;
+        const excludedDataTypeSet = new Set(this.excludedDataTypes || []);
+        this.allChartPanels = nextChartPanels.filter((panel) => !excludedDataTypeSet.has(panel.dataType));
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
@@ -910,6 +913,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const selectedActivityKey = this.buildActivitiesKey(selectedActivities);
     const allActivitiesKey = this.buildActivitiesKey(allActivities);
     const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
+    const excludedDataTypesKey = [...(this.excludedDataTypes || [])]
+      .sort((left, right) => left.localeCompare(right))
+      .join(',');
     const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
     const intensityZoneColoringKey = this.shouldColorIntensityZoneLines() ? 'intensity-zones:1' : 'intensity-zones:0';
     const intensityZoneBoundariesKey = this.buildIntensityZoneBoundariesKey(selectedActivities);
@@ -921,6 +927,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       selectedActivityKey,
       allActivitiesKey,
       dataTypesKey,
+      excludedDataTypesKey,
       unitSettingsKey,
       intensityZoneColoringKey,
       intensityZoneBoundariesKey,

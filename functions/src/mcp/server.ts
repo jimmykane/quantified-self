@@ -1591,13 +1591,19 @@ export function parseMcpBearerToken(value: unknown): string | null {
   return match?.[1] || null;
 }
 
-export const mcpApi = onRequest({
+export const MCP_API_RUNTIME_OPTIONS = {
   region: 'europe-west2',
   secrets: FUNCTION_SECRET_BINDINGS.mcpApi,
   cors: false,
   timeoutSeconds: 120,
-  memory: '512MiB',
-}, async (request, response) => {
+  memory: '1GiB',
+  // Chart parsing can materialize bounded, but sizable, activity payloads.
+  // Keep a few requests isolated per instance instead of sharing 1 GiB across
+  // the platform default of 80 concurrent requests.
+  concurrency: 4,
+} as const;
+
+export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, response) => {
   const baseUrl = resolvePublicBaseUrl(request);
   const resource = `${baseUrl}/mcp`;
   const metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource`;

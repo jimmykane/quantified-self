@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
@@ -39,6 +39,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event!: EventInterface;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
+  @Input() navigateAfterDelete = true;
+  @Output() eventDeleted = new EventEmitter<string>();
 
   public isReprocessing = false;
   public isSharing = false;
@@ -414,7 +416,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return;
       }
       await this.eventService.deleteAllEventData(this.user, this.event.getID());
-      await this.router.navigate(['/dashboard']);
+      this.eventDeleted.emit(this.event.getID());
+      if (this.navigateAfterDelete) {
+        await this.router.navigate(['/dashboard']);
+      }
       this.snackBar.open('Event deleted', undefined, {
         duration: 2000,
       });

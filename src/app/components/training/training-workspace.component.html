@@ -139,11 +139,15 @@
           <article class="training-comparison-panel qs-glass-card-panel">
             <span class="training-metric-label">Training time</span>
             <strong><app-training-metric-text [text]="trainingStatus.volumeText"></app-training-metric-text></strong>
+            <app-metric-indicator variant="deviation" label="Training time versus usual"
+              [value]="trainingStatus.volumeDeltaPercent" [compact]="true"></app-metric-indicator>
             <span>{{ trainingStatus.volumeCaption }}</span>
           </article>
           <article class="training-comparison-panel qs-glass-card-panel">
             <span class="training-metric-label">Workouts</span>
             <strong><app-training-metric-text [text]="trainingStatus.sessionsText"></app-training-metric-text></strong>
+            <app-metric-indicator variant="deviation" label="Workouts versus usual"
+              [value]="trainingStatus.sessionsDeltaPercent" [compact]="true"></app-metric-indicator>
             <span>{{ trainingStatus.sessionsCaption }}</span>
           </article>
         }
@@ -160,6 +164,9 @@
               <div class="training-readiness-summary" aria-label="Current readiness signal summary">
                 <strong><app-training-metric-text [text]="trainingReadiness.scoreText"></app-training-metric-text></strong>
                 <span>{{ trainingReadiness.label }}</span>
+                <app-metric-indicator class="training-readiness-score-indicator" label="Readiness"
+                  [value]="trainingReadiness.score" [tone]="$any(trainingReadiness.label.toLowerCase())"
+                  [showThresholds]="true"></app-metric-indicator>
                 <small>{{ trainingReadiness.updatedText }}</small>
               </div>
             }
@@ -191,6 +198,9 @@
                   <span>{{ trainingReadiness.confidenceText }}</span>
                   <span>{{ trainingReadiness.evidenceText }}</span>
                 </div>
+                <app-metric-indicator variant="segments" label="Available readiness signals"
+                  [value]="trainingReadiness.availableSignalCount" [total]="trainingReadiness.totalSignalCount"
+                  [tone]="$any(trainingReadiness.label.toLowerCase())"></app-metric-indicator>
                 <div class="training-readiness-implication">
                   <strong>{{ trainingReadiness.implicationTitle }}</strong>
                   <p>{{ trainingReadiness.implicationText }}</p>
@@ -241,6 +251,10 @@
                 <div>
                   <dt>{{ row.label }}</dt>
                   <dd><app-training-metric-text [text]="row.valueText"></app-training-metric-text></dd>
+                  @if (row.indicatorVariant) {
+                    <app-metric-indicator [variant]="row.indicatorVariant" [label]="row.label"
+                      [value]="row.indicatorValue" [tone]="row.indicatorTone" [compact]="true"></app-metric-indicator>
+                  }
                   <small>{{ row.detailText }}</small>
                 </div>
               }
@@ -393,7 +407,7 @@
                     <dt>{{ row.label }}</dt>
                     <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
                     <dd><app-training-metric-text [text]="row.benchmarkText"></app-training-metric-text></dd>
-                    <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                    <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                   </div>
                 }
               </dl>
@@ -430,7 +444,7 @@
                             <dt>{{ row.label }}</dt>
                             <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
                             <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
-                            <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                            <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                           </div>
                         }
                       </dl>
@@ -688,7 +702,8 @@
           }
           <header class="training-power-systems-summary">
             <div>
-              <span class="training-power-systems-status" [attr.data-status]="powerSystems.status">{{ powerSystems.statusText }}</span>
+              <app-metric-indicator variant="status" [label]="powerSystems.statusText"
+                [tone]="powerSystems.status === 'ready' ? 'ready' : powerSystems.status === 'partial' || powerSystems.status === 'insufficient-evidence' ? 'mixed' : 'negative'"></app-metric-indicator>
               <h3 class="qs-dashboard-chart-title">{{ powerSystems.activityType }}</h3>
               <p>{{ powerSystems.reasonText }}</p>
             </div>
@@ -700,7 +715,8 @@
               <div [attr.data-component-status]="card.statusText">
                 <dt>{{ card.label }}</dt>
                 <dd><app-training-metric-text [text]="card.valueText"></app-training-metric-text></dd>
-                <small>{{ card.statusText }}</small>
+                <app-metric-indicator variant="status" [label]="card.statusText"
+                  [tone]="card.statusText === 'Ready' ? 'ready' : card.statusText === 'Not enough evidence' ? 'mixed' : 'negative'"></app-metric-indicator>
                 <span class="training-power-systems-card-description">{{ card.description }}</span>
               </div>
             }

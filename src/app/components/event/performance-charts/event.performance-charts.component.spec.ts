@@ -115,6 +115,7 @@ describe('EventPerformanceChartsComponent', () => {
     expect(nativeElement.querySelector('app-event-power-system-strain')).toBeNull();
     expect(nativeElement.querySelector('app-event-durability-curve')).toBeNull();
     expect(nativeElement.querySelector('app-event-cadence-power')).toBeNull();
+    expect(nativeElement.querySelector('app-event-dive-profile')).toBeNull();
   });
 
   it('never exposes the retired power-system strain tab', () => {

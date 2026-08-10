@@ -1,6 +1,8 @@
 import {
   DataAirPower,
   DataCadence,
+  DataDepth,
+  DataDepthFeet,
   DataEffortPace,
   DataEffortPaceMinutesPerMile,
   DataGradeAdjustedPace,
@@ -33,6 +35,11 @@ import {
 
 const HEART_RATE_GROUP = new Set<string>([
   DataHeartRate.type,
+]);
+
+const DEPTH_GROUP = new Set<string>([
+  DataDepth.type,
+  DataDepthFeet.type,
 ]);
 
 const PRIMARY_PACE_GROUP = new Set<string>([
@@ -86,6 +93,7 @@ const CADENCE_GROUP = new Set<string>([
 ]);
 
 const PRIORITY_GROUPS: ReadonlyArray<ReadonlySet<string>> = [
+  DEPTH_GROUP,
   HEART_RATE_GROUP,
   PRIMARY_PACE_GROUP,
   GRADE_ADJUSTED_PACE_GROUP,

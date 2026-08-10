@@ -2,6 +2,7 @@ import {
   DataAirPower,
   DataAltitude,
   DataCadence,
+  DataDepth,
   DataEffortPace,
   DataHeartRate,
   DataPace,
@@ -119,6 +120,18 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.max).toBeDefined();
     expect(config.min).toBeLessThanOrEqual(300);
     expect(config.max).toBeGreaterThanOrEqual(315);
+    expect(config.interval).toBeDefined();
+  });
+
+  it('keeps depth zero at the top and increases downward', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataDepth.type, [0, 1.2, 3.86]),
+      visibleRange: null,
+    });
+
+    expect(config.inverse).toBe(true);
+    expect(config.min).toBe(0);
+    expect(config.max).toBeGreaterThanOrEqual(3.86);
     expect(config.interval).toBeDefined();
   });
 

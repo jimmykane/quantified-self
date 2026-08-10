@@ -29,6 +29,15 @@ describe('ActivityTypeIconComponent', () => {
     }
   });
 
+  it('uses the Diving icon for snorkeling and mermaiding aliases', () => {
+    const component = new ActivityTypeIconComponent();
+
+    for (const activityType of ['Snorkeling', 'snorkeling', 'Mermaiding', 'mermaiding']) {
+      component.activityType = activityType;
+      expect(component.getIcon()).toBe('scuba_diving');
+    }
+  });
+
   it('resolves virtual activities to computer icon', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = 'VirtualRide';

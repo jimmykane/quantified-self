@@ -106,6 +106,10 @@ describe('MCP on-demand activity charts', () => {
         }),
       ]),
     );
+
+    const snorkelingCatalog = listActivityChartMetrics(ActivityTypes.Snorkeling);
+    expect(snorkelingCatalog.metrics.map((metric) => metric.metric)).not.toContain('depth');
+    expect(JSON.stringify(snorkelingCatalog)).not.toContain('Depth');
   });
 
   it.each([

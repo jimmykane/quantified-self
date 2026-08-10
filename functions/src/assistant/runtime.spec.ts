@@ -22,6 +22,7 @@ import type {
   AssistantMcpSession,
   AssistantMcpToolName,
 } from './mcp-session';
+import { AssistantRecoverableMcpToolError } from './mcp-session';
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);
@@ -222,6 +223,9 @@ describe('Assistant runtime', () => {
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'Use list_routes for saved-route summary questions',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'do not silently limit the trend to a recent year',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'Do not repeat opaque references',
@@ -726,6 +730,45 @@ describe('Assistant runtime', () => {
     expect(getAssistantRuntimeErrorReason(caught)).toBe('mcp_tool_failed');
     expect(getAssistantRuntimeErrorToolName(caught)).toBe('get_daily_report');
     expect(caught).not.toHaveProperty('message', 'User-controlled provider message');
+  });
+
+  it('lets the model correct a server-classified tool query failure within one turn', async () => {
+    const { session, callTool, close } = createSession();
+    callTool
+      .mockRejectedValueOnce(new AssistantRecoverableMcpToolError(
+        'invalid_metric',
+        'Discover the supported metric before selecting it.',
+      ))
+      .mockResolvedValueOnce({
+        structuredContent: { localDate: '2026-08-03', readiness: { score: 72 } },
+      });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async ({ tools }) => {
+        await expect(tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
+          assistantToolError: {
+            code: 'invalid_metric',
+            guidance: 'Discover the supported metric before selecting it.',
+          },
+        });
+        await tools[0].execute({ timeZone: 'UTC' });
+        return 'Your readiness is 72 today.';
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Show the data with a corrected metric.',
+      timeZone: 'UTC',
+      history: [],
+    })).resolves.toMatchObject({
+      answer: 'Your readiness is 72 today.',
+      toolNames: ['get_daily_report'],
+    });
+
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('preserves signed model tool requests across sequential continuations', async () => {

@@ -30,6 +30,7 @@ import {
   DataStore,
   DataEnergy,
   DataDuration,
+  DataDepthMax,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
   DataHeartRateAvg,
@@ -156,6 +157,14 @@ describe('buildSummaryMetricTabs', () => {
       'Ascent Time',
       'Descent Time',
     ]);
+  });
+
+  it('should expose maximum dive depth in both Overall and Environment', () => {
+    const tabs = buildSummaryMetricTabs([DataDepthMax.type]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'environment']);
+    expect(tabs.find((tab) => tab.id === 'overall')?.metricTypes).toEqual([DataDepthMax.type]);
+    expect(tabs.find((tab) => tab.id === 'environment')?.metricTypes).toEqual([DataDepthMax.type]);
   });
 
   it('should copy recovery/vo2 to overall and calories to physiological', () => {

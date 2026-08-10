@@ -20,6 +20,7 @@ import {
   handleMcpRevocationRequest,
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
+  MCP_API_RUNTIME_OPTIONS,
   parseMcpBearerToken,
   parseMcpDateTime,
   parseMcpFormEncodedBody,
@@ -32,6 +33,15 @@ import {
 } from './server';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('bounds per-instance concurrency for memory-intensive chart requests', () => {
+    expect(MCP_API_RUNTIME_OPTIONS).toMatchObject({
+      region: 'europe-west2',
+      memory: '1GiB',
+      timeoutSeconds: 120,
+      concurrency: 4,
+    });
+  });
+
   function buildRevocationHttpHarness(input?: {
     body?: unknown;
     contentType?: string;

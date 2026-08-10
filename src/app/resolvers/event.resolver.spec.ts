@@ -1,6 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { DataAltitude, DataGrade, DataGradeSmooth, DataPotentialStamina, DataStamina, User } from '@sports-alliance/sports-lib';
+import {
+    DataAltitude,
+    DataDepth,
+    DataGrade,
+    DataGradeSmooth,
+    DataHeartRate,
+    DataPotentialStamina,
+    DataStamina,
+    DataTemperature,
+    User,
+} from '@sports-alliance/sports-lib';
 import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
@@ -91,6 +101,29 @@ describe('eventResolver', () => {
             const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
             expect(streamTypes).toContain(DataStamina.type);
             expect(streamTypes).toContain(DataPotentialStamina.type);
+            done();
+        });
+    }));
+
+    it('always requests dive-profile streams for source hydration', () => new Promise<void>(done => {
+        const mockEvent = { id: 'testEvent' } as any;
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+
+        (executeResolver(route, {} as RouterStateSnapshot) as any).subscribe(() => {
+            const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
+            expect(streamTypes).toEqual(expect.arrayContaining([
+                DataDepth.type,
+                DataTemperature.type,
+                DataHeartRate.type,
+            ]));
             done();
         });
     }));

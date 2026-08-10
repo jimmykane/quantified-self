@@ -23,6 +23,7 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataDescent,
+  DataDepth,
   DataSpeed,
   DataStrydDistance,
   DataStrydAltitude,
@@ -1118,6 +1119,9 @@ function getFilteredStreams(input: {
   const shouldRemoveDistance = DynamicDataLoader
     .getNonUnitBasedDataTypes(input.showAllData, input.dataTypesToUse)
     .indexOf(DataDistance.type) === -1;
+  const shouldRemoveDepth = DynamicDataLoader
+    .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)
+    .indexOf(DataDepth.type) === -1;
 
   const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
     input.streams.map((stream) => stream.type),
@@ -1161,6 +1165,8 @@ function getFilteredStreams(input: {
       switch (stream.type) {
         case DataDistance.type:
           return !shouldRemoveDistance;
+        case DataDepth.type:
+          return !shouldRemoveDepth;
         case DataSpeed.type:
           return !shouldRemoveSpeed;
         case DataGradeAdjustedSpeed.type:

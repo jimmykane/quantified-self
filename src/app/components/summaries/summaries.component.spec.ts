@@ -45,6 +45,7 @@ import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
+import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -157,7 +158,7 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [PageHeaderComponent],
+      imports: [PageHeaderComponent, MetricIndicatorComponent],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: AppThemeService, useValue: mockThemeService },
@@ -783,6 +784,8 @@ describe('SummariesComponent', () => {
     expect(state.textContent).toContain('Fatigued');
     expect(state.textContent).toContain('Absorb the load');
     expect(state.textContent).toContain('TSS only');
+    expect(state.querySelector('strong')?.textContent?.trim()).toBe('Fatigued');
+    expect(state.querySelector('app-metric-indicator')).toBeNull();
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {

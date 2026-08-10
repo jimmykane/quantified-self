@@ -245,6 +245,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
+    expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({
       label: 'Activity Calendar Overview',
       icon: 'travel_explore',
@@ -452,6 +453,27 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('selectable chart metrics');
     expect(gettingStartedSection?.content).toContain('**Beginning Potential Stamina**');
     expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
+  });
+
+  it('should document event dive profiles, depth availability, and units', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event dive profiles');
+    expect(gettingStartedSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
+    expect(gettingStartedSection?.content).toContain('**Dive Profile**');
+    expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
+    expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
+    expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
+    expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
+    expect(gettingStartedSection?.content).toContain('both the Overall and Environment event-summary metrics');
+    expect(gettingStartedSection?.content).toContain('advanced chart metric');
+    expect(gettingStartedSection?.content).toContain('first Swim pace preference');
+  });
+
+  it('should document duration fallback for any activity without distance data', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('if any selected activity does not include distance data');
   });
 
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {

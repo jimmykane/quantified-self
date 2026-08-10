@@ -1,4 +1,5 @@
 import {
+  DataDepth,
   DataPotentialStamina,
   DataStamina,
   DynamicDataLoader,
@@ -23,6 +24,11 @@ describe('app-chart-data-types.helper', () => {
       DataStamina.type,
       DataPotentialStamina.type,
     ]));
+  });
+
+  it('surfaces Sports Lib depth as an advanced generic chart metric', () => {
+    expect(getAppAdvancedChartDataTypes()).toContain(DataDepth.type);
+    expect(getAppCanonicalChartDataTypes()).toContain(DataDepth.type);
   });
 
   it('includes stamina when resolving show-all stream requests', () => {
