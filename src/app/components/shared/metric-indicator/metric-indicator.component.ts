@@ -24,6 +24,7 @@ export class MetricIndicatorComponent implements OnChanges {
   @Input() showThresholds = false;
 
   protected normalizedPercent = 0;
+  protected boundedDeviation: number | null = null;
   protected deviationPercent = 0;
   protected deviationStartsAt = 50;
   protected segmentStates: boolean[] = [];
@@ -36,9 +37,10 @@ export class MetricIndicatorComponent implements OnChanges {
     const boundedValue = finiteValue === null ? finiteMin : Math.min(finiteMax, Math.max(finiteMin, finiteValue));
     this.normalizedPercent = ((boundedValue - finiteMin) / (finiteMax - finiteMin)) * 100;
 
-    const boundedDeviation = finiteValue === null ? 0 : Math.min(20, Math.max(-20, finiteValue));
-    this.deviationPercent = (Math.abs(boundedDeviation) / 20) * 50;
-    this.deviationStartsAt = boundedDeviation < 0 ? 50 - this.deviationPercent : 50;
+    this.boundedDeviation = finiteValue === null ? null : Math.min(20, Math.max(-20, finiteValue));
+    const displayedDeviation = this.boundedDeviation ?? 0;
+    this.deviationPercent = (Math.abs(displayedDeviation) / 20) * 50;
+    this.deviationStartsAt = displayedDeviation < 0 ? 50 - this.deviationPercent : 50;
 
     const total = Math.max(1, Math.round(Number.isFinite(this.total) ? this.total : 4));
     const active = finiteValue === null ? 0 : Math.min(total, Math.max(0, Math.round(finiteValue)));
@@ -48,7 +50,7 @@ export class MetricIndicatorComponent implements OnChanges {
       : this.variant === 'segments'
         ? `${this.label}: ${active} of ${total}`
         : this.variant === 'deviation'
-          ? `${this.label}: ${finiteValue > 0 ? '+' : ''}${finiteValue.toFixed(0)} percent versus baseline`
+          ? `${this.label}: ${displayedDeviation > 0 ? '+' : ''}${displayedDeviation.toFixed(0)} percent versus baseline`
           : `${this.label}: ${finiteValue.toFixed(0)} of ${finiteMax.toFixed(0)}`;
   }
 }

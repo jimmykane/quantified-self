@@ -300,6 +300,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.selection.clear();
   }
 
+  public removeDeletedEvent(eventID: string): void {
+    if (!eventID || !this.events) {
+      return;
+    }
+    const nextEvents = this.events.filter(event => event?.getID() !== eventID);
+    if (nextEvents.length === this.events.length) {
+      return;
+    }
+    this.events = nextEvents;
+    this.processChanges('after_delete_row');
+  }
+
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
     const dashboardSettings = this.user?.settings?.dashboardSettings;
     if (!dashboardSettings) {

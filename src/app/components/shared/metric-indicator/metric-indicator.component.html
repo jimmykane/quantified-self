@@ -16,7 +16,7 @@
     [attr.aria-label]="accessibleValueText"
     [attr.aria-valuemin]="variant === 'deviation' ? -20 : min"
     [attr.aria-valuemax]="variant === 'deviation' ? 20 : max"
-    [attr.aria-valuenow]="value">
+    [attr.aria-valuenow]="variant === 'deviation' ? boundedDeviation : value">
     @if (showThresholds) {
       <span class="metric-indicator-threshold threshold-mixed" aria-hidden="true"></span>
       <span class="metric-indicator-threshold threshold-ready" aria-hidden="true"></span>

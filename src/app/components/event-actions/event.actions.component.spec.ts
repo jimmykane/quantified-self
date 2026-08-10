@@ -176,11 +176,14 @@ describe('EventActionsComponent', () => {
 
     it('should stay on the current page after a table action deletes an event', async () => {
         component.navigateAfterDelete = false;
+        const deleted = vi.fn();
+        component.eventDeleted.subscribe(deleted);
 
         await component.delete();
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(component.user, 'event-123');
+        expect(deleted).toHaveBeenCalledWith('event-123');
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockSnackBar.open).toHaveBeenCalledWith('Event deleted', undefined, { duration: 2000 });
     });

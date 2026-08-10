@@ -1155,6 +1155,20 @@ describe('EventTableComponent', () => {
     });
 
     describe('deleteSelection', () => {
+        it('removes a row deleted through its action menu', () => {
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            component.events = [e1 as any, e2 as any];
+            component.selection.select({ Event: e1 } as any);
+            const processChangesSpy = vi.spyOn(component as any, 'processChanges');
+
+            component.removeDeletedEvent('event1');
+
+            expect(component.events.map((event: any) => event.getID())).toEqual(['event2']);
+            expect(component.selection.selected).toEqual([]);
+            expect(processChangesSpy).toHaveBeenCalledWith('after_delete_row');
+        });
+
         it('should abort delete when confirmation dialog is cancelled', async () => {
             const e1 = new MockEvent('event1');
             component.selection.select({ Event: e1 } as any);

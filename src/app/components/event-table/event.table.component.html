@@ -151,7 +151,8 @@
             <span>
               @if (user) {
               <app-event-actions [user]="user" [event]="$any(row.Event)"
-                [showDownloadOriginal]="true" [navigateAfterDelete]="false"></app-event-actions>
+                [showDownloadOriginal]="true" [navigateAfterDelete]="false"
+                (eventDeleted)="removeDeletedEvent($event)"></app-event-actions>
               }
             </span>
             }

@@ -35,7 +35,10 @@ describe('MetricIndicatorComponent', () => {
     fixture.componentRef.setInput('value', -30);
     fixture.detectChanges();
     const fill = fixture.nativeElement.querySelector('.metric-indicator-deviation-fill');
+    const track = fixture.nativeElement.querySelector('[role="progressbar"]');
     expect(fill.style.left).toBe('0%');
     expect(fill.style.width).toBe('50%');
+    expect(track.getAttribute('aria-valuenow')).toBe('-20');
+    expect(track.getAttribute('aria-label')).toBe('Metric: -20 percent versus baseline');
   });
 });
