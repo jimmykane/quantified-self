@@ -51,7 +51,7 @@
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
     <div class="dashboard-current-state-primary dashboard-training-state-primary">
       <span>Training state</span>
-      <app-metric-indicator variant="status" [label]="dashboardTodayTrainingState.label"></app-metric-indicator>
+      <strong>{{ dashboardTodayTrainingState.label }}</strong>
       <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
     </div>
     <div class="dashboard-current-state-primary">

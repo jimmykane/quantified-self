@@ -416,8 +416,9 @@ Training state and Readiness are fixed inside the optional Today summary:
   call `current-training-state.helper.ts`, which prefers the current UTC-day Form series for Form and seven-day CTL
   ramp, then uses the compact Form/Ramp snapshots only while the series is unavailable. It resolves the accompanying
   CTL/ATL context and passes the same four values to `training-state.helper.ts`; there is no Dashboard-specific state
-  formula. Dashboard Today intentionally shows the compact label, caption, and `TSS only` qualifier, while Training
-  provides the full Material info control with the contributing values and state boundaries.
+  formula. Both surfaces render the state as plain heading text rather than a status tag. Dashboard Today intentionally
+  shows the compact label, caption, and `TSS only` qualifier, while Training provides the full Material info control with
+  the contributing values and state boundaries.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived

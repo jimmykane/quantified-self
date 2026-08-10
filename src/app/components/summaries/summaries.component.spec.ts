@@ -784,6 +784,8 @@ describe('SummariesComponent', () => {
     expect(state.textContent).toContain('Fatigued');
     expect(state.textContent).toContain('Absorb the load');
     expect(state.textContent).toContain('TSS only');
+    expect(state.querySelector('strong')?.textContent?.trim()).toBe('Fatigued');
+    expect(state.querySelector('app-metric-indicator')).toBeNull();
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
