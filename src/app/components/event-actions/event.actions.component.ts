@@ -39,6 +39,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event!: EventInterface;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
+  @Input() navigateAfterDelete = true;
 
   public isReprocessing = false;
   public isSharing = false;
@@ -414,7 +415,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return;
       }
       await this.eventService.deleteAllEventData(this.user, this.event.getID());
-      await this.router.navigate(['/dashboard']);
+      if (this.navigateAfterDelete) {
+        await this.router.navigate(['/dashboard']);
+      }
       this.snackBar.open('Event deleted', undefined, {
         duration: 2000,
       });

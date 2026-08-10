@@ -67,8 +67,8 @@ describe('ActivityRangeTableSectionComponent', () => {
 
     const table = fixture.debugElement.query(By.directive(EventTableStubComponent))
       .componentInstance as EventTableStubComponent;
-    expect(table.presentation).toBe('browse');
-    expect(table.showActions).toBe(false);
+    expect(table.presentation).toBe('dashboard');
+    expect(table.showActions).toBe(true);
   });
 
   it('queries a target user while preserving the viewer for table preferences', async () => {
