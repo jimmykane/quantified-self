@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DataDistance, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataDistance, DataHeartRate, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
   buildEventCanonicalXAxisScaleOptions,
   canSelectEventChartDistanceXAxis,
@@ -39,6 +39,31 @@ describe('event-echarts-xaxis.helper', () => {
 
     expect(resolved).toBe(XAxisTypes.Duration);
     expect(canSelectEventChartDistanceXAxis([indoorActivityWithoutDistance])).toBe(false);
+  });
+
+  it('falls back to duration for a diving activity with heart rate but no distance stream', () => {
+    const heartRateStream = { type: DataHeartRate.type, getData: () => [88, 82, 77, 72] };
+    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 1, 2, 3] };
+    const divingActivityWithoutDistance = {
+      type: ActivityTypes.Diving,
+      getStream: (streamType: string) => {
+        if (streamType === DataHeartRate.type) {
+          return heartRateStream;
+        }
+        if (streamType === XAxisTypes.Time) {
+          return timeStream;
+        }
+        return null;
+      },
+      getAllStreams: () => [heartRateStream, timeStream],
+    } as any;
+
+    expect(resolveEventChartXAxisType(
+      { isMultiSport: () => false } as any,
+      XAxisTypes.Distance,
+      [divingActivityWithoutDistance]
+    )).toBe(XAxisTypes.Duration);
+    expect(canSelectEventChartDistanceXAxis([divingActivityWithoutDistance])).toBe(false);
   });
 
   it('keeps distance axis when selected indoor activities include finite distance data', () => {

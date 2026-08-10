@@ -1,21 +1,16 @@
-<div class="dive-profile-container">
-  <div class="dive-profile-toolbar">
-    <div>
-      <div class="dive-profile-title">Depth over elapsed time</div>
-      <div class="dive-profile-description">The surface stays at the top; gaps remain unconnected.</div>
-    </div>
-    <div class="dive-profile-toggles" aria-label="Dive profile overlays">
-      @if (hasTemperature()) {
-      <mat-checkbox [checked]="showTemperature()" (change)="setShowTemperature($event.checked)">
-        Temperature
-      </mat-checkbox>
-      }
-      @if (hasHeartRate()) {
-      <mat-checkbox [checked]="showHeartRate()" (change)="setShowHeartRate($event.checked)">
-        Heart rate
-      </mat-checkbox>
-      }
-    </div>
+@if (model(); as profile) {
+<section class="dive-profile-section" aria-label="Dive profile">
+  <app-event-section-header icon="scuba_diving" title="Dive Profile"></app-event-section-header>
+  <div class="dive-profile-content">
+    <app-event-card-chart-panel [panel]="profile.depthPanel" [overlayPanel]="selectedOverlayPanel()"
+      [overlayOptions]="overlayOptions()" [selectedOverlayDataType]="selectedOverlayDataType()"
+      [xAxisType]="xAxisType" [darkTheme]="darkTheme" [useAnimations]="useAnimations"
+      [xDomain]="xDomain()" [cursorBehaviour]="cursorBehaviour()" [showDateOnTimeAxis]="false"
+      [showLaps]="false" [showSwimLengths]="false" [strokeWidth]="strokeWidth()"
+      [fillOpacity]="fillOpacity()" [userUnitSettings]="unitSettings"
+      [showActivityNamesInTooltip]="showActivityNames()"
+      (overlayDataTypeChange)="onOverlayDataTypeChange($event)">
+    </app-event-card-chart-panel>
   </div>
-  <div class="dive-profile-chart" #chartDiv [style.min-width.%]="100"></div>
-</div>
+</section>
+}

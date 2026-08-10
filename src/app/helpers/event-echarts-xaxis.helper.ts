@@ -1,6 +1,5 @@
 import {
   ActivityInterface,
-  ActivityTypes,
   DataDistance,
   DataStrydDistance,
   EventInterface,
@@ -8,7 +7,6 @@ import {
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
-import { isIndoorActivityType } from '@shared/activity-type-group.metadata';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { normalizeEventRange } from './event-chart-range.helper';
 import type { EventChartRange } from './event-chart-range.helper';
@@ -72,10 +70,7 @@ export function resolveEventChartXAxisType(
 
 export function canSelectEventChartDistanceXAxis(activities: ActivityInterface[] | null | undefined): boolean {
   const selectedActivities = Array.isArray(activities) ? activities : [];
-  return !selectedActivities.some((activity) => (
-    isActivityIndoor(activity)
-    && !activityHasFiniteDistanceData(activity)
-  ));
+  return !selectedActivities.some((activity) => !activityHasFiniteDistanceData(activity));
 }
 
 export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {
@@ -269,15 +264,6 @@ function pickCanonicalInterval(span: number, candidates: number[]): number | nul
   }
 
   return bestCandidate;
-}
-
-function isActivityIndoor(activity: ActivityInterface | null | undefined): boolean {
-  const activityType = `${(activity as { type?: unknown } | null)?.type || ''}`.trim();
-  if (!activityType) {
-    return false;
-  }
-
-  return isIndoorActivityType(activityType as ActivityTypes);
 }
 
 function activityHasFiniteDistanceData(activity: ActivityInterface | null | undefined): boolean {

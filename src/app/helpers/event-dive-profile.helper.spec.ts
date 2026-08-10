@@ -3,7 +3,6 @@ import {
   ActivityTypes,
   DataDepth,
   DataDepthFeet,
-  DataDepthMax,
   DataHeartRate,
   DataTemperature,
   DistanceUnits,
@@ -13,10 +12,10 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildEventDiveProfile,
-  buildEventDiveProfileChartOption,
   hasEventDiveProfileData,
   isDivingActivity,
 } from './event-dive-profile.helper';
+import { getEventChartSeriesY } from './event-echarts-data.helper';
 
 function unitSettings(swimPaceUnit: SwimPaceUnits) {
   return {
@@ -35,7 +34,6 @@ function buildActivity(input: {
   id: string;
   type: ActivityTypes;
   depth?: Array<number | null>;
-  maximumDepth?: number;
   temperature?: Array<number | null>;
   heartRate?: Array<number | null>;
 }) {
@@ -55,10 +53,6 @@ function buildActivity(input: {
   if (input.heartRate) {
     streams.push({ type: DataHeartRate.type, getData: () => input.heartRate });
   }
-  const stats = new Map<string, DataDepthMax>();
-  if (input.maximumDepth !== undefined) {
-    stats.set(DataDepthMax.type, new DataDepthMax(input.maximumDepth));
-  }
   return {
     type: input.type,
     startDate: new Date('2026-08-01T10:00:00.000Z'),
@@ -70,7 +64,6 @@ function buildActivity(input: {
     getStream: (type: string) => type === XAxisTypes.Time
       ? timeStream
       : streams.find((stream) => stream.type === type),
-    getStat: (type: string) => stats.get(type),
   } as any;
 }
 
@@ -109,22 +102,21 @@ describe('event-dive-profile.helper', () => {
     expect(isDivingActivity(buildActivity({ id: 'run', type: ActivityTypes.Running, depth: [0, 1] }))).toBe(false);
   });
 
-  it('requires finite non-negative depth samples instead of only a maximum-depth stat', () => {
-    const statOnly = buildActivity({ id: 'stat', type: ActivityTypes.Mermaiding, maximumDepth: 4.2 });
+  it('requires finite non-negative depth samples', () => {
+    const noDepth = buildActivity({ id: 'no-depth', type: ActivityTypes.Mermaiding });
     const invalidStream = buildActivity({ id: 'invalid', type: ActivityTypes.Snorkeling, depth: [null, -1] });
     const usableStream = buildActivity({ id: 'usable', type: ActivityTypes.FreeDiving, depth: [0, null, 2.4] });
 
-    expect(hasEventDiveProfileData([statOnly, invalidStream])).toBe(false);
-    expect(hasEventDiveProfileData([statOnly, usableStream])).toBe(true);
+    expect(hasEventDiveProfileData([noDepth, invalidStream])).toBe(false);
+    expect(hasEventDiveProfileData([noDepth, usableStream])).toBe(true);
   });
 
-  it('uses the deepest valid value across summary stats and unit-converted streams', () => {
+  it('builds the pinned depth panel and optional standard-chart overlays in preferred units', () => {
     const activities = [
       buildActivity({
         id: 'a1',
         type: ActivityTypes.Snorkeling,
         depth: [0, 1, null, 3.2],
-        maximumDepth: 2,
         temperature: [24, 23.8, null, 23.5],
         heartRate: [90, 94, null, 101],
       }),
@@ -142,17 +134,15 @@ describe('event-dive-profile.helper', () => {
     expect(model!.activities.map((activity) => activity.getID())).toEqual(['a1', 'a2']);
     expect(model!.depthPanel.dataType).toBe(DataDepthFeet.type);
     expect(model!.depthPanel.series).toHaveLength(2);
-    expect(model!.maximumDepth).toBeCloseTo(10.499, 3);
     expect(model!.temperaturePanel?.series).toHaveLength(1);
     expect(model!.heartRatePanel?.series).toHaveLength(1);
   });
 
-  it('keeps a larger summary maximum visible on the inverted zero-top chart with opt-in overlays', () => {
+  it('keeps missing and invalid depth samples as gaps for the standard chart panel', () => {
     const activity = buildActivity({
       id: 'a1',
       type: ActivityTypes.FreeDiving,
       depth: [0, 1.5, null, 4.25],
-      maximumDepth: 5,
       temperature: [22, 21.5, null, 21],
       heartRate: [88, 92, null, 98],
     });
@@ -161,49 +151,10 @@ describe('event-dive-profile.helper', () => {
       userUnitSettings: unitSettings(SwimPaceUnits.MinutesPer100Meter),
       eventColorService,
     });
-    expect(model?.maximumDepth).toBe(5);
-
-    const depthOnlyOption = buildEventDiveProfileChartOption({
-      model: model!,
-      showTemperature: false,
-      showHeartRate: false,
-      darkTheme: false,
-      isMobile: false,
-      useAnimations: false,
-    }) as any;
-    expect(depthOnlyOption.yAxis).toHaveLength(1);
-    expect(depthOnlyOption.yAxis[0]).toMatchObject({ inverse: true, min: 0 });
-    expect(depthOnlyOption.series).toHaveLength(1);
-    expect(depthOnlyOption.series[0].connectNulls).toBe(false);
-    expect(depthOnlyOption.series[0].data).toContainEqual([2, null]);
-    expect(depthOnlyOption.yAxis[0].max).toBeGreaterThan(5);
-    expect(depthOnlyOption.series[0].markLine.data).toEqual([{ yAxis: 5 }]);
-
-    const overlayOption = buildEventDiveProfileChartOption({
-      model: model!,
-      showTemperature: true,
-      showHeartRate: true,
-      darkTheme: true,
-      isMobile: true,
-      useAnimations: true,
-    }) as any;
-    expect(overlayOption.yAxis).toHaveLength(3);
-    expect(overlayOption.series).toHaveLength(3);
-
-    const tooltipSeries = overlayOption.series as Array<{
-      id: string;
-      name: string;
-      data: Array<[number, number | null]>;
-    }>;
-    const tooltipHtml = overlayOption.tooltip.formatter(tooltipSeries.map((series) => ({
-      axisValue: 3,
-      seriesId: series.id,
-      seriesName: series.name,
-      marker: '<span></span>',
-      value: series.data[3],
-    })));
-    expect(tooltipHtml).toContain(`4.25 ${model!.depthPanel.unit}`);
-    expect(tooltipHtml).toContain(`21.00 ${model!.temperaturePanel!.unit}`);
-    expect(tooltipHtml).toContain(`98 ${model!.heartRatePanel!.unit}`);
+    const depthSeries = model!.depthPanel.series[0];
+    expect(getEventChartSeriesY(depthSeries, 0)).toBe(0);
+    expect(getEventChartSeriesY(depthSeries, 1)).toBe(1.5);
+    expect(getEventChartSeriesY(depthSeries, 2)).toBeNull();
+    expect(getEventChartSeriesY(depthSeries, 3)).toBe(4.25);
   });
 });

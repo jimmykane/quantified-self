@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 
-import { ActivityInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 
-type PerformanceTabId = 'diveProfile' | 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
+type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
 
 @Component({
   selector: 'app-event-performance-charts',
@@ -16,9 +16,7 @@ export class EventPerformanceChartsComponent {
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
-  @Input() unitSettings!: UserUnitSettingsInterface;
 
-  @Input() hasDiveProfile = false;
   @Input() hasIntensity = false;
   @Input() hasPowerCurve = false;
   @Input() hasDurability = false;
@@ -37,9 +35,6 @@ export class EventPerformanceChartsComponent {
 
   get availableTabs(): PerformanceTabId[] {
     const tabs: PerformanceTabId[] = [];
-    if (this.hasDiveProfile) {
-      tabs.push('diveProfile');
-    }
     if (this.hasIntensity) {
       tabs.push('intensity');
     }
@@ -56,9 +51,6 @@ export class EventPerformanceChartsComponent {
   }
 
   getTabLabel(tab: PerformanceTabId): string {
-    if (tab === 'diveProfile') {
-      return 'Dive Profile';
-    }
     if (tab === 'intensity') {
       return 'Intensity';
     }
@@ -72,9 +64,6 @@ export class EventPerformanceChartsComponent {
   }
 
   getTabIcon(tab: PerformanceTabId): string {
-    if (tab === 'diveProfile') {
-      return 'scuba_diving';
-    }
     if (tab === 'intensity') {
       return 'stacked_bar_chart';
     }

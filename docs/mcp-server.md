@@ -759,7 +759,7 @@ an `elapsed_time` or `distance` axis, at most 400 points per metric, and an opti
 The catalog covers heart rate, power, cadence, altitude, grade, distance, speed, running pace, swim pace, and trail
 grade-adjusted pace/speed with canonical units.
 
-Event Details also has a frontend-only Dive Profile for continuous Sports Lib `Depth` streams. That stream is
+Event Details also has a frontend-only pinned Dive Profile for continuous Sports Lib `Depth` streams. That stream is
 intentionally absent from `list_activity_chart_metrics` and `get_activity_chart_data`, so this feature does not change
 the registered MCP activity-chart schema or source-stream allowlist. The already discoverable persisted numeric
 `Maximum Depth` event statistic remains governed by the normal Sports Lib metric catalog; continuous samples are not

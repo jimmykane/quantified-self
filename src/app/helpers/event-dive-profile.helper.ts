@@ -4,11 +4,8 @@ import {
   ActivityTypesHelper,
   DataDepth,
   DataDepthFeet,
-  DataDepthMax,
   DataHeartRate,
-  DataInterface,
   DataTemperature,
-  DynamicDataLoader,
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -16,18 +13,9 @@ import type { AppEventColorService } from '../services/color/app.event.color.ser
 import {
   buildEventChartPanels,
   getEventChartSeriesPointCount,
-  getEventChartSeriesX,
   getEventChartSeriesY,
 } from './event-echarts-data.helper';
-import { buildEventPanelYAxisConfig } from './event-echarts-yaxis.helper';
-import { buildEventEChartsVisualTokens } from './event-echarts-common.helper';
-import { formatDurationSeconds } from './event-echarts-xaxis.helper';
 import type { EventChartPanelModel, EventChartPanelSeries } from './event-echarts-data.helper';
-import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
-import {
-  resolveEChartsTooltipSurfaceConfig,
-  resolveEChartsTooltipTriggerOn,
-} from './echarts-tooltip-interaction.helper';
 
 const DIVE_PROFILE_DEPTH_TYPES = new Set([DataDepth.type, DataDepthFeet.type]);
 
@@ -36,27 +24,12 @@ export interface EventDiveProfileModel {
   depthPanel: EventChartPanelModel;
   temperaturePanel: EventChartPanelModel | null;
   heartRatePanel: EventChartPanelModel | null;
-  maximumDepth: number | null;
 }
 
 export interface BuildEventDiveProfileInput {
   activities: ActivityInterface[];
   userUnitSettings: UserUnitSettingsInterface;
   eventColorService: AppEventColorService;
-}
-
-export interface BuildEventDiveProfileChartOptionInput {
-  model: EventDiveProfileModel;
-  showTemperature: boolean;
-  showHeartRate: boolean;
-  darkTheme: boolean;
-  isMobile: boolean;
-  useAnimations: boolean;
-}
-
-interface DiveTooltipSeriesMetadata {
-  dataType: string;
-  unit: string;
 }
 
 export function isDivingActivity(activity: ActivityInterface | null | undefined): boolean {
@@ -72,7 +45,9 @@ export function hasEventDiveProfileData(activities: ActivityInterface[]): boolea
       return false;
     }
     const depthStream = (activity.getAllStreams?.() || []).find((stream) => stream?.type === DataDepth.type);
-    return (depthStream?.getData?.() || []).some((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+    return (depthStream?.getData?.() || []).some((value) => (
+      typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ));
   });
 }
 
@@ -102,171 +77,7 @@ export function buildEventDiveProfile(input: BuildEventDiveProfileInput): EventD
     depthPanel,
     temperaturePanel: panels.find((panel) => panel.dataType === DataTemperature.type) || null,
     heartRatePanel: panels.find((panel) => panel.dataType === DataHeartRate.type) || null,
-    maximumDepth: resolveMaximumDepth(activities, depthPanel, input.userUnitSettings),
   };
-}
-
-export function buildEventDiveProfileChartOption(input: BuildEventDiveProfileChartOptionInput): Record<string, unknown> {
-  const { model } = input;
-  const chartStyle = buildEventEChartsVisualTokens(input.darkTheme, input.isMobile);
-  const visiblePanels = [
-    model.depthPanel,
-    ...(input.showTemperature && model.temperaturePanel ? [model.temperaturePanel] : []),
-    ...(input.showHeartRate && model.heartRatePanel ? [model.heartRatePanel] : []),
-  ];
-  const allSeries = visiblePanels.flatMap((panel) => panel.series);
-  const depthAxis = buildEventPanelYAxisConfig({ panel: model.depthPanel, visibleRange: null });
-  const depthAxisMax = resolveDepthAxisMaximum(depthAxis.max, depthAxis.interval, model.maximumDepth);
-  const yAxes = visiblePanels.map((panel, index) => ({
-    type: 'value',
-    name: `${panel.displayName} (${panel.unit})`,
-    position: index === 0 ? 'left' : 'right',
-    offset: index <= 1 ? 0 : 52,
-    inverse: index === 0 ? depthAxis.inverse : false,
-    ...(index === 0 ? {
-      min: depthAxis.min,
-      max: depthAxisMax,
-      interval: depthAxis.interval,
-    } : {}),
-    nameLocation: 'middle',
-    nameGap: index === 0 ? 42 : 46,
-    nameTextStyle: {
-      color: chartStyle.textColor,
-      fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-    },
-    axisLine: { lineStyle: { color: chartStyle.axisColor } },
-    axisTick: { show: false },
-    splitLine: {
-      show: index === 0,
-      lineStyle: { color: chartStyle.gridColor },
-    },
-    axisLabel: {
-      color: chartStyle.textColor,
-      fontSize: chartStyle.axisLabelFontSize,
-      formatter: (value: number) => formatDiveMetricValue(panel.dataType, value),
-    },
-  }));
-
-  let firstDepthSeries = true;
-  const tooltipSeriesMetadata = new Map<string, DiveTooltipSeriesMetadata>();
-  const series = visiblePanels.flatMap((panel, panelIndex) => panel.series.map((entry) => {
-    const isDepth = DIVE_PROFILE_DEPTH_TYPES.has(panel.dataType);
-    const seriesId = `dive-profile:${entry.id}`;
-    tooltipSeriesMetadata.set(seriesId, { dataType: panel.dataType, unit: panel.unit });
-    const markLine = isDepth && firstDepthSeries && model.maximumDepth !== null
-      ? {
-          silent: true,
-          symbol: 'none',
-          lineStyle: { type: 'dashed', width: 1.2, color: entry.color },
-          label: {
-            show: true,
-            position: 'insideEndTop',
-            formatter: `Max ${formatDiveMetricValue(panel.dataType, model.maximumDepth)} ${panel.unit}`,
-            color: chartStyle.textColor,
-          },
-          data: [{ yAxis: model.maximumDepth }],
-        }
-      : undefined;
-    if (isDepth) {
-      firstDepthSeries = false;
-    }
-    return {
-      id: seriesId,
-      name: buildDiveSeriesName(panel, entry, allSeries.length),
-      type: 'line',
-      yAxisIndex: panelIndex,
-      data: toEChartsSeriesData(entry, isDepth),
-      showSymbol: false,
-      connectNulls: false,
-      smooth: false,
-      sampling: 'none',
-      animation: input.useAnimations,
-      lineStyle: { color: entry.color, width: isDepth ? 2 : 1.5 },
-      itemStyle: { color: entry.color },
-      emphasis: { focus: allSeries.length > 1 ? 'series' : 'none' },
-      ...(markLine ? { markLine } : {}),
-    };
-  }));
-
-  return {
-    animation: input.useAnimations,
-    backgroundColor: 'transparent',
-    textStyle: {
-      color: chartStyle.textColor,
-      fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-    },
-    legend: {
-      show: allSeries.length > 1,
-      top: 0,
-      left: 'center',
-      textStyle: {
-        color: chartStyle.textColor,
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-        fontSize: input.isMobile ? 11 : 12,
-      },
-    },
-    grid: {
-      left: 4,
-      right: visiblePanels.length > 2 ? 112 : visiblePanels.length > 1 ? 58 : 6,
-      top: allSeries.length > 1 ? 28 : 4,
-      bottom: 8,
-      outerBoundsMode: 'same',
-      outerBoundsContain: 'axisLabel',
-    },
-    xAxis: {
-      type: 'value',
-      min: 0,
-      name: 'Elapsed time',
-      nameLocation: 'middle',
-      nameGap: 28,
-      nameTextStyle: {
-        color: chartStyle.textColor,
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-      },
-      axisLine: { lineStyle: { color: chartStyle.axisColor } },
-      axisTick: { show: false },
-      splitLine: { show: false },
-      axisLabel: {
-        color: chartStyle.textColor,
-        fontSize: chartStyle.axisLabelFontSize,
-        formatter: (value: number) => formatDurationSeconds(value),
-      },
-    },
-    yAxis: yAxes,
-    tooltip: {
-      trigger: 'axis',
-      triggerOn: resolveEChartsTooltipTriggerOn(true, input.isMobile),
-      renderMode: 'html',
-      ...resolveEChartsTooltipSurfaceConfig(input.isMobile),
-      extraCssText: chartStyle.tooltipExtraCssText,
-      backgroundColor: chartStyle.tooltipBackgroundColor,
-      borderColor: chartStyle.tooltipBorderColor,
-      borderWidth: 1,
-      textStyle: {
-        color: chartStyle.tooltipTextColor,
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-      },
-      formatter: (params: unknown) => formatDiveProfileTooltip(params, tooltipSeriesMetadata),
-    },
-    series,
-  };
-}
-
-function resolveDepthAxisMaximum(
-  axisMaximum: number | undefined,
-  interval: number | undefined,
-  maximumDepth: number | null,
-): number | undefined {
-  if (maximumDepth === null || !Number.isFinite(maximumDepth)) {
-    return axisMaximum;
-  }
-  if (axisMaximum !== undefined && axisMaximum > maximumDepth) {
-    return axisMaximum;
-  }
-  if (interval !== undefined && interval > 0) {
-    return Math.ceil((maximumDepth * 1.05) / interval) * interval;
-  }
-  return maximumDepth > 0 ? maximumDepth * 1.05 : 1;
 }
 
 function sanitizeDepthPanel(panel: EventChartPanelModel): EventChartPanelModel {
@@ -304,119 +115,4 @@ function hasNonNegativeSeriesValue(series: EventChartPanelSeries): boolean {
     }
   }
   return false;
-}
-
-function resolveMaximumDepth(
-  activities: ActivityInterface[],
-  depthPanel: EventChartPanelModel,
-  unitSettings: UserUnitSettingsInterface,
-): number | null {
-  let maximumDepth: number | null = null;
-  activities.forEach((activity) => {
-    const value = convertDepthStat(activity.getStat?.(DataDepthMax.type), depthPanel.dataType, unitSettings);
-    if (value !== null && value >= 0 && (maximumDepth === null || value > maximumDepth)) {
-      maximumDepth = value;
-    }
-  });
-  depthPanel.series.forEach((series) => {
-    const pointCount = getEventChartSeriesPointCount(series);
-    for (let index = 0; index < pointCount; index += 1) {
-      const value = getEventChartSeriesY(series, index);
-      if (value !== null && value >= 0 && (maximumDepth === null || value > maximumDepth)) {
-        maximumDepth = value;
-      }
-    }
-  });
-  return maximumDepth;
-}
-
-function convertDepthStat(
-  stat: DataInterface | void,
-  targetType: string,
-  unitSettings: UserUnitSettingsInterface,
-): number | null {
-  if (!stat) {
-    return null;
-  }
-  try {
-    const targetUnit = DynamicDataLoader.getDataClassFromDataType(targetType).unit;
-    const converted = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)
-      .find((entry) => entry.getUnit() === targetUnit);
-    const value = Number((converted || stat).getValue());
-    return Number.isFinite(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function toEChartsSeriesData(series: EventChartPanelSeries, isDepth: boolean): Array<[number, number | null]> {
-  const values: Array<[number, number | null]> = [];
-  const pointCount = getEventChartSeriesPointCount(series);
-  for (let index = 0; index < pointCount; index += 1) {
-    const x = getEventChartSeriesX(series, index);
-    const rawY = getEventChartSeriesY(series, index);
-    const y = rawY !== null && (!isDepth || rawY >= 0) ? rawY : null;
-    if (Number.isFinite(x)) {
-      values.push([x, y]);
-    }
-  }
-  return values;
-}
-
-function buildDiveSeriesName(
-  panel: EventChartPanelModel,
-  series: EventChartPanelSeries,
-  totalSeriesCount: number,
-): string {
-  if (totalSeriesCount <= 1) {
-    return panel.displayName;
-  }
-  return `${panel.displayName} · ${series.activityName}`;
-}
-
-function formatDiveMetricValue(dataType: string, value: number): string {
-  if (!Number.isFinite(value)) {
-    return '';
-  }
-  return dataType === DataHeartRate.type ? Math.round(value).toString() : value.toFixed(2);
-}
-
-function formatDiveProfileTooltip(
-  params: unknown,
-  seriesMetadata: Map<string, DiveTooltipSeriesMetadata>,
-): string {
-  const entries = Array.isArray(params) ? params as Array<{
-    axisValue?: unknown;
-    seriesId?: unknown;
-    seriesName?: string;
-    marker?: string;
-    value?: unknown;
-  }> : [];
-  if (!entries.length) {
-    return '';
-  }
-  const xValue = Number(entries[0]?.axisValue);
-  const rows = entries.flatMap((entry) => {
-    const tuple = Array.isArray(entry.value) ? entry.value : [];
-    const value = Number(tuple[1]);
-    if (!Number.isFinite(value)) {
-      return [];
-    }
-    const metadata = seriesMetadata.get(String(entry.seriesId || ''));
-    const formattedValue = metadata ? formatDiveMetricValue(metadata.dataType, value) : value.toFixed(2);
-    const formattedUnit = metadata?.unit ? ` ${escapeHtml(metadata.unit)}` : '';
-    return [
-      `${entry.marker || ''}${escapeHtml(entry.seriesName || 'Series')}: <b>${formattedValue}${formattedUnit}</b>`,
-    ];
-  });
-  return [`<b>${formatDurationSeconds(xValue)}</b>`, ...rows].join('<br/>');
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }

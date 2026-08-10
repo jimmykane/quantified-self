@@ -18,6 +18,7 @@ import {
     XAxisTypes,
     DataPotentialStamina,
     DataDepth,
+    DataHeartRate,
     DataSpeed,
     DataStamina,
     LapTypes,
@@ -577,8 +578,48 @@ describe('EventCardComponent', () => {
         fixture.detectChanges();
 
         expect(component.hasDiveProfileFlag()).toBe(true);
-        expect(component.hasPerformanceChartsFlag()).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
+        expect(component.hasPerformanceChartsFlag()).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-event-dive-profile')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).toBeNull();
+    });
+
+    it('pins the dive profile before performance and ordinary Event Details charts', () => {
+        mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+            hasPowerCurve: true,
+            hasDurability: false,
+            durabilityOutputUnavailable: false,
+            hasCadencePower: false,
+            hasAny: true,
+        });
+        const depthStream = { type: DataDepth.type, getData: () => [0, 1.25, 2.5] };
+        const heartRateStream = { type: DataHeartRate.type, getData: () => [88, 82, 77] };
+        const timeStream = { type: XAxisTypes.Time, getData: () => [0, 1, 2] };
+        const divingActivity = {
+            ...mockActivity,
+            type: ActivityTypes.FreeDiving,
+            getID: () => 'dive-1',
+            getAllStreams: () => [depthStream, heartRateStream, timeStream],
+            getStream: (type: string) => [depthStream, heartRateStream, timeStream]
+                .find((stream) => stream.type === type),
+        } as ActivityInterface;
+        component.event.set({
+            ...component.event(),
+            isMerge: false,
+            getActivities: () => [divingActivity],
+        } as unknown as EventInterface);
+        component.selectedActivitiesInstant.set([divingActivity]);
+        component.selectedActivitiesDebounced.set([divingActivity]);
+
+        fixture.detectChanges();
+
+        const chartTags = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(
+            'app-event-dive-profile, app-event-performance-charts, app-event-card-chart',
+        )).map((element) => element.tagName.toLowerCase());
+        expect(chartTags).toEqual([
+            'app-event-dive-profile',
+            'app-event-performance-charts',
+            'app-event-card-chart',
+        ]);
     });
 
     it('should compute hasDurabilityFlag as false when no durability data exists', () => {
@@ -854,27 +895,27 @@ describe('EventCardComponent', () => {
             expect(fixture.nativeElement.querySelector('app-event-card-chart')).not.toBeNull();
         });
 
-        it('keeps hasChartDataFlag true when distance axis is configured but selected indoor activity has no distance stream', () => {
+        it('keeps the normal chart visible for a diving activity with heart rate but no distance stream', () => {
             const previousXAxisType = mockUser.settings.chartSettings.xAxisType;
             mockUser.settings.chartSettings.xAxisType = XAxisTypes.Distance;
 
             try {
-                const speedStream = {
-                    type: DataSpeed.type,
-                    getData: () => [3, 4, 5],
+                const heartRateStream = {
+                    type: DataHeartRate.type,
+                    getData: () => [88, 82, 77, 72],
                 };
                 const timeStream = {
                     type: XAxisTypes.Time,
-                    getData: () => [0, 10, 20],
+                    getData: () => [0, 1, 2, 3],
                 };
-                const indoorChartableActivity = {
+                const divingActivity = {
                     ...activityWithData,
-                    type: ActivityTypes.IndoorRunning,
-                    getID: () => 'indoor-activity-1',
-                    getAllStreams: () => [speedStream, timeStream],
+                    type: ActivityTypes.Diving,
+                    getID: () => 'diving-activity-1',
+                    getAllStreams: () => [heartRateStream, timeStream],
                     getStream: (type: string) => {
-                        if (type === DataSpeed.type) {
-                            return speedStream;
+                        if (type === DataHeartRate.type) {
+                            return heartRateStream;
                         }
                         if (type === XAxisTypes.Time) {
                             return timeStream;
@@ -884,15 +925,15 @@ describe('EventCardComponent', () => {
                 } as unknown as ActivityInterface;
                 const chartableEvent = {
                     ...eventWithData,
-                    getActivities: () => [indoorChartableActivity],
+                    getActivities: () => [divingActivity],
                 } as unknown as EventInterface;
 
                 routeData$.next({ event: chartableEvent });
                 fixture = TestBed.createComponent(EventCardComponent);
                 component = fixture.componentInstance;
                 fixture.detectChanges();
-                component.selectedActivitiesInstant.set([indoorChartableActivity]);
-                component.selectedActivitiesDebounced.set([indoorChartableActivity]);
+                component.selectedActivitiesInstant.set([divingActivity]);
+                component.selectedActivitiesDebounced.set([divingActivity]);
                 fixture.detectChanges();
 
                 expect(component.hasChartDataFlag()).toBe(true);

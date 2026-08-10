@@ -10,6 +10,7 @@ import {
   ActivityTypes,
   ChartCursorBehaviours,
   DataAltitude,
+  DataDepth,
   DataDistance,
   DataHeartRate,
   DataPower,
@@ -445,22 +446,22 @@ describe('EventCardChartComponent', () => {
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
   });
 
-  it('falls back to duration axis when distance is configured and selected indoor activity has no distance stream', async () => {
+  it('falls back to duration axis when a selected diving activity has heart rate but no distance stream', async () => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),
       xAxisType: XAxisTypes.Distance,
     });
 
-    const speedStream = { type: DataSpeed.type, getData: () => [3, 4, 5] };
-    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 10, 20] };
+    const heartRateStream = { type: DataHeartRate.type, getData: () => [88, 82, 77, 72] };
+    const timeStream = { type: XAxisTypes.Time, getData: () => [0, 1, 2, 3] };
     const activity = {
-      type: ActivityTypes.IndoorRunning,
+      type: ActivityTypes.Diving,
       startDate: new Date('2024-01-01T00:00:00.000Z'),
-      getID: () => 'indoor-a1',
-      getAllStreams: () => [speedStream, timeStream],
+      getID: () => 'dive-a1',
+      getAllStreams: () => [heartRateStream, timeStream],
       getStream: (type: string) => {
-        if (type === DataSpeed.type) {
-          return speedStream;
+        if (type === DataHeartRate.type) {
+          return heartRateStream;
         }
         if (type === XAxisTypes.Time) {
           return timeStream;
@@ -471,12 +472,12 @@ describe('EventCardChartComponent', () => {
 
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'speed',
-        displayName: 'Speed',
-        unit: 'm/s',
-        colorGroupKey: 'Speed',
+        dataType: DataHeartRate.type,
+        displayName: 'Heart Rate',
+        unit: 'bpm',
+        colorGroupKey: DataHeartRate.type,
         minX: 0,
-        maxX: 20,
+        maxX: 3,
         series: [],
       },
     ] as any);
@@ -816,6 +817,44 @@ describe('EventCardChartComponent', () => {
       expect.objectContaining({ dataType: DataPower.type, visible: true }),
       expect.objectContaining({ dataType: 'Temperature', visible: false }),
     ]);
+  });
+
+  it('excludes a pinned dive-profile metric from the ordinary chart stack', async () => {
+    const depthPanel = {
+      dataType: DataDepth.type,
+      displayName: 'Depth',
+      unit: 'm',
+      colorGroupKey: DataDepth.type,
+      minX: 0,
+      maxX: 20,
+      series: [],
+    };
+    const heartRatePanel = {
+      dataType: DataHeartRate.type,
+      displayName: 'Heart Rate',
+      unit: 'bpm',
+      colorGroupKey: DataHeartRate.type,
+      minX: 0,
+      maxX: 20,
+      series: [],
+    };
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      depthPanel,
+      heartRatePanel,
+    ] as any);
+
+    component.excludedDataTypes = [DataDepth.type];
+    component.selectedActivities = [{ getID: () => 'dive-1' } as any];
+    component.event = {
+      getID: () => 'event-1',
+      getActivities: () => component.selectedActivities,
+      isMultiSport: () => false,
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.allChartPanels.map((panel) => panel.dataType)).toEqual([DataHeartRate.type]);
   });
 
   it('updates visible panels and persists when datatype selection changes', async () => {

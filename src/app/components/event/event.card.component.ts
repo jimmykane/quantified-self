@@ -23,6 +23,7 @@ import {
 import {
   DataDistance,
   DataDepth,
+  DataDepthFeet,
   DataGradeAdjustedSpeed,
   DataHeartRate,
   DataLatitudeDegrees,
@@ -134,8 +135,7 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasPerformanceChartsFlag = computed(() =>
-    this.hasDiveProfileFlag()
-      || this.hasIntensityZonesFlag()
+    this.hasIntensityZonesFlag()
       || this.performanceCurveAvailability().hasAny
   );
 
@@ -197,6 +197,8 @@ export class EventCardComponent implements OnInit {
     'Ascent',
     'Calories'
   ];
+
+  public readonly diveProfileChartDataTypes = [DataDepth.type, DataDepthFeet.type];
 
   ngOnInit() {
     this.logger.log('[EventCard] ngOnInit: initializing event details subscriptions');

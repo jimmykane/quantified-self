@@ -20,11 +20,6 @@
       </ng-template>
       <ng-template matTabContent>
         @switch (tab) {
-        @case ('diveProfile') {
-        <app-event-dive-profile [activities]="activities" [unitSettings]="unitSettings"
-          [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-        </app-event-dive-profile>
-        }
         @case ('intensity') {
         <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
         </app-event-intensity-zones>
@@ -51,11 +46,6 @@
   </mat-tab-group>
   } @else if (singleChartTab) {
   @switch (singleChartTab) {
-  @case ('diveProfile') {
-  <app-event-dive-profile [activities]="activities" [unitSettings]="unitSettings"
-    [useAnimations]="useAnimations" [darkTheme]="darkTheme">
-  </app-event-dive-profile>
-  }
   @case ('intensity') {
   <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme">
   </app-event-intensity-zones>

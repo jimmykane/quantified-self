@@ -25,7 +25,6 @@ describe('EventPerformanceChartsComponent', () => {
   });
 
   it('should render tabs in locked order when multiple charts are available', async () => {
-    component.hasDiveProfile = true;
     component.hasIntensity = true;
     component.hasPowerCurve = true;
     component.hasDurability = true;
@@ -39,14 +38,12 @@ describe('EventPerformanceChartsComponent', () => {
 
     expect(nativeElement.querySelector('mat-tab-group')).not.toBeNull();
 
-    const diveProfileIndex = fullText.indexOf('Dive Profile');
     const intensityIndex = fullText.indexOf('Intensity');
     const powerIndex = fullText.indexOf('Power Curve');
     const durabilityIndex = fullText.indexOf('Durability');
     const cadenceIndex = fullText.indexOf('Cadence vs Power');
 
-    expect(diveProfileIndex).toBeGreaterThanOrEqual(0);
-    expect(intensityIndex).toBeGreaterThan(diveProfileIndex);
+    expect(intensityIndex).toBeGreaterThanOrEqual(0);
     expect(powerIndex).toBeGreaterThan(intensityIndex);
     expect(durabilityIndex).toBeGreaterThan(powerIndex);
     expect(cadenceIndex).toBeGreaterThan(durabilityIndex);
@@ -54,17 +51,7 @@ describe('EventPerformanceChartsComponent', () => {
     const icons = Array.from(nativeElement.querySelectorAll('.performance-tab-icon'))
       .map((icon) => icon.textContent?.trim())
       .filter((value): value is string => !!value);
-    expect(icons).toEqual(['scuba_diving', 'stacked_bar_chart', 'line_curve', 'line_axis', 'key_visualizer']);
-  });
-
-  it('should render the dive profile directly when it is the only performance chart', () => {
-    component.hasDiveProfile = true;
-
-    fixture.detectChanges();
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('mat-tab-group')).toBeNull();
-    expect(nativeElement.querySelector('app-event-dive-profile')).not.toBeNull();
+    expect(icons).toEqual(['stacked_bar_chart', 'line_curve', 'line_axis', 'key_visualizer']);
   });
 
   it('should render direct durability chart without tabs when only durability is available', () => {

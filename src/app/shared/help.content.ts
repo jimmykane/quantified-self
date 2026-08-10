@@ -364,15 +364,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Event dive profiles
 
-- Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a **Dive Profile** performance chart when the original source contains continuous depth samples.
-- The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps. A dashed marker identifies the deepest recorded or summary depth.
-- Temperature and heart-rate overlays are available when recorded and start turned off. Multi-activity events keep each selected dive separate.
+- Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a pinned **Dive Profile** above the other Event Details charts when the original source contains continuous depth samples.
+- The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
+- Temperature and heart rate are available one at a time from the standard chart overlay picker and start turned off. Multi-activity events keep each selected dive separate.
 - **Maximum Depth** appears under the Environment event-summary metrics when the source provides it. A maximum-depth statistic by itself cannot reconstruct a dive profile.
 - **Depth** is also available as an advanced chart metric in **Settings -> Charts**. Dive depth uses meters when the first Swim pace preference is per 100 meters and feet when it is per 100 yards.
 
 ### Event chart x-axis fallback
 
-- In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
+- In Event details, if any selected activity does not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
 - **Default chart metrics** in **Settings -> Charts** control which available charts are shown initially.
 - The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It does not change which charts are currently visible.
