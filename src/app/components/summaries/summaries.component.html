@@ -51,7 +51,7 @@
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
     <div class="dashboard-current-state-primary dashboard-training-state-primary">
       <span>Training state</span>
-      <strong>{{ dashboardTodayTrainingState.label }}</strong>
+      <app-metric-indicator variant="status" [label]="dashboardTodayTrainingState.label"></app-metric-indicator>
       <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
     </div>
     <div class="dashboard-current-state-primary">
@@ -60,17 +60,23 @@
         <strong>{{ dashboardTodayReadiness.label }}</strong>
         <b>{{ dashboardTodayReadiness.scoreText }}</b>
       </div>
+      <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
+        [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
+        [showThresholds]="true"></app-metric-indicator>
       <small class="dashboard-readiness-method">Load + sleep signals · Freshness stays TSS-only</small>
       <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
+      <app-metric-indicator variant="segments" label="Available readiness signals"
+        [value]="dashboardTodayReadiness.availableSignalCount"
+        [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
       @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
       <small class="dashboard-readiness-imported-recovery">Recovery left · {{ dashboardTodayReadiness.recoveryText }} remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
       }
     </div>
     <dl>
       <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
-      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
-      <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><small>vs baseline</small></div>
-      <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><small>vs baseline · lower supports</small></div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
+      <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><app-metric-indicator variant="deviation" label="HRV" [value]="dashboardTodayReadiness.hrvDeviationPercent" [tone]="dashboardTodayReadiness.hrvTone" [compact]="true"></app-metric-indicator><small>vs baseline</small></div>
+      <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator><small>vs baseline · lower supports</small></div>
     </dl>
   </section>
   }

@@ -121,7 +121,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - Below the calendar, **Activities** compares activity groups by recorded duration. Each bar uses the same color as its circles and is scaled against the longest-duration group in the selected period. The info control beside the heading explains this comparison.
 - Available duration, distance, ascent, and descent totals appear with icons beneath each bar. A metric is omitted when no positive recorded value exists, and **--** beside an activity group means duration was not recorded.
 - Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent. Ascent and descent summary exclusions configured in **Settings** also apply.
-- The activity table beneath the duration bars lists normal activities in the selected Week, Month, or Year. It follows Calendar navigation exactly; use its search, tag filter, sorting, pagination, row checkboxes, and event actions without leaving your current Calendar period. Month tables exclude adjacent dates shown only to complete the grid.
+- The activity table beneath the duration bars lists normal activities in the selected Week, Month, or Year. It follows Calendar navigation exactly; use its search, tag filter, sorting, pagination, and row checkboxes, or use an activity's action menu to share, reprocess, download, or delete it without leaving your current Calendar period. Month tables exclude adjacent dates shown only to complete the grid.
 
 ## Preferences and data scope
 

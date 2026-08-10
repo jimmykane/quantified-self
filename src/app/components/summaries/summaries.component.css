@@ -70,6 +70,9 @@
   padding-top: 0.45rem;
 }
 
+.dashboard-readiness-score-indicator { margin: 0.45rem 0 0.35rem; max-width: 240px; }
+.dashboard-current-state-row dl app-metric-indicator { margin: 0.35rem 0; }
+
 .dashboard-current-state-row dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

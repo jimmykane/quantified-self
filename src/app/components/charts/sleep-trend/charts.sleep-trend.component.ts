@@ -247,7 +247,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: style.axisColor,
       }
       : { show: false };
-    const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
+    const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+    const xAxisLabelInterval = showEveryDayLabel ? 0 : this.buildXAxisLabelInterval(points, chartWidth);
     const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
     const averageHeartRateData = points.map(point => this.toFiniteMetric(point.averageHeartRateBpm));
@@ -378,7 +379,9 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           snap: true,
         },
         renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+        // Keep the tall sleep tooltip outside the chart canvas so its rows are not
+        // clipped by compact dashboard tiles, including on touch viewports.
+        ...resolveEChartsTooltipSurfaceConfig(false),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points, style),
       },
@@ -411,7 +414,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           lineHeight: 14,
           interval: xAxisLabelInterval,
           formatter: xAxisLabelFormatter,
-          hideOverlap: true,
+          hideOverlap: !showEveryDayLabel,
         },
       },
       yAxis: hasVitalsSeries ? [sleepDurationAxis, vitalsAxis] : sleepDurationAxis,
