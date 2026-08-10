@@ -28,7 +28,7 @@
     <span>{{ resolvedEmptyMessage() }}</span>
   </div>
   } @else if (isReady() && user(); as user) {
-  <app-event-table presentation="browse" [user]="user" [targetUser]="targetUser() || user"
+  <app-event-table presentation="dashboard" [user]="user" [targetUser]="targetUser() || user"
     [events]="events()" [showActions]="true" [isLoading]="false">
   </app-event-table>
   }
