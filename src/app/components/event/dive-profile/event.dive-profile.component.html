@@ -1,0 +1,21 @@
+<div class="dive-profile-container">
+  <div class="dive-profile-toolbar">
+    <div>
+      <div class="dive-profile-title">Depth over elapsed time</div>
+      <div class="dive-profile-description">The surface stays at the top; gaps remain unconnected.</div>
+    </div>
+    <div class="dive-profile-toggles" aria-label="Dive profile overlays">
+      @if (hasTemperature()) {
+      <mat-checkbox [checked]="showTemperature()" (change)="setShowTemperature($event.checked)">
+        Temperature
+      </mat-checkbox>
+      }
+      @if (hasHeartRate()) {
+      <mat-checkbox [checked]="showHeartRate()" (change)="setShowHeartRate($event.checked)">
+        Heart rate
+      </mat-checkbox>
+      }
+    </div>
+  </div>
+  <div class="dive-profile-chart" #chartDiv [style.min-width.%]="100"></div>
+</div>

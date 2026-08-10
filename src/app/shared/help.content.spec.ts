@@ -455,6 +455,18 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
   });
 
+  it('should document event dive profiles, depth availability, and units', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event dive profiles');
+    expect(gettingStartedSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
+    expect(gettingStartedSection?.content).toContain('**Dive Profile**');
+    expect(gettingStartedSection?.content).toContain('Temperature and heart-rate overlays');
+    expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
+    expect(gettingStartedSection?.content).toContain('advanced chart metric');
+    expect(gettingStartedSection?.content).toContain('first Swim pace preference');
+  });
+
   it('should document non-merged event heart-rate and power zone line and fill coloring', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

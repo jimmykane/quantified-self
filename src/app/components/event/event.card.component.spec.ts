@@ -17,6 +17,7 @@ import {
     AppThemes,
     XAxisTypes,
     DataPotentialStamina,
+    DataDepth,
     DataSpeed,
     DataStamina,
     LapTypes,
@@ -562,6 +563,22 @@ describe('EventCardComponent', () => {
 
     it('should compute hasPerformanceChartsFlag as false when intensity and power curve are both unavailable', () => {
         expect(component.hasPerformanceChartsFlag()).toBe(false);
+    });
+
+    it('exposes a dive profile only for selected diving activities with depth samples', () => {
+        const depthStream = { type: DataDepth.type, getData: () => [0, 1.25, 2.5] };
+        const divingActivity = {
+            ...mockActivity,
+            type: ActivityTypes.Mermaiding,
+            getAllStreams: () => [depthStream],
+        } as ActivityInterface;
+
+        component.selectedActivitiesInstant.set([divingActivity]);
+        fixture.detectChanges();
+
+        expect(component.hasDiveProfileFlag()).toBe(true);
+        expect(component.hasPerformanceChartsFlag()).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-event-performance-charts')).not.toBeNull();
     });
 
     it('should compute hasDurabilityFlag as false when no durability data exists', () => {

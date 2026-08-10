@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `17`
-- `@sports-alliance/sports-lib`: `18.1.3`
+- `@sports-alliance/sports-lib`: `18.1.4`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1683,6 +1683,9 @@ result. This is a policy correction within durability protocol v1, not a v2 migr
 
 Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
 not join a curated Training discipline, change durability, or require a derived-schema bump or historical reparse.
+The repository now pins sports-lib 18.1.4, whose FIT record-depth mapping supports frontend Event Details dive profiles.
+That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
+not require a Training rebuild or historical reparse.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

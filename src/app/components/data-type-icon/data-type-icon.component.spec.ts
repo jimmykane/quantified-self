@@ -1,4 +1,6 @@
 import {
+  DataDepthMax,
+  DataDepthMaxFeet,
   DataAscent,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -109,6 +111,13 @@ describe('DataTypeIconComponent', () => {
     const component = new DataTypeIconComponent();
 
     expect(component.getColumnHeaderIcon('Shared')).toBe('public');
+  });
+
+  it('uses the existing scuba-diving icon for maximum depth', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataDepthMax.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDepthMaxFeet.type)).toBe('scuba_diving');
   });
 
   it('should map ascent and descent to elevation', () => {

@@ -362,6 +362,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
 - Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
 
+### Event dive profiles
+
+- Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a **Dive Profile** performance chart when the original source contains continuous depth samples.
+- The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps. A dashed marker identifies the deepest recorded or summary depth.
+- Temperature and heart-rate overlays are available when recorded and start turned off. Multi-activity events keep each selected dive separate.
+- **Maximum Depth** appears under the Environment event-summary metrics when the source provides it. A maximum-depth statistic by itself cannot reconstruct a dive profile.
+- **Depth** is also available as an advanced chart metric in **Settings -> Charts**. Dive depth uses meters when the first Swim pace preference is per 100 meters and feet when it is per 100 yards.
+
 ### Event chart x-axis fallback
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.

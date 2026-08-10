@@ -8,6 +8,8 @@ import {
   DataCadence,
   DataCadenceAvg,
   DataDescent,
+  DataDepth,
+  DataDepthFeet,
   DataDistance,
   DataDuration,
   DataEPOC,
@@ -89,6 +91,11 @@ const ALTITUDE_GROUP = new Set<string>([
   DataAltitude.type,
   DataGPSAltitude.type,
   DataStrydAltitude.type,
+]);
+
+const DEPTH_GROUP = new Set<string>([
+  DataDepth.type,
+  DataDepthFeet.type,
 ]);
 
 const POSITIONAL_ERROR_GROUP = new Set<string>([
@@ -198,6 +205,9 @@ const CONTRAST_VARIANT_PALETTE: string[] = [
 const MIN_COMPARE_COLOR_DISTANCE = 200;
 
 export function resolveEventColorGroupKey(streamType: string): string {
+  if (DEPTH_GROUP.has(streamType)) {
+    return DataDepth.type;
+  }
   if (ALTITUDE_GROUP.has(streamType)) {
     return DataAltitude.type;
   }

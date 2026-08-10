@@ -13,7 +13,10 @@ import {
     DataSpeed,
     DataStrydAltitude,
     DataGradeAdjustedSpeed,
-    DataDistance
+    DataDistance,
+    DataDepth,
+    DataHeartRate,
+    DataTemperature
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
 import { of, EMPTY } from 'rxjs';
@@ -91,7 +94,10 @@ export const eventResolver: ResolveFn<EventResolverData> = (
                 DataLongitudeDegrees.type,
                 DataSpeed.type,
                 DataGradeAdjustedSpeed.type,
-                DataDistance.type
+                DataDistance.type,
+                DataDepth.type,
+                DataTemperature.type,
+                DataHeartRate.type
             ];
 
             if (user) {

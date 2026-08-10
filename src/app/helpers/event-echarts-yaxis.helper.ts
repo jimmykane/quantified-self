@@ -1,6 +1,8 @@
 import {
   DataAirPower,
   DataCadence,
+  DataDepth,
+  DataDepthFeet,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
@@ -42,6 +44,10 @@ const HEART_RATE_STREAM_TYPES = new Set<string>([
 const STAMINA_STREAM_TYPES = new Set<string>([
   DataStamina.type,
   DataPotentialStamina.type,
+]);
+const DEPTH_STREAM_TYPES = new Set<string>([
+  DataDepth.type,
+  DataDepthFeet.type,
 ]);
 
 export interface EventPanelYAxisConfig {
@@ -111,6 +117,11 @@ export function buildEventPanelYAxisConfig(input: BuildEventPanelYAxisConfigInpu
       ...buildDefaultAxis(visibleExtrema, false, EVENT_PACE_EXTRA_MAX),
       inverse: true,
     };
+  }
+
+  const hasDepthStream = streamTypes.some((streamType) => DEPTH_STREAM_TYPES.has(streamType));
+  if (hasDepthStream) {
+    return buildDepthAxis(visibleExtrema);
   }
 
   const hasCadenceStream = streamTypes.some((streamType) => CADENCE_STREAM_TYPES.has(streamType));
@@ -311,6 +322,20 @@ function buildBoundedPercentAxis(extrema: VisibleExtrema | null): EventPanelYAxi
       maxCeiling: STAMINA_AXIS_MAX,
     }
   );
+}
+
+function buildDepthAxis(extrema: VisibleExtrema | null): EventPanelYAxisConfig {
+  if (!extrema) {
+    return { inverse: true, min: 0, max: 1, interval: 0.2 };
+  }
+  const paddedMax = Math.max(1, extrema.max * 1.05);
+  const range = buildNiceAxisRange(0, paddedMax, DEFAULT_NON_PACE_TARGET_TICK_COUNT);
+  return {
+    inverse: true,
+    min: 0,
+    max: range.max,
+    interval: range.interval,
+  };
 }
 
 function buildSingleValueRange(value: number, inverse: boolean): EventPanelYAxisConfig {

@@ -7,6 +7,20 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 18.1.4 continuous dive-depth transition
+
+Sports Lib 18.1.4 maps FIT record depth from millimeters into a canonical meter-based `Depth` stream while preserving
+existing session maximum-depth statistics and Suunto depth behavior. New imports and ordinary reparses can therefore
+render Event Details dive profiles for Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding sources that
+actually contain continuous depth samples. Event Details hydrates Depth, Temperature, and Heart Rate directly from the
+retained original source; the stream is never added to compact Firestore event or activity documents.
+
+Do not enable the automatic scanner or enqueue a historical reparse solely for the dive-profile UI. Existing retained
+sources become chartable through Event Details source hydration without a persistence rewrite. An explicitly requested
+ordinary reparse may serialize parser-owned summary changes, but it is not required to display the continuous profile.
+Saved routes, Training disciplines, Training durability, derived-metric schemas, and MCP activity-chart contracts are
+unchanged.
+
 ### Sports Lib 18.1.3 snorkeling and mermaiding classification transition
 
 Sports Lib 18.1.3 normalizes the lowercase `snorkeling` and `mermaiding` aliases to canonical activity types and

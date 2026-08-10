@@ -23,7 +23,8 @@
     <div after-stats class="performance-charts-summary-wrapper">
       <mat-divider></mat-divider>
       <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
-        [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
+        [unitSettings]="userUnitSettings()" [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge"
+        [hasDiveProfile]="hasDiveProfileFlag()" [hasIntensity]="hasIntensityZonesFlag()"
         [hasPowerCurve]="hasPowerCurveFlag()" [hasDurability]="hasDurabilityFlag()"
         [durabilityOutputUnavailable]="durabilityOutputUnavailableFlag()"
         [hasCadencePower]="hasCadencePowerFlag()">

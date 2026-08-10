@@ -1,5 +1,7 @@
 import {
   DataCadence,
+  DataDepth,
+  DataDepthFeet,
   DataEffortPace,
   DataGradeAdjustedPace,
   DataPowerBalanceRight,
@@ -23,6 +25,8 @@ describe('event-echarts-style.helper', () => {
     expect(resolveEventColorGroupKey(DataGradeAdjustedPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataEffortPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataCadence.type)).toBe(DataCadence.type);
+    expect(resolveEventColorGroupKey(DataDepth.type)).toBe(DataDepth.type);
+    expect(resolveEventColorGroupKey(DataDepthFeet.type)).toBe(DataDepth.type);
     expect(resolveEventColorGroupKey('Unknown Data Type')).toBe('Unknown Data Type');
   });
 

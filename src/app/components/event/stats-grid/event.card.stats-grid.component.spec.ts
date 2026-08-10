@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataBeginningPotentialStamina, DataDescent, DataDuration, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
@@ -726,6 +726,34 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.metricTabs.map(tab => tab.label)).toEqual(['Environment']);
         expect(component.selectedTabIndex).toBe(0);
+    });
+
+    it('places maximum dive depth in the Environment summary tab', () => {
+        const maximumDepthStat = createStat(DataDepthMax.type);
+        const activity = {
+            type: ActivityTypes.Mermaiding,
+            getStats: () => new Map([[DataDepthMax.type, maximumDepthStat]]),
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map([[DataDepthMax.type, maximumDepthStat]]),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = undefined;
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.metricTabs).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'environment',
+                metricTypes: [DataDepthMax.type],
+            }),
+        ]));
     });
 
     it('should restore remembered tab when it is visible', () => {
