@@ -10,14 +10,18 @@ describe('MetricIndicatorComponent', () => {
   });
 
   it('renders a bounded accessible score', () => {
-    fixture.componentRef.setInput('label', 'Sleep quality');
-    fixture.componentRef.setInput('value', 80);
+    fixture.componentRef.setInput('label', 'Readiness');
+    fixture.componentRef.setInput('value', 76);
+    fixture.componentRef.setInput('tone', 'ready');
     fixture.componentRef.setInput('showThresholds', true);
     fixture.detectChanges();
     const track = fixture.nativeElement.querySelector('[role="progressbar"]');
-    expect(track.getAttribute('aria-valuenow')).toBe('80');
-    expect(track.getAttribute('aria-label')).toBe('Sleep quality: 80 of 100');
-    expect(fixture.nativeElement.querySelector('.metric-indicator-fill').style.width).toBe('80%');
+    const fill = fixture.nativeElement.querySelector('.metric-indicator-fill');
+    expect(track.getAttribute('aria-valuenow')).toBe('76');
+    expect(track.getAttribute('aria-label')).toBe('Readiness: 76 of 100');
+    expect(fill.style.width).toBe('76%');
+    expect(fill.getAttribute('data-tone')).toBe('ready');
+    expect(fixture.nativeElement.querySelectorAll('.metric-indicator-threshold')).toHaveLength(2);
   });
 
   it('renders signal coverage as discrete segments', () => {

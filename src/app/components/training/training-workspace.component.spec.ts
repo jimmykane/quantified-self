@@ -446,6 +446,8 @@ describe('TrainingWorkspaceComponent', () => {
       const statePanel = fixture.nativeElement.querySelector('.training-state-panel') as HTMLElement;
       expect(statePanel.textContent).toContain('Building');
       expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
+      expect(statePanel.querySelector('.training-state-value-row > strong')?.textContent?.trim()).toBe('Building');
+      expect(statePanel.querySelector('.training-state-value-row app-metric-indicator')).toBeNull();
       const infoButton = statePanel.querySelector('.training-state-info-button');
       expect(infoButton?.getAttribute('aria-label')).toBe('How Building is calculated');
       expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('CTL minus ATL');
@@ -1767,6 +1769,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Used as the comparison reference; event day is excluded.');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
+    expect(element.querySelectorAll('.training-build-card .training-build-delta').length).toBeGreaterThan(0);
+    expect(element.querySelector('.training-build-card .training-comparison-delta')).toBeNull();
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
     const details = element.querySelector<HTMLElement>('.training-build-recovery-details');
     expect(details?.hidden).toBe(true);
