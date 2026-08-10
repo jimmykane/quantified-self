@@ -136,6 +136,52 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
+  it('shows a label for every day in the default 14-day sleep window', async () => {
+    const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
+      id: `sleep-${index + 1}`,
+      sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
+      categoryLabel: `Apr ${index + 1}`,
+    }));
+    component.sleepTrend = {
+      points,
+      latestPoint: points[points.length - 1],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+
+    expect(option.xAxis.axisLabel.interval).toBe(0);
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(false);
+  });
+
+  it('renders the sleep tooltip outside the chart bounds so tall content is not cropped', async () => {
+    component.sleepTrend = {
+      points: [buildSleepPoint()],
+      latestPoint: buildSleepPoint(),
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+
+    expect(option.tooltip.confine).toBe(false);
+    expect(option.tooltip.appendTo).toEqual(expect.any(Function));
+    expect(option.tooltip.position).toEqual(expect.any(Function));
+  });
+
   it('uses weekday labels for sleep points from the current week', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 28, 12));
