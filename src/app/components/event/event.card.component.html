@@ -18,18 +18,10 @@
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
-    <!-- Keep the dive profile pinned above every other Event Details chart. -->
+    <!-- Keep performance charts first, followed by the pinned dive profile and ordinary charts. -->
     @if (hasDiveProfileFlag() || hasPerformanceChartsFlag()) {
     <div after-stats class="event-charts-summary-wrapper">
       <mat-divider></mat-divider>
-      @if (hasDiveProfileFlag()) {
-      <app-event-dive-profile [activities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
-        [useAnimations]="useChartAnimations()" [darkTheme]="darkTheme()">
-      </app-event-dive-profile>
-      }
-      @if (hasDiveProfileFlag() && hasPerformanceChartsFlag()) {
-      <mat-divider class="event-charts-summary-divider"></mat-divider>
-      }
       @if (hasPerformanceChartsFlag()) {
       <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
         [darkTheme]="darkTheme()" [isMerge]="activeEvent.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
@@ -37,6 +29,14 @@
         [durabilityOutputUnavailable]="durabilityOutputUnavailableFlag()"
         [hasCadencePower]="hasCadencePowerFlag()">
       </app-event-performance-charts>
+      }
+      @if (hasDiveProfileFlag() && hasPerformanceChartsFlag()) {
+      <mat-divider class="event-charts-summary-divider"></mat-divider>
+      }
+      @if (hasDiveProfileFlag()) {
+      <app-event-dive-profile [activities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
+        [useAnimations]="useChartAnimations()" [darkTheme]="darkTheme()">
+      </app-event-dive-profile>
       }
     </div>
     }

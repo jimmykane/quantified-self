@@ -583,7 +583,7 @@ describe('EventCardComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-performance-charts')).toBeNull();
     });
 
-    it('pins the dive profile before performance and ordinary Event Details charts', () => {
+    it('pins the dive profile after performance and before ordinary Event Details charts', () => {
         mockPerformanceCurveDataService.getAvailability.mockReturnValue({
             hasPowerCurve: true,
             hasDurability: false,
@@ -616,8 +616,8 @@ describe('EventCardComponent', () => {
             'app-event-dive-profile, app-event-performance-charts, app-event-card-chart',
         )).map((element) => element.tagName.toLowerCase());
         expect(chartTags).toEqual([
-            'app-event-dive-profile',
             'app-event-performance-charts',
+            'app-event-dive-profile',
             'app-event-card-chart',
         ]);
     });
