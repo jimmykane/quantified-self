@@ -465,6 +465,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
+    expect(gettingStartedSection?.content).toContain('both the Overall and Environment event-summary metrics');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');
     expect(gettingStartedSection?.content).toContain('first Swim pace preference');
   });

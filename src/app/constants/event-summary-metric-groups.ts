@@ -355,6 +355,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataDuration.type,
       DataMovingTime.type,
       DataDistance.type,
+      DataDepthMax.type,
       DataSpeedAvg.type,
       DataPaceAvg.type,
       DataSwimPaceAvg.type,

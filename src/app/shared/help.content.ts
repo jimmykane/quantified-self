@@ -367,7 +367,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a pinned **Dive Profile** below Performance Charts and above the normal Event Details charts when the original source contains continuous depth samples.
 - The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
 - Temperature and heart rate are available one at a time from the standard chart overlay picker and start turned off. Multi-activity events keep each selected dive separate.
-- **Maximum Depth** appears under the Environment event-summary metrics when the source provides it. A maximum-depth statistic by itself cannot reconstruct a dive profile.
+- **Maximum Depth** appears in both the Overall and Environment event-summary metrics when the source provides it. A maximum-depth statistic by itself cannot reconstruct a dive profile.
 - **Depth** is also available as an advanced chart metric in **Settings -> Charts**. Dive depth uses meters when the first Swim pace preference is per 100 meters and feet when it is per 100 yards.
 
 ### Event chart x-axis fallback

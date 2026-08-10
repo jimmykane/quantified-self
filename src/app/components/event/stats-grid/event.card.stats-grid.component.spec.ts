@@ -728,7 +728,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.selectedTabIndex).toBe(0);
     });
 
-    it('places maximum dive depth in the Environment summary tab', () => {
+    it('places maximum dive depth in the Overall and Environment summary tabs', () => {
         const maximumDepthStat = createStat(DataDepthMax.type);
         const activity = {
             type: ActivityTypes.Mermaiding,
@@ -749,6 +749,10 @@ describe('EventCardStatsGridComponent', () => {
         });
 
         expect(component.metricTabs).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'overall',
+                metricTypes: [DataDepthMax.type],
+            }),
             expect.objectContaining({
                 id: 'environment',
                 metricTypes: [DataDepthMax.type],
