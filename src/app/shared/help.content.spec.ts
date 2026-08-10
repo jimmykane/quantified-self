@@ -245,6 +245,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
+    expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({
       label: 'Activity Calendar Overview',
       icon: 'travel_explore',
