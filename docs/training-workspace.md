@@ -847,8 +847,8 @@ updating until the snapshot's stable selection key matches the saved choice.
 
 Ready Best Build cards put the outcome above their comparison table (for example, whether the current build is longer,
 shorter, or similar in total time), then state the number of current/reference workouts and TSS coverage. A next-step
-prompt appears only when both windows have enough intensity evidence and a material time difference; the table remains
-the detailed numeric comparison.
+prompt appears only when both windows have enough intensity evidence and a material time difference. The detailed table
+retains exact values and text deltas without adding inline comparison bars.
 
 ### 3. What Drove This
 

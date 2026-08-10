@@ -1767,6 +1767,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Used as the comparison reference; event day is excluded.');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
+    expect(element.querySelectorAll('.training-build-card .training-build-delta').length).toBeGreaterThan(0);
+    expect(element.querySelector('.training-build-card .training-comparison-delta')).toBeNull();
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
     const details = element.querySelector<HTMLElement>('.training-build-recovery-details');
     expect(details?.hidden).toBe(true);

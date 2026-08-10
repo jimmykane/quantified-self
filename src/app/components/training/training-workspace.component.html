@@ -407,7 +407,7 @@
                     <dt>{{ row.label }}</dt>
                     <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
                     <dd><app-training-metric-text [text]="row.benchmarkText"></app-training-metric-text></dd>
-                    <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                    <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                   </div>
                 }
               </dl>
@@ -444,7 +444,7 @@
                             <dt>{{ row.label }}</dt>
                             <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
                             <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
-                            <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                            <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                           </div>
                         }
                       </dl>
