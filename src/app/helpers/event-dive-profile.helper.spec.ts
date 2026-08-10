@@ -118,13 +118,13 @@ describe('event-dive-profile.helper', () => {
     expect(hasEventDiveProfileData([statOnly, usableStream])).toBe(true);
   });
 
-  it('builds a feet-based multi-activity model from the first swim-pace preference', () => {
+  it('uses the deepest valid value across summary stats and unit-converted streams', () => {
     const activities = [
       buildActivity({
         id: 'a1',
         type: ActivityTypes.Snorkeling,
         depth: [0, 1, null, 3.2],
-        maximumDepth: 3.2,
+        maximumDepth: 2,
         temperature: [24, 23.8, null, 23.5],
         heartRate: [90, 94, null, 101],
       }),
@@ -147,11 +147,12 @@ describe('event-dive-profile.helper', () => {
     expect(model!.heartRatePanel?.series).toHaveLength(1);
   });
 
-  it('falls back to the valid stream maximum and builds an inverted zero-top chart with opt-in overlays', () => {
+  it('keeps a larger summary maximum visible on the inverted zero-top chart with opt-in overlays', () => {
     const activity = buildActivity({
       id: 'a1',
       type: ActivityTypes.FreeDiving,
       depth: [0, 1.5, null, 4.25],
+      maximumDepth: 5,
       temperature: [22, 21.5, null, 21],
       heartRate: [88, 92, null, 98],
     });
@@ -160,7 +161,7 @@ describe('event-dive-profile.helper', () => {
       userUnitSettings: unitSettings(SwimPaceUnits.MinutesPer100Meter),
       eventColorService,
     });
-    expect(model?.maximumDepth).toBe(4.25);
+    expect(model?.maximumDepth).toBe(5);
 
     const depthOnlyOption = buildEventDiveProfileChartOption({
       model: model!,
@@ -175,7 +176,8 @@ describe('event-dive-profile.helper', () => {
     expect(depthOnlyOption.series).toHaveLength(1);
     expect(depthOnlyOption.series[0].connectNulls).toBe(false);
     expect(depthOnlyOption.series[0].data).toContainEqual([2, null]);
-    expect(depthOnlyOption.series[0].markLine.data).toEqual([{ yAxis: 4.25 }]);
+    expect(depthOnlyOption.yAxis[0].max).toBeGreaterThan(5);
+    expect(depthOnlyOption.series[0].markLine.data).toEqual([{ yAxis: 5 }]);
 
     const overlayOption = buildEventDiveProfileChartOption({
       model: model!,
@@ -187,5 +189,21 @@ describe('event-dive-profile.helper', () => {
     }) as any;
     expect(overlayOption.yAxis).toHaveLength(3);
     expect(overlayOption.series).toHaveLength(3);
+
+    const tooltipSeries = overlayOption.series as Array<{
+      id: string;
+      name: string;
+      data: Array<[number, number | null]>;
+    }>;
+    const tooltipHtml = overlayOption.tooltip.formatter(tooltipSeries.map((series) => ({
+      axisValue: 3,
+      seriesId: series.id,
+      seriesName: series.name,
+      marker: '<span></span>',
+      value: series.data[3],
+    })));
+    expect(tooltipHtml).toContain(`4.25 ${model!.depthPanel.unit}`);
+    expect(tooltipHtml).toContain(`21.00 ${model!.temperaturePanel!.unit}`);
+    expect(tooltipHtml).toContain(`98 ${model!.heartRatePanel!.unit}`);
   });
 });

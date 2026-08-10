@@ -54,6 +54,11 @@ export interface BuildEventDiveProfileChartOptionInput {
   useAnimations: boolean;
 }
 
+interface DiveTooltipSeriesMetadata {
+  dataType: string;
+  unit: string;
+}
+
 export function isDivingActivity(activity: ActivityInterface | null | undefined): boolean {
   if (!activity) {
     return false;
@@ -143,8 +148,11 @@ export function buildEventDiveProfileChartOption(input: BuildEventDiveProfileCha
   }));
 
   let firstDepthSeries = true;
+  const tooltipSeriesMetadata = new Map<string, DiveTooltipSeriesMetadata>();
   const series = visiblePanels.flatMap((panel, panelIndex) => panel.series.map((entry) => {
     const isDepth = DIVE_PROFILE_DEPTH_TYPES.has(panel.dataType);
+    const seriesId = `dive-profile:${entry.id}`;
+    tooltipSeriesMetadata.set(seriesId, { dataType: panel.dataType, unit: panel.unit });
     const markLine = isDepth && firstDepthSeries && model.maximumDepth !== null
       ? {
           silent: true,
@@ -163,7 +171,7 @@ export function buildEventDiveProfileChartOption(input: BuildEventDiveProfileCha
       firstDepthSeries = false;
     }
     return {
-      id: `dive-profile:${entry.id}`,
+      id: seriesId,
       name: buildDiveSeriesName(panel, entry, allSeries.length),
       type: 'line',
       yAxisIndex: panelIndex,
@@ -238,7 +246,7 @@ export function buildEventDiveProfileChartOption(input: BuildEventDiveProfileCha
         color: chartStyle.tooltipTextColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
-      formatter: formatDiveProfileTooltip,
+      formatter: (params: unknown) => formatDiveProfileTooltip(params, tooltipSeriesMetadata),
     },
     series,
   };
@@ -252,13 +260,13 @@ function resolveDepthAxisMaximum(
   if (maximumDepth === null || !Number.isFinite(maximumDepth)) {
     return axisMaximum;
   }
-  if (axisMaximum !== undefined && axisMaximum >= maximumDepth) {
+  if (axisMaximum !== undefined && axisMaximum > maximumDepth) {
     return axisMaximum;
   }
   if (interval !== undefined && interval > 0) {
     return Math.ceil((maximumDepth * 1.05) / interval) * interval;
   }
-  return maximumDepth;
+  return maximumDepth > 0 ? maximumDepth * 1.05 : 1;
 }
 
 function sanitizeDepthPanel(panel: EventChartPanelModel): EventChartPanelModel {
@@ -303,15 +311,13 @@ function resolveMaximumDepth(
   depthPanel: EventChartPanelModel,
   unitSettings: UserUnitSettingsInterface,
 ): number | null {
-  const statValues = activities
-    .map((activity) => activity.getStat?.(DataDepthMax.type))
-    .map((stat) => convertDepthStat(stat, depthPanel.dataType, unitSettings))
-    .filter((value): value is number => value !== null && value >= 0);
-  if (statValues.length > 0) {
-    return Math.max(...statValues);
-  }
-
   let maximumDepth: number | null = null;
+  activities.forEach((activity) => {
+    const value = convertDepthStat(activity.getStat?.(DataDepthMax.type), depthPanel.dataType, unitSettings);
+    if (value !== null && value >= 0 && (maximumDepth === null || value > maximumDepth)) {
+      maximumDepth = value;
+    }
+  });
   depthPanel.series.forEach((series) => {
     const pointCount = getEventChartSeriesPointCount(series);
     for (let index = 0; index < pointCount; index += 1) {
@@ -375,9 +381,13 @@ function formatDiveMetricValue(dataType: string, value: number): string {
   return dataType === DataHeartRate.type ? Math.round(value).toString() : value.toFixed(2);
 }
 
-function formatDiveProfileTooltip(params: unknown): string {
+function formatDiveProfileTooltip(
+  params: unknown,
+  seriesMetadata: Map<string, DiveTooltipSeriesMetadata>,
+): string {
   const entries = Array.isArray(params) ? params as Array<{
     axisValue?: unknown;
+    seriesId?: unknown;
     seriesName?: string;
     marker?: string;
     value?: unknown;
@@ -392,7 +402,12 @@ function formatDiveProfileTooltip(params: unknown): string {
     if (!Number.isFinite(value)) {
       return [];
     }
-    return [`${entry.marker || ''}${escapeHtml(entry.seriesName || 'Series')}: <b>${value.toFixed(2)}</b>`];
+    const metadata = seriesMetadata.get(String(entry.seriesId || ''));
+    const formattedValue = metadata ? formatDiveMetricValue(metadata.dataType, value) : value.toFixed(2);
+    const formattedUnit = metadata?.unit ? ` ${escapeHtml(metadata.unit)}` : '';
+    return [
+      `${entry.marker || ''}${escapeHtml(entry.seriesName || 'Series')}: <b>${formattedValue}${formattedUnit}</b>`,
+    ];
   });
   return [`<b>${formatDurationSeconds(xValue)}</b>`, ...rows].join('<br/>');
 }
