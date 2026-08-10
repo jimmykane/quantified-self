@@ -63,6 +63,16 @@ The following rules are architectural constraints:
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
 - In athlete-facing Training copy, a recorded sport leg is called a **workout**. `Activity` remains the technical term
   for normalized Firestore and sports-lib records, and `sleep session` remains the term for overnight sleep data.
+- Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
+  0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
+  inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
+  confidence. HRV and Overnight HR use a baseline-centered ±20% display while retaining the exact ratio text and the
+  metric-specific direction (lower Overnight HR may be supportive). Missing evidence leaves an empty track, never zero.
+- Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
+  ACWR, monotony, strain, FTP, VO2 max, recovery time, and power-system capacity must not be normalized into arbitrary
+  0–100 bars. Those metrics retain exact values, semantic status/delta treatments, or their existing time-series charts.
+  The shared indicator is native HTML/CSS for accessibility and low per-row cost; ECharts remains reserved for actual
+  trends, distributions, forecasts, and interactive chart surfaces.
 
 ## Ownership: Sports-lib Versus Quantified Self
 

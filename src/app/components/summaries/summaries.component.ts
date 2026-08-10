@@ -188,15 +188,20 @@ type DashboardTodayReadinessTone = 'positive' | 'negative' | 'neutral';
 
 interface DashboardTodayReadinessViewModel {
   label: string;
+  score: number | null;
   scoreText: string;
   confidenceText: string;
   evidenceText: string;
+  availableSignalCount: number;
   loadText: string;
   sleepText: string;
+  sleepScore: number | null;
   sleepContextText: string;
   hrvText: string;
+  hrvDeviationPercent: number | null;
   hrvTone: DashboardTodayReadinessTone;
   overnightHeartRateText: string;
+  overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
   recoveryText: string;
   recoveryFinishTimeMs: number | null;
@@ -210,15 +215,20 @@ interface DashboardTodayTrainingStateViewModel {
 function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessViewModel {
   return {
     label: 'Awaiting data',
+    score: null,
     scoreText: '--',
     confidenceText: 'No confidence level',
     evidenceText: '0/4 signals',
+    availableSignalCount: 0,
     loadText: '-- / --',
     sleepText: '--',
+    sleepScore: null,
     sleepContextText: 'No eligible night',
     hrvText: '--',
+    hrvDeviationPercent: null,
     hrvTone: 'neutral',
     overnightHeartRateText: '--',
+    overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
     recoveryText: '--',
     recoveryFinishTimeMs: null,
@@ -1675,15 +1685,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     return {
       label: context.label,
+      score: context.score,
       scoreText: `${this.formatDashboardTodayMetric(context.score)}/100`,
       confidenceText: `${context.confidence.charAt(0).toUpperCase()}${context.confidence.slice(1)} confidence`,
       evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
+      availableSignalCount: context.availableSignalCount,
       loadText: `${this.formatDashboardTodayMetric(context.form, true)} / ${this.formatDashboardTodayMetric(context.rampRate, true)}`,
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
+      sleepScore: context.sleepScore,
       sleepContextText: formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
       hrvText: this.formatDashboardTodayRatio(context.hrvRatio),
+      hrvDeviationPercent: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
       hrvTone: this.resolveDashboardTodayRatioTone(context.hrvRatio, false),
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
+      overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
+        ? null
+        : (context.overnightHeartRateRatio - 1) * 100,
       overnightHeartRateTone: this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true),
       recoveryText,
       recoveryFinishTimeMs,
