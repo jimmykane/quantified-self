@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `17`
-- `@sports-alliance/sports-lib`: `18.1.2`
+- `@sports-alliance/sports-lib`: `18.1.3`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1675,11 +1675,14 @@ schema 17 adds their reusable maximum aggregation and longest-jump metric. The l
 Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
 require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
 still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
-events. The repository pins sports-lib `18.1.2`, whose companion
+events. The repository pins sports-lib `18.1.3`; its 18.1.2 companion
 gravity-durability policy emits explicit `unsupported-context` evidence for Enduro/Downhill activities. The Functions
 aggregator also rejects legacy eligible Enduro/Downhill durability evidence defensively. Reparse affected existing
 activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
 result. This is a policy correction within durability protocol v1, not a v2 migration.
+
+Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
+not join a curated Training discipline, change durability, or require a derived-schema bump or historical reparse.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

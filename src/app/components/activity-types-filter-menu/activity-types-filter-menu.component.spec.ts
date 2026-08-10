@@ -22,6 +22,12 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(component.activityTypeOptions.some(option => (
       option.value === ActivityTypes.Cycling && option.selected
     ))).toBe(false);
+    expect(component.activityTypeOptions.some(option => (
+      option.value === ActivityTypes.Snorkeling
+    ))).toBe(true);
+    expect(component.activityTypeOptions.some(option => (
+      option.value === ActivityTypes.Mermaiding
+    ))).toBe(true);
   });
 
   it('emits toggled activity filters and updates local menu state', () => {

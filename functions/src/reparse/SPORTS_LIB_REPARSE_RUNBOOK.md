@@ -7,6 +7,17 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 18.1.3 snorkeling and mermaiding classification transition
+
+Sports Lib 18.1.3 normalizes the lowercase `snorkeling` and `mermaiding` aliases to canonical activity types and
+places both in the existing Diving group. New imports and ordinary reparses write those canonical types. The frontend
+also resolves retained legacy aliases through the package, so calendar grouping, colors, filters, and the existing
+`scuba_diving` icon work without rewriting historical documents.
+
+Do not enable the automatic scanner or enqueue a historical reparse solely for this classification change. It adds no
+parser-owned statistic, does not change Training discipline membership or derived-metric schema, and has no saved-route
+effect. Reparse an individual source only when canonicalizing its persisted activity type is independently needed.
+
 ### Sports Lib 18.1.2 lap pace transition
 
 Sports Lib 18.1.2 fills missing pace, swim-pace, and grade-adjusted-pace summary stats from compatible speed stats on
