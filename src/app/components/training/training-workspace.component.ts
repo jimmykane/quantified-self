@@ -188,6 +188,8 @@ interface TrainingStatusViewModel {
   volumeCaption: string;
   sessionsText: string;
   sessionsCaption: string;
+  volumeDeltaPercent: number | null;
+  sessionsDeltaPercent: number | null;
 }
 
 interface TrainingLoadMetricsViewModel {
@@ -283,6 +285,8 @@ function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
     volumeCaption: 'Preparing your training comparison…',
     sessionsText: '--',
     sessionsCaption: 'Preparing your training comparison…',
+    volumeDeltaPercent: null,
+    sessionsDeltaPercent: null,
   };
 }
 
@@ -2221,6 +2225,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       stateUpdateText: isStateUpdating
         ? (analysis.state.label ? 'Updating from the latest completed TSS calculation…' : 'Calculating current TSS state…')
         : null,
+      volumeDeltaPercent: analysis.duration.deltaPercent,
+      sessionsDeltaPercent: analysis.activities.deltaPercent,
     };
     if (comparisonState === 'preparing') {
       return {
