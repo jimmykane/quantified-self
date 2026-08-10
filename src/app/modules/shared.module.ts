@@ -40,6 +40,7 @@ import { DashboardActionPromptComponent } from '../components/dashboard/dashboar
 import { WorkspaceSectionNavigationComponent } from '../components/shared/workspace-section-navigation/workspace-section-navigation.component';
 import { DurabilityReadingGuideComponent } from '../components/shared/durability-reading-guide/durability-reading-guide.component';
 import { PageHeaderComponent } from '../components/shared/page-header/page-header.component';
+import { MetricIndicatorComponent } from '../components/shared/metric-indicator/metric-indicator.component';
 
 @NgModule({
     imports: [
@@ -52,6 +53,7 @@ import { PageHeaderComponent } from '../components/shared/page-header/page-heade
         DataTypeIconComponent,
         ActivityTypeIconComponent,
         PageHeaderComponent,
+        MetricIndicatorComponent,
     ],
     declarations: [
         ShadeComponent,
@@ -124,6 +126,7 @@ import { PageHeaderComponent } from '../components/shared/page-header/page-heade
         WorkspaceSectionNavigationComponent,
         DurabilityReadingGuideComponent,
         PageHeaderComponent,
+        MetricIndicatorComponent,
     ]
 })
 

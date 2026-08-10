@@ -128,13 +128,15 @@
             </mat-checkbox>
           </th>
           }
-          @if (isLast && canManageEvents) {
-          <th mat-header-cell *matHeaderCellDef>
+          @if (isLast && showRowActions) {
+          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="canManageEvents ? null : 'Event actions'">
+            @if (canManageEvents) {
             <app-event-table-actions [selectedDataTypes]="selectedColumns"
               (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+            }
           </th>
           }
-          @if ((!(isFirst && canManageEvents) && !(isLast && canManageEvents))) {
+          @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
@@ -149,7 +151,7 @@
             <span>
               @if (user) {
               <app-event-actions [user]="user" [event]="$any(row.Event)"
-                [showDownloadOriginal]="true"></app-event-actions>
+                [showDownloadOriginal]="true" [navigateAfterDelete]="false"></app-event-actions>
               }
             </span>
             }

@@ -8,6 +8,9 @@ export interface TrainingReadinessMetricRowViewModel {
   label: string;
   valueText: string;
   detailText: string;
+  indicatorVariant: 'score' | 'deviation' | null;
+  indicatorValue: number | null;
+  indicatorTone: 'positive' | 'negative' | 'neutral';
 }
 
 export interface TrainingReadinessTrendPointViewModel {
@@ -23,6 +26,10 @@ export interface TrainingReadinessViewModel {
   state: TrainingReadinessViewState;
   label: string;
   scoreText: string;
+  score: number | null;
+  availableSignalCount: number;
+  totalSignalCount: number;
+  confidence: 'high' | 'medium' | 'low' | null;
   confidenceText: string;
   evidenceText: string;
   updatedText: string;
@@ -72,6 +79,10 @@ export function buildTrainingReadinessViewModel(
       state: isPreparing ? 'preparing' : isUnavailable ? 'unavailable' : 'empty',
       label: isPreparing ? 'Preparing' : 'Unavailable',
       scoreText: '--',
+      score: null,
+      availableSignalCount: 0,
+      totalSignalCount: 4,
+      confidence: null,
       confidenceText: isPreparing ? 'Evidence loading' : 'No confidence level',
       evidenceText: '0/4 signals',
       updatedText: 'Not calculated',
@@ -119,6 +130,10 @@ export function buildTrainingReadinessViewModel(
     state: 'ready',
     label: context.label,
     scoreText: `${formatNumber(context.score, locale, 0)}/100`,
+    score: context.score,
+    availableSignalCount: context.availableSignalCount,
+    totalSignalCount: context.totalSignalCount,
+    confidence: context.confidence,
     confidenceText: `${capitalize(context.confidence)} confidence`,
     evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
     updatedText: Number.isFinite(options.calculatedAtMs)
@@ -140,6 +155,9 @@ export function buildTrainingReadinessViewModel(
         detailText: loadEvidenceFailed
           ? 'One or more current load snapshots could not be loaded.'
           : loadFreshnessText,
+        indicatorVariant: null,
+        indicatorValue: null,
+        indicatorTone: 'neutral',
       },
       {
         label: 'Sleep',
@@ -151,20 +169,37 @@ export function buildTrainingReadinessViewModel(
             ? `Sleep updates failed. ${latestSleepText}`
             : 'Recorded sleep evidence could not be loaded.'
           : latestSleepText,
+        indicatorVariant: 'score',
+        indicatorValue: context.sleepScore,
+        indicatorTone: 'neutral',
       },
       {
         label: 'HRV vs baseline',
         valueText: formatRatio(context.hrvRatio, locale),
         detailText: 'Same-provider median; at least 3 prior nights required.',
+        indicatorVariant: 'deviation',
+        indicatorValue: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
+        indicatorTone: resolveRatioTone(context.hrvRatio, false),
       },
       {
         label: 'Overnight HR vs baseline',
         valueText: formatRatio(context.overnightHeartRateRatio, locale),
         detailText: 'Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.',
+        indicatorVariant: 'deviation',
+        indicatorValue: context.overnightHeartRateRatio === null ? null : (context.overnightHeartRateRatio - 1) * 100,
+        indicatorTone: resolveRatioTone(context.overnightHeartRateRatio, true),
       },
     ],
     ...history,
   };
+}
+
+function resolveRatioTone(ratio: number | null, lowerSupports: boolean): 'positive' | 'negative' | 'neutral' {
+  if (ratio === null || Math.abs(ratio - 1) < 0.03) {
+    return 'neutral';
+  }
+  const supportive = lowerSupports ? ratio < 1 : ratio > 1;
+  return supportive ? 'positive' : 'negative';
 }
 
 function buildTrainingReadinessHistoryViewModel(

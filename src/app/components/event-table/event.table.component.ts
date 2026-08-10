@@ -160,6 +160,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return !this.isBrowsePresentation && !!this.showActions;
   }
 
+  get showRowActions(): boolean {
+    return !!this.showActions;
+  }
+
   get tableSortActive(): string {
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
@@ -819,9 +823,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       'Actions',
     ];
 
-    this.displayedColumns = this.canManageEvents
-      ? columns
-      : columns.filter(column => column !== 'Checkbox' && column !== 'Shared' && column !== 'Actions');
+    this.displayedColumns = columns.filter(column => {
+      if (column === 'Checkbox' || column === 'Shared') {
+        return this.canManageEvents;
+      }
+      if (column === 'Actions') {
+        return this.showRowActions;
+      }
+      return true;
+    });
   }
 
   async saveEventDescription(description: string, event: EventInterface) {
