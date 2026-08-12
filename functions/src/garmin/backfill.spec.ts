@@ -262,27 +262,67 @@ describe('Garmin Backfill', () => {
         expect(requestHelper.get).not.toHaveBeenCalled();
     });
 
-    it('should recognize the live Garmin 400 shape, skip an unavailable batch, and record only accepted dates', async () => {
+    it('should reject an unbounded future range before reading tokens or calling Garmin', async () => {
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2026-08-12',
+            endDate: '2036-08-12',
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('should retry a partially available batch at the provider minimum and record the complete accepted range', async () => {
         const data = { startDate: '2023-01-01', endDate: '2023-06-01' }; // > 90 days, at least 2 batches
 
-        // Mock requestHelper.get to fail with 400 for the first call and succeed for the rest
         const garminError: any = {
             statusCode: 400,
             error: {
-                errorMessage: 'start date before min start time of 2023-03-31T00:00:00Z'
+                errorMessage: 'Start date before min start time of 2023-02-01T00:00:00.500Z'
             }
         };
 
         (requestHelper.get as any)
             .mockRejectedValueOnce(garminError)
+            .mockResolvedValueOnce({ success: true })
             .mockResolvedValueOnce({ success: true });
 
         await (backfillGarminAPIActivities as any)(data, context);
 
-        // Should have called get twice (for 2 batches)
-        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(requestHelper.get).toHaveBeenCalledTimes(3);
+        expect(requestHelper.get).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            url: expect.stringContaining(`summaryStartTimeInSeconds=${new Date('2023-02-01T00:00:01.000Z').getTime() / 1000}`),
+        }));
         expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
-            lastHistoryImportStartDate: new Date('2023-03-31T00:00:00.000Z').getTime(),
+            lastHistoryImportStartDate: new Date('2023-02-01T00:00:01.000Z').getTime(),
+            lastHistoryImportEndDate: new Date('2023-06-01T00:00:00.000Z').getTime(),
+        }), { merge: true });
+    });
+
+    it('should reuse the provider minimum without sending another unavailable batch', async () => {
+        const garminError = {
+            statusCode: 400,
+            error: {
+                errorMessage: 'start date before min start time of 2023-04-15T00:00:00Z'
+            }
+        };
+        (requestHelper.get as any)
+            .mockRejectedValueOnce(garminError)
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-06-01',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(requestHelper.get).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            url: expect.stringContaining(`summaryStartTimeInSeconds=${new Date('2023-04-15T00:00:00.000Z').getTime() / 1000}`),
+        }));
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            lastHistoryImportStartDate: new Date('2023-04-15T00:00:00.000Z').getTime(),
             lastHistoryImportEndDate: new Date('2023-06-01T00:00:00.000Z').getTime(),
         }), { merge: true });
     });
@@ -291,17 +331,20 @@ describe('Garmin Backfill', () => {
         (requestHelper.get as any).mockRejectedValue({
             statusCode: 400,
             error: {
-                errorMessage: 'start date before min start time of 2025-01-01T00:00:00Z'
+                error: {
+                    errorMessage: 'start date before min start time of 2025-01-01T00:00:00Z'
+                }
             }
         });
 
         await expect((backfillGarminAPIActivities as any)({
             startDate: '2023-01-01',
-            endDate: '2023-01-10',
+            endDate: '2023-06-01',
         }, context)).rejects.toMatchObject({
             code: 'invalid-argument',
         });
 
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
         expect(setMock).not.toHaveBeenCalled();
     });
 });

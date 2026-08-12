@@ -17,6 +17,7 @@ import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 interface BackfillRequest {
   startDate: string; // ISO Dates
@@ -25,9 +26,8 @@ interface BackfillRequest {
 
 class GarminHistoryRangeUnavailableError extends Error {
   constructor(providerMessage?: string) {
-    const minimumMatch = providerMessage?.match(/min start time of\s+([^\s']+)/i);
-    const minimumDate = minimumMatch ? new Date(minimumMatch[1]) : null;
-    const minimumDateLabel = minimumDate && Number.isFinite(minimumDate.getTime())
+    const minimumDate = getGarminProviderMinimumStartDate(providerMessage);
+    const minimumDateLabel = minimumDate
       ? minimumDate.toISOString().slice(0, 10)
       : null;
     super(minimumDateLabel
@@ -44,6 +44,15 @@ function getGarminHistoryMinimumStartDate(now = new Date()): Date {
     now.getUTCDate(),
   ));
   return minimum;
+}
+
+function getGarminProviderMinimumStartDate(providerMessage?: string | null): Date | null {
+  const minimumMatch = providerMessage?.match(/min start time of\s+['"]?([^\s'"]+)/i);
+  if (!minimumMatch) {
+    return null;
+  }
+  const minimumDate = new Date(minimumMatch[1].replace(/[,.]+$/, ''));
+  return Number.isFinite(minimumDate.getTime()) ? minimumDate : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -114,8 +123,8 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const startDate = new Date(data.startDate);
-  const endDate = new Date(data.endDate);
+  const startDate = new Date(data?.startDate);
+  const endDate = new Date(data?.endDate);
 
   if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
@@ -125,10 +134,16 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('invalid-argument', 'Start date if after the end date');
   }
 
+  // The UI submits today's local end-of-day, which can be ahead of UTC now.
+  // One day covers all time zones without allowing unbounded future batching.
+  if (endDate.getTime() > Date.now() + DAY_IN_MS) {
+    throw new functions.https.HttpsError('invalid-argument', 'End date must be today or earlier');
+  }
+
   const minimumStartDate = getGarminHistoryMinimumStartDate();
   // The browser submits local midnight as UTC. Allow one day at the boundary so
   // valid users east of UTC are not rejected before Garmin applies its exact cutoff.
-  const validationMinimumStartMs = minimumStartDate.getTime() - (24 * 60 * 60 * 1000);
+  const validationMinimumStartMs = minimumStartDate.getTime() - DAY_IN_MS;
   if (startDate.getTime() < validationMinimumStartMs) {
     throw new functions.https.HttpsError(
       'invalid-argument',
@@ -202,49 +217,67 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   let firstAcceptedStartMs: number | null = null;
   let lastAcceptedEndMs: number | null = null;
   let unavailableRangeMessage: string | null = null;
+  let providerMinimumStartDate: Date | null = null;
 
   for (let i = 0; i < batchCount; i++) {
     const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
     const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime() ?
       endDate :
       new Date(batchStartDate.getTime() + maxDeltaInMS);
-    try {
-      await requestPromise.get({
-        headers: {
-          'Authorization': `Bearer ${garminToken.accessToken}`,
-        },
-        url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.floor(batchEndDate.getTime() / 1000)}`,
-      });
-      acceptedBatchCount += 1;
-      firstAcceptedStartMs ??= batchStartDate.getTime();
-      lastAcceptedEndMs = batchEndDate.getTime();
-    } catch (error: unknown) {
-      const statusCode = getErrorStatusCode(error);
-      // Handle specific API errors
-      if (statusCode === 409) {
-        throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
+    if (providerMinimumStartDate && providerMinimumStartDate >= batchEndDate) {
+      continue;
+    }
+    let requestedBatchStartDate = providerMinimumStartDate && providerMinimumStartDate > batchStartDate
+      ? providerMinimumStartDate
+      : batchStartDate;
+
+    while (true) {
+      try {
+        await requestPromise.get({
+          headers: {
+            'Authorization': `Bearer ${garminToken.accessToken}`,
+          },
+          url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(requestedBatchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.floor(batchEndDate.getTime() / 1000)}`,
+        });
+        acceptedBatchCount += 1;
+        firstAcceptedStartMs ??= requestedBatchStartDate.getTime();
+        lastAcceptedEndMs = batchEndDate.getTime();
+        break;
+      } catch (error: unknown) {
+        const statusCode = getErrorStatusCode(error);
+        if (statusCode === 409) {
+          throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
+        }
+
+        const providerErrorMessage = getGarminProviderErrorMessage(error);
+        if (statusCode === 400 && providerErrorMessage?.toLowerCase().includes('before min start time')) {
+          unavailableRangeMessage = providerErrorMessage;
+          const parsedProviderMinimumStartDate = getGarminProviderMinimumStartDate(providerErrorMessage);
+          const adjustedBatchStartDate = parsedProviderMinimumStartDate
+            ? new Date(Math.ceil(parsedProviderMinimumStartDate.getTime() / 1000) * 1000)
+            : null;
+          if (adjustedBatchStartDate) {
+            providerMinimumStartDate = adjustedBatchStartDate;
+          }
+          if (adjustedBatchStartDate
+            && adjustedBatchStartDate > requestedBatchStartDate
+            && adjustedBatchStartDate < batchEndDate) {
+            logger.warn(`Garmin backfill batch start adjusted to provider minimum: ${providerErrorMessage}`);
+            requestedBatchStartDate = adjustedBatchStartDate;
+            continue;
+          }
+          logger.warn(`Garmin backfill batch skipped: ${providerErrorMessage}`);
+          break;
+        }
+
+        logger.error(`Error requesting Garmin backfill for range ${requestedBatchStartDate} - ${batchEndDate}:`, error);
+
+        if (statusCode === 500) {
+          throw new Error(`Garmin API error (500) for dates ${requestedBatchStartDate} to ${batchEndDate}`);
+        }
+
+        throw error;
       }
-
-      // Handle "start date before min start time" error (400)
-      // Garmin enforces a "min start time" based on when the user first connected their account.
-      // This often manifests as a 5-year rolling window or strict anchor to the connection date.
-      // We skip these invalid batches to allow the valid ones (within the allowed window) to succeed.
-      const providerErrorMessage = getGarminProviderErrorMessage(error);
-      if (statusCode === 400 && providerErrorMessage?.includes('before min start time')) {
-        unavailableRangeMessage = providerErrorMessage;
-        logger.warn(`Garmin backfill batch skipped: ${providerErrorMessage}`);
-        // Do NOT throw. Continue to next batch.
-        continue;
-      }
-
-      logger.error(`Error requesting Garmin backfill for range ${batchStartDate} - ${batchEndDate}:`, error);
-
-      if (statusCode === 500) {
-        throw new Error(`Garmin API error (500) for dates ${batchStartDate} to ${batchEndDate}`);
-      }
-
-      // Re-throw if it wasn't a handled non-fatal error
-      throw error;
     }
   }
 
