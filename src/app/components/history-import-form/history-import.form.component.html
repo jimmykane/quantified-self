@@ -87,8 +87,9 @@
   </div>
   }
   @if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • 5-Year Max Range'">
-    Garmin's API limits history imports to once per month and a maximum of 5 years of data per request.
+  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • ' + garminHistoryLimitYears + '-Year History'">
+    Garmin's API limits history imports to once per month. Dates before {{ minDate | date:'mediumDate' }} are disabled
+    because Garmin only makes the latest {{ garminHistoryLimitYears }} years available.
   </app-status-info>
   }
   @if (minDate && serviceName === serviceNames.COROSAPI) {

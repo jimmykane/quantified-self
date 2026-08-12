@@ -98,7 +98,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'history',
         title: 'Garmin history import',
-        copy: 'Import up to five years of Garmin history per request. Garmin limits how often a new history import can be started, as documented in Help.',
+        copy: 'Import activities from Garmin\'s latest rolling five-year history window. Garmin limits how often a new history import can be started, as documented in Help.',
       },
       {
         icon: 'route',

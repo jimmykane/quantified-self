@@ -6,7 +6,10 @@ import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
-import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../../../shared/history-import.constants';
+import {
+  GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS,
+  GARMIN_HISTORY_IMPORT_LIMIT_YEARS,
+} from '../../../shared/history-import.constants';
 import { getTokenData } from '../tokens';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
@@ -18,6 +21,66 @@ const MEMORY = '256MB';
 interface BackfillRequest {
   startDate: string; // ISO Dates
   endDate: string;
+}
+
+class GarminHistoryRangeUnavailableError extends Error {
+  constructor(providerMessage?: string) {
+    const minimumMatch = providerMessage?.match(/min start time of\s+([^\s']+)/i);
+    const minimumDate = minimumMatch ? new Date(minimumMatch[1]) : null;
+    const minimumDateLabel = minimumDate && Number.isFinite(minimumDate.getTime())
+      ? minimumDate.toISOString().slice(0, 10)
+      : null;
+    super(minimumDateLabel
+      ? `Garmin does not provide activity history before ${minimumDateLabel}. Choose a later start date.`
+      : 'Garmin does not provide activity history for this range. Choose a later start date.');
+    this.name = 'GarminHistoryRangeUnavailableError';
+  }
+}
+
+function getGarminHistoryMinimumStartDate(now = new Date()): Date {
+  const minimum = new Date(Date.UTC(
+    now.getUTCFullYear() - GARMIN_HISTORY_IMPORT_LIMIT_YEARS,
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  ));
+  return minimum;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function getNestedValue(value: unknown, path: string[]): unknown {
+  return path.reduce<unknown>((current, key) => asRecord(current)?.[key], value);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  const message = asRecord(error)?.message;
+  return typeof message === 'string' ? message : String(error);
+}
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  const statusCode = asRecord(error)?.statusCode;
+  return typeof statusCode === 'number' ? statusCode : undefined;
+}
+
+function getGarminProviderErrorMessage(error: unknown): string | null {
+  const paths = [
+    ['error', 'errorMessage'],
+    ['error', 'error', 'errorMessage'],
+    ['response', 'body', 'errorMessage'],
+    ['response', 'body', 'error', 'errorMessage'],
+  ];
+  for (const path of paths) {
+    const message = getNestedValue(error, path);
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message.trim();
+    }
+  }
+  return null;
 }
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -54,7 +117,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
   const startDate = new Date(data.startDate);
   const endDate = new Date(data.endDate);
 
-  if (!startDate || !endDate) {
+  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
   }
 
@@ -62,17 +125,32 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('invalid-argument', 'Start date if after the end date');
   }
 
+  const minimumStartDate = getGarminHistoryMinimumStartDate();
+  // The browser submits local midnight as UTC. Allow one day at the boundary so
+  // valid users east of UTC are not rejected before Garmin applies its exact cutoff.
+  const validationMinimumStartMs = minimumStartDate.getTime() - (24 * 60 * 60 * 1000);
+  if (startDate.getTime() < validationMinimumStartMs) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Garmin activity history is limited to the latest ${GARMIN_HISTORY_IMPORT_LIMIT_YEARS} years. Choose a start date on or after ${minimumStartDate.toISOString().slice(0, 10)}.`,
+    );
+  }
+
   try {
     await processGarminBackfill(userID, startDate, endDate);
-  } catch (e: any) {
-    if (e.message.includes('History import cannot happen')) {
-      throw new functions.https.HttpsError('permission-denied', e.message);
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error);
+    if (errorMessage.includes('History import cannot happen')) {
+      throw new functions.https.HttpsError('permission-denied', errorMessage);
     }
-    if (e.message.includes('Duplicate backfill detected')) {
-      throw new functions.https.HttpsError('already-exists', e.message);
+    if (errorMessage.includes('Duplicate backfill detected')) {
+      throw new functions.https.HttpsError('already-exists', errorMessage);
     }
-    logger.error('Error backfilling Garmin:', e);
-    throw new functions.https.HttpsError('internal', e.message);
+    if (error instanceof GarminHistoryRangeUnavailableError) {
+      throw new functions.https.HttpsError('invalid-argument', error.message);
+    }
+    logger.error('Error backfilling Garmin:', error);
+    throw new functions.https.HttpsError('internal', errorMessage);
   }
 });
 
@@ -98,16 +176,15 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   const tokenDoc = tokensQuerySnapshot.docs[0];
 
   // Use getTokenData for auto-refresh if expired
-  let serviceToken;
+  let garminToken: GarminAPIAuth2ServiceTokenInterface;
   try {
-    serviceToken = await getTokenData(tokenDoc, ServiceNames.GarminAPI);
-  } catch (e: any) {
-    logger.error(`Failed to get/refresh Garmin token for ${userID}: ${e.message}`);
+    garminToken = await getTokenData(tokenDoc, ServiceNames.GarminAPI) as GarminAPIAuth2ServiceTokenInterface;
+  } catch (error: unknown) {
+    logger.error(`Failed to get/refresh Garmin token for ${userID}: ${getErrorMessage(error)}`);
     throw new Error('Token refresh failed');
   }
 
   // Check for required permissions
-  const garminToken = serviceToken as GarminAPIAuth2ServiceTokenInterface;
   if (!garminToken.permissions ||
     !garminToken.permissions.includes('HISTORICAL_DATA_EXPORT') ||
     !garminToken.permissions.includes('ACTIVITY_EXPORT')) {
@@ -119,8 +196,12 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   // We break down larger ranges into multiple batches.
   // Use slightly under 90 days (89 days) to ensure we never exceed the limit due to rounding.
   const maxDeltaInMS = 89 * 24 * 60 * 60 * 1000; // 89 days in milliseconds
-  logger.info(`Starting backfill for Garmin User ID: ${(serviceToken as any).userID}`);
+  logger.info(`Starting backfill for Garmin User ID: ${garminToken.userID}`);
   const batchCount = Math.max(1, Math.ceil((+endDate - +startDate) / maxDeltaInMS));
+  let acceptedBatchCount = 0;
+  let firstAcceptedStartMs: number | null = null;
+  let lastAcceptedEndMs: number | null = null;
+  let unavailableRangeMessage: string | null = null;
 
   for (let i = 0; i < batchCount; i++) {
     const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
@@ -130,16 +211,17 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     try {
       await requestPromise.get({
         headers: {
-          'Authorization': `Bearer ${serviceToken.accessToken}`,
+          'Authorization': `Bearer ${garminToken.accessToken}`,
         },
         url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.floor(batchEndDate.getTime() / 1000)}`,
       });
-    } catch (e: any) {
-      // Log the full error for debugging
-      logger.error(`Error requesting Garmin backfill for range ${batchStartDate} - ${batchEndDate}:`, e);
-
+      acceptedBatchCount += 1;
+      firstAcceptedStartMs ??= batchStartDate.getTime();
+      lastAcceptedEndMs = batchEndDate.getTime();
+    } catch (error: unknown) {
+      const statusCode = getErrorStatusCode(error);
       // Handle specific API errors
-      if (e.statusCode === 409) {
+      if (statusCode === 409) {
         throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
       }
 
@@ -147,20 +229,29 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       // Garmin enforces a "min start time" based on when the user first connected their account.
       // This often manifests as a 5-year rolling window or strict anchor to the connection date.
       // We skip these invalid batches to allow the valid ones (within the allowed window) to succeed.
-      if (e.statusCode === 400 && e.error?.error?.errorMessage?.includes('before min start time')) {
-        logger.warn(`Garmin backfill batch skipped: ${e.error.error.errorMessage}`);
+      const providerErrorMessage = getGarminProviderErrorMessage(error);
+      if (statusCode === 400 && providerErrorMessage?.includes('before min start time')) {
+        unavailableRangeMessage = providerErrorMessage;
+        logger.warn(`Garmin backfill batch skipped: ${providerErrorMessage}`);
         // Do NOT throw. Continue to next batch.
         continue;
       }
 
-      if (e.statusCode === 500) {
+      logger.error(`Error requesting Garmin backfill for range ${batchStartDate} - ${batchEndDate}:`, error);
+
+      if (statusCode === 500) {
         throw new Error(`Garmin API error (500) for dates ${batchStartDate} to ${batchEndDate}`);
       }
 
       // Re-throw if it wasn't a handled non-fatal error
-      throw e;
+      throw error;
     }
   }
+
+  if (acceptedBatchCount === 0) {
+    throw new GarminHistoryRangeUnavailableError(unavailableRangeMessage || undefined);
+  }
+
   try {
     await admin.firestore()
       .collection('users')
@@ -168,11 +259,11 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       .collection('meta')
       .doc(ServiceNames.GarminAPI).set({
         didLastHistoryImport: (new Date()).getTime(),
-        lastHistoryImportStartDate: startDate.getTime(),
-        lastHistoryImportEndDate: endDate.getTime(),
+        lastHistoryImportStartDate: firstAcceptedStartMs,
+        lastHistoryImportEndDate: lastAcceptedEndMs,
       }, { merge: true });
-  } catch (e: any) {
-    logger.error(e);
+  } catch (error: unknown) {
+    logger.error(error);
     // noop all is sent to garmin
   }
 }

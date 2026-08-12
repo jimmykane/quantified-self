@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as admin from 'firebase-admin';
+/* eslint-disable @typescript-eslint/no-explicit-any -- Firebase callable tests use intentionally partial mocks. */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as requestHelper from '../request-helper';
 import { backfillGarminAPIActivities } from './backfill';
 import * as utils from '../utils';
@@ -86,6 +86,8 @@ describe('Garmin Backfill', () => {
     let context: any;
 
     beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
         vi.clearAllMocks();
 
         // Default util mocks
@@ -146,6 +148,10 @@ describe('Garmin Backfill', () => {
             auth: { uid: 'testUserID' },
             app: { appId: 'testAppId' }
         };
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('should trigger backfill and return void on success', async () => {
@@ -228,16 +234,42 @@ describe('Garmin Backfill', () => {
             .rejects.toThrow('Start date if after the end date');
     });
 
-    it('should skip invalid batches (400) and continue with other batches', async () => {
+    it('should reject history older than five years before reading tokens or calling Garmin', async () => {
+        const startDate = new Date();
+        startDate.setUTCFullYear(startDate.getUTCFullYear() - 6);
+        const endDate = new Date(startDate.getTime() + (10 * 24 * 60 * 60 * 1000));
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('should reject malformed dates before reading tokens or calling Garmin', async () => {
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: 'not-a-date',
+            endDate: '2026-08-12',
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('should recognize the live Garmin 400 shape, skip an unavailable batch, and record only accepted dates', async () => {
         const data = { startDate: '2023-01-01', endDate: '2023-06-01' }; // > 90 days, at least 2 batches
 
         // Mock requestHelper.get to fail with 400 for the first call and succeed for the rest
         const garminError: any = {
             statusCode: 400,
             error: {
-                error: {
-                    errorMessage: 'start date before min start time'
-                }
+                errorMessage: 'start date before min start time of 2023-03-31T00:00:00Z'
             }
         };
 
@@ -249,5 +281,27 @@ describe('Garmin Backfill', () => {
 
         // Should have called get twice (for 2 batches)
         expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            lastHistoryImportStartDate: new Date('2023-03-31T00:00:00.000Z').getTime(),
+            lastHistoryImportEndDate: new Date('2023-06-01T00:00:00.000Z').getTime(),
+        }), { merge: true });
+    });
+
+    it('should reject a range when Garmin accepts no batches and preserve the cooldown', async () => {
+        (requestHelper.get as any).mockRejectedValue({
+            statusCode: 400,
+            error: {
+                errorMessage: 'start date before min start time of 2025-01-01T00:00:00Z'
+            }
+        });
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(setMock).not.toHaveBeenCalled();
     });
 });

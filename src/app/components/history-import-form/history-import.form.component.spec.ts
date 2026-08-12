@@ -558,6 +558,22 @@ describe('HistoryImportFormComponent', () => {
             expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
         });
 
+        it('should keep the Garmin 5-year minimum after a previous import cooldown expires', () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {
+                didLastHistoryImport: Date.now() - ((component.garminCooldownDays + 1) * 24 * 60 * 60 * 1000),
+            } as UserServiceMetaInterface;
+
+            (component as any).processChanges();
+
+            const expectedMinDate = new Date();
+            expectedMinDate.setHours(0, 0, 0, 0);
+            expectedMinDate.setFullYear(expectedMinDate.getFullYear() - component.garminHistoryLimitYears);
+
+            expect(component.isAllowedToDoHistoryImport).toBe(true);
+            expect(component.minDate?.getTime()).toBe(expectedMinDate.getTime());
+        });
+
         it('should NOT be set to true if import fails', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.SuuntoApp;
