@@ -19,7 +19,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import {
   getCorosSleepBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
@@ -73,6 +73,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
+  public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
   /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
@@ -156,24 +157,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   private processChanges() {
     this.syncSleepBackfillStateSubscription();
+    this.updateProviderHistoryMinimumDate();
 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
       (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
-
-      // Set min date for COROS (3 months)
-      if (this.serviceName === ServiceNames.COROSAPI) {
-        const limitDate = new Date();
-        limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
-        this.minDate = limitDate;
-      }
-      // Set min date for Garmin (5 years) due to API restriction on backfill range
-      // The backfill endpoint typically restricts data to the last ~5 years from the connection date or current date.
-      else if (this.serviceName === ServiceNames.GarminAPI) {
-        const limitDate = new Date();
-        limitDate.setFullYear(limitDate.getFullYear() - 5);
-        this.minDate = limitDate;
-      }
       return;
     }
 
@@ -184,24 +172,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
-          // Set min date for COROS
-          if (this.serviceName === ServiceNames.COROSAPI) {
-            const limitDate = new Date();
-            limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
-            this.minDate = limitDate;
-          }
           break;
         }
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
-        // Set min date for COROS
-        if (this.serviceName === ServiceNames.COROSAPI) {
-          const limitDate = new Date();
-          limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
-          this.minDate = limitDate;
-        }
         break;
       case ServiceNames.GarminAPI:
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
@@ -217,6 +193,22 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         break;
     }
     (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
+  }
+
+  private updateProviderHistoryMinimumDate(): void {
+    const limitDate = new Date();
+    limitDate.setHours(0, 0, 0, 0);
+
+    if (this.serviceName === ServiceNames.COROSAPI) {
+      limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
+      this.minDate = limitDate;
+      return;
+    }
+
+    if (this.serviceName === ServiceNames.GarminAPI) {
+      limitDate.setFullYear(limitDate.getFullYear() - this.garminHistoryLimitYears);
+      this.minDate = limitDate;
+    }
   }
 
   async onSubmit(event: Event) {

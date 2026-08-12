@@ -25,7 +25,7 @@
     Garmin will push activities to your account over the coming hours/days.
     @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
+      Requested range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
       formGroup.get('endDate')?.value | date: 'mediumDate' }}
     </div>
     }
@@ -87,8 +87,9 @@
   </div>
   }
   @if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • 5-Year Max Range'">
-    Garmin's API limits history imports to once per month and a maximum of 5 years of data per request.
+  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • ' + garminHistoryLimitYears + '-Year History'">
+    Garmin's API limits history imports to once per month. Dates before {{ minDate | date:'mediumDate' }} are disabled
+    because Garmin only makes the latest {{ garminHistoryLimitYears }} years available.
   </app-status-info>
   }
   @if (minDate && serviceName === serviceNames.COROSAPI) {

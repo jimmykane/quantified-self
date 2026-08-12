@@ -712,7 +712,9 @@ See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific p
 Garmin history import has two important limits:
 
 - one import request every **30 days**,
-- and up to **5 years** of data per request.
+- and only the latest rolling **5 years** of activity data. It does not support an arbitrary older five-year period.
+
+The history picker disables dates before the current five-year cutoff, and the server rejects an older range before contacting Garmin.
 
 Garmin can deliver imported activities gradually over hours or days.
 

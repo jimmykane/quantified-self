@@ -756,6 +756,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
+    expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
+    expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
     expect(serviceConnectionsSection?.content).toContain('Garmin sleep history import is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file status');

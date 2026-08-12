@@ -425,6 +425,25 @@ describe('HistoryImportFormComponent', () => {
             expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
         });
 
+        it('should label the immediate Garmin dates as the requested range', async () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.missingPermissions = [];
+            component.isPro = true;
+            (component as any).processChanges();
+            component.formGroup.patchValue({
+                startDate: new Date(2026, 6, 1),
+                endDate: new Date(2026, 6, 2),
+                accepted: true,
+            });
+
+            await component.onSubmit({ preventDefault: vi.fn() } as any);
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).toContain('Requested range:');
+            expect(fixture.nativeElement.textContent).not.toContain('Last import range:');
+        });
+
         it('should store pendingImportResult from backend response (COROS/Suunto/Wahoo)', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.COROSAPI;
@@ -556,6 +575,22 @@ describe('HistoryImportFormComponent', () => {
             expect(component.minDate!.getDate()).toBe(expectedMinDate.getDate());
             expect(component.minDate!.getFullYear()).toBe(expectedMinDate.getFullYear());
             expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
+        });
+
+        it('should keep the Garmin 5-year minimum after a previous import cooldown expires', () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {
+                didLastHistoryImport: Date.now() - ((component.garminCooldownDays + 1) * 24 * 60 * 60 * 1000),
+            } as UserServiceMetaInterface;
+
+            (component as any).processChanges();
+
+            const expectedMinDate = new Date();
+            expectedMinDate.setHours(0, 0, 0, 0);
+            expectedMinDate.setFullYear(expectedMinDate.getFullYear() - component.garminHistoryLimitYears);
+
+            expect(component.isAllowedToDoHistoryImport).toBe(true);
+            expect(component.minDate?.getTime()).toBe(expectedMinDate.getTime());
         });
 
         it('should NOT be set to true if import fails', async () => {
