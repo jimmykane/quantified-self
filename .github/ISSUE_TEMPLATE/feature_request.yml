@@ -1,0 +1,73 @@
+name: Feature request
+description: Propose a user problem or workflow Quantified Self could support.
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Strong requests begin with the user problem and evidence. Please avoid
+        including credentials, private activity files, precise locations, or
+        personal health data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Who has this problem, when does it occur, and what is difficult today?
+      placeholder: When I ..., I need ..., because ...
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the successful user result without prescribing implementation details.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed workflow
+      description: Optional steps, UI ideas, data sources, or examples.
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Primary audience
+      options:
+        - Athlete using one provider
+        - Athlete using multiple providers or devices
+        - Athlete migrating between providers
+        - Coach or reviewer
+        - Self-hosting operator
+        - Contributor or integrator
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current alternatives
+      description: How do users solve or work around this today?
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, security, and data considerations
+      description: Note any sensitive fields, provider credentials, sharing, retention, location, or medical-claim concerns.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Suggested acceptance criteria
+      placeholder: |
+        - [ ] A user can ...
+        - [ ] Missing or malformed data ...
+        - [ ] Relevant tests and help content ...
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and linked related requests where relevant.
+          required: true
+        - label: I described the user problem separately from the proposed solution.
+          required: true
