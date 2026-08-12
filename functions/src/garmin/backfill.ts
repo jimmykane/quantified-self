@@ -26,6 +26,7 @@ const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const HISTORY_IMPORT_LEASE_MS = 15 * 60 * 1000;
+const MAX_PROVIDER_MINIMUM_ADJUSTMENTS_PER_BATCH = 3;
 
 interface BackfillRequest {
   startDate: string; // ISO Dates
@@ -33,8 +34,7 @@ interface BackfillRequest {
 }
 
 class GarminHistoryRangeUnavailableError extends Error {
-  constructor(providerMessage?: string) {
-    const minimumDate = getGarminProviderMinimumStartDate(providerMessage);
+  constructor(minimumDate?: Date | null) {
     const minimumDateLabel = minimumDate
       ? minimumDate.toISOString().slice(0, 10)
       : null;
@@ -85,13 +85,30 @@ function getGarminHistoryMinimumStartDate(now = new Date()): Date {
   return minimum;
 }
 
-function getGarminProviderMinimumStartDate(providerMessage?: string | null): Date | null {
-  const minimumMatch = providerMessage?.match(/min start time of\s+['"]?([^\s'"]+)/i);
-  if (!minimumMatch) {
+function valueToEpochMs(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+  if (typeof value !== 'string' || !value.trim()) {
     return null;
   }
-  const minimumDate = new Date(minimumMatch[1].replace(/[,.]+$/, ''));
-  return Number.isFinite(minimumDate.getTime()) ? minimumDate : null;
+
+  const trimmed = value.trim();
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const numericValue = Number(trimmed);
+    return numericValue > 10_000_000_000 ? numericValue : numericValue * 1000;
+  }
+
+  const parsedMs = Date.parse(trimmed);
+  return Number.isFinite(parsedMs) ? parsedMs : null;
+}
+
+function dateFromEpochMs(value: number | null): Date | null {
+  if (value === null) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -100,6 +117,32 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function getNestedValue(value: unknown, path: string[]): unknown {
   return path.reduce<unknown>((current, key) => asRecord(current)?.[key], value);
+}
+
+function findNestedValue(
+  value: unknown,
+  fieldNames: readonly string[],
+  visited = new Set<object>(),
+  depth = 0,
+): unknown {
+  if (!value || typeof value !== 'object' || depth > 8 || visited.has(value)) {
+    return undefined;
+  }
+  visited.add(value);
+
+  const record = value as Record<string, unknown>;
+  for (const fieldName of fieldNames) {
+    if (record[fieldName] !== undefined) {
+      return record[fieldName];
+    }
+  }
+  for (const nestedValue of Object.values(record)) {
+    const result = findNestedValue(nestedValue, fieldNames, visited, depth + 1);
+    if (result !== undefined) {
+      return result;
+    }
+  }
+  return undefined;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -129,6 +172,54 @@ function getGarminProviderErrorMessage(error: unknown): string | null {
     }
   }
   return null;
+}
+
+function getGarminBackfillErrorText(error: unknown): string {
+  let serializedError = '';
+  try {
+    serializedError = JSON.stringify(error) || '';
+  } catch {
+    // Ignore non-serializable provider error details.
+  }
+  return [
+    getErrorMessage(error),
+    getGarminProviderErrorMessage(error) || '',
+    serializedError,
+  ].filter(Boolean).join(' ');
+}
+
+function getGarminProviderMinimumStartDate(error: unknown): Date | null {
+  const structuredValue = findNestedValue(error, [
+    'minStartTimeInSeconds',
+    'minimumStartTimeInSeconds',
+    'earliestStartTimeInSeconds',
+    'minStartTime',
+    'minimumStartTime',
+    'earliestStartTime',
+  ]);
+  const structuredDate = dateFromEpochMs(valueToEpochMs(structuredValue));
+  if (structuredDate) {
+    return structuredDate;
+  }
+
+  const errorText = getGarminBackfillErrorText(error);
+  const numericMatch = errorText.match(/(?:min(?:imum)? start time|earliest start time)[^\d]*(\d{10,13}(?:\.\d+)?)/i);
+  const numericDate = dateFromEpochMs(valueToEpochMs(numericMatch?.[1]));
+  if (numericDate) {
+    return numericDate;
+  }
+
+  const isoMatch = errorText.match(/(?:min(?:imum)? start time|earliest start time)\D*(\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[-+]\d{2}:?\d{2})?)?)/i);
+  const isoMs = valueToEpochMs(isoMatch?.[1]);
+  return dateFromEpochMs(isoMs);
+}
+
+function isGarminProviderMinimumStartError(error: unknown): boolean {
+  if (getErrorStatusCode(error) !== 400) {
+    return false;
+  }
+  return /(?:before|earlier than)[^.!?]*(?:min(?:imum)?|earliest) start time/i.test(getGarminBackfillErrorText(error))
+    || getGarminProviderMinimumStartDate(error) !== null;
 }
 
 async function assertGarminHistoryImportUserActive(userID: string): Promise<void> {
@@ -355,7 +446,6 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
   let coveredBatchCount = 0;
   let firstCoveredStartMs: number | null = null;
   let lastCoveredEndMs: number | null = null;
-  let unavailableRangeMessage: string | null = null;
   let providerMinimumStartDate: Date | null = null;
 
   for (let i = 0; i < batchCount; i++) {
@@ -366,9 +456,10 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
     if (providerMinimumStartDate && providerMinimumStartDate >= batchEndDate) {
       continue;
     }
-    let requestedBatchStartDate = providerMinimumStartDate && providerMinimumStartDate > batchStartDate
+    let requestedBatchStartDate: Date = providerMinimumStartDate && providerMinimumStartDate > batchStartDate
       ? providerMinimumStartDate
       : batchStartDate;
+    let providerMinimumAdjustmentCount = 0;
 
     while (true) {
       try {
@@ -393,21 +484,30 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
           break;
         }
 
-        const providerErrorMessage = getGarminProviderErrorMessage(error);
-        if (statusCode === 400 && providerErrorMessage?.toLowerCase().includes('before min start time')) {
-          unavailableRangeMessage = providerErrorMessage;
-          const parsedProviderMinimumStartDate = getGarminProviderMinimumStartDate(providerErrorMessage);
-          const adjustedBatchStartDate = parsedProviderMinimumStartDate
+        const providerErrorMessage = getGarminProviderErrorMessage(error) || getErrorMessage(error);
+        if (isGarminProviderMinimumStartError(error)) {
+          const parsedProviderMinimumStartDate = getGarminProviderMinimumStartDate(error);
+          const roundedProviderMinimumStartDate = parsedProviderMinimumStartDate
             ? new Date(Math.ceil(parsedProviderMinimumStartDate.getTime() / 1000) * 1000)
             : null;
-          if (adjustedBatchStartDate) {
+          const adjustedBatchStartDate: Date | null = roundedProviderMinimumStartDate
+            && roundedProviderMinimumStartDate <= requestedBatchStartDate
+            ? new Date(requestedBatchStartDate.getTime() + 1000)
+            : roundedProviderMinimumStartDate;
+          if (adjustedBatchStartDate
+            && (!providerMinimumStartDate || adjustedBatchStartDate > providerMinimumStartDate)) {
             providerMinimumStartDate = adjustedBatchStartDate;
           }
           if (adjustedBatchStartDate
             && adjustedBatchStartDate > requestedBatchStartDate
             && adjustedBatchStartDate < batchEndDate) {
+            providerMinimumAdjustmentCount += 1;
             logger.warn(`Garmin backfill batch start adjusted to provider minimum: ${providerErrorMessage}`);
             requestedBatchStartDate = adjustedBatchStartDate;
+            if (providerMinimumAdjustmentCount >= MAX_PROVIDER_MINIMUM_ADJUSTMENTS_PER_BATCH) {
+              logger.warn(`Skipping Garmin backfill batch after ${providerMinimumAdjustmentCount} provider minimum adjustments.`);
+              break;
+            }
             continue;
           }
           logger.warn(`Garmin backfill batch skipped: ${providerErrorMessage}`);
@@ -426,7 +526,7 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
   }
 
   if (coveredBatchCount === 0 || firstCoveredStartMs === null || lastCoveredEndMs === null) {
-    throw new GarminHistoryRangeUnavailableError(unavailableRangeMessage || undefined);
+    throw new GarminHistoryRangeUnavailableError(providerMinimumStartDate);
   }
 
   return {

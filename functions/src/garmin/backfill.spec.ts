@@ -412,6 +412,97 @@ describe('Garmin Backfill', () => {
         }), { merge: true });
     });
 
+    it('should retry at a numeric provider minimum without requiring the word of', async () => {
+        const minimumStartMs = new Date('2023-02-01T00:00:00.000Z').getTime();
+        (requestHelper.get as any)
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    errorMessage: `Requested start is before the minimum start time ${minimumStartMs / 1000}`,
+                },
+            })
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-03-01',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(requestHelper.get).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            url: expect.stringContaining(`summaryStartTimeInSeconds=${minimumStartMs / 1000}`),
+        }));
+    });
+
+    it('should retry when Garmin returns only a structured minimum start field', async () => {
+        const minimumStartMs = new Date('2023-02-01T00:00:00.000Z').getTime();
+        (requestHelper.get as any)
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    minimumStartTimeInSeconds: minimumStartMs / 1000,
+                },
+            })
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-03-01',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(requestHelper.get).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            url: expect.stringContaining(`summaryStartTimeInSeconds=${minimumStartMs / 1000}`),
+        }));
+    });
+
+    it('should bound repeated provider minimum adjustments', async () => {
+        for (const minimumDate of ['2023-02-01', '2023-02-02', '2023-02-03']) {
+            (requestHelper.get as any).mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    errorMessage: `Requested start is before the minimum start time ${new Date(minimumDate).getTime() / 1000}`,
+                },
+            });
+        }
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-03-01',
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(3);
+        expect(metaState.historyImportLeaseOwner).toBeUndefined();
+        expect(metaState.didLastHistoryImport).toBeUndefined();
+    });
+
+    it('should advance one second when Garmin echoes the requested start as its minimum', async () => {
+        const requestedStartMs = new Date('2023-01-01T00:00:00.000Z').getTime();
+        (requestHelper.get as any)
+            .mockRejectedValueOnce({
+                statusCode: 400,
+                error: {
+                    minStartTimeInSeconds: requestedStartMs / 1000,
+                },
+            })
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-03-01',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(requestHelper.get).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            url: expect.stringContaining(`summaryStartTimeInSeconds=${(requestedStartMs / 1000) + 1}`),
+        }));
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            lastHistoryImportStartDate: requestedStartMs + 1000,
+        }), { merge: true });
+    });
+
     it('should reuse the provider minimum without sending another unavailable batch', async () => {
         const garminError = {
             statusCode: 400,

@@ -425,6 +425,25 @@ describe('HistoryImportFormComponent', () => {
             expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
         });
 
+        it('should label the immediate Garmin dates as the requested range', async () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.missingPermissions = [];
+            component.isPro = true;
+            (component as any).processChanges();
+            component.formGroup.patchValue({
+                startDate: new Date(2026, 6, 1),
+                endDate: new Date(2026, 6, 2),
+                accepted: true,
+            });
+
+            await component.onSubmit({ preventDefault: vi.fn() } as any);
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).toContain('Requested range:');
+            expect(fixture.nativeElement.textContent).not.toContain('Last import range:');
+        });
+
         it('should store pendingImportResult from backend response (COROS/Suunto/Wahoo)', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.COROSAPI;

@@ -25,7 +25,7 @@
     Garmin will push activities to your account over the coming hours/days.
     @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
+      Requested range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
       formGroup.get('endDate')?.value | date: 'mediumDate' }}
     </div>
     }
