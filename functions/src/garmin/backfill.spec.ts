@@ -10,6 +10,7 @@ const setMock = vi.fn();
 const limitMock = vi.fn();
 const docMock = vi.fn();
 const collectionMock = vi.fn();
+const runTransactionMock = vi.fn();
 
 // Chainable query object
 const queryObj = {
@@ -40,9 +41,17 @@ collectionMock.mockReturnValue(collectionObj); // collection() -> collection
 vi.mock('firebase-admin', () => ({
     firestore: () => ({
         collection: collectionMock,
-        collectionGroup: vi.fn() // added collectionGroup if needed
+        collectionGroup: vi.fn(), // added collectionGroup if needed
+        runTransaction: runTransactionMock,
     })
 }));
+
+const deletionGuardMocks = vi.hoisted(() => ({
+    getUserDeletionGuardState: vi.fn(),
+    getUserDeletionGuardStateInTransaction: vi.fn(),
+}));
+
+vi.mock('../shared/user-deletion-guard', () => deletionGuardMocks);
 
 vi.mock('firebase-functions/v1', async () => {
     const actual = await vi.importActual('firebase-functions/v1');
@@ -89,6 +98,11 @@ describe('Garmin Backfill', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
         vi.clearAllMocks();
+        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
+        runTransactionMock.mockImplementation(async (handler) => handler({
+            set: (_ref: unknown, data: unknown, options: unknown) => setMock(data, options),
+        }));
 
         // Default util mocks
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
@@ -215,23 +229,38 @@ describe('Garmin Backfill', () => {
         expect(requestHelper.get).toHaveBeenCalledTimes(2);
     });
 
-    it('should throw already-exists if Garmin returns Conflict', async () => {
+    it('should treat a Garmin conflict as an already requested successful range', async () => {
         const error: any = new Error('Duplicate backfill detected');
         error.message = 'Duplicate backfill detected'; // Matches code check
         error.statusCode = 409;
         (requestHelper.get as any).mockRejectedValue(error);
 
         const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
-        // The implementation wraps errors. e.statusCode=409 -> throws 'Duplicate backfill detected...'
-        // then the onCall wrapper catches it and rethrows HttpsError('already-exists', ...)
 
-        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('Duplicate backfill detected');
+        await (backfillGarminAPIActivities as any)(data, context);
+
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            lastHistoryImportStartDate: new Date('2023-01-01T00:00:00.000Z').getTime(),
+            lastHistoryImportEndDate: new Date('2023-01-10T00:00:00.000Z').getTime(),
+        }), { merge: true });
     });
 
     it('should throw invalid-argument if start date is after end date', async () => {
         const data = { startDate: '2023-01-10', endDate: '2023-01-01' };
         await expect((backfillGarminAPIActivities as any)(data, context))
-            .rejects.toThrow('Start date if after the end date');
+            .rejects.toThrow('Start date must be before the end date');
+    });
+
+    it('should reject a zero-length range before reading tokens or calling Garmin', async () => {
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2026-08-12T12:00:00.000Z',
+            endDate: '2026-08-12T12:00:00.000Z',
+        }, context)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
     });
 
     it('should reject history older than five years before reading tokens or calling Garmin', async () => {
@@ -346,5 +375,65 @@ describe('Garmin Backfill', () => {
 
         expect(requestHelper.get).toHaveBeenCalledTimes(1);
         expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it('should continue after an already requested batch so a partial retry reaches later ranges', async () => {
+        (requestHelper.get as any)
+            .mockRejectedValueOnce({ statusCode: 409 })
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-06-01',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            lastHistoryImportStartDate: new Date('2023-01-01T00:00:00.000Z').getTime(),
+            lastHistoryImportEndDate: new Date('2023-06-01T00:00:00.000Z').getTime(),
+        }), { merge: true });
+    });
+
+    it('should stop before calling Garmin when account deletion starts between batches', async () => {
+        deletionGuardMocks.getUserDeletionGuardState
+            .mockResolvedValueOnce({ shouldSkip: false })
+            .mockResolvedValueOnce({ shouldSkip: false })
+            .mockResolvedValueOnce({ shouldSkip: true });
+        (requestHelper.get as any).mockResolvedValue({ success: true });
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-06-01',
+        }, context)).rejects.toMatchObject({
+            code: 'failed-precondition',
+        });
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it('should not recreate history metadata when account deletion starts after Garmin accepts the range', async () => {
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it('should report failure when accepted history cannot be durably recorded', async () => {
+        runTransactionMock.mockRejectedValue(new Error('Firestore unavailable'));
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'internal',
+        });
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
     });
 });

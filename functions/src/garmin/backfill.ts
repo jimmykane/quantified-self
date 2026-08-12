@@ -13,6 +13,10 @@ import {
 import { getTokenData } from '../tokens';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+} from '../shared/user-deletion-guard';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
@@ -34,6 +38,13 @@ class GarminHistoryRangeUnavailableError extends Error {
       ? `Garmin does not provide activity history before ${minimumDateLabel}. Choose a later start date.`
       : 'Garmin does not provide activity history for this range. Choose a later start date.');
     this.name = 'GarminHistoryRangeUnavailableError';
+  }
+}
+
+class GarminHistoryImportSkippedForDeletedUserError extends Error {
+  constructor(userID: string) {
+    super(`Garmin history import was cancelled because user ${userID} is missing or account deletion is in progress.`);
+    this.name = 'GarminHistoryImportSkippedForDeletedUserError';
   }
 }
 
@@ -92,6 +103,13 @@ function getGarminProviderErrorMessage(error: unknown): string | null {
   return null;
 }
 
+async function assertGarminHistoryImportUserActive(userID: string): Promise<void> {
+  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  if (deletionGuard.shouldSkip) {
+    throw new GarminHistoryImportSkippedForDeletedUserError(userID);
+  }
+}
+
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
@@ -130,8 +148,8 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
   }
 
-  if (startDate > endDate) {
-    throw new functions.https.HttpsError('invalid-argument', 'Start date if after the end date');
+  if (startDate >= endDate) {
+    throw new functions.https.HttpsError('invalid-argument', 'Start date must be before the end date');
   }
 
   // The UI submits today's local end-of-day, which can be ahead of UTC now.
@@ -158,11 +176,11 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     if (errorMessage.includes('History import cannot happen')) {
       throw new functions.https.HttpsError('permission-denied', errorMessage);
     }
-    if (errorMessage.includes('Duplicate backfill detected')) {
-      throw new functions.https.HttpsError('already-exists', errorMessage);
-    }
     if (error instanceof GarminHistoryRangeUnavailableError) {
       throw new functions.https.HttpsError('invalid-argument', error.message);
+    }
+    if (error instanceof GarminHistoryImportSkippedForDeletedUserError) {
+      throw new functions.https.HttpsError('failed-precondition', error.message);
     }
     logger.error('Error backfilling Garmin:', error);
     throw new functions.https.HttpsError('internal', errorMessage);
@@ -170,6 +188,8 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
 });
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
+  await assertGarminHistoryImportUserActive(userID);
+
   // First check last history import
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI).get();
   if (userServiceMetaDocumentSnapshot.exists) {
@@ -213,9 +233,9 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   const maxDeltaInMS = 89 * 24 * 60 * 60 * 1000; // 89 days in milliseconds
   logger.info(`Starting backfill for Garmin User ID: ${garminToken.userID}`);
   const batchCount = Math.max(1, Math.ceil((+endDate - +startDate) / maxDeltaInMS));
-  let acceptedBatchCount = 0;
-  let firstAcceptedStartMs: number | null = null;
-  let lastAcceptedEndMs: number | null = null;
+  let coveredBatchCount = 0;
+  let firstCoveredStartMs: number | null = null;
+  let lastCoveredEndMs: number | null = null;
   let unavailableRangeMessage: string | null = null;
   let providerMinimumStartDate: Date | null = null;
 
@@ -233,20 +253,25 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
 
     while (true) {
       try {
+        await assertGarminHistoryImportUserActive(userID);
         await requestPromise.get({
           headers: {
             'Authorization': `Bearer ${garminToken.accessToken}`,
           },
           url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(requestedBatchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.floor(batchEndDate.getTime() / 1000)}`,
         });
-        acceptedBatchCount += 1;
-        firstAcceptedStartMs ??= requestedBatchStartDate.getTime();
-        lastAcceptedEndMs = batchEndDate.getTime();
+        coveredBatchCount += 1;
+        firstCoveredStartMs ??= requestedBatchStartDate.getTime();
+        lastCoveredEndMs = batchEndDate.getTime();
         break;
       } catch (error: unknown) {
         const statusCode = getErrorStatusCode(error);
         if (statusCode === 409) {
-          throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
+          logger.warn(`Garmin backfill batch was already requested: ${requestedBatchStartDate.toISOString()} - ${batchEndDate.toISOString()}`);
+          coveredBatchCount += 1;
+          firstCoveredStartMs ??= requestedBatchStartDate.getTime();
+          lastCoveredEndMs = batchEndDate.getTime();
+          break;
         }
 
         const providerErrorMessage = getGarminProviderErrorMessage(error);
@@ -281,22 +306,22 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     }
   }
 
-  if (acceptedBatchCount === 0) {
+  if (coveredBatchCount === 0) {
     throw new GarminHistoryRangeUnavailableError(unavailableRangeMessage || undefined);
   }
 
-  try {
-    await admin.firestore()
-      .collection('users')
-      .doc(userID)
-      .collection('meta')
-      .doc(ServiceNames.GarminAPI).set({
+  const db = admin.firestore();
+  const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
+  await db.runTransaction(async (transaction) => {
+    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping Garmin history import metadata for ${userID} because account deletion is in progress.`);
+      return;
+    }
+    transaction.set(serviceMetaRef, {
         didLastHistoryImport: (new Date()).getTime(),
-        lastHistoryImportStartDate: firstAcceptedStartMs,
-        lastHistoryImportEndDate: lastAcceptedEndMs,
-      }, { merge: true });
-  } catch (error: unknown) {
-    logger.error(error);
-    // noop all is sent to garmin
-  }
+        lastHistoryImportStartDate: firstCoveredStartMs,
+        lastHistoryImportEndDate: lastCoveredEndMs,
+    }, { merge: true });
+  });
 }
