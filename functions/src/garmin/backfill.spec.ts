@@ -11,6 +11,20 @@ const limitMock = vi.fn();
 const docMock = vi.fn();
 const collectionMock = vi.fn();
 const runTransactionMock = vi.fn();
+const transactionGetMock = vi.fn();
+const DELETE_FIELD = 'delete-field';
+let metaState: Record<string, unknown> = {};
+
+const runTransactionHandler = async (handler: any) => handler({
+    get: transactionGetMock,
+    set: (_ref: unknown, data: Record<string, unknown>, options: unknown) => {
+        setMock(data, options);
+        for (const [key, value] of Object.entries(data)) {
+            if (value === DELETE_FIELD) delete metaState[key];
+            else metaState[key] = value;
+        }
+    },
+});
 
 // Chainable query object
 const queryObj = {
@@ -46,10 +60,29 @@ vi.mock('firebase-admin', () => ({
     })
 }));
 
-const deletionGuardMocks = vi.hoisted(() => ({
-    getUserDeletionGuardState: vi.fn(),
-    getUserDeletionGuardStateInTransaction: vi.fn(),
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: { delete: () => DELETE_FIELD },
 }));
+
+const deletionGuardMocks = vi.hoisted(() => {
+    class MockUserDeletionGuardReadError extends Error {
+        public readonly name = 'UserDeletionGuardReadError';
+
+        constructor(
+            public readonly uid: string,
+            public readonly phase: string,
+            public readonly originalError: unknown,
+        ) {
+            super(`Could not read deletion guard for user ${uid} during ${phase}.`);
+        }
+    }
+
+    return {
+        getUserDeletionGuardState: vi.fn(),
+        getUserDeletionGuardStateInTransaction: vi.fn(),
+        UserDeletionGuardReadError: MockUserDeletionGuardReadError,
+    };
+});
 
 vi.mock('../shared/user-deletion-guard', () => deletionGuardMocks);
 
@@ -98,11 +131,14 @@ describe('Garmin Backfill', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
         vi.clearAllMocks();
-        deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
-        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
-        runTransactionMock.mockImplementation(async (handler) => handler({
-            set: (_ref: unknown, data: unknown, options: unknown) => setMock(data, options),
+        metaState = {};
+        deletionGuardMocks.getUserDeletionGuardState.mockReset().mockResolvedValue({ shouldSkip: false });
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockReset().mockResolvedValue({ shouldSkip: false });
+        transactionGetMock.mockImplementation(async () => ({
+            exists: Object.keys(metaState).length > 0,
+            data: () => ({ ...metaState }),
         }));
+        runTransactionMock.mockImplementation(runTransactionHandler);
 
         // Default util mocks
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
@@ -115,6 +151,7 @@ describe('Garmin Backfill', () => {
             userID: 'garmin-user-123',
             permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT']
         });
+        (requestHelper.get as any).mockReset().mockResolvedValue({ success: true });
 
         // Reset default mock returns
         limitMock.mockReturnValue(queryObj);
@@ -196,28 +233,73 @@ describe('Garmin Backfill', () => {
     });
 
     it('should throw permission-denied if throttled', async () => {
-        // Override for throttling
-        collectionMock.mockImplementation((name) => {
-            if (name === 'users') {
-                return {
-                    doc: vi.fn().mockReturnValue({
-                        collection: vi.fn().mockReturnValue({
-                            doc: vi.fn().mockReturnValue({
-                                get: vi.fn().mockResolvedValue({
-                                    exists: true,
-                                    data: () => ({ didLastHistoryImport: Date.now() }) // Recently imported
-                                })
-                            })
-                        })
-                    })
-                };
-            }
-            if (name === 'garminAPITokens') return collectionObj; // fallback for tokens lookups that happen later
-            return collectionObj;
-        });
+        metaState.didLastHistoryImport = Date.now();
 
         const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
-        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('History import cannot happen');
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toMatchObject({
+            code: 'permission-denied',
+        });
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('should reject a concurrent history import while its lease is active', async () => {
+        metaState.historyImportLeaseOwner = 'another-import';
+        metaState.historyImportLeaseExpiresAt = Date.now() + 60_000;
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'already-exists',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('should reclaim an expired history import lease', async () => {
+        metaState.historyImportLeaseOwner = 'expired-import';
+        metaState.historyImportLeaseExpiresAt = Date.now() - 1;
+
+        await (backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context);
+
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        expect(metaState.historyImportLeaseOwner).toBeUndefined();
+        expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
+        expect(metaState.didLastHistoryImport).toEqual(expect.any(Number));
+    });
+
+    it('should release its history import lease after a provider failure', async () => {
+        (requestHelper.get as any).mockRejectedValue({ statusCode: 503 });
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'internal',
+        });
+
+        expect(metaState.historyImportLeaseOwner).toBeUndefined();
+        expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
+        expect(metaState.didLastHistoryImport).toBeUndefined();
+    });
+
+    it('should expose deletion-guard read failures as retryable', async () => {
+        deletionGuardMocks.getUserDeletionGuardState.mockRejectedValue(new Error('Firestore unavailable'));
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'unavailable',
+        });
+
+        expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(metaState.historyImportLeaseOwner).toBeUndefined();
+        expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
     });
 
     it('should batch requests if range > 90 days', async () => {
@@ -374,7 +456,9 @@ describe('Garmin Backfill', () => {
         });
 
         expect(requestHelper.get).toHaveBeenCalledTimes(1);
-        expect(setMock).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            didLastHistoryImport: expect.any(Number),
+        }), { merge: true });
     });
 
     it('should continue after an already requested batch so a partial retry reaches later ranges', async () => {
@@ -397,7 +481,6 @@ describe('Garmin Backfill', () => {
     it('should stop before calling Garmin when account deletion starts between batches', async () => {
         deletionGuardMocks.getUserDeletionGuardState
             .mockResolvedValueOnce({ shouldSkip: false })
-            .mockResolvedValueOnce({ shouldSkip: false })
             .mockResolvedValueOnce({ shouldSkip: true });
         (requestHelper.get as any).mockResolvedValue({ success: true });
 
@@ -409,11 +492,15 @@ describe('Garmin Backfill', () => {
         });
 
         expect(requestHelper.get).toHaveBeenCalledTimes(1);
-        expect(setMock).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            didLastHistoryImport: expect.any(Number),
+        }), { merge: true });
     });
 
     it('should not recreate history metadata when account deletion starts after Garmin accepts the range', async () => {
-        deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+        deletionGuardMocks.getUserDeletionGuardStateInTransaction
+            .mockResolvedValueOnce({ shouldSkip: false })
+            .mockResolvedValueOnce({ shouldSkip: true });
 
         await (backfillGarminAPIActivities as any)({
             startDate: '2023-01-01',
@@ -421,11 +508,15 @@ describe('Garmin Backfill', () => {
         }, context);
 
         expect(requestHelper.get).toHaveBeenCalledTimes(1);
-        expect(setMock).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({
+            didLastHistoryImport: expect.any(Number),
+        }), { merge: true });
     });
 
     it('should report failure when accepted history cannot be durably recorded', async () => {
-        runTransactionMock.mockRejectedValue(new Error('Firestore unavailable'));
+        runTransactionMock
+            .mockImplementationOnce(runTransactionHandler)
+            .mockRejectedValueOnce(new Error('Firestore unavailable'));
 
         await expect((backfillGarminAPIActivities as any)({
             startDate: '2023-01-01',

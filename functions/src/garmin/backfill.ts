@@ -1,5 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
+import * as crypto from 'crypto';
+import { FieldValue } from 'firebase-admin/firestore';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 
 import * as requestPromise from '../request-helper';
@@ -16,12 +18,14 @@ import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const HISTORY_IMPORT_LEASE_MS = 15 * 60 * 1000;
 
 interface BackfillRequest {
   startDate: string; // ISO Dates
@@ -46,6 +50,30 @@ class GarminHistoryImportSkippedForDeletedUserError extends Error {
     super(`Garmin history import was cancelled because user ${userID} is missing or account deletion is in progress.`);
     this.name = 'GarminHistoryImportSkippedForDeletedUserError';
   }
+}
+
+class GarminHistoryImportCooldownError extends Error {
+  constructor(nextAvailableAt: Date) {
+    super(`History import cannot happen before ${nextAvailableAt.toISOString()}`);
+    this.name = 'GarminHistoryImportCooldownError';
+  }
+}
+
+class GarminHistoryImportInProgressError extends Error {
+  constructor() {
+    super('A Garmin history import is already running.');
+    this.name = 'GarminHistoryImportInProgressError';
+  }
+}
+
+interface GarminHistoryServiceMeta extends UserServiceMetaInterface {
+  historyImportLeaseOwner?: string;
+  historyImportLeaseExpiresAt?: number;
+}
+
+interface GarminBackfillCoverage {
+  startMs: number;
+  endMs: number;
 }
 
 function getGarminHistoryMinimumStartDate(now = new Date()): Date {
@@ -104,10 +132,91 @@ function getGarminProviderErrorMessage(error: unknown): string | null {
 }
 
 async function assertGarminHistoryImportUserActive(userID: string): Promise<void> {
-  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, 'garmin_history_before_provider_request', error);
+  }
   if (deletionGuard.shouldSkip) {
     throw new GarminHistoryImportSkippedForDeletedUserError(userID);
   }
+}
+
+async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string): Promise<void> {
+  const db = admin.firestore();
+  const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
+  const nowMs = Date.now();
+  await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'garmin_history_lease', error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new GarminHistoryImportSkippedForDeletedUserError(userID);
+    }
+
+    const snapshot = await transaction.get(metaRef);
+    const meta = snapshot.exists ? snapshot.data() as GarminHistoryServiceMeta : null;
+    const lastImportAtMs = Number(meta?.didLastHistoryImport || 0);
+    const nextAvailableAtMs = lastImportAtMs + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * DAY_IN_MS);
+    if (lastImportAtMs > 0 && nextAvailableAtMs > nowMs) {
+      throw new GarminHistoryImportCooldownError(new Date(nextAvailableAtMs));
+    }
+
+    const currentOwner = `${meta?.historyImportLeaseOwner || ''}`;
+    const currentExpiry = Number(meta?.historyImportLeaseExpiresAt || 0);
+    if (currentOwner && currentExpiry > nowMs) {
+      throw new GarminHistoryImportInProgressError();
+    }
+
+    transaction.set(metaRef, {
+      historyImportLeaseOwner: leaseOwner,
+      historyImportLeaseExpiresAt: nowMs + HISTORY_IMPORT_LEASE_MS,
+    }, { merge: true });
+  });
+}
+
+async function finishGarminHistoryImportLease(
+  userID: string,
+  leaseOwner: string,
+  coverage: GarminBackfillCoverage | null,
+): Promise<void> {
+  const db = admin.firestore();
+  const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
+  await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'garmin_history_finish', error);
+    }
+    if (deletionGuard.shouldSkip) {
+      logger.warn(`Skipping Garmin history import metadata for ${userID} because account deletion is in progress.`);
+      return;
+    }
+
+    const snapshot = await transaction.get(metaRef);
+    if (`${snapshot.data()?.historyImportLeaseOwner || ''}` !== leaseOwner) {
+      if (coverage) {
+        throw new Error('Garmin history import lease ownership was lost before completion.');
+      }
+      return;
+    }
+
+    const update: Record<string, unknown> = {
+      historyImportLeaseOwner: FieldValue.delete(),
+      historyImportLeaseExpiresAt: FieldValue.delete(),
+    };
+    if (coverage) {
+      update.didLastHistoryImport = Date.now();
+      update.lastHistoryImportStartDate = coverage.startMs;
+      update.lastHistoryImportEndDate = coverage.endMs;
+    }
+    transaction.set(metaRef, update, { merge: true });
+  });
 }
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -173,7 +282,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     await processGarminBackfill(userID, startDate, endDate);
   } catch (error: unknown) {
     const errorMessage = getErrorMessage(error);
-    if (errorMessage.includes('History import cannot happen')) {
+    if (error instanceof GarminHistoryImportCooldownError) {
       throw new functions.https.HttpsError('permission-denied', errorMessage);
     }
     if (error instanceof GarminHistoryRangeUnavailableError) {
@@ -182,27 +291,37 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     if (error instanceof GarminHistoryImportSkippedForDeletedUserError) {
       throw new functions.https.HttpsError('failed-precondition', error.message);
     }
+    if (error instanceof GarminHistoryImportInProgressError) {
+      throw new functions.https.HttpsError('already-exists', error.message);
+    }
+    if (error instanceof UserDeletionGuardReadError) {
+      throw new functions.https.HttpsError('unavailable', error.message);
+    }
     logger.error('Error backfilling Garmin:', error);
     throw new functions.https.HttpsError('internal', errorMessage);
   }
 });
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
-  await assertGarminHistoryImportUserActive(userID);
-
-  // First check last history import
-  const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI).get();
-  if (userServiceMetaDocumentSnapshot.exists) {
-    const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    if (data.didLastHistoryImport) {
-      const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)); // 3 days
-      if ((nextHistoryImportAvailableDate > new Date())) {
-        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminAPI} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextHistoryImportAvailableDate.toISOString()})`);
-        throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate.toISOString()}`);
+  const leaseOwner = crypto.randomUUID();
+  await acquireGarminHistoryImportLease(userID, leaseOwner);
+  let leaseCompleted = false;
+  try {
+    const coverage = await requestGarminBackfill(userID, startDate, endDate);
+    await finishGarminHistoryImportLease(userID, leaseOwner, coverage);
+    leaseCompleted = true;
+  } finally {
+    if (!leaseCompleted) {
+      try {
+        await finishGarminHistoryImportLease(userID, leaseOwner, null);
+      } catch (releaseError) {
+        logger.warn(`Could not release Garmin history import lease for ${userID}.`, releaseError);
       }
     }
   }
+}
 
+async function requestGarminBackfill(userID: string, startDate: Date, endDate: Date): Promise<GarminBackfillCoverage> {
   const tokensQuerySnapshot = await admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').limit(1).get();
   if (tokensQuerySnapshot.empty) {
     logger.error(`No token found for user ${userID}`);
@@ -306,22 +425,12 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     }
   }
 
-  if (coveredBatchCount === 0) {
+  if (coveredBatchCount === 0 || firstCoveredStartMs === null || lastCoveredEndMs === null) {
     throw new GarminHistoryRangeUnavailableError(unavailableRangeMessage || undefined);
   }
 
-  const db = admin.firestore();
-  const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
-  await db.runTransaction(async (transaction) => {
-    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
-    if (deletionGuard.shouldSkip) {
-      logger.warn(`Skipping Garmin history import metadata for ${userID} because account deletion is in progress.`);
-      return;
-    }
-    transaction.set(serviceMetaRef, {
-        didLastHistoryImport: (new Date()).getTime(),
-        lastHistoryImportStartDate: firstCoveredStartMs,
-        lastHistoryImportEndDate: lastCoveredEndMs,
-    }, { merge: true });
-  });
+  return {
+    startMs: firstCoveredStartMs,
+    endMs: lastCoveredEndMs,
+  };
 }
