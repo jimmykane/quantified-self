@@ -886,6 +886,33 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
   });
 
+  it('retries COROS post-upload writes after the upload count marker is committed', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockSetActivitySyncSuccessMetadata.mockRejectedValueOnce(Object.assign(
+      new Error('Firestore unavailable'),
+      { code: 'unavailable' },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    const retryTransition = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0];
+    expect(retryTransition?.isCurrent({
+      ...queueItem,
+      destinationUploadCountedID: '9223372036854775806',
+      destinationUploadCountedAt: Date.now(),
+    })).toBe(true);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
   it('treats a missing pinned COROS token as disconnected before provider upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -2228,6 +2255,30 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('defers COROS when disconnect starts between connection metadata and active-account lookup', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    mockGetActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+      new Error('COROS disconnect is pending.'),
+      {
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        code: 'failed-precondition',
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockRecordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
   });
 
   it('defers when Wahoo detects a pending disconnect inside the provider adapter', async () => {

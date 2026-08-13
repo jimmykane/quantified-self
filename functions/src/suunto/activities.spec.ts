@@ -21,6 +21,10 @@ const callableMocks = vi.hoisted(() => ({
     options: undefined as unknown,
 }));
 
+const outboundFingerprintMocks = vi.hoisted(() => ({
+    recordActivitySyncOutboundFingerprint: vi.fn(),
+}));
+
 vi.mock('../request-helper', () => ({
     default: {
         post: (...args: any[]) => requestMocks.post(...args),
@@ -30,6 +34,13 @@ vi.mock('../request-helper', () => ({
     post: (...args: any[]) => requestMocks.post(...args),
     put: (...args: any[]) => requestMocks.put(...args),
     get: (...args: any[]) => requestMocks.get(...args),
+}));
+
+vi.mock('../activity-sync/outbound-fingerprint', () => ({
+    recordActivitySyncOutboundFingerprint: (...args: unknown[]) => outboundFingerprintMocks.recordActivitySyncOutboundFingerprint(...args),
+    ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
+        readonly name = 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError';
+    },
 }));
 
 const utilsMocks = {
@@ -195,6 +206,7 @@ import {
     resumeSuuntoActivityBlobUpload,
     uploadActivityFileToSuunto,
 } from './activities';
+import { ActivitySyncOutboundFingerprintSkippedForDeletedUserError } from '../activity-sync/outbound-fingerprint';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
 // Helper to create mock request
@@ -234,6 +246,10 @@ describe('importActivityToSuuntoApp', () => {
         // Default happy path
         utilsMocks.hasProAccess.mockResolvedValue(true);
         disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+        outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
+            exactFingerprintId: 'exact-v1-test',
+            fingerprintIds: ['exact-v1-test'],
+        });
         deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -303,6 +319,13 @@ describe('importActivityToSuuntoApp', () => {
         // Assertions
         expect(utilsMocks.hasProAccess).toHaveBeenCalledWith('test-user-id');
         expect(tokensMocks.getTokenData).toHaveBeenCalled();
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+            userID: 'test-user-id',
+            destinationServiceName: ServiceNames.SuuntoApp,
+            fileBuffer: fileContent,
+        });
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+            .toBeLessThan(requestMocks.post.mock.invocationCallOrder[0]);
 
         // 1. Check Init Upload
         expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
@@ -337,6 +360,43 @@ describe('importActivityToSuuntoApp', () => {
         expect(result).toEqual(expect.objectContaining({ status: 'success' }));
         expect(result).not.toHaveProperty('providerUserId');
     }, 30000);
+
+    it('should stop before Suunto initialization when the direct-upload echo receipt cannot be written', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(
+            new ActivitySyncOutboundFingerprintSkippedForDeletedUserError('test-user-id'),
+        );
+
+        const request = createMockRequest({
+            data: { file: Buffer.from('data').toString('base64') },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'failed-precondition',
+            message: 'Account is being deleted or no longer exists.',
+        });
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
+    it('should not write a direct-upload echo receipt without a connected Suunto account', async () => {
+        const admin = await import('firebase-admin');
+        const tokenQueryGet = admin.firestore()
+            .collection('suuntoapp-access-tokens')
+            .doc('test-user-id')
+            .collection('tokens').get as ReturnType<typeof vi.fn>;
+        tokenQueryGet.mockResolvedValueOnce({ size: 0, empty: true, docs: [] });
+
+        const request = createMockRequest({
+            data: { file: Buffer.from('data').toString('base64') },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'unauthenticated',
+        });
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
 
     it('should not double-prefix Authorization header when token already has Bearer', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'Bearer preformatted-token' });

@@ -319,6 +319,9 @@ async function getDestinationConnectionStatus(userID: string, destinationService
                 await getActiveCOROSTokenSnapshot(userID);
                 return 'connected';
             } catch (error) {
+                if (isTokenUseSkippedForPendingDisconnectError(error)) {
+                    return 'disconnect_pending';
+                }
                 const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
                 if (code === 'unauthenticated' || code === 'failed-precondition') {
                     return 'not_connected';
@@ -548,7 +551,6 @@ function isSameActivitySyncProviderState(
         && areEquivalentOptionalStrings(currentQueueItem.destinationProviderUserID, expectedQueueItem.destinationProviderUserID)
         && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedQueueItem.destinationWorkoutKey)
         && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedQueueItem.destinationInfoCode)
-        && areEquivalentOptionalStrings(currentQueueItem.destinationUploadCountedID, expectedQueueItem.destinationUploadCountedID)
         && areEquivalentOptionalStrings(currentQueueItem.outboundFingerprintID, expectedQueueItem.outboundFingerprintID)
         && isSameUploadContinuation(
             currentQueueItem.destinationUploadContinuation,

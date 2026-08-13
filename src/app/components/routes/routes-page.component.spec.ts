@@ -13,6 +13,11 @@ import { encodeRoutePolyline5, ServiceNames } from '@sports-alliance/sports-lib'
 
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+
+vi.mock('@shared/coros-rollout', () => ({
+    COROS_ROUTE_UPLOAD_ALLOWED_UIDS: ['user-1'],
+    isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid === 'user-1',
+}));
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
@@ -1297,6 +1302,7 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToCOROS()"');
         expect(template).toContain('<span>Send to</span>');
+        expect(template).toContain('!(canSendRoutesToCOROS() && item.canSendToCOROS)');
         expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
         expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
         expect(template).toContain('[matMenuTriggerFor]="routeRowActionsMenu"');

@@ -636,7 +636,7 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('**Automatically send new and updated routes**');
-    expect(serviceConnectionsSection?.content).toContain('opt-in Suunto route delivery to Garmin, Wahoo, or COROS');
+    expect(serviceConnectionsSection?.content).toContain('the limited COROS route pilot');
     expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page prompt');
     expect(serviceConnectionsSection?.content).toContain('newly imported or updated Suunto routes already saved in Quantified Self');
     expect(serviceConnectionsSection?.content).toContain('requires **Course Import** permission');
@@ -649,7 +649,7 @@ describe('help.content', () => {
   it('should document opt-in Suunto saved-route delivery to Wahoo', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('Suunto Services for Garmin, Wahoo, or COROS');
+    expect(serviceConnectionsSection?.content).toContain('Suunto Services for Garmin or Wahoo; approved COROS route-pilot accounts also see COROS');
     expect(serviceConnectionsSection?.content).toContain('Wahoo receives a FIT course');
     expect(serviceConnectionsSection?.content).toContain('updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate');
     expect(serviceConnectionsSection?.content).toContain('automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo');
@@ -781,7 +781,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
-    expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
+    expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin or Wahoo; approved COROS route-pilot accounts also see COROS');
+    expect(serviceConnectionsSection?.content).toContain('currently shown only to approved route-pilot accounts');
     expect(serviceConnectionsSection?.content).toContain('Every destination is opt-in and off by default');
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Integrations',

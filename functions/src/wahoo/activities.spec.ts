@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => {
   const tokenQueryGet = vi.fn();
   const loggerInfo = vi.fn();
   const loggerWarn = vi.fn();
+  const hasProAccess = vi.fn();
+  const recordActivitySyncOutboundFingerprint = vi.fn();
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
     constructor(
       _message: string,
@@ -32,7 +34,17 @@ const mocks = vi.hoisted(() => {
     tokenRef,
     loggerInfo,
     loggerWarn,
+    hasProAccess,
+    recordActivitySyncOutboundFingerprint,
     WahooAPIRequestError,
+  };
+});
+
+vi.mock('firebase-functions/v2/https', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase-functions/v2/https')>();
+  return {
+    ...actual,
+    onCall: (_options: unknown, handler: unknown) => handler,
   };
 });
 
@@ -49,6 +61,19 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('../tokens', () => ({ getTokenData: mocks.getTokenData }));
+vi.mock('../utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils')>();
+  return {
+    ...actual,
+    hasProAccess: mocks.hasProAccess,
+  };
+});
+vi.mock('../activity-sync/outbound-fingerprint', () => ({
+  recordActivitySyncOutboundFingerprint: mocks.recordActivitySyncOutboundFingerprint,
+  ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
+    readonly name = 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError';
+  },
+}));
 vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: mocks.isDisconnectPendingForUser,
 }));
@@ -66,7 +91,8 @@ vi.mock('./auth/api', () => ({
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
 
-import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from './activities';
+import { getWahooActivityUploadStatus, importActivityToWahooAPI, uploadActivityFileToWahoo } from './activities';
+import { ActivitySyncOutboundFingerprintSkippedForDeletedUserError } from '../activity-sync/outbound-fingerprint';
 import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
@@ -75,6 +101,11 @@ describe('Wahoo activity uploads', () => {
     vi.clearAllMocks();
     mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
     mocks.isDisconnectPendingForUser.mockResolvedValue(false);
+    mocks.hasProAccess.mockResolvedValue(true);
+    mocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
+      exactFingerprintId: 'exact-v1-test',
+      fingerprintIds: ['exact-v1-test'],
+    });
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true, id: 'wahoo-user' });
     mocks.getTokenData.mockResolvedValue({
@@ -103,6 +134,54 @@ describe('Wahoo activity uploads', () => {
     expect(request.form.get('workout_file_upload[file]')).toBe('data:application/vnd.fit;base64,RklU');
     expect(request.form.get('workout_file_upload[filename]')).toBe('.._ride.fit');
     expect(request.form.get('workout_file_upload[time_zone]')).toBe('Europe/Helsinki');
+    expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+  });
+
+  it('records a direct-upload echo receipt before posting the activity to Wahoo', async () => {
+    mocks.requestWahooAPI.mockResolvedValue({ data: { token: 'upload-1', status: 'pending' } });
+    const fileBuffer = Buffer.from('FIT');
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: fileBuffer.toString('base64'), filename: 'ride.fit' },
+    } as never)).resolves.toMatchObject({ status: 'pending', uploadId: 'upload-1' });
+
+    expect(mocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+    });
+    expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.requestWahooAPI.mock.invocationCallOrder[0]);
+  });
+
+  it('stops before Wahoo when the direct-upload echo receipt cannot be written', async () => {
+    mocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(
+      new ActivitySyncOutboundFingerprintSkippedForDeletedUserError('user-1'),
+    );
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Account is being deleted or no longer exists.',
+    });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('does not write a direct-upload echo receipt without a connected Wahoo account', async () => {
+    mocks.tokenQueryGet.mockResolvedValueOnce({ docs: [] });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
   it('maps a duplicate Wahoo upload to the existing activity result contract', async () => {

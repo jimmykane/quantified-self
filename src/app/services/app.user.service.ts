@@ -1017,6 +1017,7 @@ export class AppUserService implements OnDestroy {
       ]).pipe(
         map(([tokens, serviceMeta]) => (
           !isDisconnectPendingServiceConnection(serviceMeta)
+          && !isReconnectRequiredServiceConnection(serviceMeta)
           && this.hasConnectedActivityServiceToken(serviceName, tokens, serviceMeta)
         )),
         catchError(error => {

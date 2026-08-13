@@ -7,4 +7,6 @@ export const COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME = 'COROSAPIWorkoutQueue';
 export const SERVICE_NAME = ServiceNames.COROSAPI;
 export const USE_STAGING = false;
 export const COROS_TOKEN_REFRESH_THRESHOLD_DAYS = 20;
-
+export const COROS_API_REQUEST_TIMEOUT_MS = 30_000;
+export const COROS_FIT_DOWNLOAD_TIMEOUT_MS = 60_000;
+export const COROS_FIT_DOWNLOAD_ALLOWED_HOSTS = ['oss.coros.com'] as const;

@@ -18,7 +18,11 @@ import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../../helpers/suunto-service-connection.helper';
-import { isDisconnectPendingServiceConnection } from '@shared/service-connection';
+import {
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
 
 @Component({
@@ -89,6 +93,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   isConnectedToService = () => !this.isDisconnectPending && (!!this.activeCorosServiceToken || this.forceConnected);
 
+  get isReconnectRequired(): boolean {
+    return isReconnectRequiredServiceConnection(this.serviceMeta);
+  }
+
   get isDisconnectPending(): boolean {
     return isDisconnectPendingServiceConnection(this.serviceMeta);
   }
@@ -102,20 +110,25 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   get shouldShowConnectAction(): boolean {
-    return !this.isConnectedToService()
+    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
   }
 
   get connectButtonLabel(): string {
-    return this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
+    const uploadScope = this.isCOROSRouteUploadAvailableForUser
+      ? 'activity and route uploads'
+      : 'activity uploads';
     return this.isDisconnectManualReviewRequired
       ? 'COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if the old connection still appears in COROS.'
       : this.isDisconnectPending
       ? 'Disconnect is pending while COROS finishes deauthorization. Sync and imports are paused for this connection.'
-      : 'Required for history imports, direct activity and route uploads, and automatic sync involving COROS.';
+      : this.isReconnectRequired
+      ? `Reconnect COROS to resume history imports, ${uploadScope}, and automatic sync.`
+      : `Required for history imports, direct ${uploadScope}, and automatic sync involving COROS.`;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -189,6 +202,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return isActivitySyncRouteUIDAllowlisted(this.corosToSuuntoRouteID, userID);
   }
 
+  get isCOROSRouteUploadAvailableForUser(): boolean {
+    return isCOROSRouteUploadUIDAllowlisted(`${this.user?.uid || ''}`);
+  }
+
   get isBackfillDateRangeInvalid(): boolean {
     return this.backfillStartDate > this.backfillEndDate;
   }
@@ -205,6 +222,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (enabled && this.isSuuntoReconnectRequired) {
       this.snackBar.open('Reconnect Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (enabled && this.isReconnectRequired) {
+      this.snackBar.open('Reconnect COROS before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
@@ -243,6 +265,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (this.isSuuntoReconnectRequired) {
       this.snackBar.open('Reconnect Suunto before syncing past COROS activities.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (this.isReconnectRequired) {
+      this.snackBar.open('Reconnect COROS before syncing past activities.', undefined, { duration: 4000 });
       return;
     }
 

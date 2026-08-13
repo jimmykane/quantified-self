@@ -682,7 +682,7 @@ describe('ServicesComponent', () => {
             .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.coros[1].description)
-            .toBe('Send a FIT activity or GPX/FIT route directly to COROS without adding it to your Quantified Self archive.');
+            .toBe('Send a FIT activity directly to COROS without adding it to your Quantified Self archive.');
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });
 
@@ -778,6 +778,22 @@ describe('ServicesComponent', () => {
         expect(summary.textContent).toContain('Route sending');
         expect(summary.textContent).toContain('Suunto → Garmin Connect');
         expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
+    it('does not summarize stale COROS route settings outside the route pilot', () => {
+        component.processUser({
+            uid: 'not-in-coros-route-pilot',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+
+        expect(component.automaticSyncSummaryBySection.suunto.routes).toEqual([]);
+        expect(component.automaticSyncSummaryBySection.coros.routes).toEqual([]);
     });
 
     it('describes non-Pro automatic sync without implying an unconfigured route exists', () => {

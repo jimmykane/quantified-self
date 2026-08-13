@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => ({
   metaSet: vi.fn().mockResolvedValue(undefined),
+  metaGet: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
   disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
   restoreActivitySyncRoutesForPendingDisconnectClear: vi.fn().mockResolvedValue(undefined),
   getUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
@@ -76,6 +77,7 @@ import {
   markServiceReconnectRequired,
   mirrorServiceDisconnectPendingToUserMeta,
   setServiceConnectionProviderUserId,
+  pinServiceConnectionProviderUserIdIfUnset,
 } from './service-connection-meta';
 
 describe('service-connection-meta', () => {
@@ -83,9 +85,12 @@ describe('service-connection-meta', () => {
     vi.clearAllMocks();
     hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
       set: typeof hoisted.metaSet;
+      get: typeof hoisted.metaGet;
     }) => unknown) => runner({
       set: hoisted.metaSet,
+      get: hoisted.metaGet,
     }));
+    hoisted.metaGet.mockResolvedValue({ exists: false, data: () => undefined });
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
@@ -179,6 +184,33 @@ describe('service-connection-meta', () => {
 
   it('does not write an empty provider account ID', async () => {
     await expect(setServiceConnectionProviderUserId('user-1', ServiceNames.WahooAPI, '   ')).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('pins a legacy provider account only when no account is already selected', async () => {
+    await expect(pinServiceConnectionProviderUserIdIfUnset(
+      'user-1',
+      ServiceNames.COROSAPI,
+      ' open-old ',
+    )).resolves.toBe('pinned');
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+      providerUserId: 'open-old',
+    }, { merge: true });
+  });
+
+  it('does not overwrite a provider account selected by a concurrent reconnect', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ providerUserId: 'open-new' }),
+    });
+
+    await expect(pinServiceConnectionProviderUserIdIfUnset(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'open-old',
+    )).resolves.toBe('conflict');
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
   });

@@ -134,7 +134,8 @@ function buildAutomaticSyncSummaryBySection(
   const routeSettings = serviceSyncSettings?.routeDeliverySyncRoutes || {};
 
   for (const route of Object.values(ACTIVITY_SYNC_ROUTES)) {
-    if (activitySettings[route.id]?.enabled !== true) {
+    if (activitySettings[route.id]?.enabled !== true
+      || !isActivitySyncRouteUIDAllowlisted(route.id, `${user?.uid || ''}`)) {
       continue;
     }
 
@@ -153,7 +154,8 @@ function buildAutomaticSyncSummaryBySection(
   }
 
   for (const route of Object.values(ROUTE_DELIVERY_SYNC_ROUTES)) {
-    if (routeSettings[route.id]?.enabled !== true) {
+    if (routeSettings[route.id]?.enabled !== true
+      || !isRouteDeliverySyncRouteUIDAllowlisted(route.id, `${user?.uid || ''}`)) {
       continue;
     }
 
@@ -381,7 +383,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Route sync',
-        description: 'Import existing Suunto routes and send saved routes to Garmin, Wahoo, or COROS.',
+        description: 'Import existing Suunto routes and send saved routes to Garmin or Wahoo. COROS route delivery is in a limited pilot.',
         detail: 'Route import and automatic delivery',
         icon: 'route',
         actionLabel: 'Route sync settings',
@@ -414,9 +416,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send activity or route files',
-        description: 'Send a FIT activity or GPX/FIT route directly to COROS without adding it to your Quantified Self archive.',
-        detail: 'Direct file delivery',
+        title: 'Send activity files',
+        description: 'Send a FIT activity directly to COROS without adding it to your Quantified Self archive.',
+        detail: 'Direct FIT activity delivery',
         icon: 'cloud_upload',
         actionLabel: 'Send files',
         tool: 'uploads',

@@ -9,6 +9,7 @@ import { AppFunctionsService } from '../../../services/app.functions.service';
 import { isWahooRouteAccessReconnectRequired } from '../../../helpers/wahoo-route-access.helper';
 import { markUploadErrorUserActionHandled } from '../../../services/upload-error';
 import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -96,6 +97,10 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     }
     if (!this.auth.currentUser) {
       throw new Error('User not logged in');
+    }
+    if (this.serviceName === ServiceNames.COROSAPI
+      && !isCOROSRouteUploadUIDAllowlisted(this.auth.currentUser.uid)) {
+      throw new Error('COROS route uploads are not available for this account.');
     }
     if (file.file.size > MAX_ROUTE_UPLOAD_BYTES) {
       throw new Error('Cannot upload route because the size is greater than 20MB');

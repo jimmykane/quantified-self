@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAscent, DataDistance, DataDuration } from '@sports-alliance/sports-lib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
+import { COROS_API_REQUEST_TIMEOUT_MS } from './constants';
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getManualRouteInputFormat: vi.fn(),
   parseManualRouteUpload: vi.fn(),
   exportManualRouteAsGPX: vi.fn(),
+  isCOROSRouteUploadUIDAllowlisted: vi.fn(),
   onCallOptions: undefined as unknown,
 }));
 
@@ -25,6 +27,17 @@ vi.mock('../tokens', () => ({
 }));
 vi.mock('./account', () => ({
   getActiveCOROSTokenSnapshot: (...args: unknown[]) => mocks.getActiveCOROSTokenSnapshot(...args),
+  normalizeCOROSOpenId: (value: unknown) => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    const hasControlCharacter = [...normalized].some(character => {
+      const codePoint = character.codePointAt(0);
+      return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+    });
+    return normalized && normalized.length <= 200 && !normalized.includes('/') && !hasControlCharacter
+      ? normalized
+      : null;
+  },
 }));
 vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: (...args: unknown[]) => mocks.isServiceDisconnectPendingForUser(...args),
@@ -43,6 +56,9 @@ vi.mock('../utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils')>();
   return { ...actual, hasProAccess: (...args: unknown[]) => mocks.hasProAccess(...args) };
 });
+vi.mock('../../../shared/coros-rollout', () => ({
+  isCOROSRouteUploadUIDAllowlisted: (...args: unknown[]) => mocks.isCOROSRouteUploadUIDAllowlisted(...args),
+}));
 vi.mock('firebase-admin', () => ({ firestore: () => ({}) }));
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (options: unknown, handler: unknown) => {
@@ -135,6 +151,7 @@ describe('COROS route uploads', () => {
     mocks.getManualRouteInputFormat.mockReturnValue('gpx');
     mocks.parseManualRouteUpload.mockResolvedValue(routeFile());
     mocks.exportManualRouteAsGPX.mockResolvedValue('<gpx><rte /></gpx>');
+    mocks.isCOROSRouteUploadUIDAllowlisted.mockReturnValue(true);
   });
 
   it('uses the shared high-memory route-processing runtime', () => {
@@ -146,6 +163,18 @@ describe('COROS route uploads', () => {
       timeoutSeconds: 3600,
       maxInstances: 20,
     });
+  });
+
+  it('rejects non-pilot route uploads before parsing or provider access', async () => {
+    mocks.isCOROSRouteUploadUIDAllowlisted.mockReturnValue(false);
+
+    await expect(importRouteToCOROSAPI(callableRequest())).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'COROS route uploads are currently limited to approved test accounts.',
+    });
+    expect(mocks.decodeManualRouteUpload).not.toHaveBeenCalled();
+    expect(mocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it('posts a GPX route with every required COROS field and stable int64 id', async () => {
@@ -166,6 +195,7 @@ describe('COROS route uploads', () => {
       }),
       json: false,
       body: expect.any(Buffer),
+      timeout: COROS_API_REQUEST_TIMEOUT_MS,
     }));
     const body = (mocks.post.mock.calls[0][0].body as Buffer).toString('utf8');
     expect(body).toContain('name="openId"\r\n\r\ncoros-user-1');
@@ -250,6 +280,26 @@ describe('COROS route uploads', () => {
   it('fails closed if the active COROS account changes after context creation', async () => {
     await expect(uploadGPXRouteToCOROS(uploadParams({ expectedProviderUserId: 'another-user' })))
       .rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('revalidates the active account immediately before route delivery', async () => {
+    mocks.getActiveCOROSTokenSnapshot
+      .mockResolvedValueOnce(tokenSnapshot('coros-user-1'))
+      .mockResolvedValueOnce(tokenSnapshot('coros-user-1'))
+      .mockResolvedValueOnce(tokenSnapshot('coros-user-2'));
+
+    await expect(uploadGPXRouteToCOROS(uploadParams())).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: expect.stringContaining('changed'),
+    });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe provider identifiers before building multipart content', async () => {
+    mocks.getTokenData.mockResolvedValueOnce({ accessToken: 'access-token', openId: 'coros-user-1\r\ninjected' });
+
+    await expect(uploadGPXRouteToCOROS(uploadParams())).rejects.toMatchObject({ code: 'unauthenticated' });
     expect(mocks.post).not.toHaveBeenCalled();
   });
 

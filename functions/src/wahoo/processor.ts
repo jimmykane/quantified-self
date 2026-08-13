@@ -14,6 +14,7 @@ import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import { hasProAccess, setEvent } from '../utils';
 import { enqueueActivitySyncAfterEventPersistence } from '../activity-sync/enqueue-after-event-persistence';
+import { isActivitySyncOutboundEcho } from '../activity-sync/outbound-fingerprint';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { downloadWahooFITFile } from './file-download';
@@ -82,6 +83,20 @@ export async function processWahooWorkoutQueueItem(
     }
     if (!(await isClaimedWahooWorkoutQueueRevisionCurrent(queueItem, processingOwner))) {
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    }
+    if (await isActivitySyncOutboundEcho({
+      userID,
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer: Buffer.from(fitFile),
+    })) {
+      logger.info('[ActivitySync] Skipped an inbound Wahoo provider echo before event persistence.', {
+        userID,
+        queueItemId: queueItem.id,
+      });
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped',
+        skippedReason: 'outbound_provider_echo',
+      });
     }
     const eventID = await resolveProviderImportEventID({
       userID,

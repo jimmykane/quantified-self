@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     completeRevision: vi.fn().mockResolvedValue('processed'),
     failRevision: vi.fn().mockResolvedValue('retry'),
     enqueueActivitySyncAfterEventPersistence: vi.fn(),
+    isActivitySyncOutboundEcho: vi.fn(),
   };
 });
 
@@ -51,6 +52,9 @@ vi.mock('../utils', () => ({
 }));
 vi.mock('../activity-sync/enqueue-after-event-persistence', () => ({
   enqueueActivitySyncAfterEventPersistence: mocks.enqueueActivitySyncAfterEventPersistence,
+}));
+vi.mock('../activity-sync/outbound-fingerprint', () => ({
+  isActivitySyncOutboundEcho: mocks.isActivitySyncOutboundEcho,
 }));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
@@ -101,6 +105,7 @@ describe('processWahooWorkoutQueueItem', () => {
       }],
     });
     mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(false);
+    mocks.isActivitySyncOutboundEcho.mockResolvedValue(false);
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
     mocks.claimedRevisionCurrent.mockResolvedValue(true);
@@ -164,6 +169,25 @@ describe('processWahooWorkoutQueueItem', () => {
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
       resultStatus: 'skipped',
       skippedReason: 'user_deleted_or_deleting',
+    });
+  });
+
+  it('acknowledges a provider-returned outbound echo without storing another event', async () => {
+    mocks.isActivitySyncOutboundEcho.mockResolvedValueOnce(true);
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.isActivitySyncOutboundEcho).toHaveBeenCalledWith({
+      userID: 'firebase-1',
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer: Buffer.from('valid-fit'),
+    });
+    expect(mocks.resolveEventID).not.toHaveBeenCalled();
+    expect(mocks.setEvent).not.toHaveBeenCalled();
+    expect(mocks.enqueueActivitySyncAfterEventPersistence).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'outbound_provider_echo',
     });
   });
 

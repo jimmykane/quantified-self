@@ -4,6 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { BehaviorSubject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROS_ROUTE_UPLOAD_ALLOWED_UIDS } from '@shared/coros-rollout';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
@@ -47,7 +48,7 @@ describe('RouteDeliverySyncRouteControlComponent', () => {
     fixture = TestBed.createComponent(RouteDeliverySyncRouteControlComponent);
     component = fixture.componentInstance;
     component.user = {
-      uid: 'user-1',
+      uid: COROS_ROUTE_UPLOAD_ALLOWED_UIDS[0],
       settings: {
         serviceSyncSettings: {
           routeDeliverySyncRoutes: {
@@ -87,5 +88,14 @@ describe('RouteDeliverySyncRouteControlComponent', () => {
       ServiceNames.COROSAPI,
     );
     expect(component.backfillSummary).toMatchObject({ scanned: 4, queued: 3 });
+  });
+
+  it('does not render COROS route controls for a user outside the route pilot', () => {
+    component.user = { uid: 'non-pilot-user' } as any;
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    expect(component.routeAvailableForUser).toBe(false);
+    expect(fixture.nativeElement.querySelector('.activity-sync-route-control')).toBeNull();
   });
 });

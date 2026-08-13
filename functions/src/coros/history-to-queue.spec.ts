@@ -4,6 +4,12 @@ import * as history from '../history';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
 
+const accountMocks = vi.hoisted(() => ({
+    getActiveCOROSTokenSnapshot: vi.fn(),
+    getUserDeletionGuardState: vi.fn(),
+    isServiceUnavailableForSyncForUser: vi.fn(),
+}));
+
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
@@ -38,6 +44,22 @@ vi.mock('../history', () => ({
     getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null)
 }));
 
+vi.mock('./account', () => ({
+    getActiveCOROSTokenSnapshot: (...args: unknown[]) => accountMocks.getActiveCOROSTokenSnapshot(...args),
+}));
+
+vi.mock('firebase-admin', () => ({
+    firestore: vi.fn(() => ({})),
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: (...args: unknown[]) => accountMocks.getUserDeletionGuardState(...args),
+}));
+
+vi.mock('../service-connection-meta', () => ({
+    isServiceUnavailableForSyncForUser: (...args: unknown[]) => accountMocks.isServiceUnavailableForSyncForUser(...args),
+}));
+
 // Import AFTER mocks
 import { addCOROSAPIHistoryToQueue } from './history-to-queue';
 
@@ -49,6 +71,13 @@ describe('COROS History to Queue', () => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
+        accountMocks.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-open-id-1' });
+        accountMocks.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        accountMocks.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
 
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 7); // 7 days ago
@@ -73,7 +102,8 @@ describe('COROS History to Queue', () => {
                 'testUserID',
                 SERVICE_NAME,
                 expect.any(Date),
-                expect.any(Date)
+                expect.any(Date),
+                { expectedProviderUserId: 'coros-open-id-1' },
             );
             expect(result).toEqual({
                 result: 'History items added to queue',
@@ -117,13 +147,71 @@ describe('COROS History to Queue', () => {
 
             // 40 days / 30 days batches = 2 batches
             expect(history.addHistoryToQueue).toHaveBeenCalledTimes(2);
+            expect(history.addHistoryToQueue).toHaveBeenNthCalledWith(
+                1,
+                'testUserID',
+                SERVICE_NAME,
+                expect.any(Date),
+                expect.any(Date),
+                { expectedProviderUserId: 'coros-open-id-1' },
+            );
+            expect(history.addHistoryToQueue).toHaveBeenNthCalledWith(
+                2,
+                'testUserID',
+                SERVICE_NAME,
+                expect.any(Date),
+                expect.any(Date),
+                { expectedProviderUserId: 'coros-open-id-1' },
+            );
         });
 
         it('should throw error during batch processing', async () => {
             (history.addHistoryToQueue as any).mockRejectedValueOnce(new Error('Queue failure'));
 
             await expect(addCOROSAPIHistoryToQueue(data, context))
-                .rejects.toThrow('Queue failure');
+                .rejects.toMatchObject({
+                    code: 'internal',
+                    message: 'Could not import COROS history. Please retry.',
+                });
+        });
+
+        it('preserves reconnect semantics when the active account cannot be resolved', async () => {
+            accountMocks.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+                new Error('token path detail'),
+                { code: 'unauthenticated' },
+            ));
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'unauthenticated',
+                message: 'Reconnect COROS before importing history.',
+            });
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+
+        it('blocks history before account or provider access when deletion is in progress', async () => {
+            accountMocks.getUserDeletionGuardState.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Account is being deleted or no longer exists.',
+            });
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+
+        it('blocks history while COROS is unavailable for sync', async () => {
+            accountMocks.isServiceUnavailableForSyncForUser.mockResolvedValueOnce(true);
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Reconnect COROS before importing history.',
+            });
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
         });
 
         it('should throw error if end date is older than the limit', async () => {

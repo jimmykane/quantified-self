@@ -86,7 +86,7 @@
             <span>{{ suuntoRouteSendMenuLabel() }}</span>
           </button>
           }
-          @if (canSendRouteToCOROS() || canSendRoutesToCOROS()) {
+          @if (isCOROSRouteUploadAvailableForUser() && (canSendRouteToCOROS() || canSendRoutesToCOROS())) {
           <button mat-menu-item type="button"
             [disabled]="sendingToService() || !canSendRoutesToCOROS() || !canSendRouteToCOROS()"
             (click)="sendRouteToCOROS()">

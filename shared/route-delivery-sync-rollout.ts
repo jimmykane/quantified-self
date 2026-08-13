@@ -1,10 +1,11 @@
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, RouteDeliverySyncRouteId } from './route-delivery-sync-routes';
+import { COROS_ROUTE_UPLOAD_ALLOWED_UIDS } from './coros-rollout';
 
 export const ROUTE_DELIVERY_SYNC_ROUTE_ALLOWED_UIDS: Record<RouteDeliverySyncRouteId, ReadonlyArray<string>> = {
     // Empty allowlist disables UID-gating for the route (production-wide rollout).
     [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: [],
     [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: [],
-    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: [],
+    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: COROS_ROUTE_UPLOAD_ALLOWED_UIDS,
 };
 
 export function isRouteDeliverySyncRouteUIDAllowlisted(routeId: RouteDeliverySyncRouteId, uid: string): boolean {

@@ -228,6 +228,34 @@ describe('ServicesCorosComponent', () => {
         expect(component.connectionDescription).toContain('Disconnect is pending');
     });
 
+    it('offers reconnect and blocks COROS tools when the preserved token requires reconnect', () => {
+        component.hasProAccess = true;
+        component.user = { uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2', settings: {} } as any;
+        component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            openId: 'coros-user',
+        } as any];
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent;
+        const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+        expect(component.isReconnectRequired).toBe(true);
+        expect(component.isConnectedToService()).toBe(true);
+        expect(component.shouldShowConnectAction).toBe(true);
+        expect(component.connectButtonLabel).toBe('Reconnect');
+        expect(component.connectionDescription).toContain('Reconnect COROS');
+        expect(content).toContain('Reconnect required');
+        expect(content).toContain('Reconnect COROS before importing history.');
+        expect(content).toContain('Reconnect COROS before uploading activities.');
+        expect(content).toContain('Reconnect COROS before uploading routes.');
+        expect(connectButton?.textContent).toContain('Reconnect');
+        expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+    });
+
     it('shows reconnect action instead of retry copy when pending disconnect needs manual review', () => {
         component.hasProAccess = false;
         component.user = { uid: 'user-1' } as any;
@@ -310,6 +338,7 @@ describe('ServicesCorosComponent', () => {
     describe('Upload Card', () => {
         it('shows direct activity and route uploads when COROS is connected', () => {
             component.hasProAccess = true;
+            component.user = { uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
             fixture.detectChanges();
 
@@ -320,6 +349,17 @@ describe('ServicesCorosComponent', () => {
             expect(routeUploadComponent).toBeTruthy();
             expect(content).toContain('Upload FIT Activity');
             expect(content).toContain('Upload GPX or FIT Route');
+        });
+
+        it('keeps activity upload visible while hiding route upload outside the COROS route pilot', () => {
+            component.hasProAccess = true;
+            component.user = { uid: 'not-in-coros-route-pilot', settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.textContent).not.toContain('Upload GPX or FIT Route');
         });
     });
 
@@ -386,6 +426,25 @@ describe('ServicesCorosComponent', () => {
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
                 'Reconnect Suunto before turning on automatic activity sync.',
+                undefined,
+                { duration: 4000 }
+            );
+        });
+
+        it('should block enabling COROS->Suunto route when COROS requires reconnect despite a token', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.hasProAccess = true;
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+            component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' }] as any;
+            component.suuntoConnectionView = buildSuuntoServiceConnectionViewModel({ hasToken: true, serviceMeta: null });
+
+            await component.onCorosToSuuntoRouteToggle(true);
+
+            expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Reconnect COROS before turning on automatic activity sync.',
                 undefined,
                 { duration: 4000 }
             );

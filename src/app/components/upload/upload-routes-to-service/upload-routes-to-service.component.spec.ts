@@ -90,7 +90,12 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockRouter = {};
     const mockLogger = { error: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
-    const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
+    const mockAuth = {
+        currentUser: {
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            getIdToken: () => Promise.resolve('token'),
+        },
+    };
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
 
@@ -159,7 +164,6 @@ describe('UploadRoutesToServiceComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppAnalyticsService, useValue: mockAnalytics },
-                { provide: Auth, useValue: mockAuth },
                 { provide: Auth, useValue: mockAuth },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
@@ -291,6 +295,25 @@ describe('UploadRoutesToServiceComponent', () => {
             filename: 'route.gpx',
         });
         expect(component.fileAccept).toBe('.fit,.gpx');
+    });
+
+    it('blocks COROS route parsing outside the route-upload pilot', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        mockAuth.currentUser.uid = 'not-in-coros-route-pilot';
+        const file = {
+            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            filename: 'route',
+            extension: 'gpx',
+            data: null,
+            id: '1',
+            name: 'route.gpx',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await expect(component.processAndUploadFile(file)).rejects.toThrow(
+            'COROS route uploads are not available for this account.',
+        );
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
     });
 
     it('uploads a FIT route to Wahoo without applying Suunto GPX compression', async () => {

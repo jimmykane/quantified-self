@@ -52,6 +52,10 @@ import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
 import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
+  downloadCOROSFITFile,
+  PermanentCOROSFITDownloadError,
+} from './coros/file-download';
+import {
   enqueueWorkoutTaskWithDispatchRecovery,
   markWorkoutTaskDispatchedWithRetry,
 } from './shared/cloud-tasks';
@@ -474,11 +478,7 @@ export function getWorkoutForService(
     default:
       throw new Error('Not Implemented');
     case ServiceNames.COROSAPI:
-      return requestPromise.get({
-        encoding: null,
-        // gzip: true,
-        url: (workoutQueueItem as COROSAPIWorkoutQueueItemInterface).FITFileURI,
-      });
+      return downloadCOROSFITFile((workoutQueueItem as COROSAPIWorkoutQueueItemInterface).FITFileURI);
     case ServiceNames.SuuntoApp:
       return requestPromise.get({
         headers: {
@@ -566,6 +566,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
   let sawInactiveProviderAccount = false;
+  let processedAdditionalData: Record<string, unknown> | undefined;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
@@ -582,13 +583,16 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     if (serviceName === ServiceNames.COROSAPI) {
       try {
-        const activeToken = await getActiveCOROSTokenSnapshot(parentID);
-        if (activeToken.id !== (queueItem as COROSAPIWorkoutQueueItemInterface).openId) {
-          sawInactiveProviderAccount = true;
-          logger.info(`Skipping COROS queue item ${queueItem.id} because it belongs to an inactive connected account.`);
+        await getActiveCOROSTokenSnapshot(
+          parentID,
+          (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
+        );
+      } catch (error) {
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+          sawPendingDisconnectSkip = true;
+          logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect is pending.`);
           continue;
         }
-      } catch (error) {
         const code = `${(error as { code?: unknown } | null)?.code || ''}`;
         if (code === 'unauthenticated' || code === 'failed-precondition') {
           sawInactiveProviderAccount = true;
@@ -636,6 +640,30 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
+    if (serviceName === ServiceNames.COROSAPI) {
+      try {
+        await getActiveCOROSTokenSnapshot(
+          parentID,
+          (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
+        );
+      } catch (error) {
+        if (isTokenUseSkippedForPendingDisconnectError(error)) {
+          sawPendingDisconnectSkip = true;
+          logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before the FIT download.`);
+          continue;
+        }
+        const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+        if (code === 'unauthenticated' || code === 'failed-precondition') {
+          sawInactiveProviderAccount = true;
+          logger.info(`Skipping COROS queue item ${queueItem.id} because its account changed before the FIT download.`);
+          continue;
+        }
+        lastError = error instanceof Error ? error : new Error(`${error}`);
+        sawRetryableFailure = true;
+        continue;
+      }
+    }
+
     let result: Buffer | undefined;
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
@@ -650,11 +678,19 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
       logger.info('Ending timer: DownloadFit');
-      if (e.statusCode === 401) {
+      if (e instanceof PermanentCOROSFITDownloadError) {
+        return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+      } else if (e.statusCode === 401) {
         logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
+          if (serviceName === ServiceNames.COROSAPI) {
+            await getActiveCOROSTokenSnapshot(
+              parentID,
+              (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
+            );
+          }
           const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
           const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
           if (normalizedPayload.normalizedFromMultipart) {
@@ -663,14 +699,24 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
+            sawPendingDisconnectSkip = true;
+            logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before the refreshed FIT download.`);
+            continue;
+          }
+          if (retryError instanceof PermanentCOROSFITDownloadError) {
+            return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+          }
+          const retryCode = `${retryError?.code || ''}`.replace(/^functions\//, '');
+          if (serviceName === ServiceNames.COROSAPI
+            && (retryCode === 'unauthenticated' || retryCode === 'failed-precondition')) {
+            sawInactiveProviderAccount = true;
+            logger.info(`Skipping COROS queue item ${queueItem.id} because its account changed before the refreshed FIT download.`);
+            continue;
+          }
           if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
             sawUserDeletionSkip = true;
             logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because user ${parentID} is missing or deletion is in progress.`);
-            continue;
-          }
-          if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
-            sawPendingDisconnectSkip = true;
-            logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because service disconnect is pending.`);
             continue;
           }
           if (retryError instanceof TerminalServiceAuthError) {
@@ -729,6 +775,27 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         sawUserDeletionSkip = true;
         continue;
       }
+      if (serviceName === ServiceNames.COROSAPI) {
+        try {
+          await getActiveCOROSTokenSnapshot(
+            parentID,
+            (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
+          );
+        } catch (error) {
+          if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            sawPendingDisconnectSkip = true;
+            logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before event persistence.`);
+            continue;
+          }
+          const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+          if (code === 'unauthenticated' || code === 'failed-precondition') {
+            sawInactiveProviderAccount = true;
+            logger.info(`Skipping COROS queue item ${queueItem.id} because its account changed before event persistence.`);
+            continue;
+          }
+          throw error;
+        }
+      }
       if (await isActivitySyncOutboundEcho({
         userID: parentID,
         sourceServiceName: serviceName,
@@ -740,6 +807,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           queueItemId: queueItem.id,
         });
         oneSuccess = true;
+        processedAdditionalData = {
+          resultStatus: 'skipped',
+          skippedReason: 'outbound_provider_echo',
+        };
         break;
       }
       switch (serviceName) {
@@ -842,7 +913,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   if (oneSuccess) {
     // If we made it here, the workout was processed successfully for at least one token.
     // We can stop and mark as processed.
-    return updateToProcessed(queueItem, bulkWriter);
+    return updateToProcessed(queueItem, bulkWriter, processedAdditionalData);
   }
 
   if (sawPendingDisconnectSkip && !sawRetryableFailure) {

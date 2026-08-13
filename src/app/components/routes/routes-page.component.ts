@@ -96,6 +96,7 @@ import { AppBreakpoints } from '../../constants/breakpoints';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
 import { isWahooRouteAccessReconnectRequired } from '../../helpers/wahoo-route-access.helper';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
@@ -302,8 +303,12 @@ export class RoutesPageComponent implements OnInit {
         this.userService.hasProAccessSignal()
         && this.isWahooRouteDeliveryConnected()
     ));
+    readonly isCOROSRouteUploadAvailableForUser = computed(() => (
+        isCOROSRouteUploadUIDAllowlisted(`${this.user()?.uid || ''}`)
+    ));
     readonly canSendRoutesToCOROS = computed(() => (
         this.userService.hasProAccessSignal()
+        && this.isCOROSRouteUploadAvailableForUser()
         && this.isCOROSRouteDeliveryConnected()
     ));
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());

@@ -3,12 +3,10 @@ import * as logger from 'firebase-functions/logger';
 import { GoogleAuth } from 'google-auth-library';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
-    ACTIVITY_SYNC_ROUTE_IDS,
     ACTIVITY_SYNC_ROUTES,
     ActivitySyncRouteId,
 } from '../../../shared/activity-sync-routes';
 import {
-    ROUTE_DELIVERY_SYNC_ROUTE_IDS,
     ROUTE_DELIVERY_SYNC_ROUTES,
     RouteDeliverySyncRouteId,
 } from '../../../shared/route-delivery-sync-routes';
@@ -77,22 +75,25 @@ interface FirestoreRestValue {
     };
 }
 
-const SUUNTO_ACTIVITY_SYNC_ROUTE_IDS: ActivitySyncRouteId[] = [
-    ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
-    ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
-    ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
-];
-
-const SUUNTO_ROUTE_DELIVERY_SYNC_ROUTE_IDS: RouteDeliverySyncRouteId[] = [
-    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
-    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
-];
-
 const SUUNTO_SERVICE_IDENTIFIERS = new Set<string>([
     ServiceNames.SuuntoApp,
     'Suunto app',
     'suuntoApp',
 ]);
+
+const SUUNTO_ACTIVITY_SYNC_ROUTE_IDS: ActivitySyncRouteId[] = Object.values(ACTIVITY_SYNC_ROUTES)
+    .filter(route => (
+        SUUNTO_SERVICE_IDENTIFIERS.has(route.sourceServiceName)
+        || SUUNTO_SERVICE_IDENTIFIERS.has(route.destinationServiceName)
+    ))
+    .map(route => route.id);
+
+const SUUNTO_ROUTE_DELIVERY_SYNC_ROUTE_IDS: RouteDeliverySyncRouteId[] = Object.values(ROUTE_DELIVERY_SYNC_ROUTES)
+    .filter(route => (
+        SUUNTO_SERVICE_IDENTIFIERS.has(route.sourceServiceName)
+        || SUUNTO_SERVICE_IDENTIFIERS.has(route.destinationServiceName)
+    ))
+    .map(route => route.id);
 
 interface ScriptOptions {
     execute: boolean;

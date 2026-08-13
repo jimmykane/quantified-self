@@ -7,6 +7,7 @@ import requestHelper from './request-helper';
 
 describe('request-helper', () => {
     beforeEach(() => {
+        vi.useRealTimers();
         vi.clearAllMocks();
         // Mock global fetch
         vi.stubGlobal('fetch', vi.fn());
@@ -91,5 +92,23 @@ describe('request-helper', () => {
         const call = (global.fetch as any).mock.calls[0];
         expect(call[1].body).toBeInstanceOf(URLSearchParams);
         expect(call[1].body.get('key')).toBe('value');
+    });
+
+    it('should abort a request when its timeout expires', async () => {
+        vi.useFakeTimers();
+        (global.fetch as any).mockImplementation((_url: string, options: { signal: AbortSignal }) => (
+            new Promise((_resolve, reject) => {
+                options.signal.addEventListener('abort', () => {
+                    const error = new Error('The operation was aborted.');
+                    error.name = 'AbortError';
+                    reject(error);
+                }, { once: true });
+            })
+        ));
+
+        const request = requestHelper.get({ url: 'https://example.com', timeout: 1_000 });
+        const rejection = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(1_000);
+        await rejection;
     });
 });

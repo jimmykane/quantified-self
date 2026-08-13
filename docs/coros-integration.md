@@ -1,6 +1,6 @@
 # COROS Integration
 
-COROS is a Pro-only activity, sleep-summary, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported sleep summaries, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and sends direct or saved GPX/FIT routes to COROS.
+COROS is a Pro-only activity, sleep-summary, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported sleep summaries, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and implements direct or saved GPX/FIT route delivery to COROS. Activity upload and activity-sync routes are production-wide; route delivery remains pilot-gated until the production partner route-push entitlement is verified.
 
 This is the COROS-specific architecture and release record. For shared provider requirements, see the [provider integration implementation guide](provider-integration-guide.md).
 
@@ -17,7 +17,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 - Saved-route delivery from the Routes row action, selected-row bulk toolbar, and route detail.
 - Opt-in automatic and backfill delivery of Suunto routes already saved in Quantified Self to COROS through the shared route-delivery queue.
 
-Every automatic activity and saved-route direction is off by default. Empty rollout allowlists make the routes available to all eligible Pro users; a user must still connect both services and explicitly enable each direction. A date-range or saved-route backfill does not turn on future delivery.
+Every automatic activity and saved-route direction is off by default. Empty activity rollout allowlists make activity routes available to all eligible Pro users; a user must still connect both services and explicitly enable each direction. COROS route upload uses the separate shared pilot allowlist in `shared/coros-rollout.ts`, and Suunto-to-COROS route delivery reuses that exact allowlist. A date-range or saved-route backfill does not turn on future delivery.
 
 ## Account identity
 
@@ -27,6 +27,8 @@ All COROS imports and deliveries resolve the same active token through `function
 2. If legacy metadata is not pinned, tokens are ordered by `dateRefreshed`, then `dateCreated`, then document ID, all descending.
 3. The selected `openId` is persisted through the deletion-safe service-metadata writer before it is used.
 4. Once pinned, a missing or mismatched token never falls back to another COROS account.
+
+A multi-window activity-history request resolves that account once and passes the expected `openId` through every 30-day window; each provider request revalidates the pin. Daily sleep polling deduplicates candidate users and resolves active accounts with bounded concurrency rather than fanning out an unbounded number of metadata/token reads.
 
 COROS route multipart requests require a partner-platform `openUserId`. Quantified Self derives a stable 128-bit, provider-scoped digest from the Firebase UID rather than sending the UID itself. The value is stable for a Quantified Self account but cannot be used as a browser credential.
 
@@ -70,11 +72,15 @@ Provider-to-provider activity delivery can otherwise return through a destinatio
 2. When the FIT can be parsed, also compute a semantic fingerprint from bounded event/activity start, end, type, duration, and distance fields. This tolerates provider re-encoding that changes file bytes without changing the activity.
 3. Persist both receipts under `users/{uid}/activitySyncOutboundFingerprints`, namespaced by destination so the same FIT can be sent to multiple providers without one receipt overwriting another.
 4. Abort provider delivery if the deletion-guarded receipt transaction fails.
-5. During COROS or Suunto queue processing, check the downloaded original before event persistence. A matching, unexpired receipt for that source provider marks the inbound queue item processed without writing an event or starting another fan-out.
+5. During COROS, Suunto, or Wahoo queue processing, check the downloaded original before event persistence. A matching, unexpired receipt for that source provider marks the inbound queue item processed without writing an event or starting another fan-out.
 
 Receipts contain hashes, destination identity, timestamps, and TTL metadata—not the activity file. Browser access is denied. They expire after 120 days through Firestore TTL and are also removed by recursive account deletion. Wahoo independently omits third-party-app workouts from its import API, while the shared receipt still protects outbound deliveries consistently.
 
+Inbound COROS FIT URLs are treated as untrusted provider input. The worker accepts only HTTPS downloads and redirects on the provider-documented `oss.coros.com` host, applies a 60-second deadline and the shared 30 MB activity limit, validates the FIT signature before parsing, and reduces transport failures to errors that do not expose signed URL query values.
+
 ## Route delivery
+
+Route controls, the direct callable, saved-route sends, and Suunto route automatic/backfill delivery all enforce the same server-backed pilot gate. Removing the final UID from that shared allowlist opens route delivery production-wide only after the entitlement checks below pass; frontend visibility is not the authorization boundary.
 
 All COROS route entry points share `functions/src/coros/routes.ts` through the common route-send and route-delivery adapters:
 
@@ -95,10 +101,11 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 ## Security and lifecycle controls
 
-- Access/refresh tokens remain in the server-only `COROSAPIAccessTokens` tree. The browser receives only safe connection metadata and token projections already permitted by the existing connection UI.
+- Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree and its pre-existing owner-readable connection model. The new delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.
 - Callables require authentication, App Check, and Pro access. Disconnect remains available after entitlement ends.
 - Activity and route providers are called only after account-deletion and disconnect-pending checks; the checks repeat immediately before the provider request.
 - Token refresh retries once after a terminal COROS authentication signal. A changed or missing active account fails closed.
+- Activity initialization/status and route-push requests have a 30-second provider deadline; timeout outcomes retain the operation's safe restart/resume policy.
 - Multipart values remove CR/LF characters, names are bounded, source/generated files and provider payloads are never logged, and provider errors are reduced to allowlisted messages and typed dispositions.
 - Activity fingerprints, queue state, service metadata, and provider tokens live under existing recursive account-deletion ownership. Browser Rules explicitly deny fingerprint access.
 
@@ -118,9 +125,9 @@ The existing shared activity-sync and route-delivery backfill, dispatch, worker,
 
 ## Release checklist
 
-1. Confirm the production COROS partner application has activity-file upload and route-push entitlement. A controlled non-destructive activity probe on 2026-08-13 reached COROS application-level validation (`5096`, unsupported file) rather than permission denial (`30009`), confirming activity-upload access at that time. Route entitlement has not yet been validated and remains a pre-deployment launch gate.
+1. Confirm the production COROS partner application has activity-file upload and route-push entitlement. A controlled non-destructive activity probe on 2026-08-13 reached COROS application-level validation (`5096`, unsupported file) rather than permission denial (`30009`), confirming activity-upload access at that time. Route entitlement has not yet been validated, so route delivery remains restricted by `COROS_ROUTE_UPLOAD_ALLOWED_UIDS` while activity delivery is open to all eligible users.
 2. With a dedicated test account, send one valid FIT activity and poll the same upload ID to terminal success; repeat it and verify duplicate-as-success without a second event.
-3. Send one small valid GPX route to production only after confirming the route test is authorized. Stop the release if COROS returns HTTP 403 or result `30009`; do not broadly expose route controls until the partner enables that permission.
+3. From an allowlisted test account, send one small valid GPX route to production only after confirming the route test is authorized. Stop the release if COROS returns HTTP 403 or result `30009`; do not empty the route allowlist until the partner enables that permission.
 4. Deploy Firestore indexes/TTL and Rules, then Functions, then Hosting through the normal release workflow. Do not use implementation work as deployment approval.
 5. Exercise direct FIT activity upload/status, each source-to-COROS automatic route, all date-range backfills, COROS-to-Suunto/Wahoo routes, direct GPX/FIT route upload, saved-route row/bulk/detail sends, Suunto route automatic/backfill delivery, duplicate handling, reconnect, disconnect-pending, expired-Pro, and deletion races.
 6. Send the same test FIT to both COROS and Suunto, then import provider-returned copies and verify both destination-namespaced echo receipts remain effective and no duplicate event or fan-out is created.

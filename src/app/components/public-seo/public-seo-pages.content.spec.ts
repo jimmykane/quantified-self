@@ -165,6 +165,11 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes into Routes');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('up to 10 saved routes');
     expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self and connected services')).toBe(true);
+    const wahooCorosRouteItem = PUBLIC_SEO_PAGES.routeFiles.sections
+      .flatMap(section => section.items || [])
+      .find(item => item.title === 'Send saved routes to Wahoo or pilot COROS accounts');
+    expect(wahooCorosRouteItem?.copy).toContain('Routes table or bulk actions');
+    expect(wahooCorosRouteItem?.copy).toContain('COROS in the table, bulk actions, and route detail menu');
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Wahoo or COROS?')).toBe(true);

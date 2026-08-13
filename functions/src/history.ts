@@ -11,6 +11,7 @@ import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface }
 import { getServiceConfig } from './OAuth2';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
+  COROS_API_REQUEST_TIMEOUT_MS,
   PRODUCTION_URL,
   STAGING_URL,
   USE_STAGING,
@@ -21,7 +22,16 @@ import {
 } from '@sports-alliance/sports-lib';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
-import { getActiveCOROSTokenSnapshot } from './coros/account';
+import {
+  assertActiveCOROSAccountInTransaction,
+  getActiveCOROSTokenSnapshot,
+  normalizeCOROSOpenId,
+} from './coros/account';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from './shared/user-deletion-guard';
 
 const BATCH_SIZE = 450;
 
@@ -33,10 +43,94 @@ export interface HistoryImportResult {
   failedBatches: number;
 }
 
-export async function addHistoryToQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date): Promise<HistoryImportResult> {
+export interface HistoryImportOptions {
+  expectedProviderUserId?: string;
+}
+
+export class HistoryImportSkippedForDeletedUserError extends Error {
+  readonly name = 'HistoryImportSkippedForDeletedUserError';
+  readonly code = 'failed-precondition';
+
+  constructor(public readonly userID: string, public readonly phase: string) {
+    super('Account is being deleted or no longer exists.');
+  }
+}
+
+async function assertHistoryImportUserActive(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `history_import:${phase}`, error);
+  }
+  if (deletionGuard.shouldSkip) {
+    throw new HistoryImportSkippedForDeletedUserError(userID, phase);
+  }
+}
+
+async function commitHistoryBatchForActiveUser(params: {
+  userID: string;
+  serviceName: ServiceNames;
+  providerUserId: string;
+  workoutQueueItems: Array<Record<string, unknown>>;
+  startDate: Date;
+  endDate: Date;
+  processedActivitiesCount: number;
+}): Promise<void> {
+  const db = admin.firestore();
+  await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(params.userID, 'history_import_queue_transaction', error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new HistoryImportSkippedForDeletedUserError(params.userID, 'before_queue_write');
+    }
+    if (params.serviceName === ServiceNames.COROSAPI) {
+      await assertActiveCOROSAccountInTransaction(
+        params.userID,
+        params.providerUserId,
+        transaction,
+      );
+    }
+
+    for (const workoutQueueItem of params.workoutQueueItems) {
+      const queueRef = db.collection(getServiceWorkoutQueueName(params.serviceName)).doc(`${workoutQueueItem.id}`);
+      transaction.set(queueRef, {
+        ...workoutQueueItem,
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+        fromHistory: true,
+        dispatchedToCloudTask: null,
+      });
+    }
+    transaction.set(
+      db.collection('users').doc(params.userID).collection('meta').doc(params.serviceName),
+      <UserServiceMetaInterface>{
+        didLastHistoryImport: Date.now(),
+        lastHistoryImportStartDate: params.startDate.getTime(),
+        lastHistoryImportEndDate: params.endDate.getTime(),
+        processedActivitiesFromLastHistoryImportCount: params.processedActivitiesCount,
+      },
+      { merge: true },
+    );
+  });
+}
+
+export async function addHistoryToQueue(
+  userID: string,
+  serviceName: ServiceNames,
+  startDate: Date,
+  endDate: Date,
+  options: HistoryImportOptions = {},
+): Promise<HistoryImportResult> {
+  await assertHistoryImportUserActive(userID, 'before_token_lookup');
   const serviceConfig = getServiceConfig(serviceName);
   const tokenDocuments = serviceName === ServiceNames.COROSAPI
-    ? [await getActiveCOROSTokenSnapshot(userID)]
+    ? [options.expectedProviderUserId
+      ? await getActiveCOROSTokenSnapshot(userID, options.expectedProviderUserId)
+      : await getActiveCOROSTokenSnapshot(userID)]
     : (await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get()).docs;
 
   logger.info(`Found ${tokenDocuments.length} active ${serviceName} token(s) for user ${userID}`);
@@ -49,12 +143,23 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
 
   for (const tokenQueryDocumentSnapshot of tokenDocuments) {
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
+    await assertHistoryImportUserActive(userID, 'before_provider_request');
+    if (serviceName === ServiceNames.COROSAPI) {
+      await getActiveCOROSTokenSnapshot(userID, tokenQueryDocumentSnapshot.id);
+    }
 
     let workoutQueueItems: any;
     try {
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate);
     } catch (e: any) {
-      logger.info(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
+      logger.warn('[HistoryImport] Could not retrieve provider history.', {
+        serviceName,
+        userID,
+        providerUserId: tokenQueryDocumentSnapshot.id,
+        errorName: e instanceof Error ? e.name : typeof e,
+        code: typeof e?.code === 'string' || typeof e?.code === 'number' ? e.code : undefined,
+        statusCode: Number.isFinite(Number(e?.statusCode)) ? Number(e.statusCode) : undefined,
+      });
       // If we can't even get the items, that's a failure for this token
       // But we don't know the count. 
       // Let's re-throw for now as the original logic did?
@@ -80,41 +185,29 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
 
     logger.info(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
     for (const batchToProcess of batchesToProcess) {
-      const batch = admin.firestore().batch();
-      let processedWorkoutsCount = 0;
-      for (const workoutQueueItem of batchToProcess) {
-        // Writing to Standard Queue now (false for isHistory)
-        const queueRef = admin.firestore()
-          .collection(getServiceWorkoutQueueName(serviceName))
-          .doc(workoutQueueItem.id);
-
-        batch.set(queueRef, {
-          ...workoutQueueItem,
-          expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-          fromHistory: true,
-          dispatchedToCloudTask: null,
-        });
-        processedWorkoutsCount++;
-      }
+      const processedWorkoutsCount = batchToProcess.length;
       // Try to commit it
       try {
-
-        batch.set(
-          admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName),
-          <UserServiceMetaInterface>{
-            didLastHistoryImport: (new Date()).getTime(),
-            lastHistoryImportStartDate: startDate.getTime(),
-            lastHistoryImportEndDate: endDate.getTime(),
-            processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount + processedWorkoutsCount,
-          }, { merge: true });
-
-        await batch.commit();
+        await commitHistoryBatchForActiveUser({
+          userID,
+          serviceName,
+          providerUserId: tokenQueryDocumentSnapshot.id,
+          workoutQueueItems: batchToProcess,
+          startDate,
+          endDate,
+          processedActivitiesCount: totalProcessedWorkoutsCount + processedWorkoutsCount,
+        });
 
         processedBatchesCount++;
         totalProcessedWorkoutsCount += processedWorkoutsCount;
 
         logger.info(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
       } catch (e: any) {
+        if (e instanceof HistoryImportSkippedForDeletedUserError
+          || e instanceof UserDeletionGuardReadError
+          || (serviceName === ServiceNames.COROSAPI && `${e?.code || ''}`.replace(/^functions\//, '') === 'unauthenticated')) {
+          throw e;
+        }
         logger.error(`Could not save batch for token ${tokenQueryDocumentSnapshot.id} and user ${userID}`, e);
         failedBatchesCount++;
         totalFailedWorkoutsCount += processedWorkoutsCount; // These failed to save
@@ -165,18 +258,30 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
             dispatchedToCloudTask: null,
           };
         }));
-    case ServiceNames.COROSAPI:
+    case ServiceNames.COROSAPI: {
+      const accessToken = typeof serviceToken.accessToken === 'string' ? serviceToken.accessToken.trim() : '';
+      const openId = normalizeCOROSOpenId((serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);
+      if (!accessToken || !openId) {
+        throw new Error('Connected COROS token is incomplete.');
+      }
       result = await requestPromise.get({
         headers: {
           json: true,
         },
-        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${serviceToken.accessToken}&openId=${serviceToken.openId}&startDate=${startDate.toISOString().slice(0, 10).replace(/-/g, '')}&endDate=${endDate.toISOString().slice(0, 10).replace(/-/g, '')}`,
+        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${encodeURIComponent(accessToken)}&openId=${encodeURIComponent(openId)}&startDate=${startDate.toISOString().slice(0, 10).replace(/-/g, '')}&endDate=${endDate.toISOString().slice(0, 10).replace(/-/g, '')}`,
+        timeout: COROS_API_REQUEST_TIMEOUT_MS,
       });
       result = JSON.parse(result);
-      if (result.message && result.message !== 'OK') {
+      const resultCode = `${result.result ?? ''}`.trim();
+      const hasFailureResultCode = !!resultCode && !/^0+$/.test(resultCode);
+      if (hasFailureResultCode || (result.message && result.message !== 'OK')) {
         throw new Error(`COROS API Error with code ${result.result}`);
       }
-      return await convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);
+      if (!Array.isArray(result.data)) {
+        throw new Error('COROS returned an invalid history response.');
+      }
+      return await convertCOROSWorkoutsToQueueItems(result.data, openId);
+    }
   }
 }
 

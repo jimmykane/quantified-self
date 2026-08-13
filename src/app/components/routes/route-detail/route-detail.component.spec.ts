@@ -24,6 +24,11 @@ import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmat
 import { RouteNameDialogComponent } from '../route-name-dialog/route-name-dialog.component';
 import { RouteDetailComponent } from './route-detail.component';
 
+vi.mock('@shared/coros-rollout', () => ({
+  COROS_ROUTE_UPLOAD_ALLOWED_UIDS: ['user-1'],
+  isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid === 'user-1',
+}));
+
 describe('RouteDetailComponent', () => {
   let component: RouteDetailComponent;
   let routeServiceMock: any;
@@ -659,6 +664,19 @@ describe('RouteDetailComponent', () => {
     expect(component.sendingToService()).toBe(false);
   });
 
+  it('keeps COROS route actions outside the rollout hidden', () => {
+    component.user.set(new User('user-2'));
+    component.routeDocument.set({ ...routeDocument, userID: 'user-2' });
+    activityServiceConnectionState$.next({
+      ...activityServiceConnectionState$.value,
+      [ServiceNames.COROSAPI]: true,
+    });
+
+    expect(component.canSendRouteToCOROS()).toBe(true);
+    expect(component.isCOROSRouteUploadAvailableForUser()).toBe(false);
+    expect(component.canSendRoutesToCOROS()).toBe(false);
+  });
+
   it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
     component.routeDocument.set({
       ...routeDocument,
@@ -832,6 +850,7 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('(click)="sendRouteToSuunto()"');
     expect(template).toContain('(click)="sendRouteToGarmin()"');
     expect(template).toContain('(click)="sendRouteToCOROS()"');
+    expect(template).toContain('@if (isCOROSRouteUploadAvailableForUser() && (canSendRouteToCOROS() || canSendRoutesToCOROS()))');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');

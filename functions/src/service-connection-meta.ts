@@ -170,6 +170,52 @@ export async function setServiceConnectionProviderUserId(
   });
 }
 
+export type ServiceConnectionProviderUserIdPinResult =
+  | 'pinned'
+  | 'already_pinned'
+  | 'conflict'
+  | 'invalid'
+  | 'user_inactive';
+
+/**
+ * Pins a legacy connection without replacing an account selected by a
+ * concurrent OAuth callback. A non-empty existing identifier is immutable in
+ * this migration path; reconnect owns account changes through markConnected.
+ */
+export async function pinServiceConnectionProviderUserIdIfUnset(
+  userID: string,
+  serviceName: ServiceNames,
+  providerUserId: string | null | undefined,
+): Promise<ServiceConnectionProviderUserIdPinResult> {
+  const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+  if (!normalizedProviderUserId) {
+    return 'invalid';
+  }
+
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_connection_provider_pin:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      return 'user_inactive';
+    }
+
+    const snapshot = await transaction.get(ref);
+    const existingProviderUserId = `${snapshot.data()?.providerUserId || ''}`.trim();
+    if (existingProviderUserId) {
+      return existingProviderUserId === normalizedProviderUserId ? 'already_pinned' : 'conflict';
+    }
+
+    transaction.set(ref, { providerUserId: normalizedProviderUserId }, { merge: true });
+    return 'pinned';
+  });
+}
+
 export async function clearServiceConnectionState(
   userID: string,
   serviceName: ServiceNames,

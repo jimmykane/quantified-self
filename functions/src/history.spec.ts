@@ -17,6 +17,10 @@ const hoisted = vi.hoisted(() => {
 
     const getMock = vi.fn();
     const collectionMock = vi.fn();
+    const runTransactionMock = vi.fn();
+    const getUserDeletionGuardState = vi.fn();
+    const getUserDeletionGuardStateInTransaction = vi.fn();
+    const assertActiveCOROSAccountInTransaction = vi.fn();
     const docMock = vi.fn(() => ({
         get: getMock,
         collection: collectionMock
@@ -30,6 +34,10 @@ const hoisted = vi.hoisted(() => {
         collectionMock,
         docMock,
         getActiveCOROSTokenSnapshot: vi.fn(),
+        runTransactionMock,
+        getUserDeletionGuardState,
+        getUserDeletionGuardStateInTransaction,
+        assertActiveCOROSAccountInTransaction,
     };
 });
 
@@ -38,7 +46,8 @@ vi.mock('firebase-admin', () => {
     return {
         firestore: Object.assign(() => ({
             collection: hoisted.collectionMock,
-            batch: hoisted.batchMock
+            batch: hoisted.batchMock,
+            runTransaction: hoisted.runTransactionMock,
         }), {
             batch: hoisted.batchMock,
             Timestamp: {
@@ -93,6 +102,26 @@ vi.mock('./coros/queue', () => ({
 
 vi.mock('./coros/account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
+    assertActiveCOROSAccountInTransaction: (...args: unknown[]) => hoisted.assertActiveCOROSAccountInTransaction(...args),
+    normalizeCOROSOpenId: (value: unknown) => {
+        if (typeof value !== 'string') return null;
+        const normalized = value.trim();
+        const hasControlCharacter = [...normalized].some(character => {
+            const codePoint = character.codePointAt(0);
+            return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+        });
+        return normalized && !normalized.includes('/') && !hasControlCharacter
+            ? normalized
+            : null;
+    },
+}));
+
+vi.mock('./shared/user-deletion-guard', () => ({
+    getUserDeletionGuardState: (...args: unknown[]) => hoisted.getUserDeletionGuardState(...args),
+    getUserDeletionGuardStateInTransaction: (...args: unknown[]) => hoisted.getUserDeletionGuardStateInTransaction(...args),
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+    },
 }));
 
 describe('history', () => {
@@ -107,6 +136,24 @@ describe('history', () => {
         hoisted.docMock.mockReset();
         hoisted.getActiveCOROSTokenSnapshot.mockReset();
         hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'active-coros-token' });
+        hoisted.assertActiveCOROSAccountInTransaction.mockReset();
+        hoisted.assertActiveCOROSAccountInTransaction.mockResolvedValue(undefined);
+        hoisted.getUserDeletionGuardState.mockReset();
+        hoisted.getUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.getUserDeletionGuardStateInTransaction.mockReset();
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.runTransactionMock.mockReset();
+        hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
+            set: typeof hoisted.batchSetMock;
+        }) => unknown) => runner({ set: hoisted.batchSetMock }));
 
         // Default Firestore shape
         const defaultTokensGet = vi.fn().mockResolvedValue({
@@ -261,8 +308,8 @@ describe('history', () => {
             expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
                 url: expect.stringContaining('/v3/workouts')
             }));
-            expect(firestore.batch).toHaveBeenCalled();
-            expect(firestore.batch().set).toHaveBeenCalledWith(
+            expect(firestore.runTransaction).toHaveBeenCalled();
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(
                 expect.anything(),
                 expect.objectContaining({
                     didLastHistoryImport: expect.any(Number),
@@ -271,8 +318,6 @@ describe('history', () => {
                 }),
                 expect.anything()
             );
-            expect(firestore.batch().commit).toHaveBeenCalled();
-
             // Assert return value
             expect(result).toEqual({
                 successCount: 2,
@@ -288,7 +333,7 @@ describe('history', () => {
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.batchMock).toHaveBeenCalledTimes(0);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(0);
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -307,15 +352,16 @@ describe('history', () => {
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: workouts }));
 
             // First batch commit succeeds, second fails
-            hoisted.batchCommitMock
-                .mockResolvedValueOnce({})
+            hoisted.runTransactionMock
+                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock }) => unknown) => (
+                    runner({ set: hoisted.batchSetMock })
+                ))
                 .mockRejectedValueOnce(new Error('commit failed'));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.batchMock).toHaveBeenCalledTimes(2);
-            expect(hoisted.batchCommitMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({
@@ -335,6 +381,21 @@ describe('history', () => {
                 .rejects.toThrow('service down');
         });
 
+        it('aborts queue persistence atomically when account deletion starts', async () => {
+            (requestHelper.get as any).mockResolvedValue(JSON.stringify({
+                payload: [{ workoutKey: 'w1' }],
+            }));
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toBeInstanceOf(history.HistoryImportSkippedForDeletedUserError);
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
         it('should request COROS history only for the single active account', async () => {
             vi.mocked(tokens.getTokenData).mockResolvedValue({
                 accessToken: 't',
@@ -345,11 +406,57 @@ describe('history', () => {
             await history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date('2026-08-01'), new Date('2026-08-02'));
 
             expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith('uid');
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith('uid', 'active-coros-token');
             expect(tokens.getTokenData).toHaveBeenCalledTimes(1);
             expect(tokens.getTokenData).toHaveBeenCalledWith(
                 expect.objectContaining({ id: 'active-coros-token' }),
                 ServiceNames.COROSAPI,
                 false,
+            );
+        });
+
+        it('requires the caller-pinned COROS account before and immediately before history retrieval', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+                { expectedProviderUserId: 'active-coros-token' },
+            );
+
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(1, 'uid', 'active-coros-token');
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(2, 'uid', 'active-coros-token');
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('revalidates the active COROS account in the queue-write transaction', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-coros-token',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                message: 'OK',
+                data: [{ workoutId: 'c1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+                { expectedProviderUserId: 'active-coros-token' },
+            );
+
+            expect(hoisted.assertActiveCOROSAccountInTransaction).toHaveBeenCalledWith(
+                'uid',
+                'active-coros-token',
+                expect.anything(),
             );
         });
     });
@@ -406,6 +513,40 @@ describe('history', () => {
             )).rejects.toThrow(/COROS API Error/);
         });
 
+        it('should throw when COROS returns a failure result code without an error message', async () => {
+            (requestHelper.get as any).mockResolvedValue(JSON.stringify({
+                result: '5006',
+                data: [],
+            }));
+
+            await expect(history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1', userName: 'user-1' } as any,
+                new Date(),
+                new Date()
+            )).rejects.toThrow(/COROS API Error with code 5006/);
+        });
+
+        it('should accept an explicit COROS success result code', async () => {
+            const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
+            (requestHelper.get as any).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                data: [{ workoutId: 'c1' }],
+            }));
+
+            await history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1', userName: 'user-1' } as any,
+                new Date(),
+                new Date()
+            );
+
+            expect(convertCOROSWorkoutsToQueueItems).toHaveBeenCalledWith(
+                [{ workoutId: 'c1' }],
+                'open-1'
+            );
+        });
+
         it('should convert COROS data via helper and include openId', async () => {
             const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
@@ -424,6 +565,10 @@ describe('history', () => {
                 [{ workoutId: 'c1' }],
                 'open-1'
             );
+            expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('token=t&openId=open-1'),
+                timeout: 30_000,
+            }));
             expect(items).toEqual([{ id: 'coros-open-1-0', workoutID: 'c1' }]);
         });
 

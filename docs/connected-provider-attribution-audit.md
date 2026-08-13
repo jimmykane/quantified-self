@@ -27,7 +27,8 @@ This checklist tracks the shared provider presentation rules for Garmin, Suunto,
 | Services navigation and connection cards | Destination | Garmin, Suunto, COROS, Wahoo | `Garmin Connect`, `Suunto App`, `COROS`, `Wahoo` on connection surfaces | No | Yes |
 | Activity upload to service | Destination | Suunto, COROS, Wahoo | Shared destination label in upload UI copy | No | Yes |
 | Direct route upload to service | Destination | Garmin, Suunto, COROS, Wahoo | Destination label and provider icon in Services | No | Yes |
-| Saved-route row, bulk, and detail send | Destination | Garmin, Suunto, COROS, Wahoo | Shared destination label plus `Sent to …` metadata after success | No | Yes |
+| Saved-route row and bulk send | Destination | Garmin, Suunto, COROS, Wahoo | Shared destination label plus `Sent to …` metadata after success | No | Yes |
+| Saved-route detail send | Destination | Garmin, Suunto, COROS | Shared destination label plus `Sent to …` metadata after success | No | Yes |
 | Provider data-flow matrix | Source + destination | Supported activity and Suunto saved-route directions | Shared source/destination labels; enabled, opt-in, and needs-connection states | No | Yes |
 | Public Integrations provider strips | Source | Garmin, Suunto, COROS, Wahoo | Shared source label plus provider icon | No | Yes |
 | Workout Data Comparison provider strip | Source | Garmin, Suunto, COROS, Wahoo | Shared source label plus provider icon | No | Yes |

@@ -1521,6 +1521,30 @@ describe('AppUserService', () => {
             });
         });
 
+        it('watchActivityServiceConnectionState should not expose reconnect-required COROS tokens as usable', async () => {
+            const user = { uid: 'u10c' } as any;
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.COROSAPI
+                    ? [{ accessToken: 'coros-token', openId: 'coros-user' }]
+                    : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.COROSAPI
+                    ? { connectionState: 'reconnect_required' }
+                    : undefined
+            ) as any);
+
+            const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+
+            expect(result).toEqual({
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: false,
+                [ServiceNames.COROSAPI]: false,
+                [ServiceNames.WahooAPI]: false,
+            });
+        });
+
         it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
             const user = { uid: 'u7' } as any;
             (collectionData as any)

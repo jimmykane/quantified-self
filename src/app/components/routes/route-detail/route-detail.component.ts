@@ -36,6 +36,7 @@ import { AppUserService, GarminRouteSendContext } from '../../../services/app.us
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 import {
   canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
@@ -185,8 +186,12 @@ export class RouteDetailComponent {
       && !connectionView.reconnectRequired
       && connectionView.missingPermissions.length === 0;
   });
+  readonly isCOROSRouteUploadAvailableForUser = computed(() => (
+    isCOROSRouteUploadUIDAllowlisted(`${this.user()?.uid || ''}`)
+  ));
   readonly canSendRoutesToCOROS = computed(() => (
     this.userService.hasProAccessSignal()
+    && this.isCOROSRouteUploadAvailableForUser()
     && this.isCOROSRouteDeliveryConnected()
   ));
   readonly canSendRouteToSuunto = computed(() => {
@@ -226,7 +231,7 @@ export class RouteDetailComponent {
   readonly hasSendableRouteDestination = computed(() => (
     this.canSendRouteToSuunto()
     || this.canSendRouteToGarmin()
-    || this.canSendRouteToCOROS()
+    || (this.isCOROSRouteUploadAvailableForUser() && this.canSendRouteToCOROS())
     || !!this.garminRouteSendDisabledReason()
   ));
   readonly canReprocessRoute = computed(() => {

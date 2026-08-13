@@ -228,7 +228,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     try {
       const result = await this.getServiceUploadStatusResult(row);
       if (result.pending) {
-        this.scheduleNextWahooStatusPoll(row, result.message || 'Wahoo is still processing the activity.');
+        this.scheduleNextWahooStatusPoll(
+          row,
+          result.message || `${this.destinationName} is still processing the activity.`,
+        );
         return;
       }
       if (result.duplicate) {
@@ -606,7 +609,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       callableFunction,
       payload,
     );
-    return this.toServiceUploadResult(response.data);
+    return this.toServiceUploadResult(response.data, row);
   }
 
   private getWahooRetryAfterMs(error: unknown): number | undefined {
@@ -833,16 +836,23 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return {};
   }
 
-  private toServiceUploadResult(response: ServiceUploadCallableResponse | undefined): ServiceUploadResult {
+  private toServiceUploadResult(
+    response: ServiceUploadCallableResponse | undefined,
+    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
+  ): ServiceUploadResult {
     const responseCode = response?.code || response?.result?.code;
     const responseMessage = response?.message || response?.result?.message;
     const responseStatus = `${response?.status || response?.result?.status || ''}`.trim().toLowerCase();
-    const uploadId = response?.uploadId || response?.result?.uploadId;
-    const providerUserId = response?.providerUserId || response?.result?.providerUserId;
+    const uploadId = response?.uploadId || response?.result?.uploadId || resumeState?.uploadId;
+    const providerUserId = response?.providerUserId || response?.result?.providerUserId || resumeState?.providerUserId;
     if (responseCode === 'ALREADY_EXISTS') {
       return { success: true, duplicate: true, message: responseMessage };
     }
     if (responseStatus === 'pending' || responseStatus === 'processing') {
+      if (this.usesAsynchronousStatusPolling
+        && (!uploadId || (this.serviceName === ServiceNames.COROSAPI && !providerUserId))) {
+        throw new Error(`${this.destinationName} returned an incomplete upload status.`);
+      }
       return {
         success: false,
         duplicate: false,
@@ -851,6 +861,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         providerUserId,
         message: responseMessage,
       };
+    }
+    if (this.usesAsynchronousStatusPolling && responseStatus !== 'success') {
+      throw new Error(`${this.destinationName} returned an invalid upload status.`);
     }
     return {
       success: true,

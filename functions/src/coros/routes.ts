@@ -15,6 +15,7 @@ import {
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
+import { isCOROSRouteUploadUIDAllowlisted } from '../../../shared/coros-rollout';
 import * as requestPromise from '../request-helper';
 import {
   decodeManualRouteUpload,
@@ -35,8 +36,8 @@ import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
-import { getActiveCOROSTokenSnapshot } from './account';
-import { PRODUCTION_URL, SERVICE_NAME, STAGING_URL, USE_STAGING } from './constants';
+import { getActiveCOROSTokenSnapshot, normalizeCOROSOpenId } from './account';
+import { COROS_API_REQUEST_TIMEOUT_MS, PRODUCTION_URL, SERVICE_NAME, STAGING_URL, USE_STAGING } from './constants';
 
 const COROS_SUCCESS_CODE = '0000';
 const COROS_DUPLICATE_ROUTE_CODE = '13001';
@@ -335,7 +336,20 @@ function toCOROSRouteResultError(
   });
 }
 
+function assertCOROSRouteUploadRolloutAccess(userID: string): void {
+  if (isCOROSRouteUploadUIDAllowlisted(userID)) return;
+  throw new ProviderOperationError({
+    serviceName: ServiceNames.COROSAPI,
+    operation: 'route_upload',
+    disposition: 'permission_required',
+    code: 'permission-denied',
+    message: 'COROS route uploads are currently limited to approved test accounts.',
+    dlqContext: 'COROS_ROUTE_UPLOAD_ROLLOUT_REQUIRED',
+  });
+}
+
 async function assertCOROSRouteUploadAllowed(userID: string, phase: string): Promise<void> {
+  assertCOROSRouteUploadRolloutAccess(userID);
   let deletionGuard;
   try {
     deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
@@ -354,15 +368,17 @@ async function withActiveCOROSRouteToken<T>(
   operation: (token: COROSAPIAuth2ServiceTokenInterface, providerUserId: string) => Promise<T>,
 ): Promise<T> {
   await assertCOROSRouteUploadAllowed(userID, 'before_token_lookup');
-  const selectedSnapshot = await getActiveCOROSTokenSnapshot(userID);
+  const selectedSnapshot = await getActiveCOROSTokenSnapshot(userID, expectedProviderUserId);
   const providerUserId = selectedSnapshot.id;
   if (expectedProviderUserId && providerUserId !== expectedProviderUserId) {
     throw new HttpsError('unauthenticated', 'The selected COROS account changed before the route could be sent.');
   }
 
   const execute = async (forceRefresh: boolean): Promise<T> => {
-    const currentSnapshot = await selectedSnapshot.ref.get();
-    if (!currentSnapshot.exists) throw new HttpsError('unauthenticated', 'Reconnect COROS before sending routes.');
+    const currentSnapshot = await getActiveCOROSTokenSnapshot(userID, providerUserId);
+    if (currentSnapshot.id !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'The selected COROS account changed before the route could be sent.');
+    }
     let token: COROSAPIAuth2ServiceTokenInterface;
     try {
       token = await getTokenData(currentSnapshot, ServiceNames.COROSAPI, forceRefresh) as COROSAPIAuth2ServiceTokenInterface;
@@ -370,9 +386,13 @@ async function withActiveCOROSRouteToken<T>(
       if (isTerminalServiceAuthError(error)) throw new HttpsError('unauthenticated', 'Reconnect COROS before sending routes.');
       throw error;
     }
-    const openId = `${token.openId || providerUserId}`.trim();
+    const openId = normalizeCOROSOpenId(token.openId || providerUserId);
     if (!openId || openId !== providerUserId) throw new HttpsError('unauthenticated', 'Reconnect COROS before sending routes.');
     await assertCOROSRouteUploadAllowed(userID, 'before_provider_request');
+    const finalSnapshot = await getActiveCOROSTokenSnapshot(userID, providerUserId);
+    if (finalSnapshot.id !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'The selected COROS account changed before the route could be sent.');
+    }
     return operation(token, providerUserId);
   };
 
@@ -440,6 +460,7 @@ export async function uploadGPXRouteToCOROS(params: {
         headers: { token: token.accessToken, 'Content-Type': multipart.contentType },
         json: false,
         body: multipart.body,
+        timeout: COROS_API_REQUEST_TIMEOUT_MS,
       }));
     } catch (error) {
       throw toCOROSRouteRequestError(error, providerUserId, providerRouteId);
@@ -484,6 +505,7 @@ export async function uploadRouteToCOROS(
   fileBuffer: Buffer,
   filename: unknown,
 ): Promise<COROSRouteUploadResult> {
+  assertCOROSRouteUploadRolloutAccess(userID);
   const inputFormat = getManualRouteInputFormat(filename, 'COROS', 'FIT or GPX');
   const routeFile = await parseManualRouteUpload(fileBuffer, inputFormat);
   const gpxContent = await exportManualRouteAsGPX(routeFile);
@@ -531,6 +553,7 @@ export const importRouteToCOROSAPI = onCall({
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   try {
+    assertCOROSRouteUploadRolloutAccess(request.auth.uid);
     const payload = request.data as COROSRouteUploadRequest;
     return await uploadRouteToCOROS(
       request.auth.uid,

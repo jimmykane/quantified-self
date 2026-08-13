@@ -173,6 +173,54 @@ describe('sleep polling', () => {
         }));
     });
 
+    it('uses the active COROS token document id for legacy tokens without an openId field', async () => {
+        const userID = 'coros-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        const legacyToken = createTokenDoc(userID, {
+            serviceName: ServiceNames.COROSAPI,
+        });
+        legacyToken.id = 'legacy-coros-open-id';
+        installCollectionGroupTokenMock([legacyToken]);
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(legacyToken);
+
+        await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.COROSAPI,
+            ServiceNames.COROSAPI,
+            30,
+            nowMs,
+        );
+
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            userID,
+            providerUserId: 'legacy-coros-open-id',
+        }));
+    });
+
+    it('bounds active COROS account lookups for production-wide polling', async () => {
+        const concurrency = sleepPollingTestInternals.COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY;
+        const candidateUserIDs = Array.from({ length: concurrency + 5 }, (_, index) => `coros-user-${index}`);
+        const tokens = candidateUserIDs.map((userID, index) => createTokenDoc(userID, {
+            serviceName: ServiceNames.COROSAPI,
+            openId: `coros-open-${index}`,
+        }));
+        installCollectionGroupTokenMock(tokens);
+        let inFlight = 0;
+        let maxInFlight = 0;
+        hoisted.getActiveCOROSTokenSnapshot.mockImplementation(async (userID: string) => {
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            await new Promise(resolve => setTimeout(resolve, 1));
+            inFlight -= 1;
+            return tokens.find(token => token.ref.parent.parent.id === userID)!;
+        });
+
+        const resolved = await sleepPollingTestInternals.resolveActiveCOROSTokenSnapshots(candidateUserIDs);
+
+        expect(resolved).toHaveLength(candidateUserIDs.length);
+        expect(maxInFlight).toBe(concurrency);
+        expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledTimes(candidateUserIDs.length);
+    });
+
     it('queries all Suunto token docs when sleep sync is open to all users', async () => {
         const userID = 'suunto-user-id';
         const nowMs = Date.UTC(2026, 3, 28);

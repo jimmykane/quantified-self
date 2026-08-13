@@ -53,32 +53,48 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         fetchOptions.headers['Authorization'] = `Bearer ${opts.auth.bearer}`;
     }
 
-    const response = await fetch(url, fetchOptions);
+    const timeoutMs = Number(opts.timeout);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+        if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+            const timeoutController = new AbortController();
+            timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+            fetchOptions.signal = opts.signal
+                ? AbortSignal.any([opts.signal, timeoutController.signal])
+                : timeoutController.signal;
+        } else if (opts.signal) {
+            fetchOptions.signal = opts.signal;
+        }
 
-    if (!response.ok) {
-        const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
-        err.statusCode = response.status;
-        try {
-            err.error = await response.text();
+        const response = await fetch(url, fetchOptions);
+
+        if (!response.ok) {
+            const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
+            err.statusCode = response.status;
             try {
-                err.error = JSON.parse(err.error);
+                err.error = await response.text();
+                try {
+                    err.error = JSON.parse(err.error);
+                } catch { // ignore
+                }
             } catch { // ignore
             }
-        } catch { // ignore
+            throw err;
         }
-        throw err;
-    }
 
-    if (opts.encoding === null) {
-        return Buffer.from(await response.arrayBuffer());
-    }
+        if (opts.encoding === null) {
+            return Buffer.from(await response.arrayBuffer());
+        }
 
-    // Default to JSON parsing only if json: true is explicitly set (matching request-promise-native)
-    if (opts.json === true) {
-        return response.json();
-    }
+        // Default to JSON parsing only if json: true is explicitly set (matching request-promise-native)
+        if (opts.json === true) {
+            return response.json();
+        }
 
-    return response.text();
+        return response.text();
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
 }
 
 const requestFn = request as any;
