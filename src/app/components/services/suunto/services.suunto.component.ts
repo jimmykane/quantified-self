@@ -1,4 +1,4 @@
-import { Component, DoCheck, OnDestroy } from '@angular/core';
+import { Component, DoCheck, Input, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -38,6 +38,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public serviceName = ServiceNames.SuuntoApp;
   public readonly suuntoToGarminRouteID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
   public readonly suuntoToWahooRouteID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI;
+  public activeActivitySyncDestination: 'wahoo' | 'coros' = 'wahoo';
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
   clicks = 0;
   isQueueingRoutes = false;
   isSavingRouteDeliverySyncRoute = false;
@@ -79,6 +81,9 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   private wahooRouteDeliverySubscription: Subscription | null = null;
 
   override async ngOnChanges() {
+    if (this.initialActivitySyncDestination === 'wahoo' || this.initialActivitySyncDestination === 'coros') {
+      this.activeActivitySyncDestination = this.initialActivitySyncDestination;
+    }
     await super.ngOnChanges();
     this.syncDerivedState();
     this.watchGarminRouteSendState();

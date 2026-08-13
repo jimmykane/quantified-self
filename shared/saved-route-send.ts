@@ -12,6 +12,8 @@ function getRouteDeliveryDestinationLabel(destinationServiceName: ServiceNames):
             return 'Suunto';
         case ServiceNames.WahooAPI:
             return 'Wahoo';
+        case ServiceNames.COROSAPI:
+            return 'COROS';
         default:
             return `${destinationServiceName}`;
     }

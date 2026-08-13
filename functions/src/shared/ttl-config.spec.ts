@@ -26,6 +26,7 @@ describe('TTL Configuration', () => {
         expect(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS).toBe(35);
         expect(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS).toBe(30);
         expect(TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS).toBe(7);
+        expect(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS).toBe(120);
     });
 
     describe('getExpireAtTimestamp', () => {

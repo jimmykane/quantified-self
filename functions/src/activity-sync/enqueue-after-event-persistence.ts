@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SetEventResult } from '../utils';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { enqueueActivitySyncJobsForImportedEvent } from './enqueue-imported-event';
+import { isActivitySyncOutboundEcho } from './outbound-fingerprint';
 
 export interface EnqueueActivitySyncAfterEventPersistenceParams {
   userID: string;
@@ -10,6 +11,7 @@ export interface EnqueueActivitySyncAfterEventPersistenceParams {
   sourceServiceName: ServiceNames;
   sourceActivityID: string;
   setEventResult: SetEventResult;
+  sourceFileData?: Buffer;
 }
 
 /**
@@ -31,6 +33,19 @@ export async function enqueueActivitySyncAfterEventPersistence(
   }
 
   try {
+    if (params.sourceFileData && await isActivitySyncOutboundEcho({
+      userID: params.userID,
+      sourceServiceName: params.sourceServiceName,
+      fileBuffer: params.sourceFileData,
+    })) {
+      logger.info('[ActivitySync] Suppressed a provider echo before automatic activity fan-out.', {
+        userID: params.userID,
+        sourceServiceName: params.sourceServiceName,
+        eventID: params.setEventResult.eventID || params.eventID,
+      });
+      return false;
+    }
+
     await enqueueActivitySyncJobsForImportedEvent({
       userID: params.userID,
       eventID: params.setEventResult.eventID || params.eventID,

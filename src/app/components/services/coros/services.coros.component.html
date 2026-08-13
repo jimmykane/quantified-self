@@ -39,15 +39,13 @@
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
-      @for (serviceToken of serviceTokens; track $index) {
       <div class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon">account_circle</mat-icon>
         <div class="connected-account-copy">
-          <div class="connected-account-title">{{ getCorosOpenId(serviceToken) }}</div>
-          <div class="connected-account-line">Connected: {{ serviceToken.dateCreated | date:'short' }}</div>
+          <div class="connected-account-title">{{ getCorosOpenId(activeCorosServiceToken!) }}</div>
+          <div class="connected-account-line">Active account · Connected: {{ activeCorosServiceToken!.dateCreated | date:'short' }}</div>
         </div>
       </div>
-      }
     </div>
     }
       </div>
@@ -198,6 +196,27 @@
         } @else {
         <app-status-info type="info" title="Connect Account First">
           You need to connect your COROS account before uploading activities.
+        </app-status-info>
+        }
+      </section>
+      <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>route</mat-icon>
+            <span>Upload GPX or FIT Route</span>
+          </div>
+        </div>
+        @if (!hasProAccess) {
+        <div class="pro-required-inline" (click)="triggerUpsell()">
+          <mat-icon>lock</mat-icon>
+          <span>Route upload is a Pro feature.</span>
+        </div>
+        } @else if (isConnectedToService()) {
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"
+          [serviceName]="serviceName"></app-upload-route-to-service>
+        } @else {
+        <app-status-info type="info" title="Connect Account First">
+          You need to connect your COROS account before uploading routes.
         </app-status-info>
         }
       </section>

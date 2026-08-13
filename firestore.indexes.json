@@ -1360,6 +1360,36 @@
       "indexes": []
     },
     {
+      "collectionGroup": "activitySyncOutboundFingerprints",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "activitySyncOutboundFingerprints",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "activitySyncOutboundFingerprints",
+      "fieldPath": "destinationServiceName",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "activitySyncOutboundFingerprints",
+      "fieldPath": "fingerprintKind",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "activitySyncOutboundFingerprints",
+      "fieldPath": "recordedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "adminStats",
       "fieldPath": "expireAt",
       "ttl": true,

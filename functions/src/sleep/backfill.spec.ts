@@ -25,6 +25,7 @@ const hoisted = vi.hoisted(() => ({
     addSleepSyncQueueItem: vi.fn(),
     updateSleepSyncState: vi.fn(),
     requestGet: vi.fn(),
+    getActiveCOROSTokenSnapshot: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -179,6 +180,10 @@ vi.mock('../utils', () => ({
 
 vi.mock('../tokens', () => ({
     getTokenData: hoisted.getTokenData,
+}));
+
+vi.mock('../coros/account', () => ({
+    getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
 }));
 
 vi.mock('./provider-flags', () => ({
@@ -453,6 +458,13 @@ describe('backfillCorosAPISleep', () => {
         hoisted.transactionTombstoneData = undefined;
         hoisted.hasProAccess.mockResolvedValue(true);
         hoisted.getTokenData.mockResolvedValue({ openId: 'coros-user-1' });
+        hoisted.getActiveCOROSTokenSnapshot.mockImplementation(async () => {
+            const token = hoisted.tokenDocs[0];
+            if (!token) {
+                throw new Error('No COROS token');
+            }
+            return { ...token, id: 'coros-user-1' };
+        });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
         hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);

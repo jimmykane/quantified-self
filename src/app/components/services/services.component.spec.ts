@@ -680,7 +680,9 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
         expect(component.serviceOverviewCardsBySection.suunto[3].description)
             .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
-        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.coros[1].description)
+            .toBe('Send a FIT activity or GPX/FIT route directly to COROS without adding it to your Quantified Self archive.');
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });
 
@@ -873,7 +875,7 @@ describe('ServicesComponent', () => {
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('activity-sync');
-        expect(component.managedToolTitle).toBe('Send activities to Wahoo');
+        expect(component.managedToolTitle).toBe('Send activities to connected services');
     });
 
     it('gives the service tools dialog an accessible close action', () => {

@@ -4,6 +4,7 @@ export const ROUTE_DELIVERY_SYNC_ROUTE_ALLOWED_UIDS: Record<RouteDeliverySyncRou
     // Empty allowlist disables UID-gating for the route (production-wide rollout).
     [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: [],
     [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: [],
+    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: [],
 };
 
 export function isRouteDeliverySyncRouteUIDAllowlisted(routeId: RouteDeliverySyncRouteId, uid: string): boolean {

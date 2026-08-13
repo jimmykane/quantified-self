@@ -668,7 +668,7 @@ At the top of Connections, **Your data flow** explains that connected providers 
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct GPX/FIT route delivery to Garmin, Suunto, and Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin or Wahoo, history imports, uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, supported activity-sync directions to Suunto, Wahoo, and COROS, direct GPX/FIT route delivery to Garmin, Suunto, Wahoo, and COROS, saved-route row and bulk sends, syncing past activities, opt-in Suunto route delivery to Garmin, Wahoo, or COROS, history imports, uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
@@ -699,13 +699,13 @@ Suunto FIT activity uploads in Services show each file's upload status, duplicat
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 
-Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin or Wahoo. Garmin can also be enabled from a one-time **Routes** page prompt when both connections are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to the selected destination. For Garmin, it sends routes already saved in Quantified Self to Garmin as courses; Garmin must be connected with **Course Import** permission. Wahoo receives a FIT course and requires Wahoo route access. **Send routes** uses Suunto routes already saved in Quantified Self. For Garmin, it does not fetch routes from Suunto or Garmin; Wahoo delivery likewise operates only on the saved route. Wahoo route delivery uses a stable saved-route key, so an updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate. If Wahoo was connected before route delivery was available, reconnect it once to grant route access.
+Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS. Every destination is opt-in and off by default. Garmin can also be enabled from a one-time **Routes** page prompt when both connections are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to the selected destination. Garmin receives a course and requires **Course Import** permission. Wahoo receives a FIT course and requires Wahoo route access. COROS receives GPX route geometry; cycling activity types are sent as bike routes and all other or unspecified types as running routes. **Send routes** uses Suunto routes already saved in Quantified Self and can backfill them without enabling future delivery. It does not fetch routes from Suunto or any destination during delivery. Wahoo uses a stable saved-route key, so an updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate. COROS uses a deterministic ID for the exact saved-route revision, so repeating that revision is deduplicated. If Wahoo was connected before route delivery was available, reconnect it once to grant route access.
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Suunto imports sent route files as new routes, so sending an edited route that was already sent to Suunto creates an updated copy in Suunto App. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 
 **Uploads** in Suunto Services also accepts a selected GPX or FIT route without adding it to **Routes**. Suunto receives GPX, so Quantified Self converts a selected FIT route to GPX in memory before delivery. The direct upload does not create or retain a Quantified Self route.
 
-See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and sending routes to Garmin.
+See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and sending routes or activities to connected destinations.
 
 ## Garmin
 
@@ -733,13 +733,15 @@ Garmin to Suunto activity sync requires:
 - turn on automatic activity sync in Garmin Services,
 - and allow Activity Export in Garmin.
 
-Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync. After reconnecting, turn it on again if you want automatic sync to resume.
+Garmin Services also offers Wahoo and COROS as opt-in activity destinations. Automatic delivery applies only to new imported FIT activities. **Sync past activities** can send a selected stored date range to any supported destination without turning on future delivery.
+
+Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery. After reconnecting, turn each route on again if you want automatic sync to resume.
 
 If a provider revokes access, Quantified Self marks that connection as **Reconnect required** in Services and may also show a dashboard reconnect prompt. Reconnecting restores access; dismissing the prompt does not reconnect automatically.
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
-**Sync past activities** is available in Garmin Services: choose a date range to send Garmin activities already imported into Quantified Self to Suunto. It uses the original files already saved with those activities.
+**Sync past activities** is available in Garmin Services: choose a supported destination and date range to send Garmin activities already imported into Quantified Self. It uses the original files already saved with those activities.
 
 You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 
@@ -755,9 +757,18 @@ COROS tools currently include:
 - automatically importing daily sleep summaries from a rolling recent window (sleep timing plus available average sleep HR, resting HR, and overnight HRV; the COROS API does not expose sleep stages),
 - importing available COROS sleep history from the last three months in 30-day windows once every seven days,
 - importing history,
-- uploading FIT activities to COROS.
+- uploading FIT activities to COROS,
+- uploading selected GPX or FIT routes to COROS without saving them in Quantified Self,
+- sending saved routes to COROS individually or in selected-row bulk batches,
+- automatically sending new Garmin, Suunto, or Wahoo activities to COROS, or backfilling a stored date range,
+- automatically sending new COROS activities to Suunto or Wahoo, or backfilling a stored date range,
+- and opting in to new/updated or existing saved Suunto route delivery to COROS.
 
-COROS FIT activity uploads in Services use the same per-file status, short provider upload pacing, and failed-file retry controls as Suunto uploads.
+COROS uses one active connected account for every import and delivery. New OAuth connections pin that account. A legacy connection is pinned deterministically the first time it is used; if the pinned token disappears, delivery fails closed and asks you to reconnect instead of silently choosing another account.
+
+COROS FIT activity uploads in Services are asynchronous and use per-file status, short provider upload pacing, and failed-file retry controls. Once COROS issues an upload ID, refresh or retry checks that same upload first instead of posting the FIT again. A duplicate is shown as a completed result.
+
+Direct COROS route upload accepts one GPX or FIT file, parses it server-side, and sends generated GPX route geometry without creating or retaining a Quantified Self route. Saved routes can be sent from a row action, route detail, or selected-row bulk action. Saved-route and automatic Suunto-route delivery share the same server adapter and delivery metadata. COROS supports bike and running route types: cycling-family routes use bike, while every other or missing activity type uses running.
 
 COROS to Suunto activity sync requires:
 
@@ -765,15 +776,19 @@ COROS to Suunto activity sync requires:
 - turn on automatic activity sync in COROS Services,
 - and keep both service connections active.
 
-Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event.
+Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event. COROS Services also offers Wahoo as a destination.
 
-**Sync past activities** is available in COROS Services: choose a date range to send COROS activities already imported into Quantified Self to Suunto.
+**Sync past activities** is available in COROS Services: choose a date range to send COROS activities already imported into Quantified Self to Suunto or Wahoo.
 
 You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 
 When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync. Dismissing the prompt hides it permanently; **Sync past activities** remains available in Services.
 
-See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, uploads, and COROS to Suunto sync.
+Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination. Connect both services and turn on only the route you want. Automatic delivery is off by default; a date-range backfill does not enable it. The original stored FIT is sent, so events without a supported retained original file are skipped.
+
+Before an activity is sent to any provider, Quantified Self stores short-lived, server-only exact-file and semantic FIT fingerprints. If COROS or Suunto later returns that activity through its import feed, the matching provider echo is acknowledged without creating another event or starting another fan-out. These receipts expire after about 120 days and contain hashes and routing metadata, not the source file.
+
+See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, activity and route uploads, provider-to-provider sync, and short-lived echo protection.
 
 ## Wahoo
 
@@ -788,7 +803,8 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 - automatically send new Garmin, COROS, or Suunto activities to Wahoo,
 - or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo,
 - automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo, or send those saved routes now,
-- automatically send new Wahoo activities to Suunto, or choose a date range to send past retained Wahoo activities to Suunto.
+- automatically send new Wahoo activities to Suunto, or choose a date range to send past retained Wahoo activities to Suunto,
+- automatically send new Wahoo activities to COROS, or choose a date range to send past retained Wahoo activities to COROS.
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
@@ -796,16 +812,16 @@ Direct FIT activity delivery only sends the selected file to Wahoo. It does not 
 
 Direct course/route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory before sending it to Wahoo; the GPX must contain exactly one route with valid coordinates. It sends the route to Wahoo without creating or retaining a route in Quantified Self. If you connected Wahoo before route sending was available, reconnect it once to grant route access. When a route send reports missing Wahoo route access, select **Reconnect Wahoo** in the displayed dialog, then send the route again after you return. Routes imported by Wahoo's Cloud API sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
 
-Wahoo to Suunto activity sync requires:
+Wahoo to Suunto or COROS activity sync requires:
 
-- you must connect both Wahoo and Suunto,
+- you must connect Wahoo and the selected destination,
 - turn on automatic activity sync in Wahoo Services,
 - keep both service connections active,
 - and use Wahoo activities with a retained original FIT file.
 
-Automatic sync runs only for newly imported eligible Wahoo activities. **Sync past activities** in Wahoo Services sends retained Wahoo FIT activities from the date range you choose to Suunto. You can sync past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
+Automatic sync runs only for newly imported eligible Wahoo activities. **Sync past activities** in Wahoo Services sends retained Wahoo FIT activities from the date range you choose to Suunto or COROS. You can sync past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
 
-Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route in this release. Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services; direct Wahoo GPX/FIT course/route delivery is a separate, user-selected Wahoo-only upload. Sleep sync, plans, and other Wahoo forwarding are not supported.
+Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in. Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services; direct Wahoo GPX/FIT course/route delivery is a separate, user-selected Wahoo-only upload. Sleep sync and plans are not forwarded.
 
 See [Policies -> Wahoo Data](/policies#wahoo-data) for the provider-specific privacy and retention summary.
 

@@ -29,6 +29,7 @@ const hoisted = vi.hoisted(() => {
         getMock,
         collectionMock,
         docMock,
+        getActiveCOROSTokenSnapshot: vi.fn(),
     };
 });
 
@@ -90,6 +91,10 @@ vi.mock('./coros/queue', () => ({
     })))
 }));
 
+vi.mock('./coros/account', () => ({
+    getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
+}));
+
 describe('history', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -100,6 +105,8 @@ describe('history', () => {
         hoisted.collectionMock.mockReset();
         hoisted.getMock.mockReset();
         hoisted.docMock.mockReset();
+        hoisted.getActiveCOROSTokenSnapshot.mockReset();
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'active-coros-token' });
 
         // Default Firestore shape
         const defaultTokensGet = vi.fn().mockResolvedValue({
@@ -326,6 +333,24 @@ describe('history', () => {
 
             await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
                 .rejects.toThrow('service down');
+        });
+
+        it('should request COROS history only for the single active account', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+
+            await history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date('2026-08-01'), new Date('2026-08-02'));
+
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith('uid');
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(1);
+            expect(tokens.getTokenData).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'active-coros-token' }),
+                ServiceNames.COROSAPI,
+                false,
+            );
         });
     });
 

@@ -2,12 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 
+interface MockTokenDocument {
+    id: string;
+    data: () => Record<string, unknown>;
+    ref: { parent: { parent: { id: string } } };
+}
+
 const hoisted = vi.hoisted(() => ({
     collectionGroup: vi.fn(),
     collection: vi.fn(),
     collectionGroupGet: vi.fn(),
     metaDocGet: vi.fn(),
     mockGetUserDeletionGuardState: vi.fn(),
+    getActiveCOROSTokenSnapshot: vi.fn(),
+    installedTokenDocs: [] as MockTokenDocument[],
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -35,6 +43,10 @@ vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
 }));
 
+vi.mock('../coros/account', () => ({
+    getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
+}));
+
 import { sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
 import * as logger from 'firebase-functions/logger';
@@ -48,10 +60,17 @@ describe('sleep polling', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
+        hoisted.installedTokenDocs.length = 0;
+        hoisted.getActiveCOROSTokenSnapshot.mockImplementation(async (userID: string) => {
+            const token = hoisted.installedTokenDocs.find(candidate => candidate.ref.parent.parent.id === userID);
+            if (!token) throw new Error('No active COROS token');
+            return token;
+        });
     });
 
     function createTokenDoc(userID: string, data: Record<string, unknown>) {
         return {
+            id: `${data['openId'] || data['userName'] || 'token'}`,
             data: () => data,
             ref: {
                 parent: {
@@ -63,7 +82,8 @@ describe('sleep polling', () => {
         };
     }
 
-    function installCollectionGroupTokenMock(docs: unknown[]) {
+    function installCollectionGroupTokenMock(docs: MockTokenDocument[]) {
+        hoisted.installedTokenDocs.splice(0, hoisted.installedTokenDocs.length, ...docs);
         hoisted.collectionGroupGet.mockResolvedValue({ docs });
         hoisted.collectionGroup.mockReturnValue({
             where: vi.fn().mockReturnThis(),
@@ -121,6 +141,35 @@ describe('sleep polling', () => {
             provider: SLEEP_PROVIDERS.COROSAPI,
             userID,
             providerUserId: 'coros-open-id-1',
+        }));
+    });
+
+    it('queues only the active COROS account when a user has legacy token documents', async () => {
+        const userID = 'coros-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        const oldToken = createTokenDoc(userID, {
+            serviceName: ServiceNames.COROSAPI,
+            openId: 'coros-open-old',
+        });
+        const activeToken = createTokenDoc(userID, {
+            serviceName: ServiceNames.COROSAPI,
+            openId: 'coros-open-active',
+        });
+        installCollectionGroupTokenMock([oldToken, activeToken]);
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(activeToken);
+
+        const queued = await sleepPollingTestInternals.enqueueProviderPolls(
+            SLEEP_PROVIDERS.COROSAPI,
+            ServiceNames.COROSAPI,
+            30,
+            nowMs,
+        );
+
+        expect(queued).toBe(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            userID,
+            providerUserId: 'coros-open-active',
         }));
     });
 

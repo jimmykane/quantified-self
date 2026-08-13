@@ -74,6 +74,7 @@ import { enqueueRouteDeliverySyncJobsForImportedRoute } from './enqueue-imported
 const routeId = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
 const route = ROUTE_DELIVERY_SYNC_ROUTES[routeId];
 const wahooRouteId = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI;
+const corosRouteId = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI;
 
 function baseParams() {
   return {
@@ -163,7 +164,7 @@ describe('route-delivery-sync/enqueue-imported-route', () => {
     expect(mockEnqueueQueueItem).toHaveBeenCalled();
   });
 
-  it('queues one delivery per enabled Suunto destination', async () => {
+  it('queues one delivery per enabled Suunto destination, including COROS', async () => {
     mockMetadataDocs.mockReset();
     mockMetadataDocs.mockReturnValue([]);
     const result = await enqueueRouteDeliverySyncJobsForImportedRoute({
@@ -172,10 +173,11 @@ describe('route-delivery-sync/enqueue-imported-route', () => {
     });
 
     expect(result).toEqual({
-      queued: 2,
+      queued: 3,
       skippedByReason: {},
     });
     expect(mockEnqueueQueueItem).toHaveBeenCalledWith(expect.objectContaining({ routeId }));
     expect(mockEnqueueQueueItem).toHaveBeenCalledWith(expect.objectContaining({ routeId: wahooRouteId }));
+    expect(mockEnqueueQueueItem).toHaveBeenCalledWith(expect.objectContaining({ routeId: corosRouteId }));
   });
 });

@@ -97,6 +97,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   destinationUploadCountedID?: string | null;
   destinationUploadCountedAt?: number;
   destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
+  /** Durable marker proving provider-echo fingerprints were written before upload. */
+  outboundFingerprintID?: string | null;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {

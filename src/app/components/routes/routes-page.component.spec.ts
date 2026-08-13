@@ -1292,8 +1292,10 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(click)="downloadRouteOriginals(item.route)"');
         expect(template).toContain('(click)="sendRouteToSuunto(item.route)"');
         expect(template).toContain('(click)="sendRouteToGarmin(item.route)"');
+        expect(template).toContain('(click)="sendRouteToCOROS(item.route)"');
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToSuunto()"');
         expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()"');
+        expect(template).toContain('(click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToCOROS()"');
         expect(template).toContain('<span>Send to</span>');
         expect(template).toContain('(click)="confirmDeleteRoute(item.route)"');
         expect(template).toContain('(click)="reprocessRouteFromOriginalFile(item.route)"');
@@ -1857,6 +1859,45 @@ describe('RoutesPageComponent', () => {
         expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Wahoo.', undefined, { duration: 2500 });
     });
 
+    it('enables COROS as a route-send destination and sends a row route', async () => {
+        activityServiceConnectionState$.next({
+            ...activityServiceConnectionState$.value,
+            [ServiceNames.COROSAPI]: true,
+        });
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.COROSAPI,
+            status: 'success',
+            routeCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.COROSAPI,
+                status: 'success',
+            }],
+        });
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToCOROS).toBe(true);
+        expect(component.canSendRoutesToCOROS()).toBe(true);
+
+        await component.sendRouteToCOROS(route);
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.COROSAPI);
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'success',
+            routeCount: 1,
+            failedCount: 0,
+            skippedCount: 0,
+            fileType: 'gpx',
+            source: 'routes_list_row',
+            destinationService: ServiceNames.COROSAPI,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to COROS.', undefined, { duration: 2500 });
+    });
+
     it('opens Wahoo reconnect instead of showing only route-access guidance', async () => {
         activityServiceConnectionState$.next({
             ...activityServiceConnectionState$.value,
@@ -2004,6 +2045,62 @@ describe('RoutesPageComponent', () => {
             destinationService: ServiceNames.GarminAPI,
         });
         expect(snackBarMock.open).toHaveBeenCalledWith('Sent 1 route to Garmin. Failed 1.', undefined, { duration: 4000 });
+        expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('bulk sends all selected routes to COROS and clears successful selections', async () => {
+        const secondRoute: FirestoreRouteJSON = {
+            ...route,
+            id: 'route-2',
+            name: 'Evening Ride',
+            originalFiles: [{
+                path: 'users/user-1/routes/route-2/evening.gpx',
+                originalFilename: 'evening.gpx',
+                startDate: new Date('2026-01-03T00:00:00.000Z'),
+                extension: 'gpx',
+            }],
+        };
+        activityServiceConnectionState$.next({
+            ...activityServiceConnectionState$.value,
+            [ServiceNames.COROSAPI]: true,
+        });
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.COROSAPI,
+            status: 'success',
+            routeCount: 2,
+            successCount: 2,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [
+                { routeId: 'route-1', destinationServiceName: ServiceNames.COROSAPI, status: 'success' },
+                { routeId: 'route-2', destinationServiceName: ServiceNames.COROSAPI, status: 'success' },
+            ],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        expect(component.selectedSendableRoutesToCOROSCount()).toBe(2);
+
+        await component.sendSelectedRoutesToCOROS();
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+            expect.arrayContaining(['route-1', 'route-2']),
+            ServiceNames.COROSAPI,
+            expect.objectContaining({ onProgress: expect.any(Function) }),
+        );
+        expect(component.selectedRouteIDs()).toEqual([]);
+        expect(processingServiceMock.completeJob).toHaveBeenCalledWith('job-1', 'Sent 2 routes to COROS');
+        expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+            status: 'success',
+            routeCount: 2,
+            failedCount: 0,
+            skippedCount: 0,
+            source: 'routes_list_bulk',
+            destinationService: ServiceNames.COROSAPI,
+        });
+        expect(snackBarMock.open).toHaveBeenCalledWith('Sent 2 routes to COROS.', undefined, { duration: 2500 });
         expect(component.bulkActionInProgress()).toBe(false);
     });
 

@@ -155,12 +155,13 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importActivityToWahooAPI, getWahooAPIWorkoutFileUploadStatus } from './wahoo/activities';
 export { importRouteToWahooAPI } from './wahoo/routes';
+export { importRouteToCOROSAPI } from './coros/routes';
 export { importRouteToSuuntoApp } from './suunto/routes';
 export { importRouteToGarminAPI } from './garmin/manual-route-upload';
 export { sendRoutesToService } from './routes/send-routes-to-service';
 export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
-export { importActivityToCOROSAPI } from './coros/activities';
+export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './coros/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';

@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -100,6 +100,8 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDel
             update: (ref, data) => ref.update?.(data),
         })),
         mockMarkQueueItemDeletedForUserCleanup: vi.fn().mockResolvedValue(true),
+        mockIsActivitySyncOutboundEcho: vi.fn().mockResolvedValue(false),
+        mockGetActiveCOROSTokenSnapshot: vi.fn().mockResolvedValue({ id: 'corosOpenId' }),
     };
 });
 
@@ -234,6 +236,14 @@ vi.mock('./queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
+vi.mock('./activity-sync/outbound-fingerprint', () => ({
+    isActivitySyncOutboundEcho: mockIsActivitySyncOutboundEcho,
+}));
+
+vi.mock('./coros/account', () => ({
+    getActiveCOROSTokenSnapshot: mockGetActiveCOROSTokenSnapshot,
+}));
+
 vi.mock('./shared/user-deletion-guard', () => {
     class MockUserDeletionGuardReadError extends Error {
         readonly name = 'UserDeletionGuardReadError';
@@ -329,6 +339,8 @@ describe('queue', () => {
         });
         vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(true);
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockIsActivitySyncOutboundEcho.mockResolvedValue(false);
+        mockGetActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'corosOpenId' });
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -2767,6 +2779,66 @@ describe('queue', () => {
                 providerEventSecondaryID: 'https://coros.com/fit',
                 providerEventSecondaryIDField: 'serviceFITFileURI',
             });
+        });
+
+        it('should acknowledge an inbound COROS item from an inactive legacy account without writing an event', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'inactive-coros-item',
+                ref: mockRef,
+                openId: 'legacyCorosOpenId',
+                workoutID: 'cw-old',
+                FITFileURI: 'https://coros.com/old.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockGetActiveCOROSTokenSnapshot.mockResolvedValueOnce({ id: 'activeCorosOpenId' });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: 'inactive_provider_account',
+                skippedContext: 'INACTIVE_PROVIDER_ACCOUNT',
+            }));
+        });
+
+        it('should suppress a COROS upload echo before writing a duplicate event', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'test-coros-echo',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: 'cw-echo',
+                FITFileURI: 'https://coros.com/echo.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockIsActivitySyncOutboundEcho.mockResolvedValueOnce(true);
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as unknown as Awaited<ReturnType<typeof getTokenData>>);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockIsActivitySyncOutboundEcho).toHaveBeenCalledWith({
+                userID: 'mock-user-id',
+                sourceServiceName: ServiceNames.COROSAPI,
+                fileBuffer: expect.any(Buffer),
+            });
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(vi.mocked(resolveProviderImportEventID)).not.toHaveBeenCalled();
         });
 
         it('should handle 401 Unauthorized with token refresh and retry', async () => {

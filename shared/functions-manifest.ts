@@ -29,6 +29,8 @@ export const FUNCTIONS_MANIFEST = {
     addCOROSAPIHistoryToQueue: { name: 'addCOROSAPIHistoryToQueue', region: 'europe-west2' },
     backfillCorosAPISleep: { name: 'backfillCorosAPISleep', region: 'europe-west2' },
     importActivityToCOROSAPI: { name: 'importActivityToCOROSAPI', region: 'europe-west2' },
+    getCOROSAPIWorkoutFileUploadStatus: { name: 'getCOROSAPIWorkoutFileUploadStatus', region: 'europe-west2' },
+    importRouteToCOROSAPI: { name: 'importRouteToCOROSAPI', region: 'europe-west2' },
 
     // Wahoo Functions
     getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },

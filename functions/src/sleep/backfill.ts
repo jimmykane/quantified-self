@@ -30,7 +30,7 @@ import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
-import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
@@ -184,22 +184,15 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
 }
 
 async function getCorosSleepBackfillToken(userID: string): Promise<CorosSleepBackfillToken> {
-    const tokenSnapshot = await admin.firestore()
-        .collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME)
-        .doc(userID)
-        .collection('tokens')
-        .get();
-
-    for (const tokenDoc of tokenSnapshot.docs) {
-        try {
-            const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
-            const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
-            if (providerUserId) {
-                return { providerUserId };
-            }
-        } catch (error) {
-            logger.warn(`[SleepBackfill] Could not use COROS token ${tokenDoc.id} for ${userID}`, error);
+    try {
+        const tokenDoc = await getActiveCOROSTokenSnapshot(userID);
+        const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
+        const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
+        if (providerUserId && providerUserId === tokenDoc.id) {
+            return { providerUserId };
         }
+    } catch (error) {
+        logger.warn(`[SleepBackfill] Could not use the active COROS token for ${userID}`, error);
     }
 
     throw new HttpsError('failed-precondition', 'Connected COROS token is required for sleep backfill.');

@@ -974,7 +974,11 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  private hasConnectedActivityServiceToken(serviceName: ActivityServiceConnectionName, tokens: unknown): boolean {
+  private hasConnectedActivityServiceToken(
+    serviceName: ActivityServiceConnectionName,
+    tokens: unknown,
+    serviceMeta?: AppUserServiceMetaInterface,
+  ): boolean {
     if (!Array.isArray(tokens) || tokens.length === 0) {
       return false;
     }
@@ -985,6 +989,16 @@ export class AppUserService implements OnDestroy {
 
     if (serviceName === ServiceNames.GarminAPI) {
       return hasConnectedGarminToken(tokens);
+    }
+
+    if (serviceName === ServiceNames.COROSAPI) {
+      const connectedOpenIds = tokens
+        .map(token => `${(token as { openId?: unknown } | null)?.openId || ''}`.trim())
+        .filter(Boolean);
+      const pinnedOpenId = `${serviceMeta?.providerUserId || ''}`.trim();
+      return pinnedOpenId
+        ? connectedOpenIds.includes(pinnedOpenId)
+        : connectedOpenIds.length > 0;
     }
 
     return true;
@@ -1003,7 +1017,7 @@ export class AppUserService implements OnDestroy {
       ]).pipe(
         map(([tokens, serviceMeta]) => (
           !isDisconnectPendingServiceConnection(serviceMeta)
-          && this.hasConnectedActivityServiceToken(serviceName, tokens)
+          && this.hasConnectedActivityServiceToken(serviceName, tokens, serviceMeta)
         )),
         catchError(error => {
           this.logger.warn('[AppUserService] Failed to read activity service connection state', {

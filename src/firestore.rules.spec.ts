@@ -343,6 +343,34 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Activity sync outbound fingerprints', () => {
+            const fingerprintPath = `users/${userId}/activitySyncOutboundFingerprints/exact-v1-private`;
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(fingerprintPath).set({
+                        version: 1,
+                        destinationServiceName: 'COROS API',
+                        fingerprintKind: 'exact',
+                        recordedAt: Date.now(),
+                        expireAt: new Date('2026-12-01T00:00:00.000Z'),
+                    });
+                });
+            });
+
+            it('should deny all browser reads of server-owned echo receipts', async () => {
+                await assertFails(testEnv.authenticatedContext(userId).firestore().doc(fingerprintPath).get());
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(fingerprintPath).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(fingerprintPath).get());
+            });
+
+            it('should deny all browser writes to server-owned echo receipts', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(ownerDb.doc(fingerprintPath).set({ version: 1 }));
+                await assertFails(ownerDb.doc(fingerprintPath).delete());
+            });
+        });
+
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

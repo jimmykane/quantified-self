@@ -151,6 +151,7 @@ describe('processWahooWorkoutQueueItem', () => {
           path: 'users/firebase-1/events/event-1/original.fit',
         })],
       }),
+      sourceFileData: Buffer.from('valid-fit'),
     });
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
   });

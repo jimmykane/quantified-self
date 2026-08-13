@@ -46,6 +46,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
       ServiceNames.SuuntoApp,
       ServiceNames.GarminAPI,
       ServiceNames.WahooAPI,
+      ServiceNames.COROSAPI,
     ].includes(this.serviceName);
   }
 
@@ -75,6 +76,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     if (this.serviceName === ServiceNames.SuuntoApp) {
       return this.processAndUploadRouteForService(file, 'importRouteToSuuntoApp', 'Suunto');
     }
+    if (this.serviceName === ServiceNames.COROSAPI) {
+      return this.processAndUploadRouteForService(file, 'importRouteToCOROSAPI', 'COROS');
+    }
     throw new Error(`Manual route upload is not supported by ${this.serviceName}.`);
   }
 
@@ -84,7 +88,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
 
   private async processAndUploadRouteForService(
     file: FileInterface,
-    functionName: 'importRouteToGarminAPI' | 'importRouteToSuuntoApp' | 'importRouteToWahooAPI',
+    functionName: 'importRouteToGarminAPI' | 'importRouteToSuuntoApp' | 'importRouteToWahooAPI' | 'importRouteToCOROSAPI',
     serviceLabel: string,
   ): Promise<boolean> {
     if (!['fit', 'gpx'].includes(file.extension.toLowerCase())) {

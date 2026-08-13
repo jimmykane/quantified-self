@@ -353,7 +353,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
     if (await hasProAccess(userID)) {
       await clearServiceDisconnectPending(userID, serviceName);
-      const didMarkConnected = serviceName === ServiceNames.WahooAPI && uniqueId
+      const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
         ? await markServiceConnected(userID, serviceName, uniqueId)
         : await markServiceConnected(userID, serviceName);
       if (!didMarkConnected) {

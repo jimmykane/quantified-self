@@ -762,15 +762,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'routeFiles',
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
-    title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
-    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto or Garmin Connect, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
-    h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
-    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; sending routes requires a connected provider account, and Garmin also requires Course Import permission.`,
-    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Saved routes', 'Original files'],
+    title: 'FIT and GPX Route Files with Multi-Provider Delivery',
+    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    h1: 'Save FIT and GPX route files, then send them to connected services',
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
+    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route send'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
       routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
+      routeAction('COROS Integration', '/integrations/coros', 'stroked', 'route'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
     sections: [
@@ -798,7 +799,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Send Routes',
-        title: 'Move routes between Quantified Self, Suunto, and Garmin Connect',
+        title: 'Move routes between Quantified Self and connected services',
         copy: 'Use Routes as the private route library between planning files, saved provider routes, and connected device ecosystems without turning planned courses into completed activities.',
         items: [
           {
@@ -810,6 +811,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'route',
             title: 'Send saved routes to Garmin Connect',
             copy: 'Send saved FIT and GPX route records to Garmin Connect as Garmin courses when Course Import is allowed. Sending the same saved route again updates the same Garmin course for that account.',
+          },
+          {
+            icon: 'near_me',
+            title: 'Send saved routes to Wahoo or COROS',
+            copy: 'Use the same Routes table, bulk actions, and route detail menu to send FIT- or GPX-backed routes to a connected Wahoo or COROS account.',
           },
           {
             icon: 'sync',
@@ -859,6 +865,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes, when Garmin is connected and Course Import is allowed. Saved FIT and GPX routes can be sent to Garmin Connect from Routes, and sending the same saved route again updates the same Garmin course for that account.',
       },
       {
+        question: 'Can I send saved routes to Wahoo or COROS?',
+        answer: 'Yes, with Pro and the destination connected. Saved FIT and GPX routes can be sent from a route row, a bulk selection, or the route detail page to Wahoo or COROS.',
+      },
+      {
         question: 'Can Quantified Self import routes from Suunto?',
         answer: 'Yes, when Suunto is connected. New and updated Suunto routes are imported automatically, and Services includes Import existing routes for routes already in your Suunto account.',
       },
@@ -872,11 +882,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Save the route file, then send it where it needs to go',
-    closingCopy: 'Use Routes when you have a planned course, GPX route, Suunto route, Garmin course target, or device route file that should stay attached to its original source file without mixing into workout history.',
+    closingCopy: 'Use Routes when you have a planned course, GPX route, provider route target, or device route file that should stay attached to its original source file without mixing into workout history.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
       routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
+      routeAction('COROS Integration', '/integrations/coros', 'stroked', 'route'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
   },

@@ -39,6 +39,7 @@ describe('RouteDetailComponent', () => {
   let routerMock: any;
   let loggerMock: any;
   let garminRouteSendContext$: BehaviorSubject<any>;
+  let activityServiceConnectionState$: BehaviorSubject<Record<string, boolean>>;
 
   const routeDocument: FirestoreRouteJSON = {
     id: 'route-1',
@@ -76,6 +77,12 @@ describe('RouteDetailComponent', () => {
       providerStates: [],
       serviceMeta: null,
       permissionPromptSource: null,
+    });
+    activityServiceConnectionState$ = new BehaviorSubject({
+      [ServiceNames.GarminAPI]: false,
+      [ServiceNames.SuuntoApp]: true,
+      [ServiceNames.COROSAPI]: false,
+      [ServiceNames.WahooAPI]: false,
     });
     const parsedRoute = {
       name: 'Parsed Segment',
@@ -184,8 +191,10 @@ describe('RouteDetailComponent', () => {
         connectedProviderUserIds: ['suunto-user-1'],
       })),
       watchGarminRouteSendContext: vi.fn(),
+      watchActivityServiceConnectionState: vi.fn(),
     };
     userServiceMock.watchGarminRouteSendContext.mockReturnValue(garminRouteSendContext$.asObservable());
+    userServiceMock.watchActivityServiceConnectionState.mockReturnValue(activityServiceConnectionState$.asObservable());
     analyticsServiceMock = {
       logSavedRouteAction: vi.fn(),
     };
@@ -612,6 +621,44 @@ describe('RouteDetailComponent', () => {
     expect(component.sendingToService()).toBe(false);
   });
 
+  it('sends the owner route to COROS from the detail page action when COROS is connected', async () => {
+    activityServiceConnectionState$.next({
+      ...activityServiceConnectionState$.value,
+      [ServiceNames.COROSAPI]: true,
+    });
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+      destinationServiceName: ServiceNames.COROSAPI,
+      status: 'success',
+      routeCount: 1,
+      successCount: 1,
+      failureCount: 0,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.COROSAPI,
+        status: 'success',
+      }],
+    });
+
+    expect(component.canSendRoutesToCOROS()).toBe(true);
+    expect(component.canSendRouteToCOROS()).toBe(true);
+
+    await component.sendRouteToCOROS();
+
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.COROSAPI);
+    expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('send_service_route', {
+      status: 'success',
+      routeCount: 1,
+      failedCount: 0,
+      skippedCount: 0,
+      fileType: 'gpx',
+      source: 'route_detail',
+      destinationService: ServiceNames.COROSAPI,
+    });
+    expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to COROS.', undefined, { duration: 2500 });
+    expect(component.sendingToService()).toBe(false);
+  });
+
   it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
     component.routeDocument.set({
       ...routeDocument,
@@ -784,6 +831,7 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('<span>Send to</span>');
     expect(template).toContain('(click)="sendRouteToSuunto()"');
     expect(template).toContain('(click)="sendRouteToGarmin()"');
+    expect(template).toContain('(click)="sendRouteToCOROS()"');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');

@@ -135,6 +135,7 @@ interface RoutePageRouteViewModel {
     garminSendDisabledReason: string | null;
     garminSendMenuLabel: string;
     canSendToWahoo: boolean;
+    canSendToCOROS: boolean;
     canDelete: boolean;
     filterText: string;
 }
@@ -279,6 +280,7 @@ export class RoutesPageComponent implements OnInit {
         permissionPromptSource: null,
     });
     readonly isWahooRouteDeliveryConnected = signal(false);
+    readonly isCOROSRouteDeliveryConnected = signal(false);
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -299,6 +301,10 @@ export class RoutesPageComponent implements OnInit {
     readonly canSendRoutesToWahoo = computed(() => (
         this.userService.hasProAccessSignal()
         && this.isWahooRouteDeliveryConnected()
+    ));
+    readonly canSendRoutesToCOROS = computed(() => (
+        this.userService.hasProAccessSignal()
+        && this.isCOROSRouteDeliveryConnected()
     ));
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly routeMapRoutes = computed(() => this.visibleRouteViewModels().map(item => item.route));
@@ -436,6 +442,18 @@ export class RoutesPageComponent implements OnInit {
             && item.canSendToWahoo
         )).length;
     });
+    readonly selectedSendableRoutesToCOROSCount = computed(() => {
+        if (!this.canSendRoutesToCOROS()) {
+            return 0;
+        }
+
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToCOROS
+        )).length;
+    });
     readonly allVisibleRoutesSelected = computed(() => {
         const visibleRoutes = this.visibleRouteViewModels();
         const selectedIDs = this.selectedRouteIDSet();
@@ -517,6 +535,7 @@ export class RoutesPageComponent implements OnInit {
             ).subscribe(connectionState => {
                 const wahooConnected = connectionState[ServiceNames.WahooAPI] === true;
                 this.isWahooRouteDeliveryConnected.set(wahooConnected);
+                this.isCOROSRouteDeliveryConnected.set(connectionState[ServiceNames.COROSAPI] === true);
             });
 
             const routeDocuments$ = this.routeService.getAllRoutes(user).pipe(
@@ -1241,6 +1260,10 @@ export class RoutesPageComponent implements OnInit {
         await this.sendRouteToService(route, ServiceNames.WahooAPI, source);
     }
 
+    async sendRouteToCOROS(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        await this.sendRouteToService(route, ServiceNames.COROSAPI, source);
+    }
+
     async sendRouteToService(
         route: FirestoreRouteJSON,
         destinationServiceName: ServiceNames,
@@ -1452,6 +1475,10 @@ export class RoutesPageComponent implements OnInit {
 
     async sendSelectedRoutesToWahoo(): Promise<void> {
         await this.sendSelectedRoutesToService(ServiceNames.WahooAPI);
+    }
+
+    async sendSelectedRoutesToCOROS(): Promise<void> {
+        await this.sendSelectedRoutesToService(ServiceNames.COROSAPI);
     }
 
     async sendSelectedRoutesToService(destinationServiceName: ServiceNames): Promise<void> {
@@ -1907,6 +1934,11 @@ export class RoutesPageComponent implements OnInit {
             && this.routeService.getOriginalRouteFiles(route).length > 0;
     }
 
+    private canSendRouteToCOROS(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route)
+            && this.routeService.getOriginalRouteFiles(route).length > 0;
+    }
+
     private getGarminSendDisabledReason(route: FirestoreRouteJSON): string | null {
         if (!this.canManageRoute(route) || this.routeService.getOriginalRouteFiles(route).length === 0) {
             return null;
@@ -1923,6 +1955,8 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRoutesToGarmin();
             case ServiceNames.WahooAPI:
                 return this.canSendRoutesToWahoo();
+            case ServiceNames.COROSAPI:
+                return this.canSendRoutesToCOROS();
             default:
                 return false;
         }
@@ -1936,13 +1970,15 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRouteToGarmin(route);
             case ServiceNames.WahooAPI:
                 return this.canSendRouteToWahoo(route);
+            case ServiceNames.COROSAPI:
+                return this.canSendRouteToCOROS(route);
             default:
                 return false;
         }
     }
 
     private canSendRouteItemToDestination(
-        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin' | 'canSendToWahoo'>,
+        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin' | 'canSendToWahoo' | 'canSendToCOROS'>,
         destinationServiceName: ServiceNames,
     ): boolean {
         switch (destinationServiceName) {
@@ -1952,6 +1988,8 @@ export class RoutesPageComponent implements OnInit {
                 return item.canSendToGarmin;
             case ServiceNames.WahooAPI:
                 return item.canSendToWahoo;
+            case ServiceNames.COROSAPI:
+                return item.canSendToCOROS;
             default:
                 return false;
         }
@@ -2121,6 +2159,7 @@ export class RoutesPageComponent implements OnInit {
             garminSendDisabledReason,
             garminSendMenuLabel,
             canSendToWahoo: this.canSendRouteToWahoo(route),
+            canSendToCOROS: this.canSendRouteToCOROS(route),
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,

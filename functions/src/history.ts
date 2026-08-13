@@ -21,6 +21,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
+import { getActiveCOROSTokenSnapshot } from './coros/account';
 
 const BATCH_SIZE = 450;
 
@@ -34,9 +35,11 @@ export interface HistoryImportResult {
 
 export async function addHistoryToQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date): Promise<HistoryImportResult> {
   const serviceConfig = getServiceConfig(serviceName);
-  const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
+  const tokenDocuments = serviceName === ServiceNames.COROSAPI
+    ? [await getActiveCOROSTokenSnapshot(userID)]
+    : (await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get()).docs;
 
-  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+  logger.info(`Found ${tokenDocuments.length} active ${serviceName} token(s) for user ${userID}`);
 
   // Get the history for those tokens
   let totalProcessedWorkoutsCount = 0;
@@ -44,7 +47,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   let processedBatchesCount = 0;
   let failedBatchesCount = 0;
 
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
+  for (const tokenQueryDocumentSnapshot of tokenDocuments) {
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
 
     let workoutQueueItems: any;

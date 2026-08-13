@@ -3,6 +3,7 @@ import {
   CONNECTED_SERVICES_POLICY_SECTION,
   POLICY_CONTENT,
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
+  POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
@@ -68,7 +69,25 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('updated saved route updates the same Wahoo route');
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
-    expect(content).toContain('Wahoo-to-Suunto activity sync');
+    expect(content).toContain('Wahoo-to-Suunto or Wahoo-to-COROS activity sync');
+  });
+});
+
+describe('COROS connected-service policy', () => {
+  it('documents the active account, activity and route destinations, and expiring echo protection', () => {
+    const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_COROS_DATA_FRAGMENT);
+    const content = topic?.content.join(' ') || '';
+
+    expect(topic?.title).toBe('COROS Data');
+    expect(content).toContain('active COROS connection');
+    expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
+    expect(content).toContain('selected GPX/FIT route');
+    expect(content).toContain('saved Suunto route delivery');
+    expect(content).toContain('Selected route files are parsed and converted to GPX in memory');
+    expect(content).toContain('exact-file and semantic FIT fingerprints');
+    expect(content).toContain('without storing a duplicate event');
+    expect(content).toContain('expire after about 120 days');
   });
 });
 

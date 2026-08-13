@@ -25,7 +25,10 @@ This checklist tracks the shared provider presentation rules for Garmin, Suunto,
 | Route detail provenance chips | Source + destination | Garmin, Suunto, COROS, Wahoo | `Synced from …`, `Sent to …` with shared provider labels | No | Yes |
 | Dashboard auto-sync prompts | Source | Garmin, COROS, Suunto | Prompt copy uses shared provider source labels | No | Yes |
 | Services navigation and connection cards | Destination | Garmin, Suunto, COROS, Wahoo | `Garmin Connect`, `Suunto App`, `COROS`, `Wahoo` on connection surfaces | No | Yes |
-| Activity upload to service | Destination | Suunto, COROS | Shared destination label in upload UI copy | No | Yes |
+| Activity upload to service | Destination | Suunto, COROS, Wahoo | Shared destination label in upload UI copy | No | Yes |
+| Direct route upload to service | Destination | Garmin, Suunto, COROS, Wahoo | Destination label and provider icon in Services | No | Yes |
+| Saved-route row, bulk, and detail send | Destination | Garmin, Suunto, COROS, Wahoo | Shared destination label plus `Sent to …` metadata after success | No | Yes |
+| Provider data-flow matrix | Source + destination | Supported activity and Suunto saved-route directions | Shared source/destination labels; enabled, opt-in, and needs-connection states | No | Yes |
 | Public Integrations provider strips | Source | Garmin, Suunto, COROS, Wahoo | Shared source label plus provider icon | No | Yes |
 | Workout Data Comparison provider strip | Source | Garmin, Suunto, COROS, Wahoo | Shared source label plus provider icon | No | Yes |
 | Clipboard markdown export | Source / series provenance | Any explicit provider context | Optional `Source:` and `Series sources:` note | Yes | Maybe |
@@ -36,4 +39,4 @@ This checklist tracks the shared provider presentation rules for Garmin, Suunto,
 - Verify every Garmin data screenshot intended for Garmin review still shows nearby attribution after responsive layout changes.
 - Confirm any future Garmin Connect consumer-facing asset swap uses approved Garmin Connect branding assets.
 - Replace the provisional Wahoo wordmark with Wahoo-approved production artwork before launch.
-- Re-audit new provider surfaces when route delivery to Garmin or COROS expands beyond the current develop branch.
+- Re-audit responsive COROS saved-route row/bulk/detail actions and the expanded Services data-flow matrix before production screenshots are captured.

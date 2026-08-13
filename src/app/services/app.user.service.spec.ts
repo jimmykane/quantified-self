@@ -1404,6 +1404,34 @@ describe('AppUserService', () => {
             expect(result).toEqual(tokens);
         });
 
+        it('should fail closed when COROS metadata pins a token that is no longer present', () => {
+            service = TestBed.inject(AppUserService);
+            const hasConnectedToken = (service as any).hasConnectedActivityServiceToken.bind(service);
+
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'remaining-coros-account' }],
+                { providerUserId: 'missing-pinned-account' },
+            )).toBe(false);
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'active-coros-account' }],
+                { providerUserId: 'active-coros-account' },
+            )).toBe(true);
+        });
+
+        it('should recognize an unpinned legacy COROS token until the backend pins it', () => {
+            service = TestBed.inject(AppUserService);
+            const hasConnectedToken = (service as any).hasConnectedActivityServiceToken.bind(service);
+
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'legacy-coros-account' }],
+                {},
+            )).toBe(true);
+            expect(hasConnectedToken(ServiceNames.COROSAPI, [{ accessToken: 'malformed' }], {})).toBe(false);
+        });
+
         it('getServiceToken should read Garmin tokens from garminAPITokens collection', async () => {
             const user = { uid: 'u3' } as any;
             const tokens = [{ accessToken: 'garmin-token' }];

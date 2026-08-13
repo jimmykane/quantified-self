@@ -86,6 +86,14 @@
             <span>{{ suuntoRouteSendMenuLabel() }}</span>
           </button>
           }
+          @if (canSendRouteToCOROS() || canSendRoutesToCOROS()) {
+          <button mat-menu-item type="button"
+            [disabled]="sendingToService() || !canSendRoutesToCOROS() || !canSendRouteToCOROS()"
+            (click)="sendRouteToCOROS()">
+            <mat-icon>cloud_upload</mat-icon>
+            <span>COROS</span>
+          </button>
+          }
           @if (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()) {
           <button mat-menu-item type="button"
             [disabled]="sendingToService() || !canSendRoutesToGarmin() || !canSendRouteToGarmin()"

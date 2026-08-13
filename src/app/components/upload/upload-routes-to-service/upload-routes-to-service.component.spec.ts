@@ -270,10 +270,12 @@ describe('UploadRoutesToServiceComponent', () => {
         });
     });
 
-    it('does not route an unsupported provider upload through Suunto', async () => {
+    it('uploads a GPX route directly to COROS', async () => {
         component.serviceName = ServiceNames.COROSAPI;
         const file = {
-            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            file: Object.assign(new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([60, 103, 112, 120, 47, 62]).buffer),
+            }),
             filename: 'route',
             extension: 'gpx',
             data: null,
@@ -282,8 +284,13 @@ describe('UploadRoutesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
         };
 
-        await expect(component.processAndUploadFile(file)).rejects.toThrow('Manual route upload is not supported by COROS API.');
-        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToCOROSAPI', {
+            file: 'PGdweC8+',
+            filename: 'route.gpx',
+        });
+        expect(component.fileAccept).toBe('.fit,.gpx');
     });
 
     it('uploads a FIT route to Wahoo without applying Suunto GPX compression', async () => {

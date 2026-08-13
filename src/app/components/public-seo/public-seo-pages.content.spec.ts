@@ -156,15 +156,18 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to Suunto or Garmin Connect');
+    expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to connected services');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route or track files');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('send saved routes to Suunto');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Garmin Connect');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Wahoo');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('COROS');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes into Routes');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('up to 10 saved routes');
-    expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self, Suunto, and Garmin Connect')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self and connected services')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Wahoo or COROS?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can Quantified Self import routes from Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Are route files counted separately from activities?')).toBe(true);
 

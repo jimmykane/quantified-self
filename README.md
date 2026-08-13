@@ -204,12 +204,14 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
 | `users/*/assistantConversations` | 7 days after the latest completed turn or reset; an active turn is protected for at most 4 extra minutes | `expireAt` | One bounded server-owned active Assistant conversation plus private, unindexed replay fingerprints per user |
 | `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
+| `users/*/activitySyncOutboundFingerprints` | About 120 days | `expireAt` | Server-only exact/semantic FIT receipts that suppress provider-returned activity echoes |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
 ## Architecture documentation
 
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)

@@ -17,6 +17,8 @@ export class ProviderPendingDisconnectError extends HttpsError {
       ? 'Suunto'
       : serviceName === ServiceNames.WahooAPI
         ? 'Wahoo'
+        : serviceName === ServiceNames.COROSAPI
+          ? 'COROS'
         : `${serviceName}`;
     super('failed-precondition', `${providerName} disconnect is pending.`);
   }

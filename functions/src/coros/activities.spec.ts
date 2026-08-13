@@ -1,92 +1,119 @@
 'use strict';
 
-import { describe, it, vi, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
-const requestMocks = {
+const mocks = vi.hoisted(() => ({
   post: vi.fn(),
-};
-
-const tokensMocks = {
+  get: vi.fn(),
   getTokenData: vi.fn(),
-};
-
-const corosAuthApiMocks = {
-  getCOROSUserId: vi.fn(),
-};
-
-const utilsMocks = {
   hasProAccess: vi.fn(),
-};
+  getActiveCOROSTokenSnapshot: vi.fn(),
+  getUserDeletionGuardState: vi.fn(),
+  isServiceDisconnectPendingForUser: vi.fn(),
+  recordSuccessfulActivityUpload: vi.fn(),
+  recordActivitySyncOutboundFingerprint: vi.fn(),
+}));
 
 vi.mock('../request-helper', () => ({
   default: {
-    post: (...args: any[]) => requestMocks.post(...args),
+    post: (...args: unknown[]) => mocks.post(...args),
+    get: (...args: unknown[]) => mocks.get(...args),
   },
-  post: (...args: any[]) => requestMocks.post(...args),
+  post: (...args: unknown[]) => mocks.post(...args),
+  get: (...args: unknown[]) => mocks.get(...args),
 }));
 
 vi.mock('../tokens', () => ({
-  getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
+  getTokenData: (...args: unknown[]) => mocks.getTokenData(...args),
 }));
 
-vi.mock('./auth/api', () => ({
-  getCOROSUserId: (...args: any[]) => corosAuthApiMocks.getCOROSUserId(...args),
+vi.mock('./account', () => ({
+  getActiveCOROSTokenSnapshot: (...args: unknown[]) => mocks.getActiveCOROSTokenSnapshot(...args),
+}));
+
+vi.mock('../activity-sync/upload-count', () => ({
+  recordSuccessfulActivityUpload: (...args: unknown[]) => mocks.recordSuccessfulActivityUpload(...args),
+}));
+
+vi.mock('../activity-sync/outbound-fingerprint', () => ({
+  recordActivitySyncOutboundFingerprint: (...args: unknown[]) => mocks.recordActivitySyncOutboundFingerprint(...args),
+  ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {},
+}));
+
+vi.mock('../service-disconnect-pending', () => ({
+  isServiceDisconnectPendingForUser: (...args: unknown[]) => mocks.isServiceDisconnectPendingForUser(...args),
+}));
+
+vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardState: (...args: unknown[]) => mocks.getUserDeletionGuardState(...args),
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+    readonly name = 'UserDeletionGuardReadError';
+  },
 }));
 
 vi.mock('../utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils')>();
   return {
     ...actual,
-    hasProAccess: (...args: any[]) => utilsMocks.hasProAccess(...args),
+    hasProAccess: (...args: unknown[]) => mocks.hasProAccess(...args),
   };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-  onCall: (_options: any, handler: any) => handler,
+  onCall: (_options: unknown, handler: unknown) => handler,
   HttpsError: class HttpsError extends Error {
-    code: string;
-
-    constructor(code: string, message: string) {
+    constructor(
+      public readonly code: string,
+      message: string,
+      public readonly details?: unknown,
+    ) {
       super(message);
-      this.code = code;
       this.name = 'HttpsError';
     }
   },
 }));
 
-vi.mock('firebase-admin', () => {
-  const getMock = vi.fn();
-  const setMock = vi.fn();
+vi.mock('firebase-admin', () => ({
+  firestore: () => ({}),
+}));
 
-  const collectionMock: any = vi.fn();
-  const docMock: any = vi.fn();
+import {
+  getCOROSActivityUploadStatus,
+  getCOROSAPIWorkoutFileUploadStatus,
+  importActivityToCOROSAPI,
+  uploadActivityFileToCOROS,
+} from './activities';
 
-  const colObj = { doc: docMock, get: getMock, set: setMock, collection: collectionMock };
-  const docObj = { collection: collectionMock, get: getMock, set: setMock };
+type ActivityCallableRequest = Parameters<typeof importActivityToCOROSAPI>[0];
+type ActivityStatusCallableRequest = Parameters<typeof getCOROSAPIWorkoutFileUploadStatus>[0];
+type ActivityUploadCountOptions = NonNullable<Parameters<typeof getCOROSActivityUploadStatus>[3]>;
 
-  collectionMock.mockReturnValue(colObj);
-  docMock.mockReturnValue(docObj);
+const activeUserGuard = {
+  userExists: true,
+  deletionState: null,
+  deletionCompleted: false,
+  shouldSkip: false,
+};
 
-  getMock.mockResolvedValue({
-    size: 1,
-    empty: false,
-    docs: [{ id: 'token1', data: () => ({}) }],
-  });
-
-  return {
-    firestore: Object.assign(() => ({ collection: collectionMock }), {
-      FieldValue: {
-        increment: vi.fn((val) => ({ type: 'increment', val })),
-      },
-    }),
-    initializeApp: vi.fn(),
+function tokenSnapshot(openId = 'open-id-1') {
+  const snapshot = {
+    id: openId,
+    exists: true,
+    data: () => ({ openId }),
   };
-});
+  return {
+    ...snapshot,
+    ref: { get: vi.fn().mockResolvedValue(snapshot) },
+  };
+}
 
-import { importActivityToCOROSAPI } from './activities';
-
-function createMockRequest(overrides: Partial<{ auth: { uid: string } | null; app: object | null; data: any }> = {}) {
+function createMockRequest(overrides: Partial<{
+  auth: { uid: string } | null;
+  app: object | null;
+  data: Record<string, unknown>;
+}> = {}) {
   return {
     auth: overrides.auth !== undefined ? overrides.auth : { uid: 'test-user-id' },
     app: overrides.app !== undefined ? overrides.app : { appId: 'test-app' },
@@ -94,213 +121,243 @@ function createMockRequest(overrides: Partial<{ auth: { uid: string } | null; ap
   };
 }
 
-describe('importActivityToCOROSAPI', () => {
+function toActivityCallableRequest(request: ReturnType<typeof createMockRequest>): ActivityCallableRequest {
+  return request as unknown as ActivityCallableRequest;
+}
+
+function toActivityStatusCallableRequest(request: ReturnType<typeof createMockRequest>): ActivityStatusCallableRequest {
+  return request as unknown as ActivityStatusCallableRequest;
+}
+
+function activityRequest(file = Buffer.from('fit-data')): ActivityCallableRequest {
+  return toActivityCallableRequest(createMockRequest({ data: { file: file.toString('base64') } }));
+}
+
+describe('COROS asynchronous activity uploads', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    utilsMocks.hasProAccess.mockResolvedValue(true);
-    tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'coros-token', openId: 'open-id-1' });
-    corosAuthApiMocks.getCOROSUserId.mockResolvedValue('open-id-fallback');
-    requestMocks.post.mockResolvedValue(JSON.stringify({
-      result: '0000',
-      message: 'OK',
-      data: [{ labelId: 12345 }],
-    }));
+    mocks.hasProAccess.mockResolvedValue(true);
+    mocks.getUserDeletionGuardState.mockResolvedValue(activeUserGuard);
+    mocks.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+    mocks.getActiveCOROSTokenSnapshot.mockResolvedValue(tokenSnapshot());
+    mocks.getTokenData.mockResolvedValue({ accessToken: 'coros-token', openId: 'open-id-1' });
+    mocks.recordSuccessfulActivityUpload.mockResolvedValue(true);
+    mocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
+      exactFingerprintId: 'exact-v1-test',
+      fingerprintIds: ['exact-v1-test'],
+    });
+    mocks.post.mockResolvedValue('{"result":"0000","message":"OK","data":[{"uploadId":9223372036854775806}]}');
+    mocks.get.mockResolvedValue('{"result":"0000","message":"OK","data":[{"uploadId":9223372036854775806,"status":1}]}');
   });
 
-  it('uploads successfully and returns labelId', async () => {
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
+  it('starts a multipart upload and preserves an unquoted 64-bit upload id', async () => {
+    const result = await importActivityToCOROSAPI(activityRequest());
+
+    expect(result).toEqual({
+      status: 'pending',
+      message: 'COROS is processing the activity.',
+      uploadId: '9223372036854775806',
+      providerUserId: 'open-id-1',
     });
-
-    const result = await importActivityToCOROSAPI(request as any);
-
-    expect(result).toEqual(expect.objectContaining({
-      status: 'success',
-      labelId: '12345',
-    }));
-
-    expect(tokensMocks.getTokenData).toHaveBeenCalled();
-    expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
-      url: expect.stringContaining('/coros/file/synchronous'),
-      headers: expect.objectContaining({ token: 'coros-token' }),
+    expect(mocks.post).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('/coros/file/upload'),
+      headers: expect.objectContaining({
+        token: 'coros-token',
+        'Content-Type': expect.stringContaining('multipart/form-data; boundary='),
+      }),
       json: false,
       body: expect.any(Buffer),
     }));
+    const requestBody = mocks.post.mock.calls[0][0].body as Buffer;
+    expect(requestBody.toString('latin1')).toContain('name="fileType"\r\n\r\n4');
+    expect(requestBody.toString('latin1')).toContain('filename="activity.fit"');
+    expect(mocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'test-user-id',
+      destinationServiceName: ServiceNames.COROSAPI,
+      fileBuffer: Buffer.from('fit-data'),
+    });
+    expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.post.mock.invocationCallOrder[0]);
   });
 
-  it('returns ALREADY_EXISTS when COROS reports duplicate (5082)', async () => {
-    requestMocks.post.mockResolvedValueOnce(JSON.stringify({
-      result: '5082',
-      message: 'Already uploaded',
-    }));
+  it('does not persist an echo receipt when no active COROS account is connected', async () => {
+    mocks.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+      new Error('Reconnect COROS before sending data.'),
+      { code: 'unauthenticated' },
+    ));
 
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending activities.',
     });
+    expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
 
-    const result = await importActivityToCOROSAPI(request as any);
+  it('accepts a provider duplicate without starting another operation', async () => {
+    mocks.post.mockResolvedValueOnce(JSON.stringify({ result: '5082', message: 'Already uploaded' }));
 
-    expect(result).toEqual(expect.objectContaining({
-      status: 'info',
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))).resolves.toEqual({
+      status: 'duplicate',
       code: 'ALREADY_EXISTS',
-    }));
-  });
-
-  it('falls back to fetching openId when missing on token', async () => {
-    tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'coros-token', openId: '' });
-
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
-    });
-
-    await importActivityToCOROSAPI(request as any);
-
-    expect(corosAuthApiMocks.getCOROSUserId).toHaveBeenCalledWith('coros-token', 'https://open.coros.com');
-  });
-
-  it('throws unauthenticated when missing openId cannot be resolved', async () => {
-    tokensMocks.getTokenData.mockResolvedValueOnce({ accessToken: 'coros-token', openId: '' });
-    corosAuthApiMocks.getCOROSUserId.mockRejectedValueOnce(new Error('no open id'));
-
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
-    });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
-      code: 'unauthenticated',
+      message: 'Activity already exists in COROS.',
+      providerUserId: 'open-id-1',
     });
   });
 
-  it('maps auth-related COROS code to unauthenticated', async () => {
-    requestMocks.post.mockResolvedValueOnce(JSON.stringify({
-      result: '5006',
-      message: 'invalid authorization',
-    }));
+  it('maps missing provider entitlement to permission-denied', async () => {
+    mocks.post.mockResolvedValueOnce(JSON.stringify({ result: '30009', message: 'No permission' }));
 
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
-    });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: expect.stringContaining('upload permission'),
     });
   });
 
-  it('maps invalid payload/unsupported code to invalid-argument', async () => {
-    requestMocks.post.mockResolvedValueOnce(JSON.stringify({
-      result: '5096',
-      message: 'unsupported workout data',
-    }));
+  it('force-refreshes once when COROS reports an expired access token', async () => {
+    mocks.post
+      .mockResolvedValueOnce(JSON.stringify({ result: '5006', message: 'Invalid authorization' }))
+      .mockResolvedValueOnce(JSON.stringify({ result: '0000', data: [{ uploadId: '42' }] }));
 
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))).resolves.toMatchObject({
+      status: 'pending',
+      uploadId: '42',
     });
+    expect(mocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
+    expect(mocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+  });
 
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
+  it('maps unsupported files to invalid-argument', async () => {
+    mocks.post.mockResolvedValueOnce(JSON.stringify({ result: '5096', message: 'Unsupported' }));
+
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
       code: 'invalid-argument',
+      message: 'COROS does not support this activity file.',
     });
   });
 
-  it('preserves provider message when HTTP error payload is a string', async () => {
-    requestMocks.post.mockRejectedValueOnce({
-      statusCode: 500,
-      error: 'COROS rejected payload as malformed FIT',
-    });
+  it('classifies rate limiting as a retryable restart', async () => {
+    mocks.post.mockRejectedValueOnce({ statusCode: 429 });
 
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
-    });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
-      code: 'internal',
-      message: 'COROS rejected payload as malformed FIT',
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
+      code: 'resource-exhausted',
+      details: expect.objectContaining({ retryMode: 'restart' }),
     });
   });
 
-  it('throws unauthenticated when no COROS token exists', async () => {
-    const admin = await import('firebase-admin');
-    const getMock = admin.firestore().collection('COROSAPIAccessTokens').doc('test-user-id').collection('tokens').get;
-    getMock.mockResolvedValueOnce({ size: 0, empty: true, docs: [] });
+  it('rejects a success response without a usable upload id', async () => {
+    mocks.post.mockResolvedValueOnce(JSON.stringify({ result: '0000', data: [{}] }));
 
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
-    });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: expect.stringContaining('identifier required to reconcile'),
     });
   });
 
-  it('increments uploadedActivitiesCount only on success', async () => {
-    const admin = await import('firebase-admin');
-    const setMock = admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('COROSAPI').set;
-
-    const request = createMockRequest({
-      data: { file: Buffer.from('fit-data').toString('base64') },
+  it('returns pending while COROS is processing', async () => {
+    await expect(getCOROSActivityUploadStatus(
+      'test-user-id',
+      '9223372036854775806',
+      'open-id-1',
+    )).resolves.toMatchObject({
+      status: 'pending',
+      uploadId: '9223372036854775806',
+      providerUserId: 'open-id-1',
     });
-
-    await importActivityToCOROSAPI(request as any);
-
-    expect(setMock).toHaveBeenCalledTimes(1);
-
-    requestMocks.post.mockResolvedValueOnce(JSON.stringify({ result: '5082', message: 'duplicate' }));
-    await importActivityToCOROSAPI(request as any);
-
-    expect(setMock).toHaveBeenCalledTimes(1);
+    expect(mocks.get).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('uploadId=9223372036854775806'),
+      headers: { token: 'coros-token' },
+      json: false,
+    }));
+    expect(mocks.recordSuccessfulActivityUpload).not.toHaveBeenCalled();
   });
 
-  it('blocks unauthenticated requests', async () => {
-    const request = createMockRequest({
-      auth: null,
-      data: { file: 'abc' },
-    });
+  it('records a completed upload idempotently with its queue reference', async () => {
+    mocks.get.mockResolvedValueOnce(JSON.stringify({
+      result: '0000',
+      data: [{ uploadId: '42', status: 2 }],
+    }));
+    const queueItemRef = { id: 'queue-1' } as unknown as NonNullable<ActivityUploadCountOptions['queueItemRef']>;
 
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    await expect(getCOROSActivityUploadStatus(
+      'test-user-id',
+      '42',
+      'open-id-1',
+      { queueItemRef },
+    )).resolves.toMatchObject({ status: 'success', uploadId: '42' });
+    expect(mocks.recordSuccessfulActivityUpload).toHaveBeenCalledWith({
+      userID: 'test-user-id',
+      serviceName: expect.anything(),
+      uploadId: '42',
+      queueItemRef,
     });
   });
 
-  it('blocks requests without App Check', async () => {
-    const request = createMockRequest({
-      app: null,
-      data: { file: 'abc' },
-    });
+  it('fails closed when a status response references another upload', async () => {
+    mocks.get.mockResolvedValueOnce(JSON.stringify({
+      result: '0000',
+      data: [{ uploadId: '43', status: 2 }],
+    }));
 
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
+    await expect(getCOROSAPIWorkoutFileUploadStatus(toActivityStatusCallableRequest(createMockRequest({
+      data: { uploadId: '42', providerUserId: 'open-id-1' },
+    })))).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: expect.stringContaining('different operation'),
+    });
+  });
+
+  it('requires the same active COROS account when resuming', async () => {
+    mocks.getActiveCOROSTokenSnapshot.mockResolvedValueOnce(tokenSnapshot('open-id-2'));
+    mocks.getTokenData.mockResolvedValueOnce({ accessToken: 'coros-token', openId: 'open-id-2' });
+
+    await expect(getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1')).rejects.toMatchObject({
+      disposition: 'auth_required',
+      providerOperationId: '42',
+    });
+    expect(mocks.get).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleted users and pending disconnects before provider access', async () => {
+    mocks.getUserDeletionGuardState.mockResolvedValueOnce({ ...activeUserGuard, shouldSkip: true });
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))).rejects.toMatchObject({
       code: 'failed-precondition',
     });
+    expect(mocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+
+    mocks.getUserDeletionGuardState.mockResolvedValue(activeUserGuard);
+    mocks.isServiceDisconnectPendingForUser.mockResolvedValueOnce(true);
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))).rejects.toMatchObject({
+      code: 'failed-precondition',
+    });
+    expect(mocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
   });
 
-  it('blocks non-pro users', async () => {
-    utilsMocks.hasProAccess.mockResolvedValueOnce(false);
-
-    const request = createMockRequest({
-      data: { file: 'abc' },
+  it('enforces authentication, App Check, and Pro access', async () => {
+    await expect(importActivityToCOROSAPI(toActivityCallableRequest(createMockRequest({ auth: null })))).rejects.toMatchObject({
+      code: 'unauthenticated',
     });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
+    await expect(importActivityToCOROSAPI(toActivityCallableRequest(createMockRequest({ app: null })))).rejects.toMatchObject({
+      code: 'failed-precondition',
+    });
+    mocks.hasProAccess.mockResolvedValueOnce(false);
+    await expect(importActivityToCOROSAPI(activityRequest())).rejects.toMatchObject({
       code: 'permission-denied',
       message: PRO_REQUIRED_MESSAGE,
     });
   });
 
-  it('rejects missing file payload', async () => {
-    const request = createMockRequest({ data: {} });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
+  it('strictly validates base64 and upload size before provider access', async () => {
+    await expect(importActivityToCOROSAPI(toActivityCallableRequest(createMockRequest({ data: { file: 'not_base64' } })))).rejects.toMatchObject({
       code: 'invalid-argument',
     });
-  });
-
-  it('rejects files larger than 20MB before uploading to COROS', async () => {
-    const request = createMockRequest({
-      data: { file: Buffer.alloc((20 * 1024 * 1024) + 1).toString('base64') },
-    });
-
-    await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
+    await expect(importActivityToCOROSAPI(toActivityCallableRequest(createMockRequest({ data: {} })))).rejects.toMatchObject({
       code: 'invalid-argument',
-      message: 'Cannot upload activity because the size is greater than 20MB',
     });
-    expect(requestMocks.post).not.toHaveBeenCalled();
+    await expect(importActivityToCOROSAPI(activityRequest(Buffer.alloc((20 * 1024 * 1024) + 1)))).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: expect.stringContaining('20MB'),
+    });
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 });

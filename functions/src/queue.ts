@@ -34,6 +34,7 @@ import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
+import { isActivitySyncOutboundEcho } from './activity-sync/outbound-fingerprint';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from './shared/user-deletion-guard';
@@ -49,6 +50,7 @@ import {
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
+import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
   markWorkoutTaskDispatchedWithRetry,
@@ -81,6 +83,15 @@ function deferWorkoutQueueItemForPendingDisconnect(
   bulkWriter?: admin.firestore.BulkWriter,
 ): Promise<QueueResult.Deferred | QueueResult.Failed> {
   return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
+}
+
+function markWorkoutQueueItemSkippedForInactiveProviderAccount(
+  queueItem: QueueItemInterface,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+  return markQueueItemSkipped(queueItem, bulkWriter, 'inactive_provider_account', {
+    skippedContext: 'INACTIVE_PROVIDER_ACCOUNT',
+  });
 }
 
 
@@ -554,6 +565,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   let sawRetryableFailure = false;
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
+  let sawInactiveProviderAccount = false;
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
@@ -566,6 +578,27 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_token_refresh')) {
       sawUserDeletionSkip = true;
       continue;
+    }
+
+    if (serviceName === ServiceNames.COROSAPI) {
+      try {
+        const activeToken = await getActiveCOROSTokenSnapshot(parentID);
+        if (activeToken.id !== (queueItem as COROSAPIWorkoutQueueItemInterface).openId) {
+          sawInactiveProviderAccount = true;
+          logger.info(`Skipping COROS queue item ${queueItem.id} because it belongs to an inactive connected account.`);
+          continue;
+        }
+      } catch (error) {
+        const code = `${(error as { code?: unknown } | null)?.code || ''}`;
+        if (code === 'unauthenticated' || code === 'failed-precondition') {
+          sawInactiveProviderAccount = true;
+          logger.info(`Skipping COROS queue item ${queueItem.id} because no matching active COROS account is available.`);
+          continue;
+        }
+        lastError = error instanceof Error ? error : new Error(`${error}`);
+        sawRetryableFailure = true;
+        continue;
+      }
     }
 
     try {
@@ -696,6 +729,19 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         sawUserDeletionSkip = true;
         continue;
       }
+      if (await isActivitySyncOutboundEcho({
+        userID: parentID,
+        sourceServiceName: serviceName,
+        fileBuffer: Buffer.from(result),
+      })) {
+        logger.info('[ActivitySync] Skipped an inbound provider echo before event persistence.', {
+          userID: parentID,
+          sourceServiceName: serviceName,
+          queueItemId: queueItem.id,
+        });
+        oneSuccess = true;
+        break;
+      }
       switch (serviceName) {
         default:
           throw new Error('Not Implemented');
@@ -719,6 +765,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
               sourceServiceName: ServiceNames.COROSAPI,
               sourceActivityID: corosWorkoutQueueItem.workoutID,
               setEventResult,
+              sourceFileData: Buffer.from(result),
             });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
@@ -744,6 +791,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
               sourceServiceName: ServiceNames.SuuntoApp,
               sourceActivityID: suuntoWorkoutQueueItem.workoutID,
               setEventResult,
+              sourceFileData: Buffer.from(result),
             });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
@@ -814,6 +862,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   if (sawUserDeletionSkip && !sawRetryableFailure) {
     logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} without retry because every usable token owner is missing or deletion is in progress.`);
     return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+  }
+
+  if (sawInactiveProviderAccount && !sawRetryableFailure) {
+    logger.info(`Skipping ${serviceName} queue item ${queueItem.id} without retry because it belongs to an inactive provider account.`);
+    return markWorkoutQueueItemSkippedForInactiveProviderAccount(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.

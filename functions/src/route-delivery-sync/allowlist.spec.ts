@@ -10,6 +10,7 @@ describe('route-delivery-sync/allowlist', () => {
     expect(Object.keys(ROUTE_DELIVERY_SYNC_ROUTES)).toEqual([
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
     ]);
     expect(ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]).toMatchObject({
       id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
@@ -19,11 +20,16 @@ describe('route-delivery-sync/allowlist', () => {
       id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
       destinationRequiredPermissions: ['routes_read', 'routes_write'],
     });
+    expect(ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]).toMatchObject({
+      id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      destinationRequiredPermissions: [],
+    });
   });
 
   it.each([
     ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
     ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
   ])('allows any non-empty uid when the %s route allowlist is empty', (routeId) => {
     expect(getRouteDeliverySyncRouteAllowlistConfigError(routeId)).toBeNull();
     expect(isRouteDeliverySyncRouteUserAllowlisted(routeId, 'user-1')).toBe(true);

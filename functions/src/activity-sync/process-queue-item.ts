@@ -47,6 +47,8 @@ import {
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
+import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
@@ -58,6 +60,7 @@ import {
     isProviderOperationError,
     ProviderOperationError,
 } from '../shared/provider-operation-error';
+import { recordActivitySyncOutboundFingerprint } from './outbound-fingerprint';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -189,7 +192,25 @@ function isAccountDeletionSkipError(error: unknown): boolean {
             error.name === 'TokenRefreshSkippedForDeletedUserError'
             || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
             || error.name === 'WahooActivityUploadSkippedForDeletedUserError'
+            || error.name === 'COROSActivityUploadSkippedForDeletedUserError'
+            || error.name === 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError'
         );
+}
+
+function destinationRequiresProviderUserId(destinationServiceName: ServiceNames): boolean {
+    return destinationServiceName === ServiceNames.SuuntoApp
+        || destinationServiceName === ServiceNames.COROSAPI;
+}
+
+function destinationUploadStatePersistPhase(destinationServiceName: ServiceNames): string {
+    switch (destinationServiceName) {
+        case ServiceNames.WahooAPI:
+            return 'before_activity_sync_wahoo_upload_state_persist';
+        case ServiceNames.COROSAPI:
+            return 'before_activity_sync_coros_upload_state_persist';
+        default:
+            return 'before_activity_sync_suunto_upload_state_persist';
+    }
 }
 
 function getWahooProviderConfirmedRestartError(
@@ -286,6 +307,25 @@ async function getDestinationConnectionStatus(userID: string, destinationService
                 .get();
             return snapshot.size > 0 ? 'connected' : 'not_connected';
         }
+        case ServiceNames.COROSAPI: {
+            const meta = await getServiceConnectionMeta(userID, destinationServiceName);
+            if (isDisconnectPendingServiceConnection(meta)) {
+                return 'disconnect_pending';
+            }
+            if (isServiceUnavailableForSyncConnection(meta)) {
+                return 'not_connected';
+            }
+            try {
+                await getActiveCOROSTokenSnapshot(userID);
+                return 'connected';
+            } catch (error) {
+                const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+                if (code === 'unauthenticated' || code === 'failed-precondition') {
+                    return 'not_connected';
+                }
+                throw error;
+            }
+        }
         default:
             return 'not_connected';
     }
@@ -368,6 +408,19 @@ async function uploadToDestination(
             return uploadActivityFileToWahoo(queueItem.userID, fileBuffer, {
                 filename: queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
             });
+        case ServiceNames.COROSAPI:
+            if (queueItem.destinationUploadID && queueItem.destinationProviderUserID) {
+                return getCOROSActivityUploadStatus(
+                    queueItem.userID,
+                    queueItem.destinationUploadID,
+                    queueItem.destinationProviderUserID,
+                    { queueItemRef: queueItem.ref },
+                );
+            }
+            if (!fileBuffer) {
+                throw new Error('COROS activity upload is missing its source file.');
+            }
+            return uploadActivityFileToCOROS(queueItem.userID, fileBuffer);
         default:
             throw new Error(`Unsupported destination service ${queueItem.destinationServiceName}`);
     }
@@ -401,11 +454,11 @@ function getSuuntoBlobContinuation(
 }
 
 function shouldDownloadOriginalFileForDestination(queueItem: ActivitySyncQueueItemInterface): boolean {
-    return !hasPersistedDestinationUpload(queueItem);
+    return !hasPersistedDestinationUpload(queueItem) || !queueItem.outboundFingerprintID;
 }
 
 function hasPersistedDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
-    if (queueItem.destinationServiceName === ServiceNames.SuuntoApp) {
+    if (destinationRequiresProviderUserId(queueItem.destinationServiceName)) {
         return !!queueItem.destinationUploadID && !!queueItem.destinationProviderUserID;
     }
     return !!queueItem.destinationUploadID;
@@ -418,13 +471,13 @@ function hasMatchingPersistedDestinationUpload(
 ): boolean {
     return queueItem.destinationUploadID === uploadId
         && (
-            queueItem.destinationServiceName !== ServiceNames.SuuntoApp
+            !destinationRequiresProviderUserId(queueItem.destinationServiceName)
             || queueItem.destinationProviderUserID === providerUserId
         );
 }
 
-function hasIncompleteSuuntoDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
-    return queueItem.destinationServiceName === ServiceNames.SuuntoApp
+function hasIncompleteDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
+    return destinationRequiresProviderUserId(queueItem.destinationServiceName)
         && !!queueItem.destinationUploadID !== !!queueItem.destinationProviderUserID;
 }
 
@@ -496,11 +549,51 @@ function isSameActivitySyncProviderState(
         && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedQueueItem.destinationWorkoutKey)
         && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedQueueItem.destinationInfoCode)
         && areEquivalentOptionalStrings(currentQueueItem.destinationUploadCountedID, expectedQueueItem.destinationUploadCountedID)
+        && areEquivalentOptionalStrings(currentQueueItem.outboundFingerprintID, expectedQueueItem.outboundFingerprintID)
         && isSameUploadContinuation(
             currentQueueItem.destinationUploadContinuation,
             expectedQueueItem.destinationUploadContinuation,
         )
         && isSameActivitySyncQueueItem(currentQueueItem, expectedQueueItem);
+}
+
+async function ensureOutboundFingerprintBeforeProviderUpload(
+    queueItem: ActivitySyncQueueItemInterface,
+    fileBuffer: Buffer | undefined,
+): Promise<boolean> {
+    if (queueItem.outboundFingerprintID) {
+        return true;
+    }
+    if (!fileBuffer) {
+        throw new Error('Activity sync outbound fingerprint is missing its source file.');
+    }
+    if (!queueItem.ref) {
+        throw new Error('Activity sync outbound fingerprint cannot be persisted without a queue document reference.');
+    }
+
+    const fingerprints = await recordActivitySyncOutboundFingerprint({
+        userID: queueItem.userID,
+        destinationServiceName: queueItem.destinationServiceName,
+        fileBuffer,
+    });
+    const expectedQueueItem = { ...queueItem };
+    const updateResult = await updateQueueItemIfUserActive({
+        queueItemDocument: queueItem.ref,
+        queueItemId: queueItem.id,
+        userID: queueItem.userID,
+        phase: 'before_activity_sync_outbound_fingerprint_marker',
+        updateData: {
+            outboundFingerprintID: fingerprints.exactFingerprintId,
+        },
+        logPrefix: 'ActivitySync',
+        actionDescription: 'outbound provider-echo fingerprint marker',
+        isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, expectedQueueItem),
+    });
+    if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
+        return false;
+    }
+    queueItem.outboundFingerprintID = fingerprints.exactFingerprintId;
+    return true;
 }
 
 const ACTIVITY_SYNC_MANUAL_RECONCILIATION_CONTEXTS = new Set([
@@ -674,8 +767,8 @@ async function persistDestinationUploadState(
     }
     const destinationUploadID = uploadResult.uploadId;
     const destinationProviderUserID = uploadResult.providerUserId || queueItem.destinationProviderUserID;
-    if (queueItem.destinationServiceName === ServiceNames.SuuntoApp && !destinationProviderUserID) {
-        throw new Error('Suunto upload is missing its provider user identity.');
+    if (destinationRequiresProviderUserId(queueItem.destinationServiceName) && !destinationProviderUserID) {
+        throw new Error(`${queueItem.destinationServiceName} upload is missing its provider user identity.`);
     }
     const destinationWorkoutKey = uploadResult.workoutKey || queueItem.destinationWorkoutKey;
     const destinationInfoCode = uploadResult.code || queueItem.destinationInfoCode;
@@ -693,9 +786,7 @@ async function persistDestinationUploadState(
         queueItemDocument: queueItem.ref,
         queueItemId: queueItem.id,
         userID: queueItem.userID,
-        phase: queueItem.destinationServiceName === ServiceNames.WahooAPI
-            ? 'before_activity_sync_wahoo_upload_state_persist'
-            : 'before_activity_sync_suunto_upload_state_persist',
+        phase: destinationUploadStatePersistPhase(queueItem.destinationServiceName),
         updateData: {
             destinationUploadID,
             destinationProviderUserID: destinationProviderUserID || null,
@@ -846,7 +937,7 @@ function buildPendingDestinationUploadError(
     queueItem: ActivitySyncQueueItemInterface,
     uploadResult: UploadActivityFileResult,
 ): Error {
-    if (queueItem.destinationServiceName === ServiceNames.SuuntoApp) {
+    if (destinationRequiresProviderUserId(queueItem.destinationServiceName)) {
         const persistedResumeState = hasPersistedDestinationUpload(queueItem);
         const providerOperationId = uploadResult.uploadId
             || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
@@ -860,15 +951,17 @@ function buildPendingDestinationUploadError(
             );
         }
         return new ProviderOperationError({
-            serviceName: ServiceNames.SuuntoApp,
+            serviceName: queueItem.destinationServiceName,
             operation: 'activity_upload_status',
             disposition: 'retryable',
             retryMode: 'resume',
             code: 'deadline-exceeded',
-            message: uploadResult.message || 'Suunto is still processing the activity.',
+            message: uploadResult.message || `${queueItem.destinationServiceName} is still processing the activity.`,
             providerUserId,
             providerOperationId,
-            dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+            dlqContext: queueItem.destinationServiceName === ServiceNames.SuuntoApp
+                ? 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED'
+                : 'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
         });
     }
 
@@ -1266,7 +1359,7 @@ export async function processActivitySyncQueueItem(
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
         }
 
-        if (hasIncompleteSuuntoDestinationUpload(queueItem)) {
+        if (hasIncompleteDestinationUpload(queueItem)) {
             throw buildInvalidProviderResumeStateError(
                 queueItem,
                 queueItem.destinationUploadID || undefined,
@@ -1284,6 +1377,10 @@ export async function processActivitySyncQueueItem(
             'before_activity_sync_destination_upload',
         )) {
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+        }
+
+        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer))) {
+            return QueueResult.Processed;
         }
 
         const operationMarked = await markDestinationProviderOperationInFlight(queueItem);
@@ -1324,9 +1421,12 @@ export async function processActivitySyncQueueItem(
             || (hadPersistedDestinationUpload ? queueItem.destinationProviderUserID || undefined : undefined);
         const destinationWorkoutKey = uploadResult.workoutKey
             || (hadPersistedDestinationUpload ? queueItem.destinationWorkoutKey || undefined : undefined);
+        const providerConfirmedDuplicateWithoutResumeID = !destinationUploadID
+            && (uploadResult.status === 'duplicate' || uploadResult.code === 'ALREADY_EXISTS');
 
-        if (queueItem.destinationServiceName === ServiceNames.SuuntoApp && (
-            !destinationUploadID || !destinationProviderUserID
+        if (destinationRequiresProviderUserId(queueItem.destinationServiceName) && (
+            (!destinationUploadID && !providerConfirmedDuplicateWithoutResumeID)
+            || !destinationProviderUserID
         )) {
             const invalidResumeStateError = buildInvalidProviderResumeStateError(
                 queueItem,
@@ -1350,7 +1450,7 @@ export async function processActivitySyncQueueItem(
             !hadPersistedDestinationUpload
             || queueItem.destinationUploadID !== destinationUploadID
             || (
-                queueItem.destinationServiceName === ServiceNames.SuuntoApp
+                destinationRequiresProviderUserId(queueItem.destinationServiceName)
                 && queueItem.destinationProviderUserID !== destinationProviderUserID
             )
         );
@@ -1385,8 +1485,6 @@ export async function processActivitySyncQueueItem(
                 infoCode: uploadResult.code || undefined,
             });
         } catch (metadataError) {
-            const providerConfirmedDuplicateWithoutResumeID = !destinationUploadID
-                && (uploadResult.status === 'duplicate' || uploadResult.code === 'ALREADY_EXISTS');
             if (!providerConfirmedDuplicateWithoutResumeID) {
                 throw metadataError;
             }
@@ -1583,7 +1681,7 @@ export async function processActivitySyncQueueItem(
                 const providerUserId = actionableError.providerUserId
                     || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
                 if (!providerOperationId || (
-                    queueItem.destinationServiceName === ServiceNames.SuuntoApp && !providerUserId
+                    destinationRequiresProviderUserId(queueItem.destinationServiceName) && !providerUserId
                 )) {
                     const invalidResumeStateError = buildInvalidProviderResumeStateError(
                         queueItem,

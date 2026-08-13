@@ -120,6 +120,7 @@ export async function processWahooWorkoutQueueItem(
       sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
       sourceActivityID: queueItem.workoutID,
       setEventResult,
+      sourceFileData: Buffer.from(fitFile),
     });
     if (skippedAfterDeletionStarted) {
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {

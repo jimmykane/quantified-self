@@ -280,6 +280,7 @@
           (change)="activeActivitySyncDestination = $event.value">
           <mat-button-toggle value="suunto">To Suunto</mat-button-toggle>
           <mat-button-toggle value="wahoo">To Wahoo</mat-button-toggle>
+          <mat-button-toggle value="coros">To COROS</mat-button-toggle>
         </mat-button-toggle-group>
         }
 
@@ -394,6 +395,17 @@
         [hasProAccess]="hasProAccess"
         [sourceServiceName]="serviceName"
         [destinationServiceName]="serviceNames.WahooAPI"
+        [sourceConnected]="isConnectedToService()"
+        [sourceReconnectRequired]="isReconnectRequired"
+        [showTopDivider]="!showOnlyActiveProviderTool">
+      </app-activity-sync-route-control>
+        }
+        @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'coros') {
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.COROSAPI"
         [sourceConnected]="isConnectedToService()"
         [sourceReconnectRequired]="isReconnectRequired"
         [showTopDivider]="!showOnlyActiveProviderTool">

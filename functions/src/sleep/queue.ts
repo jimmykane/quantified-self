@@ -50,8 +50,9 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
 
-type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
+type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
 interface AddSleepSyncQueueItemInput {
     type: SleepSyncQueueItemType;
@@ -384,6 +385,21 @@ export async function findSleepTokenByProviderUserId(provider: SleepProvider, pr
 
 async function findTokenForQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<TokenSnapshot | null> {
     if (queueItem.userID) {
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
+            try {
+                const activeToken = await getActiveCOROSTokenSnapshot(queueItem.userID);
+                const activeOpenId = `${activeToken.data()?.openId || activeToken.id}`.trim();
+                return activeToken.id === queueItem.providerUserId && activeOpenId === queueItem.providerUserId
+                    ? activeToken
+                    : null;
+            } catch (error) {
+                const code = `${(error as { code?: unknown } | null)?.code || ''}`;
+                if (code === 'unauthenticated' || code === 'failed-precondition') {
+                    return null;
+                }
+                throw error;
+            }
+        }
         const tokenRoot = getTokenRoot(queueItem.provider, queueItem.userID);
         const tokenField = providerUserIdTokenField(queueItem.provider);
         if (!tokenRoot || !tokenField) {

@@ -136,6 +136,12 @@ service cloud.firestore {
          allow read, write: if false;
       }
 
+      // Short-lived provider-echo fingerprints are server-owned operational
+      // receipts and never exposed to browser clients.
+      match /activitySyncOutboundFingerprints/{fingerprintID} {
+         allow read, write: if false;
+      }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;

@@ -137,6 +137,47 @@ describe('UploadActivitiesToServiceComponent', () => {
         await promise;
     });
 
+    it('polls COROS with both async resume identifiers until processing completes', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.COROSAPI;
+        component.wahooStatusPollDelayMs = 2000;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+        mockProcessingService.addJob.mockReturnValueOnce('coros-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: '9223372036854775806',
+            providerUserId: 'coros-user-1',
+            message: 'COROS is processing the activity.',
+        } as any);
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'success', message: 'Activity uploaded to COROS.' },
+        });
+
+        await component.getFiles(event);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing',
+            uploadId: '9223372036854775806',
+            providerUserId: 'coros-user-1',
+        });
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'getCOROSAPIWorkoutFileUploadStatus',
+            { uploadId: '9223372036854775806', providerUserId: 'coros-user-1' },
+        );
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'success',
+            message: 'Activity uploaded to COROS.',
+        });
+    });
+
     it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
         component.serviceName = ServiceNames.WahooAPI;
         mockFunctionsService.call.mockResolvedValueOnce({

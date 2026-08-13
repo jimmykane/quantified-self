@@ -394,8 +394,8 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.routeFiles,
-        title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
-        h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
+        title: 'FIT and GPX Route Files with Multi-Provider Delivery',
+        h1: 'Save FIT and GPX route files, then send them to connected services',
         descriptionText: 'Save FIT course files and GPX route or track files',
       },
       {

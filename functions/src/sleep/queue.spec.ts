@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
+import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -31,6 +32,7 @@ const hoisted = vi.hoisted(() => ({
     transactionUpdate: vi.fn((ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => ref.update?.(data)),
     runTransaction: vi.fn(),
     recursiveDelete: vi.fn(),
+    getActiveCOROSTokenSnapshot: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -201,6 +203,10 @@ vi.mock('../queue/cleanup-tombstone', () => ({
     },
 }));
 
+vi.mock('../coros/account', () => ({
+    getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
@@ -238,6 +244,9 @@ describe('sleep queue', () => {
         });
         hoisted.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
         hoisted.transactionUpdate.mockClear();
+        hoisted.getActiveCOROSTokenSnapshot.mockRejectedValue(Object.assign(new Error('No active COROS token'), {
+            code: 'unauthenticated',
+        }));
         hoisted.runTransaction.mockClear();
         hoisted.recursiveDelete.mockResolvedValue(undefined);
     });
@@ -980,7 +989,7 @@ describe('sleep queue', () => {
             retryCount: 0,
             type: 'garmin_ping',
             callbackURL: 'https://attacker.example/wellness-api/rest/sleeps?token=garmin-token',
-            ref: queueRef as any,
+            ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
         });
 
         expect(result).toBe(QueueResult.MovedToDLQ);
@@ -1516,5 +1525,45 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
         }));
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+    });
+
+    it('does not process a COROS sleep queue item for an inactive legacy account', async () => {
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue({
+            id: 'active-coros-user',
+            data: () => ({ openId: 'active-coros-user' }),
+            ref: {
+                parent: {
+                    parent: {
+                        id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                    },
+                },
+            },
+        });
+        const queueRef = { parent: { id: 'sleepSyncQueue' } };
+
+        const result = await processSleepSyncQueueItem({
+            id: 'coros-inactive-account-sleep',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'COROSAPI',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'old-coros-user',
+            retryCount: 0,
+            type: 'coros_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'coros-inactive-account-sleep',
+        }), expect.objectContaining({
+            context: 'NO_TOKEN_FOUND',
+        }));
     });
 });

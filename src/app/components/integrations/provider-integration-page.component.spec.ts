@@ -72,10 +72,13 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('coros');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('COROS Integration for Suunto Sync and Centralized Training Data');
+    expect(text).toContain('COROS Integration for Activity Sync and Route Delivery');
     expect(text).toContain('COROS to Suunto automatic activity sync');
+    expect(text).toContain('Send activities to COROS');
+    expect(text).toContain('Send routes to COROS');
+    expect(text).toContain('GPX and FIT route delivery');
     expect(text).toContain('COROS history import');
-    expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
+    expect(text).toContain('one active COROS account');
   });
 
   it('should render Wahoo import, explicit delivery, and retention boundaries', () => {
@@ -89,7 +92,8 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('does not delete activities already imported');
     expect(text).toContain('Direct GPX/FIT course/route delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
-    expect(text).toContain('sleep sync, plans, and other Wahoo forwarding are not enabled');
+    expect(text).toContain('sleep sync and plans are not forwarded');
+    expect(text).toContain('Wahoo to COROS sync');
     expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
       .toContain('/guides/import-activities-to-wahoo');
   });
