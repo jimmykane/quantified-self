@@ -291,31 +291,32 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       throw new Error('User not logged in');
     }
 
-    if (file.file.size > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
-      throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
-    }
-
-    const payload = await this.readFileAsArrayBuffer(file.file);
-    if (payload.byteLength > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
-      throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
-    }
-
-    const base64String = this.arrayBufferToBase64(payload);
-    const callablePayload: Record<string, unknown> = this.serviceName === ServiceNames.WahooAPI
-      ? {
-        file: base64String,
-        filename: file.name,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }
-      : {
-        file: base64String,
-        ...(this.serviceName === ServiceNames.SuuntoApp && suuntoResumeState
-          ? {
-            resumeUploadId: suuntoResumeState.uploadId,
-            resumeProviderUserId: suuntoResumeState.providerUserId,
-          }
-          : {}),
+    const isSuuntoResume = this.serviceName === ServiceNames.SuuntoApp && !!suuntoResumeState;
+    let callablePayload: Record<string, unknown>;
+    if (isSuuntoResume) {
+      callablePayload = {
+        resumeUploadId: suuntoResumeState.uploadId,
+        resumeProviderUserId: suuntoResumeState.providerUserId,
       };
+    } else {
+      if (file.file.size > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
+        throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
+      }
+
+      const payload = await this.readFileAsArrayBuffer(file.file);
+      if (payload.byteLength > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
+        throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
+      }
+
+      const base64String = this.arrayBufferToBase64(payload);
+      callablePayload = this.serviceName === ServiceNames.WahooAPI
+        ? {
+          file: base64String,
+          filename: file.name,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }
+        : { file: base64String };
+    }
 
     if (file.jobId) {
       this.processingService.updateJob(file.jobId, { progress: 50 });

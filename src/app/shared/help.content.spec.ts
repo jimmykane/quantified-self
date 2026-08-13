@@ -721,8 +721,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
-    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job first instead of immediately uploading the FIT again');
-    expect(serviceConnectionsSection?.content).toContain('only when Suunto explicitly reports that the earlier job is still empty');
+    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job instead of uploading the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('retry never replaces an issued job automatically');
+    expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');

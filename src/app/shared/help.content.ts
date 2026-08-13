@@ -695,7 +695,7 @@ Suunto tools currently include:
 - uploading FIT activities to Suunto,
 - uploading GPX or FIT routes to Suunto.
 
-Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. If Suunto has already issued an upload job when a temporary error occurs, retrying the same row checks that job first instead of immediately uploading the FIT again. A replacement is started only when Suunto explicitly reports that the earlier job is still empty. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. If Suunto has already issued an upload job when a temporary error occurs, retrying the same row checks that job instead of uploading the FIT again. Suunto can report a job as new while an accepted FIT is still processing, so retry never replaces an issued job automatically. To deliberately start a fresh upload, clear the upload list and choose the FIT file again. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 

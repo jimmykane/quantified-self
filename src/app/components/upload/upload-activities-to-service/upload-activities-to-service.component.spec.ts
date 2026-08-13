@@ -1014,7 +1014,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         );
     });
 
-    it('should send the FIT with Suunto resume identifiers so a confirmed empty job can recover', async () => {
+    it('should resume a Suunto status check without reading or resending the FIT', async () => {
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
             filename: 'activity',
@@ -1025,16 +1025,19 @@ describe('UploadActivitiesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
             jobId: '1'
         };
+        const fileReadSpy = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+
         await component.processAndUploadFile(file, {
             uploadId: 'suunto-upload-1',
             providerUserId: 'suunto-user-1',
         });
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importActivityToSuuntoApp', {
-            file: expect.any(String),
             resumeUploadId: 'suunto-upload-1',
             resumeProviderUserId: 'suunto-user-1',
         });
+        expect(fileReadSpy).not.toHaveBeenCalled();
+        fileReadSpy.mockRestore();
     });
 
     it('retryFailedUploads should retry only failed rows', async () => {

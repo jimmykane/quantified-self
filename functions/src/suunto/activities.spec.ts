@@ -359,7 +359,7 @@ describe('importActivityToSuuntoApp', () => {
         expect(result).not.toHaveProperty('providerUserId');
     }, 30000);
 
-    it('paces repeated Suunto status checks ten seconds apart', async () => {
+    it('paces transient Suunto status retries ten seconds apart', async () => {
         vi.useFakeTimers();
         try {
             tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
@@ -370,7 +370,7 @@ describe('importActivityToSuuntoApp', () => {
             });
             requestMocks.put.mockResolvedValue({});
             requestMocks.get
-                .mockResolvedValueOnce({ status: 'NEW' })
+                .mockRejectedValueOnce(createStatusCodeError('Service Unavailable', 503))
                 .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'paced-workout-key' });
 
             const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('paced-data'));
@@ -586,59 +586,73 @@ describe('importActivityToSuuntoApp', () => {
     }, 30000);
 
     it('should continue polling after transient status 500 and then succeed', async () => {
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
-        requestMocks.post.mockResolvedValue({
-            id: 'status-retry-upload-id',
-            url: 'https://storage.suunto.com/status-retry-upload-url',
-            headers: {}
-        });
+            requestMocks.post.mockResolvedValue({
+                id: 'status-retry-upload-id',
+                url: 'https://storage.suunto.com/status-retry-upload-url',
+                headers: {}
+            });
 
-        requestMocks.put.mockResolvedValue({});
+            requestMocks.put.mockResolvedValue({});
 
-        requestMocks.get
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'status-retry-workout-key' });
+            requestMocks.get
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'status-retry-workout-key' });
 
-        const fileContent = Buffer.from('status-retry-data');
-        const request = createMockRequest({
-            data: { file: fileContent.toString('base64') }
-        });
+            const fileContent = Buffer.from('status-retry-data');
+            const request = createMockRequest({
+                data: { file: fileContent.toString('base64') }
+            });
 
-        const result = await importActivityToSuuntoApp(request as any);
+            const uploadPromise = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            const result = await uploadPromise;
 
-        expect(requestMocks.get).toHaveBeenCalledTimes(4);
-        expect(result).toEqual(expect.objectContaining({
-            status: 'success',
-            workoutKey: 'status-retry-workout-key'
-        }));
-    }, 30000);
+            expect(requestMocks.get).toHaveBeenCalledTimes(4);
+            expect(result).toEqual(expect.objectContaining({
+                status: 'success',
+                workoutKey: 'status-retry-workout-key'
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it('should cap transient status polling retries by actual request budget', async () => {
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
-        requestMocks.post.mockResolvedValue({
-            id: 'status-budget-upload-id',
-            url: 'https://storage.suunto.com/status-budget-upload-url',
-            headers: {}
-        });
+            requestMocks.post.mockResolvedValue({
+                id: 'status-budget-upload-id',
+                url: 'https://storage.suunto.com/status-budget-upload-url',
+                headers: {}
+            });
 
-        requestMocks.put.mockResolvedValue({});
-        requestMocks.get.mockRejectedValue(createStatusCodeError('Internal Server Error', 500));
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockRejectedValue(createStatusCodeError('Internal Server Error', 500));
 
-        const fileContent = Buffer.from('status-budget-data');
-        const request = createMockRequest({
-            data: { file: fileContent.toString('base64') }
-        });
+            const fileContent = Buffer.from('status-budget-data');
+            const request = createMockRequest({
+                data: { file: fileContent.toString('base64') }
+            });
 
-        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
-            code: 'unavailable',
-            message: 'Suunto activity upload is temporarily unavailable. Please retry.'
-        });
-        expect(requestMocks.get).toHaveBeenCalledTimes(5);
-    }, 30000);
+            const rejection = expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+                code: 'unavailable',
+                message: 'Suunto activity upload is temporarily unavailable. Please retry.'
+            });
+            await vi.runAllTimersAsync();
+            await rejection;
+            expect(requestMocks.get).toHaveBeenCalledTimes(5);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it('should not retry permanent-looking Suunto 500 payload errors', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
@@ -1169,7 +1183,7 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should replace a resumed direct upload only after Suunto confirms the original job is still empty', async () => {
+    it('should not replace a resumed direct upload while Suunto reports NEW', async () => {
         vi.useFakeTimers();
         try {
             const admin = await import('firebase-admin');
@@ -1185,17 +1199,7 @@ describe('importActivityToSuuntoApp', () => {
                 data: () => ({}),
             });
             tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
-            requestMocks.get.mockImplementation(({ url }: { url: string }) => Promise.resolve(
-                url.endsWith('/direct-empty-upload-id')
-                    ? { status: 'NEW' }
-                    : { status: 'PROCESSED', workoutKey: 'replacement-workout-key' },
-            ));
-            requestMocks.post.mockResolvedValue({
-                id: 'replacement-upload-id',
-                url: 'https://storage.suunto.com/replacement-upload-url',
-                headers: {},
-            });
-            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockResolvedValue({ status: 'NEW' });
             const request = createMockRequest({
                 data: {
                     file: Buffer.from('direct-resume-data').toString('base64'),
@@ -1205,19 +1209,20 @@ describe('importActivityToSuuntoApp', () => {
             });
 
             const uploadPromise = importActivityToSuuntoApp(request as any);
-            await vi.runAllTimersAsync();
-            await expect(uploadPromise).resolves.toMatchObject({
-                status: 'success',
-                uploadId: 'replacement-upload-id',
-                workoutKey: 'replacement-workout-key',
+            const rejection = expect(uploadPromise).rejects.toMatchObject({
+                code: 'unavailable',
+                details: {
+                    retryMode: 'resume',
+                    resumeUploadId: 'direct-empty-upload-id',
+                    resumeProviderUserId: 'token1',
+                },
             });
+            await vi.runAllTimersAsync();
+            await rejection;
 
-            expect(requestMocks.get).toHaveBeenCalledTimes(6);
-            expect(requestMocks.post).toHaveBeenCalledTimes(1);
-            expect(requestMocks.put).toHaveBeenCalledWith(expect.objectContaining({
-                url: 'https://storage.suunto.com/replacement-upload-url',
-                body: Buffer.from('direct-resume-data'),
-            }));
+            expect(requestMocks.get).toHaveBeenCalledTimes(5);
+            expect(requestMocks.post).not.toHaveBeenCalled();
+            expect(requestMocks.put).not.toHaveBeenCalled();
         } finally {
             vi.useRealTimers();
         }

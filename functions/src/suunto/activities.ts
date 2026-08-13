@@ -522,9 +522,8 @@ async function pollSuuntoActivityUploadStatus(
 ): Promise<SuuntoActivityUploadResult> {
   const maxAttempts = options.maxAttempts ?? SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS;
   const pollDelayMs = options.pollDelayMs ?? SUUNTO_STATUS_POLL_DELAY_MS;
-  // UNKNOWN is deliberate: a missing/malformed status response must never be
-  // interpreted as provider-confirmed NEW, because callers may only replace an
-  // empty direct-upload job after Suunto explicitly reports NEW.
+  // UNKNOWN is deliberate: a missing or malformed response must remain
+  // distinguishable from an explicit provider status in retry diagnostics.
   let status = 'UNKNOWN';
   let statusRequestAttempts = 0;
 
@@ -535,27 +534,17 @@ async function pollSuuntoActivityUploadStatus(
     await assertSuuntoActivityUploadUserActive(userID, 'before_status_poll');
 
     try {
-      const remainingStatusRequestAttempts = maxAttempts - statusRequestAttempts;
-      const maxStatusRequestRetries = Math.min(
-        SUUNTO_MAX_TRANSIENT_RETRIES,
-        Math.max(0, remainingStatusRequestAttempts - 1)
-      );
-      const statusJson = await withSuuntoTransientRetry(
-        `Check upload status for ${uploadId} for user ${userID}`,
-        async () => {
-          statusRequestAttempts++;
-          return requestPromise.get({
-            headers: {
-              'Authorization': toSuuntoAuthorizationHeader(accessToken),
-              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-            },
-            json: true,
-            url: `https://cloudapi.suunto.com/v2/upload/${encodeURIComponent(uploadId)}`,
-          });
+      // Status retries stay in this outer loop so every provider request uses
+      // the same poll interval instead of the shorter generic transport retry.
+      statusRequestAttempts++;
+      const statusJson = await requestPromise.get({
+        headers: {
+          'Authorization': toSuuntoAuthorizationHeader(accessToken),
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
         },
-        maxStatusRequestRetries,
-        true
-      );
+        json: true,
+        url: `https://cloudapi.suunto.com/v2/upload/${encodeURIComponent(uploadId)}`,
+      });
 
       if (!statusJson || !statusJson.status) {
         logger.warn('Suunto activity status response omitted status.', {
@@ -1163,13 +1152,6 @@ export const importActivityToSuuntoApp = onCall({
     let result: SuuntoActivityUploadResult;
     if (resumeState) {
       result = await getSuuntoActivityUploadStatus(userID, resumeState.uploadId, resumeState.providerUserId);
-      if (result.status === 'pending' && result.providerStatus === 'NEW') {
-        // Direct uploads do not persist signed blob URLs server-side. A NEW
-        // provider status confirms the original job never received its FIT, so
-        // replacing that empty job is safe and prevents an unrecoverable loop.
-        fileBuffer = decodeSuuntoActivityUpload(request.data?.file);
-        result = await startDirectUpload(fileBuffer);
-      }
     } else {
       result = await startDirectUpload(fileBuffer as Buffer);
     }
