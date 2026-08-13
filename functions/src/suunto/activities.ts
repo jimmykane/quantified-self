@@ -47,8 +47,8 @@ import {
 const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([408, 502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
-const SUUNTO_STATUS_POLL_DELAY_MS = 2000;
-const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 10;
+const SUUNTO_STATUS_POLL_DELAY_MS = 10_000;
+const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 5;
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const SUUNTO_UPLOAD_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 const SUUNTO_PROVIDER_USER_ID_MAX_LENGTH = 200;
@@ -529,7 +529,7 @@ async function pollSuuntoActivityUploadStatus(
   let statusRequestAttempts = 0;
 
   while (statusRequestAttempts < maxAttempts) {
-    if (pollDelayMs > 0) {
+    if (statusRequestAttempts > 0 && pollDelayMs > 0) {
       await sleep(pollDelayMs);
     }
     await assertSuuntoActivityUploadUserActive(userID, 'before_status_poll');
@@ -1124,7 +1124,8 @@ export const importActivityToSuuntoApp = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   timeoutSeconds: 300,
-  maxInstances: 10,
+  concurrency: 1,
+  maxInstances: 1,
 }, async (request) => {
   logger.info('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
 
