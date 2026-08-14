@@ -204,10 +204,12 @@ describe('SummariesComponent', () => {
       displayName: '  Dimitrios Kanellopoulos  ',
       settings: { dashboardSettings: { tiles: [] } },
     } as any;
-    component.showActions = true;
+    component.eventUser = { uid: 'owner-user' } as any;
+    component.showActions = false;
 
     fixture.detectChanges();
 
+    expect(component.isOwnerDashboard).toBe(true);
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
       .toBe('Good morning, Dimitrios');
   });
@@ -255,9 +257,10 @@ describe('SummariesComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
 
     component.user.settings.dashboardSettings.showTodaySummary = true;
-    component.eventUser = { uid: 'other-user' } as any;
-    component.showActions = false;
+    fixture.componentRef.setInput('eventUser', { uid: 'other-user' } as any);
+    fixture.componentRef.setInput('showActions', true);
     fixture.detectChanges();
+    expect(component.isOwnerDashboard).toBe(false);
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
   });
 
@@ -299,7 +302,7 @@ describe('SummariesComponent', () => {
 
     expect(component.todayGreeting).toBe('Good morning, Morgan');
 
-    vi.advanceTimersByTime(1_001);
+    vi.advanceTimersByTime(1_000);
     fixture.detectChanges();
     expect(component.todayGreeting).toBe('Good afternoon, Morgan');
 
@@ -320,7 +323,7 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     const previousDateSubtitle = component.todayDateSubtitle;
 
-    vi.advanceTimersByTime(1_001);
+    vi.advanceTimersByTime(1_000);
     fixture.detectChanges();
 
     expect(component.todayGreeting).toBe('Good morning, Morgan');
@@ -346,12 +349,21 @@ describe('SummariesComponent', () => {
     expect(component.todayGreeting).toBe('Good morning, Morgan');
 
     vi.setSystemTime(localDashboardDate(19));
-    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
-    document.dispatchEvent(new Event('visibilitychange'));
-    fixture.detectChanges();
+    const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
 
-    expect(component.todayGreeting).toBe('Good evening, Morgan');
-    expect(vi.getTimerCount()).toBe(1);
+      expect(component.todayGreeting).toBe('Good evening, Morgan');
+      expect(vi.getTimerCount()).toBe(1);
+    } finally {
+      if (visibilityDescriptor) {
+        Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+      } else {
+        delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+      }
+    }
   });
 
   it('clears the boundary timer and visibility listener when destroyed', () => {

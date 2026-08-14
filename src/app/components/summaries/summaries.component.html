@@ -47,7 +47,7 @@
     }
   </app-page-header>
   }
-  @if (!derivedMetricsBanner && showTodaySummary && showActions && todayGreeting) {
+  @if (!derivedMetricsBanner && showTodaySummary && isOwnerDashboard && todayGreeting) {
   <p class="dashboard-today-greeting">{{ todayGreeting }}</p>
   }
   @if (showTodaySummary) {

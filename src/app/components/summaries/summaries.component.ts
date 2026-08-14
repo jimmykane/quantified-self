@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -12,7 +13,6 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
 import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
@@ -301,6 +301,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public todayGreeting = '';
+  public isOwnerDashboard = false;
 
   private appThemeSubscription: Subscription | null = null;
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -395,8 +396,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.logger = logger;
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
-    this.todayDateSubtitle = this.formatTodayDateSubtitle(new Date());
-    this.todayGreeting = formatDashboardGreeting(new Date());
+    this.refreshTodayHeader(new Date());
   }
 
   @HostListener('window:resize', ['$event'])
@@ -415,7 +415,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
-    if (simpleChanges.user || simpleChanges.showActions) {
+    if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
     }
     this.syncTodaySummaryVisibility();
@@ -500,6 +500,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private refreshTodayHeader(date: Date): void {
+    this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
     this.todayGreeting = formatDashboardGreeting(
       date,
@@ -519,7 +520,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.todayHeaderRefreshTimeoutHandle = globalThis.setTimeout(() => {
       this.todayHeaderRefreshTimeoutHandle = null;
       this.refreshTodayHeaderAndSchedule();
-    }, Math.max(1, refreshAtMs - date.getTime() + 1));
+    }, Math.max(1, refreshAtMs - date.getTime()));
   }
 
   private clearTodayHeaderRefreshTimer(): void {
@@ -1064,6 +1065,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return null;
     }
 
+    return this.resolveDashboardOwnerUID();
+  }
+
+  private resolveDashboardOwnerUID(): string | null {
     const uid = `${this.user?.uid || ''}`.trim();
     if (!uid) {
       return null;
