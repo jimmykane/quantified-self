@@ -2,6 +2,13 @@
   margin: 0 0 0.75rem;
 }
 
+.dashboard-today-greeting {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  font-weight: 500;
+  margin: -0.35rem 0 0.75rem;
+}
+
 .dashboard-kpi-section {
   margin: 0 0 0.85rem;
 }
@@ -138,6 +145,10 @@
 }
 
 @media (max-width: 600px) {
+  .dashboard-today-greeting {
+    margin-bottom: 0.65rem;
+  }
+
   .dashboard-summary-header .dashboard-derived-metrics-retry,
   .dashboard-summary-header .dashboard-training-link {
     align-items: center;

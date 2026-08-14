@@ -582,6 +582,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('Dashboard **Today** header');
+    expect(gettingStartedSection?.content).toContain('browser-local morning, afternoon, or evening time');
+    expect(gettingStartedSection?.content).toContain('generic copy otherwise');
+    expect(gettingStartedSection?.content).toContain('hidden on shared dashboards');
     expect(gettingStartedSection?.content).toContain('**Show Today summary**');
     expect(gettingStartedSection?.content).toContain('hides the Today summary');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
