@@ -293,7 +293,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'Training Analysis for Endurance Athletes',
     description: 'Analyze eight sport families—from running, cycling, swimming, and rowing to walking and hiking, Nordic skiing, strength, and paddling—with readiness, load trends, intensity, durability, sleep context, and historical build comparisons, all through context-aware summaries.',
     h1: 'Training analysis for endurance athletes',
-    intro: 'Training is a curated workspace for understanding your current workload in context: compare it with your usual training, see what changed, and inspect the evidence behind readiness, performance, and long-session durability.',
+    intro: 'Training is a curated workspace for understanding your current workload in context. Start with one All training overview, then switch to a focused sport destination for its historical build, performance, power, and durability evidence without losing any global totals.',
     chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -326,7 +326,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Eight conservative sport families keep materially different contexts separate, including individual registered legs from multisport activities.',
+        copy: 'Use account-saved sport shortcuts or the complete selector to open one of eight conservative sport families. Every sport stays available, and materially different contexts—including registered legs from multisport activities—remain separate.',
         items: [
           {
             icon: 'directions_run',
@@ -341,7 +341,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'show_chart',
             title: 'Context-aware sport summaries',
-            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
+            copy: 'Switch to one sport for its detailed current-versus-usual summary while All training keeps the compact cross-sport mix. Indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts remain separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
           },
         ],
       },
@@ -383,7 +383,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'How is Training different from the Dashboard?',
-        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace that combines related evidence into a consistent current, historical, and discipline-specific view.',
+        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace with one global overview and focused sport destinations. Account-saved shortcuts speed up navigation but never hide a sport or change the calculations.',
       },
     ],
     closingTitle: 'Start with the work you already recorded',

@@ -1137,6 +1137,21 @@ describe('Firestore Security Rules', () => {
                     trainingSettings: { buildBenchmarks: { cycling: { mode: 'period', durationWeeks: 8, endDayMs: 1_746_403_200_000 } } },
                 }));
                 await assertSucceeds(settingsRef.update({ theme: 'light' }));
+                await assertSucceeds(settingsRef.set({
+                    appSettings: {
+                        trainingWorkspace: {
+                            preferredDestination: 'cycling',
+                            sportShortcuts: ['running', 'cycling'],
+                        },
+                    },
+                }, { merge: true }));
+
+                const savedSettings = (await settingsRef.get()).data();
+                expect(savedSettings?.trainingSettings).toEqual(trainingSettings);
+                expect(savedSettings?.appSettings?.trainingWorkspace).toEqual({
+                    preferredDestination: 'cycling',
+                    sportShortcuts: ['running', 'cycling'],
+                });
             });
 
             it('should deny user reading other user settings', async () => {

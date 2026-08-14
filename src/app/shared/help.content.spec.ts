@@ -304,12 +304,12 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
-    expect(trainingSection?.content).toContain('**Sports shown**');
-    expect(trainingSection?.content).toContain('activities in the latest 28 days and saved sport benchmarks');
-    expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling');
-    expect(trainingSection?.content).toContain('keeps those sport cards visible while a replacement snapshot refreshes');
+    expect(trainingSection?.content).toContain('**All sports**');
+    expect(trainingSection?.content).toContain('training duration and workouts in the latest 28 days');
+    expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, or Paddling');
+    expect(trainingSection?.content).toContain('Shortcuts change navigation only');
     expect(trainingSection?.content).toContain('**Use automatic selection**');
-    expect(trainingSection?.content).toContain('does not filter the overall comparison, **What drove this**, or **Power systems**');
+    expect(trainingSection?.content).toContain('unmatched types appear under **Other power activities**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
     expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
@@ -354,7 +354,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('zero-session result');
     expect(trainingSection?.content).toContain('Imported VO₂ max');
     expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
-    expect(trainingSection?.content).toContain('The selector has no all-sports value');
+    expect(trainingSection?.content).toContain('There is no pooled all-sports value');
     expect(trainingSection?.content).toContain('partial, insufficient, poor-fit, unstable, and invalid evidence');
     expect(trainingSection?.content).not.toContain('aggregate best 3–20 minute power curve');
     expect(trainingSection?.content).toContain('never a readiness score');

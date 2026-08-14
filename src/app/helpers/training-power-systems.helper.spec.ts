@@ -7,6 +7,7 @@ import type {
 import {
   buildTrainingPowerSystemsInterpretation,
   buildTrainingPowerSystemsActivityTypeViewModels,
+  groupTrainingPowerSystemsActivityTypeViewModels,
   resolveTrainingPowerSystemsMetricPayload,
 } from './training-power-systems.helper';
 
@@ -165,6 +166,21 @@ describe('training-power-systems.helper', () => {
       wPrime: { value: 18_500 },
       maximumPower: { value: 1_200 },
     });
+  });
+
+  it('groups registered exact types by sport and preserves unmatched types as Other', () => {
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([
+      entry('Cycling'),
+      entry('Rowing'),
+      entry('Elliptical Trainer'),
+    ]));
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(
+      buildTrainingPowerSystemsActivityTypeViewModels(normalized),
+    );
+
+    expect(groups.bySport.cycling.map(item => item.activityType)).toEqual(['Cycling']);
+    expect(groups.bySport.rowing.map(item => item.activityType)).toEqual(['Rowing']);
+    expect(groups.other.map(item => item.activityType)).toEqual(['Elliptical Trainer']);
   });
 
   it('accepts a discovered same-day type with no preceding evidence as a valid unavailable state', () => {

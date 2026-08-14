@@ -200,4 +200,44 @@ describe('AppUserSettingsQueryService', () => {
         });
     });
 
+    describe('Training workspace preferences', () => {
+        it('writes only the requested client-owned Training preference map', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+
+            await service.updateTrainingWorkspacePreferences('test-uid', {
+                preferredDestination: 'cycling',
+            });
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: {
+                    appSettings: {
+                        trainingWorkspace: {
+                            preferredDestination: 'cycling',
+                        },
+                    },
+                },
+            });
+        });
+
+        it('rejects a queued preference when the signed-in account changed', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'different-user' }));
+
+            await expect(service.updateTrainingWorkspacePreferences('test-uid', {
+                sportShortcuts: ['running'],
+            })).rejects.toThrow('account changed');
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
+        it('propagates Firestore persistence failures to the caller', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('offline'));
+
+            await expect(service.updateTrainingWorkspacePreferences('test-uid', {
+                sportShortcuts: null,
+            })).rejects.toThrow('offline');
+        });
+    });
+
 });

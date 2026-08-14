@@ -343,18 +343,9 @@ export type TrainingBuildBenchmarkSelection =
   };
 
 export interface TrainingSettings {
+  /** @deprecated Read only as a migration fallback for client-owned sport shortcuts. */
   visibleDisciplines?: TrainingVisibleDiscipline[];
   buildBenchmarks?: Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>;
-}
-
-export interface SetTrainingVisibleDisciplinesRequest {
-  /** A null selection restores automatic visibility based on recent training. */
-  visibleDisciplines: TrainingVisibleDiscipline[] | null;
-}
-
-export interface SetTrainingVisibleDisciplinesResponse {
-  accepted: true;
-  visibleDisciplines: TrainingVisibleDiscipline[] | null;
 }
 
 /**

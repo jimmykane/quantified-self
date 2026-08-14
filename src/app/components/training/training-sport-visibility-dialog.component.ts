@@ -1,17 +1,15 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import type {
-  SetTrainingVisibleDisciplinesRequest,
-  SetTrainingVisibleDisciplinesResponse,
-  TrainingVisibleDiscipline,
-} from '@shared/derived-metrics';
-import { AppFunctionsService } from '../../services/app.functions.service';
+import type { TrainingVisibleDiscipline } from '@shared/derived-metrics';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import {
+  TRAINING_SPORT_SHORTCUT_LIMIT,
   TRAINING_VISIBLE_DISCIPLINE_OPTIONS,
   trainingSportVisibilitySelectionKey,
 } from '../../helpers/training-sport-visibility.helper';
 
 export interface TrainingSportVisibilityDialogData {
+  userUID: string;
   visibleDisciplines: TrainingVisibleDiscipline[];
   isAutomatic: boolean;
 }
@@ -30,6 +28,7 @@ export interface TrainingSportVisibilityDialogResult {
 })
 export class TrainingSportVisibilityDialogComponent {
   public readonly disciplineOptions = TRAINING_VISIBLE_DISCIPLINE_OPTIONS;
+  public readonly shortcutLimit = TRAINING_SPORT_SHORTCUT_LIMIT;
   public readonly saveActionLabel: string;
   public selectedDisciplines: Record<TrainingVisibleDiscipline, boolean>;
   public isSaving = false;
@@ -42,7 +41,7 @@ export class TrainingSportVisibilityDialogComponent {
   constructor(
     @Inject(MAT_DIALOG_DATA) public readonly data: TrainingSportVisibilityDialogData,
     private readonly dialogRef: MatDialogRef<TrainingSportVisibilityDialogComponent>,
-    private readonly functionsService: AppFunctionsService,
+    private readonly userSettingsService: AppUserSettingsQueryService,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.saveActionLabel = data.isAutomatic ? 'Keep these sports' : 'Save selection';
@@ -54,17 +53,28 @@ export class TrainingSportVisibilityDialogComponent {
   }
 
   public setDisciplineSelected(discipline: TrainingVisibleDiscipline, selected: boolean): void {
+    if (selected && !this.selectedDisciplines[discipline] && this.buildSelection().length >= this.shortcutLimit) {
+      this.errorMessage = `Choose up to ${this.shortcutLimit} sport shortcuts.`;
+      return;
+    }
     this.selectedDisciplines[discipline] = selected;
     this.errorMessage = this.buildSelection().length
       ? null
-      : 'Keep at least one sport visible.';
+      : 'Choose at least one sport shortcut.';
     this.refreshCanSave();
+  }
+
+  public isDisciplineDisabled(discipline: TrainingVisibleDiscipline): boolean {
+    return this.isSaving || (
+      !this.selectedDisciplines[discipline]
+      && this.buildSelection().length >= this.shortcutLimit
+    );
   }
 
   public async save(): Promise<void> {
     const visibleDisciplines = this.buildSelection();
     if (!visibleDisciplines.length) {
-      this.errorMessage = 'Keep at least one sport visible.';
+      this.errorMessage = 'Choose at least one sport shortcut.';
       this.refreshCanSave();
       return;
     }
@@ -97,17 +107,14 @@ export class TrainingSportVisibilityDialogComponent {
     this.savingAction = action;
     this.errorMessage = null;
     try {
-      const response = await this.functionsService.call<
-        SetTrainingVisibleDisciplinesRequest,
-        SetTrainingVisibleDisciplinesResponse
-      >('setTrainingVisibleDisciplines', { visibleDisciplines });
-      if (response?.data?.accepted !== true) {
-        throw new Error('The Training preference was not accepted.');
-      }
+      await this.userSettingsService.updateTrainingWorkspacePreferences(
+        this.data.userUID,
+        { sportShortcuts: visibleDisciplines },
+      );
       const result: TrainingSportVisibilityDialogResult = { saved: true, visibleDisciplines };
       this.dialogRef.close(result);
     } catch {
-      this.errorMessage = 'Could not save the sports shown. Try again.';
+      this.errorMessage = 'Could not save sport shortcuts. Try again.';
     } finally {
       this.isSaving = false;
       this.savingAction = null;

@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { TrainingWorkspaceComponent } from '../components/training/training-workspace.component';
+import {
+  TRAINING_WORKSPACE_PREFERENCE_WRITER,
+  TrainingWorkspaceComponent,
+} from '../components/training/training-workspace.component';
 import { TrainingBuildBenchmarkDialogComponent } from '../components/training/training-build-benchmark-dialog.component';
 import { TrainingSportVisibilityDialogComponent } from '../components/training/training-sport-visibility-dialog.component';
 import { TrainingSwimPerformanceChartComponent } from '../components/training/training-swim-performance-chart.component';
@@ -13,6 +16,7 @@ import { TrainingRoutingModule } from '../training.routing.module';
 import { AppChartsModule } from './app-charts.module';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
+import { AppUserSettingsQueryService } from '../services/app.user-settings-query.service';
 
 @NgModule({
   imports: [CommonModule, SharedModule, MaterialModule, AppChartsModule, TrainingRoutingModule],
@@ -26,6 +30,9 @@ import { SharedModule } from './shared.module';
     TrainingPowerSystemsTrendChartComponent,
     TrainingReadinessTrendChartComponent,
     TrainingBodyWeightTrendChartComponent,
+  ],
+  providers: [
+    { provide: TRAINING_WORKSPACE_PREFERENCE_WRITER, useExisting: AppUserSettingsQueryService },
   ],
 })
 export class TrainingModule {}

@@ -7,28 +7,29 @@ function createComponent(
   visibleDisciplines: TrainingVisibleDiscipline[] = ['cycling'],
 ) {
   const dialogRef = { close: vi.fn() };
-  const functionsService = { call: vi.fn().mockResolvedValue({ data: { accepted: true } }) };
+  const userSettingsService = { updateTrainingWorkspacePreferences: vi.fn().mockResolvedValue(undefined) };
   const changeDetector = { markForCheck: vi.fn() };
   const component = new TrainingSportVisibilityDialogComponent(
-    { isAutomatic, visibleDisciplines },
+    { userUID: 'user-1', isAutomatic, visibleDisciplines },
     dialogRef as any,
-    functionsService as any,
+    userSettingsService as any,
     changeDetector as any,
   );
-  return { component, dialogRef, functionsService };
+  return { component, dialogRef, userSettingsService };
 }
 
 describe('TrainingSportVisibilityDialogComponent', () => {
   it('allows an unchanged automatic selection to be pinned explicitly', async () => {
-    const { component, dialogRef, functionsService } = createComponent(true, ['cycling']);
+    const { component, dialogRef, userSettingsService } = createComponent(true, ['cycling']);
 
     expect(component.canSave).toBe(true);
     expect(component.saveActionLabel).toBe('Keep these sports');
     await component.save();
 
-    expect(functionsService.call).toHaveBeenCalledWith('setTrainingVisibleDisciplines', {
-      visibleDisciplines: ['cycling'],
-    });
+    expect(userSettingsService.updateTrainingWorkspacePreferences).toHaveBeenCalledWith(
+      'user-1',
+      { sportShortcuts: ['cycling'] },
+    );
     expect(dialogRef.close).toHaveBeenCalledWith({ saved: true, visibleDisciplines: ['cycling'] });
   });
 
@@ -39,7 +40,7 @@ describe('TrainingSportVisibilityDialogComponent', () => {
 
     component.setDisciplineSelected('cycling', false);
     expect(component.canSave).toBe(false);
-    expect(component.errorMessage).toBe('Keep at least one sport visible.');
+    expect(component.errorMessage).toBe('Choose at least one sport shortcut.');
 
     component.setDisciplineSelected('running', true);
     expect(component.canSave).toBe(true);
@@ -47,36 +48,47 @@ describe('TrainingSportVisibilityDialogComponent', () => {
   });
 
   it('offers every registered family as an independent persisted selection', async () => {
-    const { component, functionsService } = createComponent(false, ['cycling']);
+    const { component, userSettingsService } = createComponent(false, ['cycling']);
 
     component.setDisciplineSelected('cycling', false);
     component.setDisciplineSelected('rowing', true);
     await component.save();
 
-    expect(functionsService.call).toHaveBeenCalledWith('setTrainingVisibleDisciplines', {
-      visibleDisciplines: ['rowing'],
-    });
+    expect(userSettingsService.updateTrainingWorkspacePreferences).toHaveBeenCalledWith(
+      'user-1',
+      { sportShortcuts: ['rowing'] },
+    );
   });
 
   it('restores automatic mode with a null preference', async () => {
-    const { component, dialogRef, functionsService } = createComponent(false, ['running']);
+    const { component, dialogRef, userSettingsService } = createComponent(false, ['running']);
 
     await component.useAutomaticSelection();
 
-    expect(functionsService.call).toHaveBeenCalledWith('setTrainingVisibleDisciplines', {
-      visibleDisciplines: null,
-    });
+    expect(userSettingsService.updateTrainingWorkspacePreferences).toHaveBeenCalledWith(
+      'user-1',
+      { sportShortcuts: null },
+    );
     expect(dialogRef.close).toHaveBeenCalledWith({ saved: true, visibleDisciplines: null });
   });
 
   it('keeps the dialog open and exposes an accessible error after a failed save', async () => {
-    const { component, dialogRef, functionsService } = createComponent();
-    functionsService.call.mockRejectedValueOnce(new Error('offline'));
+    const { component, dialogRef, userSettingsService } = createComponent();
+    userSettingsService.updateTrainingWorkspacePreferences.mockRejectedValueOnce(new Error('offline'));
 
     await component.save();
 
     expect(dialogRef.close).not.toHaveBeenCalled();
-    expect(component.errorMessage).toBe('Could not save the sports shown. Try again.');
+    expect(component.errorMessage).toBe('Could not save sport shortcuts. Try again.');
     expect(component.isSaving).toBe(false);
+  });
+
+  it('caps fixed shortcuts at four and disables unchecked options at the limit', () => {
+    const { component } = createComponent(false, ['running', 'cycling', 'swimming', 'rowing']);
+
+    expect(component.isDisciplineDisabled('strength')).toBe(true);
+    component.setDisciplineSelected('strength', true);
+    expect(component.errorMessage).toBe('Choose up to 4 sport shortcuts.');
+    expect(component.selectedDisciplines.strength).toBe(false);
   });
 });

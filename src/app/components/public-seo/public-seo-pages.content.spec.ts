@@ -74,6 +74,10 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.intro).toContain('All training overview');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.some(section => (
+      section.copy.includes('account-saved sport shortcuts')
+    ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.some(section => (
       section.items.some(item => item.copy.includes('longest-jump evidence'))
     ))).toBe(true);

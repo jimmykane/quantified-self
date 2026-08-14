@@ -16,7 +16,8 @@ import {
     AppMyTracksSettings,
     AppEventDetailsSettingsInterface,
     AppEventLapSportFamily,
-    AppUserInterface
+    AppUserInterface,
+    TrainingWorkspacePreferences,
 } from '../models/app-user.interface';
 import {
     isEventLapSportFamily,
@@ -130,6 +131,44 @@ export class AppUserSettingsQueryService {
         ),
         { initialValue: undefined }
     );
+
+    /**
+     * Persists non-metric Training workspace preferences directly to the
+     * account-owned settings document. The expected UID prevents a queued UI
+     * write from crossing an account switch.
+     */
+    public async updateTrainingWorkspacePreferences(
+        expectedUserUID: string,
+        preferences: Partial<TrainingWorkspacePreferences>,
+    ): Promise<void> {
+        if (!expectedUserUID || Object.keys(preferences).length === 0) {
+            throw new Error('A signed-in account and Training preference are required.');
+        }
+        const user = await this.getCurrentUser();
+        if (!user?.uid || user.uid !== expectedUserUID) {
+            throw new Error('The signed-in account changed before the Training preference could be saved.');
+        }
+
+        this.logger.info('[AppUserSettingsQueryService] Updating Training workspace preferences.', {
+            preferredDestination: preferences.preferredDestination ?? null,
+            shortcutMode: preferences.sportShortcuts === null
+                ? 'automatic'
+                : Array.isArray(preferences.sportShortcuts) ? 'fixed' : null,
+            shortcutCount: Array.isArray(preferences.sportShortcuts)
+                ? preferences.sportShortcuts.length
+                : 0,
+        });
+        return this.userService.updateUserProperties(user, {
+            settings: {
+                appSettings: {
+                    trainingWorkspace: preferences,
+                },
+            },
+        }).catch(err => {
+            this.logger.error('[AppUserSettingsQueryService] Failed to update Training workspace preferences.', err);
+            throw err;
+        });
+    }
 
     /**
      * Updates My Tracks settings by merging the provided partial settings.

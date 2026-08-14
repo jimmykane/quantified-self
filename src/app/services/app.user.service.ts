@@ -1448,9 +1448,10 @@ export class AppUserService implements OnDestroy {
       return {};
     }
 
-    // Training preferences and benchmarks are written only by their validated callables.
-    // Generic profile saves can otherwise replay a stale value and make an
-    // unrelated preference update fail Firestore's server-owned-field rule.
+    // Metric-affecting Training settings and benchmarks are written only by
+    // validated callables. Client-owned workspace navigation preferences live
+    // under appSettings and remain writable through the normal settings path.
+    // Generic profile saves must not replay a stale server-owned value.
     const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;
     return clientWritableSettings;
   }

@@ -17,6 +17,21 @@
 .training-page-header { margin-bottom: 32px; }
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .training-page-actions mat-icon { margin-right: 4px; }
+.training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 18px; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.training-destination-desktop { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.training-destination-shortcuts { flex: 1 1 auto; min-width: 0; }
+.training-destination-shortcuts mat-button-toggle { min-width: 0; }
+.training-destination-shortcuts mat-icon,
+.training-destination-shortcuts app-activity-type-icon { width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
+.training-all-sports-selector { flex: 0 0 210px; width: 210px; }
+.training-destination-desktop > .training-sport-visibility-action { flex: 0 0 auto; }
+.training-destination-mobile { display: none; }
+.training-destination-scope { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 20px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
+.training-destination-scope strong { color: var(--mat-sys-on-surface); }
+.training-destination-saving { display: inline-flex; align-items: center; gap: 7px; color: var(--mat-sys-primary); white-space: nowrap; }
+.training-destination-option { display: inline-flex; align-items: center; gap: 8px; }
+.training-destination-option mat-icon,
+.training-destination-option app-activity-type-icon { flex: 0 0 auto; width: 18px; height: 18px; font-size: 18px; line-height: 18px; }
 .training-section-heading p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
 .training-derived-metrics-status { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 4px; color: var(--mat-sys-primary); font-size: var(--training-inter-caption-font-size); line-height: 1.2; }
 .training-derived-metrics-status > mat-icon { flex: 0 0 auto; width: 16px; height: 16px; font-size: 16px; line-height: 16px; }
@@ -209,6 +224,18 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-load-grid:has(.training-chart-state-form) > * { grid-column: 1 / -1; grid-row: auto; }
 .training-load-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .training-mix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; }
+.training-mix-grid--overview { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.training-overview-sport-panel { min-width: 0; padding: 16px; }
+.training-overview-sport-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.training-overview-sport-panel > header > div { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.training-overview-sport-panel > header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); white-space: nowrap; }
+.training-overview-sport-panel dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-overview-sport-panel dl > div { min-width: 0; padding: 11px 8px 0 0; }
+.training-overview-sport-panel dl > div + div { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-overview-sport-panel dd,
+.training-overview-sport-panel small { display: block; min-width: 0; }
+.training-overview-sport-panel dd { font-size: var(--training-card-stat-font-size); }
+.training-overview-sport-panel small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; }
 .training-mix-panel { padding: 20px; }
 .training-mix-panel header { margin-bottom: 18px; }
 .training-mix-panel header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); white-space: nowrap; }
@@ -242,6 +269,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   .training-mix-grid--single > .training-intensity-chart { grid-column: 2; grid-row: 1; }
   .training-mix-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .training-mix-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .training-mix-grid--overview { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 }
 .training-power-systems-heading { align-items: center; }
 .training-power-systems-selector { width: min(100%, 260px); }
@@ -351,6 +379,11 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 
 @media (max-width: 1200px) { .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-insights-grid > .training-insight-panel:nth-of-type(3):last-of-type { grid-column: 1 / -1; } }
 @media (max-width: 1050px) { .training-build-grid:has(> :nth-child(3)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-build-grid:has(> :nth-child(3)) > :last-child { grid-column: 1 / -1; } }
+@media (min-width: 801px) and (max-width: 1100px) {
+  .training-destination-desktop { flex-wrap: wrap; }
+  .training-destination-shortcuts { flex: 1 0 100%; width: 100%; }
+  .training-all-sports-selector { margin-left: auto; }
+}
 @media (max-width: 960px) { .training-current-context-grid, .training-load-grid, .training-performance-grid, .training-readiness-overview { grid-template-columns: 1fr; } .training-readiness-history { padding: 16px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); border-left: 0; } .training-readiness-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-readiness-metrics > div:nth-child(odd) { padding-left: 0; border-left: 0; } .training-readiness-metrics > div:nth-child(even) { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel-wide { grid-row: auto; min-height: 360px; } .training-power-systems-trends { grid-template-columns: 1fr; } .training-intensity-chart, .training-swim-performance-panel, .training-durability-panel { grid-column: auto; } }
 @media (max-width: 640px) {
   :host {
@@ -374,6 +407,12 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 }
 @media (max-width: 640px) { .training-page-header { margin-bottom: 8px; } .training-page-actions { width: 100%; justify-content: flex-start; } .training-page-actions a, .training-page-actions button { min-width: 0; } h2 { font-size: 20px; } .training-section-heading { align-items: flex-start; flex-direction: column; gap: 6px; } .training-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-insights-grid { grid-template-columns: 1fr; } .training-state-panel { grid-column: 1 / -1; min-height: 110px; } .training-comparison-panel { min-height: 120px; padding: 18px; } .training-state-panel strong, .training-comparison-panel strong { font-size: 22px; } .training-comparison-status-panel strong { font-size: 19px; } .training-state-panel > span:last-child, .training-comparison-panel > span:last-child { font-size: 12px; } .training-readiness-panel { padding: 18px; } .training-recovery-table > div { grid-template-columns: minmax(76px, 1.15fr) repeat(3, minmax(52px, 1fr)); gap: 5px; } .training-recovery-table dt, .training-recovery-table dd { font-size: 11px; } .training-recovery-table-heading dt, .training-recovery-table-heading dd { font-size: 9px; white-space: nowrap; } .training-metric-panel, .training-load-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-metric-panel div:nth-child(odd) { border-left: 0; } .training-metric-panel div:nth-child(even) { border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel { min-height: 280px; } .training-chart-panel-wide { min-height: 340px; } .training-build-grid, .training-build-grid:has(> :nth-child(2)), .training-build-grid:has(> :nth-child(3)) { grid-template-columns: 1fr; } .training-build-grid:has(> :nth-child(3)) > :last-child { grid-column: auto; } .training-build-card { padding: 18px; min-height: 0; } .training-build-card-header { align-items: center; } .training-build-benchmark-action-label { display: none; } .training-build-card-header .training-build-benchmark-action mat-icon { margin-inline: 0; } .training-build-table > div { grid-template-columns: minmax(74px, 1fr) repeat(3, minmax(54px, 1fr)); gap: 6px; } .training-build-table dt, .training-build-table dd { font-size: 11px; } .training-build-intensity-row dd { font-size: 10px; } .training-power-systems-selector { width: 100%; } .training-power-systems-panel { padding: 18px; } .training-power-systems-summary { display: block; } .training-power-systems-summary > span { display: block; margin-top: 6px; text-align: left; white-space: normal; } .training-power-systems-cards { grid-template-columns: 1fr; } .training-power-systems-cards > div, .training-power-systems-cards > div:first-child, .training-power-systems-cards > div:last-child { padding: 13px 0; border-left: 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-power-systems-cards > div:first-child { border-top: 0; } .training-capacity-panel { padding: 18px; } .training-capacity-panel header { align-items: flex-start; } .training-capacity-window { white-space: normal; text-align: right; } .training-capacity-marker { column-gap: 10px; } .training-durability-panel > header { display: block; padding: 18px 18px 8px; } .training-durability-panel > header > span { display: block; margin-top: 5px; white-space: normal; } .training-durability-tab { padding: 14px 18px 20px; } .training-durability-evidence { grid-template-columns: 1fr; } .training-durability-evidence span { text-align: left; } .training-durability-context > header { display: block; } .training-durability-context > header span { display: block; margin-top: 3px; text-align: left; } .training-durability-table > div { grid-template-columns: minmax(78px, 1.1fr) repeat(3, minmax(48px, .7fr)); gap: 5px; } .training-durability-table dt strong, .training-durability-table dd { font-size: 11px; } .training-durability-table dt small { display: none; } .training-chart-panel > .training-power-profile-summary { grid-template-columns: 1fr; } .training-power-profile-summary > span { text-align: left; } .training-section { padding: 24px 0 30px; } }
 @media (max-width: 800px) {
+  .training-destination-navigation { margin-top: 0; }
+  .training-destination-desktop { display: none; }
+  .training-destination-mobile { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 8px; }
+  .training-destination-mobile mat-form-field { width: 100%; }
+  .training-destination-scope { align-items: flex-start; flex-direction: column; gap: 5px; }
+
   .training-page-actions {
     flex-wrap: nowrap;
     justify-content: flex-start;

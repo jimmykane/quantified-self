@@ -181,7 +181,6 @@ export {
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
-export { setTrainingVisibleDisciplines } from './derived-metrics/set-training-visible-disciplines';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,

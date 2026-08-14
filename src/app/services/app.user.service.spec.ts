@@ -1818,12 +1818,18 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
         });
 
-        it('does not replay server-owned training settings with unrelated preference writes', async () => {
+        it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
             const updates = {
                 displayName: 'New Name',
                 settings: {
                     theme: 'dark',
+                    appSettings: {
+                        trainingWorkspace: {
+                            preferredDestination: 'cycling',
+                            sportShortcuts: ['running', 'cycling'],
+                        },
+                    },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
@@ -1835,7 +1841,15 @@ describe('AppUserService', () => {
 
             await service.updateUserProperties(user, updates);
 
-            expect(setDoc).toHaveBeenCalledWith(expect.anything(), { theme: 'dark' }, { merge: true });
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), {
+                theme: 'dark',
+                appSettings: {
+                    trainingWorkspace: {
+                        preferredDestination: 'cycling',
+                        sportShortcuts: ['running', 'cycling'],
+                    },
+                },
+            }, { merge: true });
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
         });
 

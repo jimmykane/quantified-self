@@ -99,9 +99,10 @@ service cloud.firestore {
            
       }
 
-      // Config Settings (Private / Owner Read-Write). Training benchmarks are
-      // deliberately server-owned so every selection is validated and queues
-      // a targeted derived-metrics refresh through its App-Check callable.
+      // Config Settings (Private / Owner Read-Write). Client-owned appSettings,
+      // including Training destination and shortcut preferences, use this path.
+      // Metric-affecting trainingSettings stay server-owned so benchmark changes
+      // are validated and queue a targeted refresh through an App-Check callable.
       match /config/settings {
          allow read: if request.auth.uid == userID;
          allow create: if request.auth.uid == userID
