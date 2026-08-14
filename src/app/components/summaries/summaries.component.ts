@@ -372,6 +372,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private readonly onDocumentVisibilityChange = (): void => {
     if (this.documentRef.visibilityState !== 'visible') {
+      this.clearTodayHeaderRefreshTimer();
       return;
     }
     this.refreshTodayHeaderAndSchedule();
@@ -510,7 +511,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private refreshTodayHeaderAndSchedule(date = new Date()): void {
     this.refreshTodayHeader(date);
-    this.scheduleTodayHeaderRefresh(date);
+    if (this.documentRef.visibilityState === 'visible') {
+      this.scheduleTodayHeaderRefresh(date);
+    } else {
+      this.clearTodayHeaderRefreshTimer();
+    }
     this.changeDetector.markForCheck();
   }
 

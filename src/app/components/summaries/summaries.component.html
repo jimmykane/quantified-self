@@ -1,6 +1,7 @@
 @if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
 <section class="pie">
   @if (showTodaySummary || showActions || derivedMetricsBanner) {
+  <div class="dashboard-summary-heading">
   <app-page-header
     class="dashboard-summary-header"
     variant="compact"
@@ -46,9 +47,10 @@
     </div>
     }
   </app-page-header>
-  }
   @if (!derivedMetricsBanner && showTodaySummary && isOwnerDashboard && todayGreeting) {
   <p class="dashboard-today-greeting">{{ todayGreeting }}</p>
+  }
+  </div>
   }
   @if (showTodaySummary) {
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">

@@ -1,12 +1,16 @@
-.dashboard-summary-header {
+.dashboard-summary-heading {
   margin: 0 0 0.75rem;
+}
+
+.dashboard-summary-header {
+  margin: 0;
 }
 
 .dashboard-today-greeting {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-medium);
   font-weight: 500;
-  margin: -0.35rem 0 0.75rem;
+  margin: 0.35rem 0 0;
 }
 
 .dashboard-kpi-section {
@@ -145,7 +149,7 @@
 }
 
 @media (max-width: 600px) {
-  .dashboard-today-greeting {
+  .dashboard-summary-heading {
     margin-bottom: 0.65rem;
   }
 

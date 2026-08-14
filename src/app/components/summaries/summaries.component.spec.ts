@@ -336,7 +336,7 @@ describe('SummariesComponent', () => {
     }).format(new Date()));
   });
 
-  it('catches up and reschedules when the page becomes visible again', () => {
+  it('pauses while hidden, then catches up and reschedules when visible again', () => {
     vi.useFakeTimers();
     vi.setSystemTime(localDashboardDate(8));
     component.user = {
@@ -351,12 +351,40 @@ describe('SummariesComponent', () => {
     vi.setSystemTime(localDashboardDate(19));
     const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
     try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(vi.getTimerCount()).toBe(0);
+
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
       document.dispatchEvent(new Event('visibilitychange'));
       fixture.detectChanges();
 
       expect(component.todayGreeting).toBe('Good evening, Morgan');
       expect(vi.getTimerCount()).toBe(1);
+    } finally {
+      if (visibilityDescriptor) {
+        Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+      } else {
+        delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+      }
+    }
+  });
+
+  it('does not schedule a greeting boundary timer when initialized in a hidden document', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(8));
+    const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      component.user = {
+        uid: 'owner-user',
+        settings: { dashboardSettings: { tiles: [] } },
+      } as any;
+      component.showActions = true;
+
+      fixture.detectChanges();
+
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       if (visibilityDescriptor) {
         Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
@@ -551,6 +579,7 @@ describe('SummariesComponent', () => {
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
     expect(template).toContain('class="dashboard-today-calendar-button"');
+    expect(template).toContain('class="dashboard-summary-heading"');
     expect(template).toContain('class="dashboard-today-greeting"');
     expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
@@ -559,6 +588,8 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('.dashboard-today-calendar-button');
     expect(styles).toContain('font: var(--mat-sys-body-medium);');
     expect(styles).toContain('color: var(--mat-sys-on-surface-variant);');
+    expect(styles).toContain('margin: 0.35rem 0 0;');
+    expect(styles).not.toContain('margin: -0.35rem 0 0.75rem;');
     expect(styles).not.toContain('.dashboard-calendar-link');
   });
 
@@ -2432,9 +2463,10 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const status = nativeElement.querySelector('.qs-page-header--status');
     const statusHeader = status?.closest('.dashboard-summary-header');
+    const summaryHeading = statusHeader?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(statusHeader?.nextElementSibling).toBe(today);
+    expect(summaryHeading?.nextElementSibling).toBe(today);
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 
