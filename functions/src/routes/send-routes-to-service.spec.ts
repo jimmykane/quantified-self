@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import {
   GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
   GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
@@ -410,27 +411,45 @@ describe('sendRoutesToService', () => {
   });
 
   it('returns typed destination permission failures in-band', async () => {
-    garminRouteMocks.createGarminRouteSendContext.mockRejectedValueOnce(new ProviderOperationError({
-      serviceName: ServiceNames.GarminAPI,
+    corosRouteMocks.createCOROSRouteSendContext.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
       operation: 'route_create',
       disposition: 'permission_required',
       retryMode: 'none',
       code: 'permission-denied',
-      message: 'Grant Garmin Course Import permission before sending routes.',
+      message: 'Enable COROS route access before sending routes.',
+      providerCode: '30009',
+      providerUserId: 'coros-user-1',
     }));
 
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
-      destinationServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
     }) as any);
 
     expect(result.results).toEqual([
       expect.objectContaining({
         routeId: 'route-1',
         reason: 'DESTINATION_PERMISSION_REQUIRED',
-        message: 'Grant Garmin Course Import permission before sending routes.',
+        message: 'Enable COROS route access before sending routes.',
       }),
     ]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[sendRoutesToService] Destination provider failure returned in-band.',
+      expect.objectContaining({
+        destinationServiceName: ServiceNames.COROSAPI,
+        affectedRouteCount: 1,
+        code: 'permission-denied',
+        providerCode: '30009',
+        providerUserId: 'coros-user-1',
+        providerMessage: 'Enable COROS route access before sending routes.',
+        outcome: 'returned_in_band',
+      }),
+    );
+    const providerFailureLog = vi.mocked(logger.warn).mock.calls.find(
+      ([summary]) => summary === '[sendRoutesToService] Destination provider failure returned in-band.',
+    );
+    expect(providerFailureLog?.[1]).not.toHaveProperty('message');
   });
 
   it('sends saved routes to Wahoo through the shared route-send adapter', async () => {

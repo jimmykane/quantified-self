@@ -34,6 +34,7 @@ import {
   ProviderOperation,
   ProviderOperationError,
   ProviderRetryMode,
+  toProviderOperationLogDetails,
 } from '../shared/provider-operation-error';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
@@ -655,15 +656,7 @@ function logSuuntoActivityProviderFailure(userID: string, error: ProviderOperati
   const details = {
     userID,
     serviceName: error.serviceName,
-    operation: error.operation,
-    disposition: error.disposition,
-    retryMode: error.retryMode,
-    code: error.code,
-    statusCode: error.statusCode,
-    providerUserId: error.providerUserId,
-    providerOperationId: error.providerOperationId,
-    message: error.message,
-    dlqContext: error.dlqContext,
+    ...toProviderOperationLogDetails(error),
   };
   if (error.disposition === 'retryable') {
     logger.warn('[SuuntoActivityUpload] Provider operation will be retried.', details);

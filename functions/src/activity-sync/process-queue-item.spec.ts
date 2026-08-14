@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
@@ -1695,16 +1696,18 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('moves an explicitly permanent Suunto provider failure directly to DLQ', async () => {
-    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+    const providerError = new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
       operation: 'activity_upload_status',
       disposition: 'permanent',
       code: 'failed-precondition',
       message: 'Suunto processing failed: Unsupported FIT file format',
+      providerStatus: -1,
       providerUserId: 'suunto-user-1',
       providerOperationId: 'suunto-rejected-1',
       dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
-    }));
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(providerError);
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
@@ -1716,6 +1719,18 @@ describe('activity-sync/process-queue-item', () => {
       'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
     );
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        code: 'failed-precondition',
+        providerStatus: -1,
+        providerMessage: 'Suunto processing failed: Unsupported FIT file format',
+      }),
+    );
+    const providerFailureLog = vi.mocked(logger.error).mock.calls.find(
+      ([summary]) => summary === '[ActivitySync] Destination provider failure moved to DLQ.',
+    );
+    expect(providerFailureLog?.[1]).not.toHaveProperty('message');
   });
 
   it('moves an ambiguous Wahoo activity POST directly to DLQ without retrying it', async () => {

@@ -59,6 +59,7 @@ import {
 import {
     isProviderOperationError,
     ProviderOperationError,
+    toProviderOperationLogDetails,
 } from '../shared/provider-operation-error';
 import { recordActivitySyncOutboundFingerprint } from './outbound-fingerprint';
 
@@ -1111,16 +1112,8 @@ function logProviderFailureDecision(
         routeId: queueItem.routeId,
         userID: queueItem.userID,
         destinationServiceName: queueItem.destinationServiceName,
-        operation: error.operation,
-        disposition: error.disposition,
-        retryMode: error.retryMode,
-        providerCode: error.providerCode,
-        statusCode: error.statusCode,
-        providerUserId: error.providerUserId,
-        providerOperationId: error.providerOperationId,
-        message: error.message,
+        ...toProviderOperationLogDetails(error),
         retryCount: queueItem.retryCount || 0,
-        dlqContext: error.dlqContext,
         outcome,
     };
     if (outcome === 'dlq') {

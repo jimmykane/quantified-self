@@ -353,6 +353,23 @@ describe('COROS asynchronous activity uploads', () => {
     });
   });
 
+  it('retains COROS processing failure status for structured diagnostics', async () => {
+    mocks.get.mockResolvedValueOnce(JSON.stringify({
+      result: '0000',
+      data: [{ uploadId: '42', status: -1 }],
+    }));
+
+    await expect(getCOROSActivityUploadStatus(
+      'test-user-id',
+      '42',
+      'open-id-1',
+    )).rejects.toMatchObject({
+      code: 'provider-processing-failed',
+      providerStatus: -1,
+      providerOperationId: '42',
+    });
+  });
+
   it('retains the upload operation when COROS returns an unknown status', async () => {
     mocks.get.mockResolvedValueOnce(JSON.stringify({
       result: '0000',

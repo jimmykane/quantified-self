@@ -2,6 +2,7 @@
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
@@ -1487,6 +1488,18 @@ describe('importActivityToSuuntoApp', () => {
                 providerOperationId: 'permanent-error-upload-id',
                 dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
             } satisfies Partial<ProviderOperationError>);
+        expect(logger.error).toHaveBeenCalledWith(
+            '[SuuntoActivityUpload] Provider operation failed permanently.',
+            expect.objectContaining({
+                code: 'failed-precondition',
+                providerCode: 'ERROR',
+                providerMessage: 'Suunto processing failed: Unsupported FIT file format',
+            }),
+        );
+        const providerFailureLog = vi.mocked(logger.error).mock.calls.find(
+            ([summary]) => summary === '[SuuntoActivityUpload] Provider operation failed permanently.',
+        );
+        expect(providerFailureLog?.[1]).not.toHaveProperty('message');
     });
 
     it('should not treat an ambiguous invalid-token processing message as a permanent FIT rejection', async () => {
