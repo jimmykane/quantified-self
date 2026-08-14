@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Injectio
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -420,6 +421,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private trainingWorkspacePreferences: TrainingWorkspacePreferences = {};
   private allTrainingPowerSystemsActivityTypes: TrainingPowerSystemsActivityTypeViewModel[] = [];
   private preferredDestinationOverride: TrainingDestinationId | null = null;
+  private preferredDestinationOverrideBaseline: TrainingDestinationId | null = null;
+  private acknowledgedDestinationWrites = new Set<TrainingDestinationId>();
+  private preferredDestinationSaveFailed = false;
   private queuedDestinationWrite: {
     uid: string;
     destination: TrainingDestinationId;
@@ -527,6 +531,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.preferenceWriteGeneration += 1;
     this.queuedDestinationWrite = null;
+    this.acknowledgedDestinationWrites.clear();
     this.trainingStateDetailsDialogRef?.close();
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
@@ -761,6 +766,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.queuedDestinationWrite = null;
     this.isSavingDestination = false;
     this.preferredDestinationOverride = null;
+    this.preferredDestinationOverrideBaseline = null;
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
@@ -998,6 +1006,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.derivedState.trainingSummaryStatus,
         this.derivedState.trainingExplanationStatus,
         this.derivedState.trainingReadinessStatus,
+        this.derivedState.trainingBuildComparisonStatus,
         this.derivedState.bodyWeightTrendStatus,
       );
       if (!currentTrainingState.formNowFromSeries) {
@@ -1152,10 +1161,37 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const persisted = normalizeTrainingDestinationId(
       this.trainingWorkspacePreferences.preferredDestination,
     );
-    if (this.preferredDestinationOverride === persisted) {
-      this.preferredDestinationOverride = null;
+    const override = this.preferredDestinationOverride;
+    if (override === null) {
+      this.selectedTrainingDestination = persisted;
+      return;
     }
-    this.selectedTrainingDestination = this.preferredDestinationOverride || persisted;
+    const hasAcknowledgedPersistedValue = this.acknowledgedDestinationWrites.has(persisted);
+    if (override === persisted && hasAcknowledgedPersistedValue) {
+      this.clearPreferredTrainingDestinationOverride();
+      this.selectedTrainingDestination = persisted;
+      return;
+    }
+    if (
+      this.destinationWriteInFlight
+      || this.queuedDestinationWrite !== null
+      || this.preferredDestinationSaveFailed
+      || this.acknowledgedDestinationWrites.has(override)
+      || hasAcknowledgedPersistedValue
+      || persisted === this.preferredDestinationOverrideBaseline
+    ) {
+      this.selectedTrainingDestination = override;
+      return;
+    }
+    this.clearPreferredTrainingDestinationOverride();
+    this.selectedTrainingDestination = persisted;
+  }
+
+  private clearPreferredTrainingDestinationOverride(): void {
+    this.preferredDestinationOverride = null;
+    this.preferredDestinationOverrideBaseline = null;
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
   }
 
   public selectTrainingDestination(
@@ -1166,11 +1202,25 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (destination === this.selectedTrainingDestination) {
       return;
     }
+    this.preferredDestinationOverrideBaseline = normalizeTrainingDestinationId(
+      this.trainingWorkspacePreferences.preferredDestination,
+    );
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
     this.selectedTrainingDestination = destination;
     this.preferredDestinationOverride = destination;
     this.refreshSportSpecificViewModels();
     this.changeDetector.markForCheck();
     this.queuePreferredTrainingDestinationWrite(destination, source);
+  }
+
+  public selectDesktopTrainingDestination(value: unknown, select: MatSelect): void {
+    this.selectTrainingDestination(value, 'desktop_selector');
+    // MatSelect updates its own value before selectionChange. When a selected
+    // sport is then injected into the shortcut row, the bound value remains
+    // null and Angular has no changed input to write back, so clear it through
+    // the component's public value API to avoid showing the destination twice.
+    select.value = this.desktopAllSportsSelectorValue;
   }
 
   private queuePreferredTrainingDestinationWrite(
@@ -1217,6 +1267,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           write.generation === this.preferenceWriteGeneration
           && write.uid === this.currentUserUID
         ) {
+          this.acknowledgedDestinationWrites.add(write.destination);
           const isSportDestination = isTrainingDiscipline(write.destination);
           this.analyticsService?.logEvent('training_destination_saved', {
             destination_type: isSportDestination
@@ -1232,6 +1283,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           && write.uid === this.currentUserUID
           && this.queuedDestinationWrite === null
         ) {
+          this.acknowledgedDestinationWrites.clear();
+          this.preferredDestinationSaveFailed = true;
           this.snackBar?.open(
             'This view is open, but its account default was not saved.',
             'Dismiss',
@@ -1242,6 +1295,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     }
     this.destinationWriteInFlight = false;
     this.isSavingDestination = false;
+    const destinationBeforeReconciliation = this.selectedTrainingDestination;
+    this.reconcilePreferredTrainingDestination();
+    if (this.selectedTrainingDestination !== destinationBeforeReconciliation) {
+      this.refreshSportSpecificViewModels();
+    }
     this.changeDetector.markForCheck();
   }
 

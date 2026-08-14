@@ -302,9 +302,10 @@ settings: {
 
 `preferredDestination` is account-scoped UI state. Missing, malformed, or unknown values normalize to `overview`.
 `sportShortcuts: null` explicitly selects automatic shortcuts; a valid array pins one to four registry-ordered sports.
-When `sportShortcuts` is absent, the frontend reads the legacy `trainingSettings.visibleDisciplines` value once as a
-compatibility fallback. If neither exists, automatic selection ranks current 28-day evidence by duration and workout
-count, with a valid saved benchmark keeping an otherwise inactive sport eligible. The legacy field is no longer written.
+When `sportShortcuts` is absent, the frontend reads the legacy `trainingSettings.visibleDisciplines` value as a
+compatibility fallback until a new shortcut preference exists. If neither exists, automatic selection ranks current
+28-day evidence by duration and workout count, with a valid saved benchmark keeping an otherwise inactive sport eligible.
+The legacy field is no longer written.
 Benchmark selections remain independent per discipline and stay under server-owned `trainingSettings`.
 
 ### Derived snapshots
@@ -362,7 +363,8 @@ Important behavior:
   `Unclassified`.
 - Membership is intentionally conservative. CrossFit, ski touring/backcountry skiing, snowshoeing, surfing, sailing,
   and other unlisted types remain Other rather than inheriting a nearby Training profile.
-- The overall state and explanation remain global even if a discipline is hidden from detailed cards.
+- The overall state and explanation remain on **All training**. Sport shortcuts affect navigation only and never filter
+  global calculations or remove a registered family from the complete selector.
 
 The registry also declares context metrics and their aggregation semantics: additive distance/time/ascent/descent,
 descent time and jumps; the maximum recorded jump distance across contributing workouts; arithmetic-mean grit, flow,
@@ -611,7 +613,10 @@ complete selector, Overview totals remain global, and all derived snapshots/calc
 Destination changes update the view optimistically and persist the last choice to the current account. Rapid changes
 coalesce to the latest queued destination. Every queued write carries the expected UID and a workspace generation so an
 account switch drops stale queued work and optimistic state. A failed write keeps the requested view open, removes the
-saving indicator, and explains that only the account default failed to save.
+saving indicator, and explains that only the account default failed to save. Because Firestore can publish a local-cache
+settings echo before the server accepts the write, that echo does not retire the optimistic destination until the matching
+write is acknowledged. Intermediate echoes from coalesced choices and unrelated stale settings emissions likewise cannot
+replace the latest requested view.
 
 ## Page Sections and Calculations
 
@@ -1466,9 +1471,11 @@ requested discipline branch, so clearing one benchmark cannot overwrite another 
 Destination and shortcut preferences are non-metric UI state. The frontend writes only
 `appSettings.trainingWorkspace` through `AppUserSettingsQueryService` and the normal owner-authorized
 `users/{uid}/config/settings` Firestore rule. Each write verifies the expected signed-in UID, uses merge semantics, and
-propagates failures to the UI. Firestore rules continue to reject all client mutations of `trainingSettings`, including
-the deprecated legacy visibility field. `setTrainingVisibleDisciplines` is retired from source and the Functions
-manifest; remove its already-deployed endpoint separately after the compatible frontend release is available.
+propagates failures to the UI. The service accepts only `preferredDestination` and `sportShortcuts`, validates the
+destination against the registry, and canonicalizes only `null` or a unique non-empty list of at most four supported
+shortcuts before writing. Firestore rules continue to reject all client mutations of `trainingSettings`, including the
+deprecated legacy visibility field. `setTrainingVisibleDisciplines` is retired from source and the Functions manifest;
+remove its already-deployed endpoint separately after the compatible frontend release is available.
 
 Derived triggers and workers also check deletion state before enqueueing and before writes. Never add user-scoped async
 state without extending recursive deletion handling and deletion guards.
@@ -1657,7 +1664,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - Overview, every registered sport, and Other power activities;
 - automatic and fixed one-to-four-sport shortcuts, legacy fallback, and a selected off-shortcut sport;
 - desktop hybrid navigation, intermediate-width wrapping, and the mobile destination selector;
-- rapid destination switching, failed persistence, and an account switch during an in-flight preference write;
+- rapid destination switching, a pre-acknowledgement local Firestore echo, failed persistence, and an account switch
+  during an in-flight preference write;
 - benchmark unset, saving, updating, invalid, cleared, and ready;
 - event and manual benchmark flows for 8/10/12 weeks;
 - no TSS, no zones, no pace, no SWOLF, and no sleep;

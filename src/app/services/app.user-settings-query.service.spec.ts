@@ -220,6 +220,42 @@ describe('AppUserSettingsQueryService', () => {
             });
         });
 
+        it('canonicalizes and bounds fixed sport shortcuts before writing', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+
+            await service.updateTrainingWorkspacePreferences('test-uid', {
+                sportShortcuts: ['paddling', 'cycling', 'running'],
+            });
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: {
+                    appSettings: {
+                        trainingWorkspace: {
+                            sportShortcuts: ['running', 'cycling', 'paddling'],
+                        },
+                    },
+                },
+            });
+        });
+
+        it.each([
+            [{ preferredDestination: 'unknown' }, 'destination'],
+            [{ sportShortcuts: [] }, 'sport shortcuts'],
+            [{ sportShortcuts: ['running', 'running'] }, 'sport shortcuts'],
+            [{ sportShortcuts: ['running', 'cycling', 'swimming', 'rowing', 'strength'] }, 'no more than 4'],
+            [{ unrelatedPreference: true }, 'not supported'],
+        ])('rejects malformed client-owned Training preferences %#', async (preferences, message) => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+
+            await expect(service.updateTrainingWorkspacePreferences(
+                'test-uid',
+                preferences as any,
+            )).rejects.toThrow(message);
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('rejects a queued preference when the signed-in account changed', async () => {
             mockUserSubject.next(createMockUser({ uid: 'different-user' }));
 

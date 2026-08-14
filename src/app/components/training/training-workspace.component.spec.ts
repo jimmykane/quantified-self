@@ -36,10 +36,12 @@ function createSleepService(sessions: readonly SleepSession[] = []) {
 
 function createDeferredVoidPromise() {
   let resolve!: () => void;
-  const promise = new Promise<void>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function createRouteReadyDerivedState(
@@ -1414,6 +1416,25 @@ describe('TrainingWorkspaceComponent', () => {
     });
   });
 
+  it('clears the desktop selector after placing an off-shortcut sport in the toggle row', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const select = { value: 'walking-hiking' };
+
+    component.selectDesktopTrainingDestination('walking-hiking', select as any);
+
+    expect(component.selectedTrainingDestination).toBe('walking-hiking');
+    expect(component.desktopSportShortcuts[0]).toBe('walking-hiking');
+    expect(component.desktopAllSportsSelectorValue).toBeNull();
+    expect(select.value).toBeNull();
+  });
+
   it('keeps the selected destination open and reports a failed account-default write', async () => {
     const preferenceWriter = {
       updateTrainingWorkspacePreferences: vi.fn().mockRejectedValue(new Error('offline')),
@@ -1448,6 +1469,87 @@ describe('TrainingWorkspaceComponent', () => {
       'training_destination_saved',
       expect.anything(),
     );
+  });
+
+  it('does not accept a local Firestore echo until the destination write is acknowledged', async () => {
+    const write = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn(() => write.promise),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    (component as any).currentUserUID = 'user-1';
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'cycling' };
+    (component as any).reconcilePreferredTrainingDestination();
+
+    expect((component as any).preferredDestinationOverride).toBe('cycling');
+    write.reject(new Error('permission-denied'));
+    await vi.waitFor(() => expect(component.isSavingDestination).toBe(false));
+
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('cycling');
+  });
+
+  it('ignores an acknowledged intermediate echo during rapid destination changes', async () => {
+    const firstWrite = createDeferredVoidPromise();
+    const finalWrite = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn()
+        .mockImplementationOnce(() => firstWrite.promise)
+        .mockImplementationOnce(() => finalWrite.promise),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    (component as any).currentUserUID = 'user-1';
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    component.selectTrainingDestination('swimming', 'mobile_selector');
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'cycling' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('swimming');
+
+    firstWrite.resolve();
+    await vi.waitFor(() => expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledTimes(2));
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('swimming');
+
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'swimming' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect((component as any).preferredDestinationOverride).toBe('swimming');
+    finalWrite.resolve();
+    await vi.waitFor(() => expect(component.isSavingDestination).toBe(false));
+
+    expect(component.selectedTrainingDestination).toBe('swimming');
+    expect((component as any).preferredDestinationOverride).toBeNull();
   });
 
   it('drops queued destination writes and optimistic state when the account changes', async () => {
@@ -2268,6 +2370,24 @@ describe('TrainingWorkspaceComponent', () => {
     });
     (component as any).refreshTrainingRecoveryEstimate();
     (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
+  it('includes the visible sleep-history snapshot in the overview route status', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({
+      trainingBuildComparisonStatus: 'failed',
+    });
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+
     expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });
 

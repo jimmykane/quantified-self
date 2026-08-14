@@ -95,8 +95,9 @@
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-all-sports-selector">
         <mat-label>All sports</mat-label>
         <mat-select
+          #desktopAllSportsSelect
           [value]="desktopAllSportsSelectorValue"
-          (selectionChange)="selectTrainingDestination($event.value, 'desktop_selector')">
+          (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
           @for (option of trainingDestinationOptions; track option.id) {
             @if (option.id !== 'overview') {
               <mat-option [value]="option.id">
