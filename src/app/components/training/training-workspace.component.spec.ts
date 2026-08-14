@@ -13,7 +13,10 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
-import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
+import type {
+  DerivedTrainingDurabilityMetricPayload,
+  TrainingBuildBenchmarkSelection,
+} from '@shared/derived-metrics';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   DashboardDerivedMetricsService,
@@ -57,6 +60,46 @@ function createRouteReadyDerivedState(
     trainingSwimPerformanceStatus: 'ready',
     trainingPowerSystemsStatus: 'ready',
     ...overrides,
+  };
+}
+
+function createExcludedCyclingDurabilityPayload(): DerivedTrainingDurabilityMetricPayload {
+  const coverage = {
+    candidateActivityCount: 2,
+    evidenceActivityCount: 2,
+    eligibleActivityCount: 0,
+    missingEvidenceActivityCount: 0,
+    excludedActivityCount: 2,
+    eligibilityRatio: 0,
+    exclusions: [
+      { reason: 'missing-output', activityCount: 1 },
+      { reason: 'insufficient-duration', activityCount: 1 },
+    ],
+  };
+  const window = (periodDays: 28 | 7) => ({
+    periodDays,
+    windowStartDayMs: 1,
+    windowEndDayMs: 2,
+    coverage,
+    summaries: [],
+  });
+  return {
+    dayBoundary: 'UTC',
+    asOfDayMs: 2,
+    currentWindowDays: 28,
+    baselineBlockCount: 3,
+    weeklyPointCount: 12,
+    excludesMergedEvents: true,
+    excludesFutureEvents: true,
+    evidenceSource: 'persisted-activity-stat',
+    scopes: [{
+      scope: 'cycling',
+      current: window(28),
+      baselineBlocks: Array.from({ length: 3 }, () => window(28)),
+      usual: { coverage, summaries: [] },
+      weeks: Array.from({ length: 12 }, () => window(7)),
+      recentSupportingEvents: [],
+    }],
   };
 }
 
@@ -1088,6 +1131,94 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
     expect(element.textContent).toContain('TSS-backed workouts only');
     expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
+  });
+
+  it('renders Cycling exclusion evidence and its trajectory in fixed sport mode', async () => {
+    const trainingDurability = createExcludedCyclingDurabilityPayload();
+    const derivedState = createRouteReadyDerivedState({
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+      trainingDurability,
+    });
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(fixture.componentInstance.trainingDurabilityScopes[0].contexts).toHaveLength(1);
+    expect(element.querySelector('app-training-durability-trajectory-chart')).not.toBeNull();
+    expect(element.textContent).toContain('Cycling · Power');
+    expect(element.textContent).toContain('No recorded power 1');
+    expect(element.textContent).toContain('Too short 1');
+    expect(element.textContent).not.toContain('Preparing durability evidence');
+  });
+
+  it('keeps automatic Cycling durability visible while retained snapshots refresh', async () => {
+    const window = (activityCount: number) => ({
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      activityCount,
+      durationSeconds: activityCount ? 3_600 : 0,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+    });
+    const trainingSummary = {
+      asOfDayMs: 2,
+      currentWindowDays: 28,
+      baselineWindowDays: 84,
+      disciplines: [{ discipline: 'cycling' as const, current28d: window(2), baseline28d: window(2) }],
+    };
+    const trainingDurability = createExcludedCyclingDurabilityPayload();
+    const derivedState = new BehaviorSubject(createRouteReadyDerivedState({ trainingSummary, trainingDurability }));
+    const derivedMetrics = { watch: vi.fn(() => derivedState.asObservable()), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.visibleDisciplines).toEqual(['cycling']);
+
+    derivedState.next(createRouteReadyDerivedState({
+      trainingSummary,
+      trainingSummaryStatus: 'building',
+      trainingDurability,
+      trainingDurabilityStatus: 'building',
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.visibleDisciplines).toEqual(['cycling']);
+    expect(fixture.nativeElement.querySelector('app-training-durability-trajectory-chart')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Updating durability evidence');
   });
 
   it('renders Swimming-only detail cards without capacity or power placeholders', async () => {

@@ -557,8 +557,10 @@ prevent derived status changes from moving the value cards or initially presenti
 
 Sport visibility has two modes:
 
-- **Automatic:** use any registered family with current 28-day activity or a saved benchmark. While evidence is loading,
-  or when nothing qualifies, show no sport-detail cards. Global state, load, readiness, and explanation sections remain.
+- **Automatic:** use any registered family with current 28-day activity or a saved benchmark. On the initial load, show no
+  sport-detail cards until a valid summary exists; when nothing qualifies, keep them hidden. Once a valid summary has
+  loaded, its automatic sport selection remains visible while a replacement snapshot builds or refreshes. Global state,
+  load, readiness, and explanation sections remain.
 - **Fixed:** show the persisted non-empty subset selected by the user.
 
 The action label compacts to one sport, `N sports`, `All sports`, or `No sports`; its accessible label lists the actual
@@ -1287,6 +1289,12 @@ A stored Power Curve alone therefore does not guarantee a durability point. Spor
 reason per activity, so aggregate exclusion copy must call these **primary exclusions** rather than implying an
 exhaustive list of every threshold that activity missed.
 
+Cycling has one fixed durability context, `cycling|power|W|-|-`. When a valid Cycling scope has no eligible summary in any
+retained window, the frontend materializes that known context so the 12-week evidence chart remains mounted. This does
+not synthesize a durability metric: the line stays absent, and the snapshot's candidate, power-confirmed, eligible,
+missing-evidence, and primary-exclusion counts remain visible. Missing processed evidence stays distinct from a confirmed
+`missing-output` exclusion; the chart labels it as power unknown rather than no power.
+
 The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
 dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
 before the conditional view and leaves the chart blank. Conditional removal can also race the controller's lazy ECharts
@@ -1384,8 +1392,9 @@ UI principles:
 - A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
   instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.
-- A durability week without an eligible sample must expose candidate/input counts and primary exclusion reasons rather
-  than using an unexplained `Empty` label.
+- A durability week without an eligible sample must expose candidate/input counts, missing processed evidence, and
+  primary exclusion reasons rather than using an unexplained `Empty` label. Unknown processed evidence must remain
+  distinct from a confirmed missing output signal.
 - Null optional metrics render as an em dash or unavailable copy, never zero.
 - Compact loading cards remain readable without reserving the full chart canvas. Ready empty states keep the full chart card
   height so their domain-specific explanation is not compressed.

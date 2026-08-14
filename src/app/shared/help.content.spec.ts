@@ -307,7 +307,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**Sports shown**');
     expect(trainingSection?.content).toContain('activities in the latest 28 days and saved sport benchmarks');
     expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling');
-    expect(trainingSection?.content).toContain('sport cards stay hidden while the global Training sections remain available');
+    expect(trainingSection?.content).toContain('keeps those sport cards visible while a replacement snapshot refreshes');
     expect(trainingSection?.content).toContain('**Use automatic selection**');
     expect(trainingSection?.content).toContain('does not filter the overall comparison, **What drove this**, or **Power systems**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
@@ -315,6 +315,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
     expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
+    expect(trainingSection?.content).toContain('fixed Cycling power context remains visible');
+    expect(trainingSection?.content).toContain('power unknown rather than confirmed no power');
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');

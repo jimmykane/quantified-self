@@ -40,7 +40,7 @@ export const TRAINING_VISIBLE_DISCIPLINE_OPTIONS: readonly (TrainingVisibleDisci
 export function resolveTrainingSportVisibility(
   preference: unknown,
   summary: DashboardTrainingSummaryContext | null,
-  isSummaryReady: boolean,
+  hasUsableSummary: boolean,
   buildBenchmarks: TrainingSettings['buildBenchmarks'],
 ): TrainingSportVisibilityResolution {
   const explicitDisciplines = normalizeTrainingVisibleDisciplines(preference);
@@ -48,7 +48,7 @@ export function resolveTrainingSportVisibility(
     return { disciplines: explicitDisciplines, isAutomatic: false };
   }
   const disciplines = TRAINING_VISIBLE_DISCIPLINES.filter((discipline) => {
-    const currentActivityCount = isSummaryReady && summary
+    const currentActivityCount = hasUsableSummary && summary
       ? summary.disciplines
         .find(item => item.discipline === discipline)
         ?.current28d.activityCount || 0

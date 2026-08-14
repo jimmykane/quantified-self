@@ -949,7 +949,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const resolution = resolveTrainingSportVisibility(
       preference,
       this.derivedState.trainingSummary,
-      this.derivedState.trainingSummaryStatus === 'ready',
+      this.derivedState.trainingSummary !== null,
       this.trainingSettings.buildBenchmarks,
     );
     this.visibleDisciplines = resolution.disciplines;

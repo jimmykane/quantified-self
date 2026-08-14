@@ -3280,6 +3280,74 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
+    it('keeps steady Cycling contexts eligible while excluding Enduro and Downhill evidence', async () => {
+        const { buildTrainingDurabilityMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const eligibleCyclingEvidence = aerobicEvidence(4, {
+            discipline: 'cycling',
+            outputSource: 'power',
+            outputUnit: 'W',
+        });
+        const unsupportedGravityEvidence = aerobicEvidence(0, {
+            discipline: 'cycling',
+            outputSource: 'power',
+            outputUnit: 'W',
+            qualifyingDurationSeconds: 0,
+            coverageRatio: 0,
+            eligibility: {
+                eligible: false,
+                reason: 'unsupported-context',
+                validSampleCount: 0,
+                comparisonSegments: 'halves',
+                earlySampleCount: 0,
+                lateSampleCount: 0,
+                outputCoefficientOfVariation: null,
+                hardZoneRatio: null,
+            },
+            evidence: null,
+        });
+        const activityTypes = [
+            ActivityTypes.Cycling,
+            ActivityTypes.IndoorCycling,
+            ActivityTypes.VirtualCycling,
+            ActivityTypes.MountainBiking,
+            ActivityTypes['Enduro MTB'],
+            ActivityTypes.DownhillCycling,
+        ];
+        const docs = activityTypes.map((activityType, index) => eventDoc(`cycling-context-${index}`, {
+            startDate: Date.UTC(2026, 6, 8 + index),
+            stats: {
+                [DataActivityTypes.type]: [activityType],
+                [DataDurabilityEvidence.type]: index < 4
+                    ? eligibleCyclingEvidence
+                    : unsupportedGravityEvidence,
+            },
+        }));
+
+        const cycling = buildTrainingDurabilityMetricPayload(buildTrainingActivitySources(docs), nowMs)
+            .payload.scopes.find(scope => scope.scope === 'cycling')!;
+
+        expect(cycling.current.coverage).toEqual({
+            candidateActivityCount: 6,
+            evidenceActivityCount: 6,
+            eligibleActivityCount: 4,
+            missingEvidenceActivityCount: 0,
+            excludedActivityCount: 2,
+            eligibilityRatio: 0.6667,
+            exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+        });
+        expect(cycling.current.summaries).toEqual([
+            expect.objectContaining({
+                context: expect.objectContaining({
+                    contextKey: 'cycling|power|W|-|-',
+                    scope: 'cycling',
+                    outputSource: 'power',
+                }),
+                sampleCount: 4,
+            }),
+        ]);
+    });
+
     it('does not count registered families without durability adapters as durability sources or candidates', async () => {
         const {
             aggregatePersistedTrainingDurability,
