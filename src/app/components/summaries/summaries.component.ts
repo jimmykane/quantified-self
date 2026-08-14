@@ -47,6 +47,10 @@ import {
   resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
 import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-date.helper';
+import {
+  buildDashboardGreeting,
+  getNextDashboardGreetingRefreshTime,
+} from '../../helpers/dashboard-greeting.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
@@ -295,7 +299,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
+  public todayGreeting = '';
 
+  private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private readonly onTodayHeaderVisibilityChange = (): void => {
+    if (document.visibilityState !== 'hidden') {
+      this.refreshTodayHeader();
+    }
+  };
   private appThemeSubscription: Subscription | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
@@ -394,6 +405,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   ngOnInit() {
     this.updateDesktopTileDragCapability();
+    this.refreshTodayHeader();
+    document.addEventListener('visibilitychange', this.onTodayHeaderVisibilityChange);
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
@@ -403,6 +416,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       simpleChanges.user
       || simpleChanges.eventUser
     ) {
+      this.refreshTodayHeader();
       const previousUser = (simpleChanges.user?.previousValue ?? this.user) as User | null;
       const previousEventUser = (simpleChanges.eventUser?.previousValue ?? this.eventUser) as User | null;
       const previousDependencySnapshot = this.getDashboardInputDependencySnapshot(previousUser, previousEventUser);
@@ -439,6 +453,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    document.removeEventListener('visibilitychange', this.onTodayHeaderVisibilityChange);
+    this.clearTodayHeaderRefreshTimer();
     this.unsubscribeFromAll();
   }
 
@@ -456,6 +472,50 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public trackBySection(_index: number, item: DashboardTileSectionViewModel): DashboardTileSectionId {
     return item.id;
+  }
+
+  /**
+   * Recomputes the localized date subtitle and the time-aware greeting, then
+   * schedules the next refresh for the upcoming greeting boundary or midnight.
+   * The greeting only renders on the owner's dashboard and never derives a
+   * name from anything but the display name.
+   */
+  private refreshTodayHeader(): void {
+    const now = new Date();
+    const nextDateSubtitle = this.formatTodayDateSubtitle(now);
+    const nextGreeting = this.isOwnDashboard()
+      ? buildDashboardGreeting(now, (this.user as AppUserInterface | null | undefined)?.displayName)
+      : '';
+    this.scheduleTodayHeaderRefresh(now);
+    if (nextDateSubtitle === this.todayDateSubtitle && nextGreeting === this.todayGreeting) {
+      return;
+    }
+    this.todayDateSubtitle = nextDateSubtitle;
+    this.todayGreeting = nextGreeting;
+    this.changeDetector.markForCheck();
+  }
+
+  private isOwnDashboard(): boolean {
+    if (!this.user?.uid) {
+      return false;
+    }
+    return !this.eventUser?.uid || this.eventUser.uid === this.user.uid;
+  }
+
+  private scheduleTodayHeaderRefresh(now: Date): void {
+    this.clearTodayHeaderRefreshTimer();
+    const delayMs = Math.max(getNextDashboardGreetingRefreshTime(now).getTime() - now.getTime(), 1000);
+    this.todayHeaderRefreshTimeoutHandle = setTimeout(() => {
+      this.todayHeaderRefreshTimeoutHandle = null;
+      this.refreshTodayHeader();
+    }, delayMs);
+  }
+
+  private clearTodayHeaderRefreshTimer(): void {
+    if (this.todayHeaderRefreshTimeoutHandle !== null) {
+      clearTimeout(this.todayHeaderRefreshTimeoutHandle);
+      this.todayHeaderRefreshTimeoutHandle = null;
+    }
   }
 
   private formatTodayDateSubtitle(date: Date): string {

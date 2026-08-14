@@ -2,6 +2,15 @@
   margin: 0 0 0.75rem;
 }
 
+.dashboard-today-greeting {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  margin: -0.35rem 0 0.85rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dashboard-kpi-section {
   margin: 0 0 0.85rem;
 }

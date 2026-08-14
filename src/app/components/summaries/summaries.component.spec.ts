@@ -3011,4 +3011,144 @@ describe('SummariesComponent', () => {
     theme$.next(AppThemes.Dark);
     expect(markForCheckSpy).toHaveBeenCalledTimes(1);
   });
+
+  describe('today greeting', () => {
+    const queryGreeting = (): HTMLElement | null =>
+      (fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting');
+
+    const setOwnerUser = (displayName: string | null | undefined): void => {
+      component.user = {
+        uid: 'owner-1',
+        displayName,
+        settings: { dashboardSettings: { tiles: [] } },
+      } as any;
+      component.eventUser = component.user;
+    };
+
+    it('renders a time-aware greeting with the first name below the Today header', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 15, 0, 0));
+      setOwnerUser('  Dimitrios Kanellopoulos ');
+
+      fixture.detectChanges();
+
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good afternoon, Dimitrios');
+    });
+
+    it('falls back to a generic greeting when the display name is blank', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 9, 0, 0));
+      setOwnerUser('   ');
+
+      fixture.detectChanges();
+
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good morning');
+    });
+
+    it('does not render the greeting on another user\'s dashboard', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 15, 0, 0));
+      setOwnerUser('Dimitrios');
+      component.eventUser = { uid: 'other-user' } as any;
+
+      fixture.detectChanges();
+
+      expect(queryGreeting()).toBeNull();
+    });
+
+    it('does not render the greeting when the Today summary is disabled', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 15, 0, 0));
+      component.user = {
+        uid: 'owner-1',
+        displayName: 'Dimitrios',
+        settings: { dashboardSettings: { tiles: [], showTodaySummary: false } },
+      } as any;
+      component.eventUser = component.user;
+
+      fixture.detectChanges();
+
+      expect(queryGreeting()).toBeNull();
+    });
+
+    it('does not render the greeting while a derived-metrics banner replaces the Today header', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 15, 0, 0));
+      setOwnerUser('Dimitrios');
+      component.derivedMetricsBanner = {
+        type: 'info',
+        title: 'Updating metrics',
+        description: 'Working on it',
+        showRetry: false,
+      } as any;
+
+      fixture.detectChanges();
+
+      expect(queryGreeting()).toBeNull();
+    });
+
+    it('updates the greeting across the 18:00 boundary without a reload', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 17, 59, 0));
+      setOwnerUser('Morgan Lee');
+
+      fixture.detectChanges();
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good afternoon, Morgan');
+
+      vi.advanceTimersByTime(61_000);
+      fixture.detectChanges();
+
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good evening, Morgan');
+    });
+
+    it('refreshes the date subtitle and greeting after local midnight', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 23, 59, 0));
+      setOwnerUser('Morgan');
+
+      fixture.detectChanges();
+      const eveningSubtitle = component.todayDateSubtitle;
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good evening, Morgan');
+
+      vi.advanceTimersByTime(61_000);
+      fixture.detectChanges();
+
+      expect(component.todayDateSubtitle).not.toBe(eveningSubtitle);
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good morning, Morgan');
+    });
+
+    it('recomputes the greeting when the page becomes visible again', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 11, 0, 0));
+      setOwnerUser('Morgan');
+
+      fixture.detectChanges();
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good morning, Morgan');
+
+      // Simulate returning to a backgrounded tab after the boundary passed.
+      vi.setSystemTime(new Date(2026, 7, 14, 13, 0, 0));
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
+
+      expect(queryGreeting()?.textContent?.trim()).toBe('Good afternoon, Morgan');
+    });
+
+    it('clears the scheduled refresh timer and visibility listener on destroy', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 7, 14, 15, 0, 0));
+      const removeListenerSpy = vi.spyOn(document, 'removeEventListener');
+      setOwnerUser('Morgan');
+
+      fixture.detectChanges();
+      expect((component as any).todayHeaderRefreshTimeoutHandle).not.toBeNull();
+
+      fixture.destroy();
+
+      expect((component as any).todayHeaderRefreshTimeoutHandle).toBeNull();
+      expect(removeListenerSpy).toHaveBeenCalledWith(
+        'visibilitychange',
+        (component as any).onTodayHeaderVisibilityChange,
+      );
+    });
+  });
 });

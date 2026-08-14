@@ -47,6 +47,9 @@
     }
   </app-page-header>
   }
+  @if (showTodaySummary && !derivedMetricsBanner && todayGreeting) {
+  <p class="dashboard-today-greeting">{{ todayGreeting }}</p>
+  }
   @if (showTodaySummary) {
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
     <div class="dashboard-current-state-primary dashboard-training-state-primary">
