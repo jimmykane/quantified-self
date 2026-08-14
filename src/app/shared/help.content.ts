@@ -770,6 +770,18 @@ COROS uses one active connected account for every import and delivery. New OAuth
 
 COROS FIT activity uploads in Services are asynchronous and use per-file status, short provider upload pacing, and failed-file retry controls. Once COROS issues an upload ID, refresh or retry checks that same upload first instead of posting the FIT again. A duplicate is shown as a completed result.
 
+### Activity types COROS accepts
+
+COROS documents third-party activity import for these modes:
+
+- **Running:** Run, Indoor Run, Trail Run, Track Run, and Hike.
+- **Cycling:** Bike and Indoor Bike.
+- **Swimming:** Pool Swim and Open Water Swim.
+- **Other outdoor:** Multisport, Bouldering, Mountain Climb, GPS Cardio, Badminton, Basketball, Pickleball, Soccer, and Tennis.
+- **Other indoor:** Strength, Indoor Climb, Gym Cardio, and Table Tennis.
+
+Quantified Self sends the retained original FIT file, while COROS makes the final compatibility and activity-type decision. A source mode outside the documented list may be rejected during asynchronous processing even after COROS issues an upload ID, or COROS may accept it under a generic type. For example, Stand Up Paddling may appear as **Other**. Sailing and Snorkeling are not in COROS's documented import list and may be rejected. COROS currently reports these processing failures only as a generic failed status without a specific reason. See [COROS's supported import requirements](https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account).
+
 For approved route-pilot accounts, direct COROS route upload accepts one GPX or FIT file, parses it server-side, and sends generated GPX route geometry without creating or retaining a Quantified Self route. Saved routes can be sent from a row action, route detail, or selected-row bulk action. Saved-route and automatic Suunto-route delivery share the same server adapter and delivery metadata. COROS supports bike and running route types: cycling-family routes use bike, while every other or missing activity type uses running.
 
 COROS to Suunto activity sync requires:

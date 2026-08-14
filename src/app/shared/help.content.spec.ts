@@ -769,6 +769,13 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload first instead of posting the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('### Activity types COROS accepts');
+    expect(serviceConnectionsSection?.content).toContain('Run, Indoor Run, Trail Run, Track Run, and Hike');
+    expect(serviceConnectionsSection?.content).toContain('Pool Swim and Open Water Swim');
+    expect(serviceConnectionsSection?.content).toContain('Stand Up Paddling may appear as **Other**');
+    expect(serviceConnectionsSection?.content).toContain("Sailing and Snorkeling are not in COROS's documented import list");
+    expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
+    expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');
     expect(serviceConnectionsSection?.content).toContain('sending saved routes to COROS individually or in selected-row bulk batches');
     expect(serviceConnectionsSection?.content).toContain('Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination');
