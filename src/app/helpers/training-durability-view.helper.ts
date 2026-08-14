@@ -323,10 +323,10 @@ function buildTrajectoryViewModel(
 function resolvePowerActivityCount(
   coverage: DerivedTrainingDurabilityMetricPayload['scopes'][number]['current']['coverage'],
 ): number {
-  const missingPowerCount = coverage.exclusions
-    .filter(exclusion => exclusion.reason === 'missing-output')
+  const unconfirmedPowerCount = coverage.exclusions
+    .filter(exclusion => exclusion.reason === 'missing-output' || exclusion.reason === 'unsupported-context')
     .reduce((sum, exclusion) => sum + exclusion.activityCount, 0);
-  return Math.max(0, coverage.evidenceActivityCount - missingPowerCount);
+  return Math.max(0, coverage.evidenceActivityCount - unconfirmedPowerCount);
 }
 
 function sumPointCount(

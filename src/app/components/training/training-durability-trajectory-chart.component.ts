@@ -264,6 +264,12 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
               ) {
                 return 'Power unknown';
               }
+              if (
+                trajectory.sourceActivityLabel === 'Power recorded'
+                && point.exclusionReasons.some(exclusion => exclusion.reason === 'unsupported-context')
+              ) {
+                return 'Unsupported';
+              }
               return trajectory.sourceActivityLabel === 'Power recorded' ? 'No power' : '0 eligible';
             }
             return 'No activity';

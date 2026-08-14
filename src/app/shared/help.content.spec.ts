@@ -317,6 +317,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
     expect(trainingSection?.content).toContain('fixed Cycling power context remains visible');
     expect(trainingSection?.content).toContain('power unknown rather than confirmed no power');
+    expect(trainingSection?.content).toContain('Unsupported Enduro and Downhill evidence is not counted as confirmed power');
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');

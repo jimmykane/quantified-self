@@ -1283,11 +1283,12 @@ and SWOLF change. Training compares:
 The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
 frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,
 and the primary ineligibility reasons already present in the snapshot. The power-confirmed count is the evidence count
-minus `missing-output` exclusions; it does not query activity history. Bar height shows power-recorded activities, the
-compact bar label shows `eligible / power-recorded`, and the line appears only for eligible aerobic-decoupling evidence.
-A stored Power Curve alone therefore does not guarantee a durability point. Sports-lib records one primary eligibility
-reason per activity, so aggregate exclusion copy must call these **primary exclusions** rather than implying an
-exhaustive list of every threshold that activity missed.
+minus `missing-output` and `unsupported-context` exclusions; it does not query activity history. Gravity Cycling receives
+`unsupported-context` before Sports Lib inspects a power stream, so that evidence must not be presented as confirmed
+power. Bar height shows power-recorded activities, the compact bar label shows `eligible / power-recorded`, and the line
+appears only for eligible aerobic-decoupling evidence. A stored Power Curve alone therefore does not guarantee a
+durability point. Sports-lib records one primary eligibility reason per activity, so aggregate exclusion copy must call
+these **primary exclusions** rather than implying an exhaustive list of every threshold that activity missed.
 
 Cycling has one fixed durability context, `cycling|power|W|-|-`. When a valid Cycling scope has no eligible summary in any
 retained window, the frontend materializes that known context so the 12-week evidence chart remains mounted. This does

@@ -163,6 +163,49 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
     }));
   });
 
+  it('does not count unsupported gravity contexts as confirmed Cycling power', () => {
+    const cyclingContext = {
+      ...context,
+      contextKey: 'cycling|power|W|-|-',
+      scope: 'cycling' as const,
+      outputSource: 'power',
+      outputUnit: 'W',
+    };
+    const poweredSummary = { ...currentSummary, context: cyclingContext, sampleCount: 4 };
+    const cyclingCoverage = {
+      candidateActivityCount: 6,
+      evidenceActivityCount: 6,
+      eligibleActivityCount: 4,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 2,
+      eligibilityRatio: 4 / 6,
+      exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+    };
+    const cyclingWeek = { ...makeWindow(7, [poweredSummary]), coverage: cyclingCoverage };
+    const cyclingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage })),
+        usual: { coverage: cyclingCoverage, summaries: [poweredSummary] },
+        weeks: Array.from({ length: 12 }, () => cyclingWeek),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(cyclingPayload, ['cycling'])[0];
+
+    expect(view).toEqual(expect.objectContaining({
+      evidenceText: '4 eligible · 4 with power · 6 candidates',
+      exclusionText: 'Primary exclusions: Unsupported context 2',
+    }));
+    expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
+      activityCountSummary: 'Across 12 weeks: 72 candidates · 48 with power · 48 eligible',
+      exclusionSummary: 'Primary exclusions: Unsupported context 24',
+    }));
+  });
+
   it('keeps a Cycling trajectory when every recent week contains only exclusions', () => {
     const excludedCoverage = {
       candidateActivityCount: 3,

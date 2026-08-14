@@ -195,6 +195,26 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(emptyTooltip).toContain('No recorded power');
   });
 
+  it('labels an unsupported Cycling context without claiming that power was absent', () => {
+    const component = createComponent();
+    const view = trajectory();
+    view.points[1] = {
+      ...view.points[1],
+      candidateActivityCount: 1,
+      sourceActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      exclusionReasons: [{ reason: 'unsupported-context', label: 'Unsupported context', activityCount: 1 }],
+    };
+    component.trajectory = view;
+    component.status = 'ready';
+    component.chartDiv = new ElementRef(document.createElement('div'));
+
+    const option = (component as any).buildOption();
+
+    expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('Unsupported');
+    expect(option.tooltip.formatter([{ dataIndex: 1 }])).toContain('Unsupported context');
+  });
+
   it('keeps the twelve-week evidence chart horizontally readable on narrow screens', () => {
     const styles = readFileSync(resolve(
       process.cwd(),
