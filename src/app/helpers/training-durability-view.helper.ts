@@ -123,13 +123,12 @@ export function buildTrainingDurabilityScopeViewModels(
       label: formatScopeLabel(item.scope),
       conclusionText: buildScopeConclusion(item.current.coverage),
       evidenceQualityText: buildEvidenceQualityText(item.current.coverage),
-      nextStepText: eligibleCount === 0 && exclusions.length
-        ? 'Look at the primary exclusions to see which data or comparability condition prevented a reading.'
-        : eligibleCount === 0 && missingEvidenceCount > 0
-          ? 'Workouts without processed durability evidence cannot produce a trend point.'
-        : eligibleCount > 0 && eligibleWeeks < 2
-          ? 'Use the twelve-week trail to see how often comparable evidence is available.'
-          : null,
+      nextStepText: buildScopeNextStepText(
+        eligibleCount,
+        eligibleWeeks,
+        exclusions.length > 0,
+        missingEvidenceCount,
+      ),
       evidenceText: currentPowerActivityCount === null
         ? `${eligibleCount} eligible of ${candidateCount} candidate workouts${formatMissingEvidenceSuffix(missingEvidenceCount)}`
         : `${eligibleCount} eligible · ${currentPowerActivityCount} with power · ${candidateCount} candidates${formatMissingEvidenceSuffix(missingEvidenceCount)}`,
@@ -156,10 +155,34 @@ function buildScopeConclusion(
   if (coverage.evidenceActivityCount === 0 && coverage.missingEvidenceActivityCount > 0) {
     return 'Recent workouts are present, but their processed durability evidence is not available yet.';
   }
+  if (eligibleCount === 0 && coverage.missingEvidenceActivityCount > 0) {
+    return `No processed current workout met the steady-effort comparison rules; ${formatMissingEvidenceClause(coverage.missingEvidenceActivityCount)}.`;
+  }
   if (eligibleCount === 0) {
     return 'No current workout met the steady-effort comparison rules, so durability is not being judged.';
   }
   return `Durability is based on ${eligibleCount} comparable current ${eligibleCount === 1 ? 'workout' : 'workouts'}; read it as a directional signal rather than a verdict.`;
+}
+
+function buildScopeNextStepText(
+  eligibleCount: number,
+  eligibleWeeks: number,
+  hasExclusions: boolean,
+  missingEvidenceCount: number,
+): string | null {
+  if (eligibleCount === 0 && hasExclusions && missingEvidenceCount > 0) {
+    return 'Review the primary exclusions for processed workouts; workouts without processed durability evidence cannot produce a trend point yet.';
+  }
+  if (eligibleCount === 0 && hasExclusions) {
+    return 'Look at the primary exclusions to see which data or comparability condition prevented a reading.';
+  }
+  if (eligibleCount === 0 && missingEvidenceCount > 0) {
+    return 'Workouts without processed durability evidence cannot produce a trend point.';
+  }
+  if (eligibleCount > 0 && eligibleWeeks < 2) {
+    return 'Use the twelve-week trail to see how often comparable evidence is available.';
+  }
+  return null;
 }
 
 function buildEvidenceQualityText(
@@ -174,6 +197,9 @@ function buildEvidenceQualityText(
   }
   const ratio = eligibleCount / candidateCount;
   const quality = ratio >= 0.5 ? 'usable' : 'limited';
+  if (coverage.missingEvidenceActivityCount > 0) {
+    return `Evidence quality: ${quality} — ${eligibleCount} of ${coverage.evidenceActivityCount} processed candidate ${coverage.evidenceActivityCount === 1 ? 'workout supplied' : 'workouts supplied'} eligible evidence; ${formatMissingEvidenceClause(coverage.missingEvidenceActivityCount)}.`;
+  }
   return `Evidence quality: ${quality} — ${eligibleCount} of ${candidateCount} candidate ${candidateCount === 1 ? 'workout met' : 'workouts met'} the comparison rules.`;
 }
 
@@ -336,6 +362,10 @@ function summarizeTrajectoryExclusions(
 
 function formatMissingEvidenceSuffix(count: number): string {
   return count > 0 ? ` · ${count} without processed evidence` : '';
+}
+
+function formatMissingEvidenceClause(count: number): string {
+  return `${count} candidate ${count === 1 ? 'workout still lacks' : 'workouts still lack'} processed durability evidence`;
 }
 
 function resolveVisibleScopes(disciplines: readonly TrainingVisibleDiscipline[]): Set<DerivedTrainingDurabilityScope> {

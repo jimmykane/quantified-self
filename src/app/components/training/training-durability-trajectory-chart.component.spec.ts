@@ -21,8 +21,8 @@ function trajectory(): TrainingDurabilityTrajectoryViewModel {
     eligibilityDescription: 'Only comparable steady power-and-heart-rate sessions produce a trend point.',
     sourceActivityLabel: 'Power recorded',
     barExplanation: 'Bar height shows power-recorded activities; labels show eligible / power-recorded.',
-    activityCountSummary: 'Across 12 weeks: 36 candidates · 32 with power · 32 eligible',
-    exclusionSummary: 'Primary exclusions: No recorded power 1 · Too variable 1',
+    activityCountSummary: 'Across 12 weeks: 35 candidates · 33 with power · 32 eligible · 1 without processed evidence',
+    exclusionSummary: 'Processed evidence missing 1 · Primary exclusions: No recorded power 1 · Too variable 1',
     unitLabel: '%',
     noEligibleWeekCount: 1,
     unavailableMetricWeekCount: 1,
@@ -30,8 +30,8 @@ function trajectory(): TrainingDurabilityTrajectoryViewModel {
       weekStartDayMs: Date.UTC(2026, 3, 20) + (index * weekMs),
       weekEndDayMs: Date.UTC(2026, 3, 26) + (index * weekMs),
       value: index === 1 || index === 2 ? null : 4 - (index * 0.1),
-      candidateActivityCount: 3,
-      sourceActivityCount: index === 1 ? 0 : index === 2 ? 2 : 3,
+      candidateActivityCount: index === 1 ? 2 : 3,
+      sourceActivityCount: index === 1 ? 0 : 3,
       missingEvidenceActivityCount: index === 1 ? 1 : 0,
       eligibleSampleCount: index === 1 ? 0 : index === 2 ? 2 : 3,
       exclusionReasons: index === 1
@@ -175,7 +175,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.series.map((series: any) => series.name)).toEqual(['Power recorded', 'Aerobic decoupling']);
     expect(option.series[0].data[1]).toBe(0);
     expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('Power unknown');
-    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/2');
+    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/3');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
     expect(option.tooltip).toEqual(expect.objectContaining({
