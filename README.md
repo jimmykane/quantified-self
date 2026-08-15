@@ -58,19 +58,26 @@ The repository pins its own Firebase CLI; do not install or log in to a global C
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
-nvm use
 npm ci
 npm --prefix functions ci
 ```
 
-The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
+Activate Node 20.19 or later in the Node 20 line before installing (`nvm use` on systems with nvm). The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
 
 ### 2. Create the ignored local files
 
 Copy the safe Mapbox template:
 
+macOS/Linux:
+
 ```bash
 cp src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
 ```
 
 Edit only `src/environments/mapbox-token.local.ts` and replace `YOUR_PUBLIC_MAPBOX_TOKEN` with your own `pk.*` public Mapbox token. On first start, the launcher creates `functions/.secret.local` from its safe sentinel template if the file is missing. Do not edit the `LOCAL_EMULATOR_DISABLED` values: they stop Firebase from falling back to Secret Manager.

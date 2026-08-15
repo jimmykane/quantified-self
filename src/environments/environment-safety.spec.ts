@@ -59,6 +59,16 @@ describe('assertEnvironmentSafety', () => {
     }
   });
 
+  it('keeps observability disabled in the hosted localhost profile', () => {
+    expect(hostedLocalEnvironment.backendMode).toBe('hosted');
+    expect(hostedLocalEnvironment.localhost).toBe(true);
+    expect(hostedLocalEnvironment.observabilityEnabled).toBe(false);
+    expect(() => assertEnvironmentSafety({
+      ...hostedLocalEnvironment,
+      observabilityEnabled: true,
+    })).toThrow(/Observability/);
+  });
+
   it('accepts an isolated demo-project environment', () => {
     expect(() => assertEnvironmentSafety(buildEnvironment())).not.toThrow();
   });

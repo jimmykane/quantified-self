@@ -39,6 +39,15 @@ export function buildSyntheticSubscription(Timestamp, now = new Date()) {
   };
 }
 
+export function buildSyntheticRoleStatusUpdate(FieldValue, Timestamp, role, now = new Date()) {
+  return {
+    claimsUpdatedAt: FieldValue.serverTimestamp(),
+    gracePeriodUntil: FieldValue.delete(),
+    localSyntheticRole: role,
+    localSyntheticRoleUpdatedAt: Timestamp.fromDate(now),
+  };
+}
+
 async function setBackgroundTriggers(runtimeConfig, enabled) {
   const action = enabled ? 'enableBackgroundTriggers' : 'disableBackgroundTriggers';
   const response = await fetch(`http://${runtimeConfig.host}:${runtimeConfig.ports.hub}/functions/${action}`, {
@@ -99,12 +108,10 @@ export async function updateLocalRole({ email, role }, now = new Date()) {
     }
 
     await auth.setCustomUserClaims(user.uid, nextClaims);
-    await firestore.doc(`users/${user.uid}/system/status`).set({
-      claimsUpdatedAt: Timestamp.fromMillis(now.getTime() + 5_000),
-      gracePeriodUntil: FieldValue.delete(),
-      localSyntheticRole: role,
-      localSyntheticRoleUpdatedAt: Timestamp.fromDate(now),
-    }, { merge: true });
+    await firestore.doc(`users/${user.uid}/system/status`).set(
+      buildSyntheticRoleStatusUpdate(FieldValue, Timestamp, role, now),
+      { merge: true },
+    );
   } finally {
     if (triggersDisabled) {
       await setBackgroundTriggers(runtimeConfig, true);

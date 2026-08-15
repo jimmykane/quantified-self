@@ -8,6 +8,7 @@ import {
   assertExactLocalSecretTemplate,
   assertLocalStatePersistencePathAt,
   assertPublicMapboxTokenSource,
+  buildLocalNodeCommand,
   buildEmulatorArguments,
   createIsolatedLocalProcessEnvironment,
   ensureLocalSecretFileAt,
@@ -17,6 +18,7 @@ import {
   parseEnvAssignments,
   readLocalRuntimeConfiguration,
   removeLocalStateAt,
+  repositoryRoot,
   validateAngularLocalConfiguration,
   validateRuntimeConfiguration,
 } from './local-runtime.mjs';
@@ -251,6 +253,28 @@ test('builds explicit local-only Firebase CLI arguments', () => {
 test('uses a constant smoke command without interpolating the checkout path', () => {
   assert.equal(LOCAL_SMOKE_CHECK_COMMAND, 'npm run local:smoke:check');
   assert.equal(LOCAL_SMOKE_CHECK_COMMAND.includes(process.cwd()), false);
+});
+
+test('launches local tools through Node instead of platform-specific command shims', () => {
+  const firebase = buildLocalNodeCommand('firebase', ['--version']);
+  const angular = buildLocalNodeCommand('ng', ['version']);
+  const functionsBuild = buildLocalNodeCommand('functions-build');
+
+  for (const invocation of [firebase, angular, functionsBuild]) {
+    assert.equal(invocation.command, process.execPath);
+    assert.equal(invocation.args[0].endsWith('.cmd'), false);
+  }
+  assert.match(firebase.args[0], /firebase-tools[/\\]lib[/\\]bin[/\\]firebase\.js$/u);
+  assert.deepEqual(firebase.args.slice(1), ['--version']);
+  assert.match(angular.args[0], /@angular[/\\]cli[/\\]bin[/\\]ng\.js$/u);
+  assert.match(functionsBuild.args[0], /functions[/\\]scripts[/\\]build\.mjs$/u);
+  assert.throws(() => buildLocalNodeCommand('unknown'), /Unknown local command/u);
+});
+
+test('keeps the Functions package build on the cross-platform Node script', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(repositoryRoot, 'functions', 'package.json'), 'utf8'));
+
+  assert.equal(packageJson.scripts.build, 'node scripts/build.mjs');
 });
 
 test('rejects legacy runtime configuration and service-account files', () => {

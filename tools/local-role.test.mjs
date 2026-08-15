@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildSyntheticSubscription, parseRoleArguments } from './local-role.mjs';
+import {
+  buildSyntheticRoleStatusUpdate,
+  buildSyntheticSubscription,
+  parseRoleArguments,
+} from './local-role.mjs';
 
 test('parses supported local role commands', () => {
   assert.deepEqual(parseRoleArguments(['--email', 'local@example.test', '--role', 'PRO']), {
@@ -23,4 +27,22 @@ test('builds a 30-day synthetic Pro subscription without Stripe identifiers', ()
   assert.equal(subscription.current_period_end.toISOString(), '2026-09-14T10:00:00.000Z');
   assert.equal('stripeId' in subscription, false);
   assert.equal('customer' in subscription, false);
+});
+
+test('uses an emulator server timestamp as the claims refresh revision', () => {
+  const claimsRevision = Symbol('server-timestamp');
+  const deletedField = Symbol('deleted-field');
+  const FieldValue = {
+    serverTimestamp: () => claimsRevision,
+    delete: () => deletedField,
+  };
+  const Timestamp = { fromDate: value => value };
+  const now = new Date('2026-08-15T10:00:00.000Z');
+
+  const update = buildSyntheticRoleStatusUpdate(FieldValue, Timestamp, 'free', now);
+
+  assert.equal(update.claimsUpdatedAt, claimsRevision);
+  assert.equal(update.gracePeriodUntil, deletedField);
+  assert.equal(update.localSyntheticRole, 'free');
+  assert.equal(update.localSyntheticRoleUpdatedAt, now);
 });

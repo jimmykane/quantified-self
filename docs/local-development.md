@@ -11,6 +11,7 @@ This is a development environment, not a production self-hosting recipe. It does
 ```bash
 npm ci
 npm --prefix functions ci
+# macOS/Linux; use Copy-Item with the same paths in Windows PowerShell.
 cp src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
 # Replace only YOUR_PUBLIC_MAPBOX_TOKEN with a pk.* public token.
 npm start
@@ -176,6 +177,8 @@ When changing local development behavior:
 ## Intentional hosted opt-in
 
 `npm run start:functions:prod` is retained for a narrow maintainer workflow and is not a local-development command. Despite its historical name, its environment uses the hosted production Firebase configuration broadly, not just one isolated Function.
+
+The hosted localhost frontend keeps Sentry disabled, so it does not send browser errors or traces to the live Sentry project.
 
 It refuses to start unless the maintainer supplies an exact confirmation:
 
