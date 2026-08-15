@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -30,6 +31,14 @@ interface COROSBindingStateResponse {
   message?: unknown;
   data?: unknown;
 }
+
+const COROS_BINDING_STATE_CACHE_MS = 5 * 60 * 1000;
+const COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS = 15 * 60 * 1000;
+const COROS_BINDING_STATE_LEASE_MS = 45 * 1000;
+const COROS_BINDING_STATE_GLOBAL_WINDOW_MS = 60 * 1000;
+const COROS_BINDING_STATE_GLOBAL_REQUESTS_PER_WINDOW = 60;
+const PROVIDER_OPERATION_LIMITS_COLLECTION = 'providerOperationLimits';
+const COROS_BINDING_STATE_LIMIT_DOCUMENT = 'coros-binding-state';
 
 export interface COROSBindingStateResult {
   status: 'bound' | 'unbound' | 'stale';
@@ -98,6 +107,136 @@ function tokenIdentityMatches(
       || (Number.isFinite(currentDateCreated) && currentDateCreated === tokenDateCreated));
 }
 
+function getCachedBindingState(
+  metaData: ServiceConnectionMetaFields | undefined,
+  nowMs: number,
+  maximumAgeMs: number,
+): COROSBindingStateResult | null {
+  const checkedAt = Number(metaData?.providerBindingCheckedAt);
+  const ageMs = nowMs - checkedAt;
+  if (!Number.isFinite(checkedAt) || checkedAt <= 0 || ageMs < 0 || ageMs > maximumAgeMs) {
+    return null;
+  }
+  if (metaData?.providerBindingState === 'bound') {
+    return { status: 'bound', bound: true, checkedAt };
+  }
+  if (metaData?.providerBindingState === 'unbound') {
+    return { status: 'unbound', bound: false, checkedAt };
+  }
+  return null;
+}
+
+type COROSBindingCheckClaim =
+  | { status: 'cached'; result: COROSBindingStateResult }
+  | { status: 'claimed'; leaseId: string };
+
+async function claimCOROSBindingStateCheck(params: {
+  userID: string;
+  openId: string;
+  accessToken: string;
+  tokenDateCreated: number | null;
+  tokenRef: admin.firestore.DocumentReference;
+  checkedAt: number;
+  leaseId: string;
+}): Promise<COROSBindingCheckClaim> {
+  const db = admin.firestore();
+  const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
+  const rateLimitRef = db.collection(PROVIDER_OPERATION_LIMITS_COLLECTION)
+    .doc(COROS_BINDING_STATE_LIMIT_DOCUMENT);
+  const windowStartMs = Math.floor(params.checkedAt / COROS_BINDING_STATE_GLOBAL_WINDOW_MS)
+    * COROS_BINDING_STATE_GLOBAL_WINDOW_MS;
+
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(params.userID, 'coros_binding_state_claim', error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+    }
+
+    const [tokenSnapshot, metaSnapshot] = await Promise.all([
+      transaction.get(params.tokenRef),
+      transaction.get(metaRef),
+    ]);
+    const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
+    const metaData = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+    if (!tokenSnapshot.exists
+      || !tokenIdentityMatches(
+        tokenData,
+        params.openId,
+        params.accessToken,
+        params.tokenDateCreated,
+      )
+      || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
+      || isServiceUnavailableForSyncConnection(metaData)) {
+      throw new HttpsError('unauthenticated', 'Reconnect COROS before checking the connection.');
+    }
+
+    const cachedResult = getCachedBindingState(
+      metaData,
+      params.checkedAt,
+      COROS_BINDING_STATE_CACHE_MS,
+    );
+    if (cachedResult) {
+      return { status: 'cached' as const, result: cachedResult };
+    }
+
+    const leaseExpiresAt = Number(metaData?.providerBindingCheckLeaseExpiresAt);
+    if (Number.isFinite(leaseExpiresAt) && leaseExpiresAt > params.checkedAt) {
+      const staleResult = getCachedBindingState(
+        metaData,
+        params.checkedAt,
+        COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS,
+      );
+      if (staleResult) {
+        return { status: 'cached' as const, result: staleResult };
+      }
+      throw new HttpsError(
+        'resource-exhausted',
+        'A COROS connection check is already in progress. Please retry shortly.',
+      );
+    }
+
+    // Cached and already-in-flight requests never contend on the shared
+    // provider budget document. Read it only once an upstream call is needed.
+    const rateLimitSnapshot = await transaction.get(rateLimitRef);
+    const rateLimitData = rateLimitSnapshot.data() as Record<string, unknown> | undefined;
+    const storedWindowStartMs = Number(rateLimitData?.windowStartMs);
+    const storedCount = Number(rateLimitData?.count);
+    const currentCount = storedWindowStartMs === windowStartMs
+      && Number.isSafeInteger(storedCount)
+      && storedCount >= 0
+      ? storedCount
+      : 0;
+    if (currentCount >= COROS_BINDING_STATE_GLOBAL_REQUESTS_PER_WINDOW) {
+      logger.warn('[COROSBindingState] Shared provider request budget exhausted.', {
+        windowStartMs,
+        requestCount: currentCount,
+      });
+      throw new HttpsError(
+        'resource-exhausted',
+        'COROS connection checks are temporarily busy. Please retry shortly.',
+      );
+    }
+
+    transaction.set(rateLimitRef, {
+      provider: 'COROS',
+      operation: 'binding_state',
+      windowStartMs,
+      count: currentCount + 1,
+      updatedAtMs: params.checkedAt,
+    }, { merge: true });
+    transaction.set(metaRef, {
+      providerBindingCheckLeaseId: params.leaseId,
+      providerBindingCheckLeaseExpiresAt: params.checkedAt + COROS_BINDING_STATE_LEASE_MS,
+    }, { merge: true });
+    return { status: 'claimed' as const, leaseId: params.leaseId };
+  });
+}
+
 async function persistBindingStateIfCurrent(params: {
   userID: string;
   openId: string;
@@ -106,6 +245,7 @@ async function persistBindingStateIfCurrent(params: {
   tokenRef: admin.firestore.DocumentReference;
   bound: boolean;
   checkedAt: number;
+  leaseId: string;
 }): Promise<'updated' | 'stale' | 'user_inactive'> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
@@ -133,6 +273,7 @@ async function persistBindingStateIfCurrent(params: {
         params.accessToken,
         params.tokenDateCreated,
       )
+      || metaData?.providerBindingCheckLeaseId !== params.leaseId
       || normalizeCOROSOpenId(metaData?.providerUserId) !== params.openId
       || isServiceUnavailableForSyncConnection(metaData)) {
       return 'stale';
@@ -142,6 +283,8 @@ async function persistBindingStateIfCurrent(params: {
       transaction.set(metaRef, {
         providerBindingState: 'bound',
         providerBindingCheckedAt: params.checkedAt,
+        providerBindingCheckLeaseId: null,
+        providerBindingCheckLeaseExpiresAt: 0,
       }, { merge: true });
       return 'updated';
     }
@@ -150,6 +293,8 @@ async function persistBindingStateIfCurrent(params: {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
       providerBindingState: 'unbound',
       providerBindingCheckedAt: params.checkedAt,
+      providerBindingCheckLeaseId: null,
+      providerBindingCheckLeaseExpiresAt: 0,
       lastAuthFailureCode: 'coros_unbound',
       lastAuthFailureMessage: 'The COROS account is no longer bound. Reconnect COROS.',
       lastDisconnectedAt: params.checkedAt,
@@ -176,6 +321,18 @@ export async function checkCOROSBindingStateForUser(
     throw new HttpsError('unauthenticated', 'Reconnect COROS before checking the connection.');
   }
 
+  const leaseId = crypto.randomUUID();
+  const claim = await claimCOROSBindingStateCheck({
+    userID,
+    openId,
+    accessToken,
+    tokenDateCreated,
+    tokenRef: tokenSnapshot.ref,
+    checkedAt,
+    leaseId,
+  });
+  if (claim.status === 'cached') return claim.result;
+
   const bound = await fetchCOROSBindingState(accessToken, openId);
   const writeResult = await persistBindingStateIfCurrent({
     userID,
@@ -185,6 +342,7 @@ export async function checkCOROSBindingStateForUser(
     tokenRef: tokenSnapshot.ref,
     bound,
     checkedAt,
+    leaseId: claim.leaseId,
   });
   if (writeResult === 'user_inactive') {
     throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');

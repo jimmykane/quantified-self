@@ -383,6 +383,7 @@ export async function getCOROSQueueItemFromWorkout(
   return {
     id: await generateIDFromParts([input.openId, input.labelId, input.componentKey]),
     dateCreated: Date.now(),
+    queueRevision: crypto.randomUUID(),
     openId: input.openId,
     workoutID: input.labelId,
     ...(input.fitUrl ? { FITFileURI: input.fitUrl } : {}),

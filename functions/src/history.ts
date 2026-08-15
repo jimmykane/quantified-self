@@ -113,6 +113,7 @@ async function commitHistoryBatchForActiveUser(params: {
       const queueRef = db.collection(getServiceWorkoutQueueName(params.serviceName)).doc(`${workoutQueueItem.id}`);
       transaction.set(queueRef, {
         ...workoutQueueItem,
+        firebaseUserID: params.userID,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         fromHistory: true,
         dispatchedToCloudTask: null,

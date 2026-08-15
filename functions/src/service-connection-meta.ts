@@ -151,6 +151,8 @@ export async function markServiceConnected(
     disconnectManualReviewRequired: FieldValue.delete(),
     providerBindingState: FieldValue.delete(),
     providerBindingCheckedAt: FieldValue.delete(),
+    providerBindingCheckLeaseId: FieldValue.delete(),
+    providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
   });
 }
 
@@ -238,6 +240,8 @@ export async function clearServiceConnectionState(
     disconnectManualReviewRequired: FieldValue.delete(),
     providerBindingState: FieldValue.delete(),
     providerBindingCheckedAt: FieldValue.delete(),
+    providerBindingCheckLeaseId: FieldValue.delete(),
+    providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
   });
   if (!didWrite || !options.restorePendingDisconnectActivitySyncRoutes) {
     return;

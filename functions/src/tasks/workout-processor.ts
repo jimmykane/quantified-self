@@ -21,7 +21,12 @@ export const processWorkoutTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId, serviceName } = request.data as { queueItemId: string; serviceName: ServiceNames };
+    const { queueItemId, serviceName, queueRevision, queueDateCreated } = request.data as {
+        queueItemId: string;
+        serviceName: ServiceNames;
+        queueRevision?: string;
+        queueDateCreated?: number;
+    };
 
     const collectionName = getServiceWorkoutQueueName(serviceName);
     logger.info(`[TaskWorker] Starting task for ${serviceName} item: ${queueItemId} in collection ${collectionName}`);
@@ -49,6 +54,21 @@ export const processWorkoutTask = onTaskDispatched({
     }
 
     const queueItem = queueDoc.data();
+    const currentQueueRevision = typeof queueItem?.queueRevision === 'string'
+        ? queueItem.queueRevision.trim()
+        : '';
+    const expectedQueueRevision = typeof queueRevision === 'string' ? queueRevision.trim() : '';
+    const expectedQueueDateCreated = Number(queueDateCreated);
+    if ((expectedQueueRevision && currentQueueRevision !== expectedQueueRevision)
+        || (serviceName === ServiceNames.COROSAPI && currentQueueRevision && !expectedQueueRevision)
+        || (serviceName === ServiceNames.COROSAPI
+            && !currentQueueRevision
+            && !expectedQueueRevision
+            && Number.isFinite(expectedQueueDateCreated)
+            && queueItem?.dateCreated !== expectedQueueDateCreated)) {
+        logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
+        return;
+    }
     if (queueItem?.processed === true) {
         logger.info(`[TaskWorker] Item ${queueItemId} already processed, skipping.`);
         return;

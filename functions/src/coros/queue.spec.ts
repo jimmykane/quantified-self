@@ -94,6 +94,7 @@ describe('coros/queue', () => {
         mode: 0,
         subMode: 0,
         componentKey: 'root',
+        queueRevision: expect.any(String),
         retryCount: 0,
         processed: false,
         dispatchedToCloudTask: null,
@@ -105,6 +106,16 @@ describe('coros/queue', () => {
       const result = await getCOROSQueueItemFromWorkout('open-id', '418173315956375553');
       expect(result.dateCreated).toBeGreaterThanOrEqual(before);
       expect(result.dateCreated).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('keeps the provider identity stable while assigning each payload a new queue revision', async () => {
+      const first = await getCOROSQueueItemFromWorkout('open-id', '418173315956375553');
+      const second = await getCOROSQueueItemFromWorkout('open-id', '418173315956375553');
+
+      expect(first.id).toBe(second.id);
+      expect(first.queueRevision).toEqual(expect.any(String));
+      expect(second.queueRevision).toEqual(expect.any(String));
+      expect(first.queueRevision).not.toBe(second.queueRevision);
     });
   });
 

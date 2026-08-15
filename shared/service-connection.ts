@@ -16,6 +16,8 @@ export interface ServiceConnectionMetaFields {
   providerUserId?: string | null;
   providerBindingState?: ProviderBindingState | null;
   providerBindingCheckedAt?: number | null;
+  providerBindingCheckLeaseId?: string | null;
+  providerBindingCheckLeaseExpiresAt?: number | null;
   lastAuthFailureCode?: string | null;
   lastAuthFailureMessage?: string | null;
   lastDisconnectedAt?: number | null;

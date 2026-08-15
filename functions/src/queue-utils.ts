@@ -56,6 +56,39 @@ export class ProviderOperationStillInFlightError extends Error {
     }
 }
 
+interface QueueRevisionGuard {
+    userID: string;
+    isCurrent: (queueItem: Record<string, unknown>) => boolean;
+}
+
+function getQueueRevisionGuard(queueItem: QueueItemInterface): QueueRevisionGuard | null {
+    const queueRevision = typeof queueItem.queueRevision === 'string'
+        ? queueItem.queueRevision.trim()
+        : '';
+    const userID = typeof queueItem.firebaseUserID === 'string'
+        ? queueItem.firebaseUserID.trim()
+        : '';
+    if (!userID) return null;
+    const legacyCOROSOpenId = typeof (queueItem as QueueItemInterface & { openId?: unknown }).openId === 'string'
+        ? `${(queueItem as QueueItemInterface & { openId?: unknown }).openId}`.trim()
+        : '';
+    const legacyDateCreated = Number(queueItem.dateCreated);
+    if (!queueRevision && (!legacyCOROSOpenId || !Number.isFinite(legacyDateCreated))) return null;
+    return {
+        userID,
+        isCurrent: current => {
+            if (current.processed === true) return false;
+            if (queueRevision) return current.queueRevision === queueRevision;
+            const currentRevision = typeof current.queueRevision === 'string'
+                ? current.queueRevision.trim()
+                : '';
+            return !currentRevision
+                && current.dateCreated === legacyDateCreated
+                && current.openId === legacyCOROSOpenId;
+        },
+    };
+}
+
 export function isProviderOperationInFlightLeaseActive(
     queueItem: Pick<QueueItemInterface, 'dispatchedToCloudTask' | 'providerOperationStartedAt'>,
     nowMs = Date.now(),
@@ -93,10 +126,24 @@ function buildFailedQueueItem(
     return failedItem;
 }
 
-export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
+export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
 
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
+    }
+
+    const revisionGuard = getQueueRevisionGuard(queueItem);
+    if (revisionGuard) {
+        return moveToDeadLetterQueueIfCurrentUserActive({
+            queueItem,
+            error,
+            context,
+            bulkWriter,
+            userID: revisionGuard.userID,
+            phase: 'workout_queue_revision_dlq',
+            logPrefix: 'WorkoutQueueRevision',
+            isCurrent: revisionGuard.isCurrent,
+        });
     }
 
     const failedItem = buildFailedQueueItem(queueItem, error, context);
@@ -478,9 +525,24 @@ export async function increaseRetryCountForQueueItem(
     incrementBy = 1,
     bulkWriter?: admin.firestore.BulkWriter,
     maxRetryDlqContext?: string,
-): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Failed> {
+): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
+    }
+
+    const revisionGuard = getQueueRevisionGuard(queueItem);
+    if (revisionGuard) {
+        return increaseRetryCountIfCurrentUserActive({
+            queueItem,
+            error,
+            incrementBy,
+            maxRetryDlqContext,
+            bulkWriter,
+            userID: revisionGuard.userID,
+            phase: 'workout_queue_revision_retry',
+            logPrefix: 'WorkoutQueueRevision',
+            isCurrent: revisionGuard.isCurrent,
+        });
     }
 
     // Check if we overlap the max retry count
@@ -522,9 +584,44 @@ export async function increaseRetryCountForQueueItem(
 }
 
 
-export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: any): Promise<QueueResult.Processed | QueueResult.Failed> {
+async function updateToProcessedIfCurrentUserActive(
+    queueItem: QueueItemInterface,
+    additionalData: Record<string, unknown> | undefined,
+    revisionGuard: QueueRevisionGuard,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+    const nowMs = Date.now();
+    try {
+        const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
+            queueItem,
+            userID: revisionGuard.userID,
+            phase: 'workout_queue_revision_completion',
+            logPrefix: 'WorkoutQueueRevision',
+            actionDescription: 'processed-state transition',
+            isCurrent: revisionGuard.isCurrent,
+        }, transaction => {
+            transaction.update(queueItem.ref!, {
+                processed: true,
+                processedAt: nowMs,
+                ...additionalData,
+            });
+        });
+        if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
+            logger.info(`Skipping stale processed-state transition for queue item ${queueItem.id}; its revision already advanced.`);
+        }
+        return QueueResult.Processed;
+    } catch (error) {
+        logger.error(new Error(`Could not update guarded processed state for ${queueItem.id}: ${error}`));
+        return QueueResult.Failed;
+    }
+}
+
+export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: Record<string, unknown>): Promise<QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
+    }
+    const revisionGuard = getQueueRevisionGuard(queueItem);
+    if (revisionGuard) {
+        return updateToProcessedIfCurrentUserActive(queueItem, additionalData, revisionGuard);
     }
     try {
         const ref = queueItem.ref;
@@ -564,9 +661,22 @@ export async function deferQueueItemForPendingDisconnect(
     queueItem: QueueItemInterface,
     bulkWriter?: admin.firestore.BulkWriter,
     additionalData: Record<string, unknown> = {},
-): Promise<QueueResult.Deferred | QueueResult.Failed> {
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
+    }
+
+    const revisionGuard = getQueueRevisionGuard(queueItem);
+    if (revisionGuard) {
+        return deferQueueItemForPendingDisconnectIfCurrentUserActive({
+            queueItem,
+            additionalData,
+            bulkWriter,
+            userID: revisionGuard.userID,
+            phase: 'workout_queue_revision_pending_disconnect',
+            logPrefix: 'WorkoutQueueRevision',
+            isCurrent: revisionGuard.isCurrent,
+        });
     }
 
     try {

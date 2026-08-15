@@ -96,7 +96,12 @@ vi.mock('./config', () => ({
 vi.mock('./coros/queue', () => ({
     convertCOROSWorkoutsToQueueItems: vi.fn(async (data: any[], openId: string) => data.map((d, i) => ({
         id: `coros-${openId}-${i}`,
-        workoutID: d.workoutId ?? d.workoutID ?? `w-${i}`
+        workoutID: d.workoutId ?? d.workoutID ?? `w-${i}`,
+        queueRevision: `revision-${i}`,
+        dateCreated: 1_777_000_000_000 + i,
+        retryCount: 0,
+        processed: false,
+        dispatchedToCloudTask: null,
     })))
 }));
 
@@ -415,6 +420,38 @@ describe('history', () => {
             );
         });
 
+        it('persists a new COROS payload revision bound to the Firebase user', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    id: 'coros-active-open-id-0',
+                    queueRevision: 'revision-0',
+                    firebaseUserID: 'uid',
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                    fromHistory: true,
+                }),
+            );
+        });
+
         it('requires the caller-pinned COROS account before and immediately before history retrieval', async () => {
             vi.mocked(tokens.getTokenData).mockResolvedValue({
                 accessToken: 't',
@@ -687,7 +724,9 @@ describe('history', () => {
                 timeout: 30_000,
             }));
             expect(vi.mocked(requestHelper.get).mock.calls.at(-1)?.[0]).not.toHaveProperty('headers');
-            expect(items).toEqual([{ id: 'coros-open-1-0', workoutID: 'c1' }]);
+            expect(items).toEqual([
+                expect.objectContaining({ id: 'coros-open-1-0', workoutID: 'c1' }),
+            ]);
         });
 
         it('should throw for unimplemented service', async () => {

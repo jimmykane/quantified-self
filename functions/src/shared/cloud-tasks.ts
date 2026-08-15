@@ -34,6 +34,7 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
+    queueRevision?: string;
 }
 
 export interface WorkoutTaskDispatchItem {
@@ -41,6 +42,7 @@ export interface WorkoutTaskDispatchItem {
     dateCreated: number;
     retryCount?: number;
     totalRetryCount?: number;
+    queueRevision?: string;
     dispatchRecoveryGeneration?: number;
 }
 
@@ -270,13 +272,28 @@ export async function enqueueWorkoutTask(
     const sanitizedServiceName = sanitizeTaskNamePart(serviceName);
     const safeQueueItemId = sanitizeTaskNamePart(`${queueItemId}`);
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const queueRevision = typeof options.queueRevision === 'string'
+        ? options.queueRevision.trim()
+        : '';
+    const safeQueueRevision = queueRevision
+        ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
+        : '';
 
     // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
-    // while preserving deduplication for retries of the SAME item.
-    const taskId = `${sanitizedServiceName}-${safeQueueItemId}-${safeDateCreated}`;
+    // while preserving deduplication for retries of the SAME item. Revisioned
+    // COROS items also include their payload revision so a history replacement
+    // cannot reuse a still-live task for an older document revision.
+    const taskId = `${sanitizedServiceName}-${safeQueueItemId}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
     const taskName = getCloudTaskName(projectId, location, workoutQueue, taskId);
 
-    const payload = { queueItemId, serviceName };
+    const payload = {
+        queueItemId,
+        serviceName,
+        ...(queueRevision ? { queueRevision } : {}),
+        ...(serviceName === ServiceNames.COROSAPI && !queueRevision
+            ? { queueDateCreated: safeDateCreated }
+            : {}),
+    };
 
     const taskCreated = await enqueueTaskWithRetry({
         projectId,
@@ -346,6 +363,16 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
     return dispatchGeneration > 0 ? `${retryGeneration}-${dispatchGeneration}` : retryGeneration;
 }
 
+function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
+    const queueRevision = typeof queueItem.queueRevision === 'string'
+        ? queueItem.queueRevision.trim()
+        : '';
+    return {
+        recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
+        ...(queueRevision ? { queueRevision } : {}),
+    };
+}
+
 /**
  * Dispatch a durable workout queue item while recovering from Cloud Tasks'
  * temporary task-name reservation. The queue-specific callback advances a
@@ -360,7 +387,7 @@ export async function enqueueWorkoutTaskWithDispatchRecovery<T extends WorkoutTa
         params.queueItem.id,
         params.queueItem.dateCreated,
         params.scheduleDelaySeconds,
-        { recoveryTaskKey: workoutTaskRecoveryKey(params.queueItem) },
+        workoutTaskEnqueueOptions(params.queueItem),
     );
     if (taskCreated) return true;
 
@@ -376,7 +403,7 @@ export async function enqueueWorkoutTaskWithDispatchRecovery<T extends WorkoutTa
         nextQueueItem.id,
         nextQueueItem.dateCreated,
         params.scheduleDelaySeconds,
-        { recoveryTaskKey: workoutTaskRecoveryKey(nextQueueItem) },
+        workoutTaskEnqueueOptions(nextQueueItem),
     );
 }
 

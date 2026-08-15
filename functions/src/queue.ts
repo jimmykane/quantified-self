@@ -92,7 +92,7 @@ function markWorkoutQueueItemSkippedForDeletedUser(
 function deferWorkoutQueueItemForPendingDisconnect(
   queueItem: QueueItemInterface,
   bulkWriter?: admin.firestore.BulkWriter,
-): Promise<QueueResult.Deferred | QueueResult.Failed> {
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
   return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
 }
 
@@ -161,6 +161,7 @@ type StoredWorkoutQueueItem = Omit<Partial<QueueItemInterface>, 'processed'> & {
 enum WorkoutQueueGuardedUpdateResult {
   Updated = 'updated',
   SkippedDeletedUser = 'skipped_deleted_user',
+  NotCurrent = 'not_current',
   AlreadyMovedToFailedJobs = 'already_moved_to_failed_jobs',
 }
 
@@ -506,6 +507,7 @@ async function persistRecoveredCOROSFITUrl(
     logPrefix: 'COROSFITDetail',
     actionDescription: 'recovered FIT URL write',
     isCurrent: currentQueueItem => currentQueueItem.processed !== true
+      && workoutQueueGenerationMatches(queueItem, currentQueueItem)
       && currentQueueItem.openId === queueItem.openId
       && `${currentQueueItem.workoutID ?? ''}` === queueItem.workoutID
       && (queueItem.componentKey
@@ -958,6 +960,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           throw error;
         }
+        if (!(await isWorkoutQueueRevisionCurrent(queueItem))) {
+          logger.info('Skipping stale COROS queue revision before event persistence.', {
+            queueItemId: queueItem.id,
+            queueRevision: queueItem.queueRevision || 'legacy',
+          });
+          return QueueResult.Processed;
+        }
       }
       if (await isActivitySyncOutboundEcho({
         userID: parentID,
@@ -1143,6 +1152,33 @@ function workoutQueueDispatchRecoveryGeneration(queueItem: { dispatchRecoveryGen
     : 0;
 }
 
+function workoutQueueGenerationMatches(
+  attemptedQueueItem: Pick<QueueItemInterface, 'queueRevision' | 'dateCreated'>,
+  currentQueueItem: Record<string, unknown>,
+): boolean {
+  const attemptedRevision = typeof attemptedQueueItem.queueRevision === 'string'
+    ? attemptedQueueItem.queueRevision.trim()
+    : '';
+  if (attemptedRevision) return currentQueueItem.queueRevision === attemptedRevision;
+  const currentRevision = typeof currentQueueItem.queueRevision === 'string'
+    ? currentQueueItem.queueRevision.trim()
+    : '';
+  return !currentRevision && currentQueueItem.dateCreated === attemptedQueueItem.dateCreated;
+}
+
+async function isWorkoutQueueRevisionCurrent(queueItem: QueueItemInterface): Promise<boolean> {
+  const queueRevision = typeof queueItem.queueRevision === 'string' ? queueItem.queueRevision.trim() : '';
+  // Legacy COROS work is still protected at retry/completion. Avoid adding a
+  // new pre-persistence read requirement to already-dispatched legacy tasks.
+  if (!queueRevision) return true;
+  if (!queueItem.ref) return true;
+  const snapshot = await queueItem.ref.get();
+  const currentQueueItem = snapshot.exists ? snapshot.data() as Record<string, unknown> : null;
+  return !!currentQueueItem
+    && currentQueueItem.processed !== true
+    && workoutQueueGenerationMatches(queueItem, currentQueueItem);
+}
+
 async function advanceWorkoutQueueDispatchRecoveryGeneration(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItem: QueueItemInterface,
@@ -1169,6 +1205,8 @@ async function advanceWorkoutQueueDispatchRecoveryGeneration(
 
       const currentQueueItem = queueItemSnapshot.data() as Partial<QueueItemInterface>;
       if ((currentQueueItem as { processed?: unknown }).processed === true
+        || (serviceName === ServiceNames.COROSAPI
+          && !workoutQueueGenerationMatches(queueItem, currentQueueItem as Record<string, unknown>))
         || currentQueueItem.dispatchedToCloudTask !== null && currentQueueItem.dispatchedToCloudTask !== undefined) {
         return { status: 'not_current' as const };
       }
@@ -1235,8 +1273,8 @@ async function markWorkoutQueueItemDispatched(
   queueItem?: QueueItemInterface,
 ): Promise<boolean> {
   try {
-    const isCurrent = queueItem && serviceName === ServiceNames.WahooAPI
-      ? createWahooQueueRevisionCurrentGuard(queueItem)
+    const isCurrent = queueItem
+      ? createWorkoutQueueDispatchCurrentGuard(queueItem, serviceName)
       : undefined;
     const result = await markQueueItemDispatchedIfUserActive({
       queueItemDocument,
@@ -1290,6 +1328,22 @@ function createWahooQueueRevisionCurrentGuard(
     && currentQueueItem.dispatchedToCloudTask === null
     && currentQueueItem.workoutSummaryID === wahooQueueItem.workoutSummaryID
     && currentQueueItem.summaryUpdatedAt === wahooQueueItem.summaryUpdatedAt;
+}
+
+function createWorkoutQueueDispatchCurrentGuard(
+  queueItem: QueueItemInterface,
+  serviceName: ServiceNames,
+): ((currentQueueItem: Record<string, unknown>) => boolean) | undefined {
+  if (serviceName === ServiceNames.WahooAPI) {
+    return createWahooQueueRevisionCurrentGuard(queueItem);
+  }
+  const hasQueueRevision = typeof queueItem.queueRevision === 'string' && !!queueItem.queueRevision.trim();
+  if (!hasQueueRevision && serviceName !== ServiceNames.COROSAPI) {
+    return undefined;
+  }
+  return currentQueueItem => currentQueueItem.processed !== true
+    && currentQueueItem.dispatchedToCloudTask === null
+    && workoutQueueGenerationMatches(queueItem, currentQueueItem);
 }
 
 async function backfillWorkoutQueueFirebaseUserID(
@@ -1457,6 +1511,7 @@ async function updateDuplicateProviderWebhookPayloadIfNeeded(
   serviceName: ServiceNames,
   firebaseUserID: string,
   updateData: Record<string, unknown>,
+  expectedQueueItem?: Pick<QueueItemInterface, 'queueRevision' | 'dateCreated'>,
 ): Promise<WorkoutQueueGuardedUpdateResult> {
   if (!Object.keys(updateData).length) {
     return WorkoutQueueGuardedUpdateResult.Updated;
@@ -1471,10 +1526,14 @@ async function updateDuplicateProviderWebhookPayloadIfNeeded(
       updateData,
       logPrefix: 'WorkoutQueue',
       actionDescription: 'duplicate provider payload refresh',
+      isCurrent: expectedQueueItem && serviceName === ServiceNames.COROSAPI
+        ? currentQueueItem => currentQueueItem.processed !== true
+          && workoutQueueGenerationMatches(expectedQueueItem, currentQueueItem)
+        : undefined,
     });
-    return result === QueueItemUserGuardedUpdateResult.Updated
-      ? WorkoutQueueGuardedUpdateResult.Updated
-      : WorkoutQueueGuardedUpdateResult.SkippedDeletedUser;
+    if (result === QueueItemUserGuardedUpdateResult.Updated) return WorkoutQueueGuardedUpdateResult.Updated;
+    if (result === QueueItemUserGuardedUpdateResult.NotCurrent) return WorkoutQueueGuardedUpdateResult.NotCurrent;
+    return WorkoutQueueGuardedUpdateResult.SkippedDeletedUser;
   } catch (error) {
     if (!isFirestoreNotFoundError(error)) {
       throw error;
@@ -1554,6 +1613,14 @@ async function handleDuplicateProviderWebhookQueueItem(
     serviceName,
     duplicateDispatchContext.firebaseUserID,
     refreshData,
+    typeof existingQueueItem.dateCreated === 'number'
+      ? {
+        dateCreated: existingQueueItem.dateCreated,
+        ...(typeof existingQueueItem.queueRevision === 'string'
+          ? { queueRevision: existingQueueItem.queueRevision }
+          : {}),
+      }
+      : undefined,
   );
   if (refreshResult === WorkoutQueueGuardedUpdateResult.AlreadyMovedToFailedJobs) {
     return queueItemDocument;
@@ -1565,6 +1632,13 @@ async function handleDuplicateProviderWebhookQueueItem(
       duplicateDispatchContext.providerUserID,
       queuePayload.id,
     );
+  }
+  if (refreshResult === WorkoutQueueGuardedUpdateResult.NotCurrent) {
+    logger.info('Duplicate provider queue item changed revision during payload refresh; skipping stale dispatch.', {
+      serviceName,
+      queueItemId: queuePayload.id,
+    });
+    return queueItemDocument;
   }
 
   logger.info('workout_queue_duplicate_pending_refreshed', {
@@ -1594,6 +1668,9 @@ async function handleDuplicateProviderWebhookQueueItem(
     refreshData,
     { id: queuePayload.id, dateCreated },
   ) as QueueItemInterface;
+  if (typeof existingQueueItem.queueRevision !== 'string') {
+    delete queueItemForDuplicateDispatch.queueRevision;
+  }
   const wasDuplicateTaskEnqueued = await enqueueWorkoutTaskWithDispatchRecovery({
     serviceName,
     queueItem: queueItemForDuplicateDispatch,

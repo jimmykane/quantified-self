@@ -173,6 +173,8 @@ describe('service-connection-meta', () => {
       disconnectManualReviewRequired: 'delete-sentinel',
       providerBindingState: 'delete-sentinel',
       providerBindingCheckedAt: 'delete-sentinel',
+      providerBindingCheckLeaseId: 'delete-sentinel',
+      providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
     }), { merge: true });
   });
 
@@ -236,6 +238,8 @@ describe('service-connection-meta', () => {
       providerUserId: 'delete-sentinel',
       providerBindingState: 'delete-sentinel',
       providerBindingCheckedAt: 'delete-sentinel',
+      providerBindingCheckLeaseId: 'delete-sentinel',
+      providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
     }), { merge: true });
   });
 

@@ -13,6 +13,8 @@ export interface QueueItemInterface {
   processed: false,
   retryCount: number,
   totalRetryCount?: number,
+  /** Opaque provider-payload revision used to reject stale Cloud Task writes. */
+  queueRevision?: string,
   dispatchRecoveryGeneration?: number,
   errors?: QueueItemError[],
   processedAt?: number,
