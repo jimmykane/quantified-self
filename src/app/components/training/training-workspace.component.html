@@ -133,29 +133,44 @@
 
     <div class="training-destination-mobile">
       <div #mobileDestinationScroller class="training-mobile-shortcut-scroller">
-        <mat-button-toggle-group
+        <div
           class="training-mobile-shortcuts"
-          [value]="selectedTrainingDestination"
-          aria-label="Training shortcuts"
-          hideSingleSelectionIndicator
-          (change)="selectTrainingDestination($event.value, 'mobile_selector')">
-          <mat-button-toggle value="overview" aria-label="View all training">
-            <mat-icon aria-hidden="true">monitoring</mat-icon>
-            <span>All</span>
-          </mat-button-toggle>
+          role="group"
+          aria-label="Training shortcuts">
+          <button
+            mat-button
+            type="button"
+            class="training-mobile-shortcut"
+            [class.training-mobile-shortcut-selected]="selectedTrainingDestination === 'overview'"
+            [attr.aria-current]="selectedTrainingDestination === 'overview' ? 'page' : null"
+            aria-label="View all training"
+            (click)="selectTrainingDestination('overview', 'mobile_selector')">
+            <span class="training-mobile-shortcut-label">
+              <mat-icon aria-hidden="true">monitoring</mat-icon>
+              <span>All</span>
+            </span>
+          </button>
           @for (option of visibleSportShortcutOptions; track option.id) {
-            <mat-button-toggle [value]="option.id">
-              @if (option.sport; as sport) {
-                <app-activity-type-icon
-                  [activityType]="sport.iconActivityType"
-                  size="18px"
-                  aria-hidden="true">
-                </app-activity-type-icon>
-              }
-              <span>{{ option.label }}</span>
-            </mat-button-toggle>
+            <button
+              mat-button
+              type="button"
+              class="training-mobile-shortcut"
+              [class.training-mobile-shortcut-selected]="selectedTrainingDestination === option.id"
+              [attr.aria-current]="selectedTrainingDestination === option.id ? 'page' : null"
+              (click)="selectTrainingDestination(option.id, 'mobile_selector')">
+              <span class="training-mobile-shortcut-label">
+                @if (option.sport; as sport) {
+                  <app-activity-type-icon
+                    [activityType]="sport.iconActivityType"
+                    size="16px"
+                    aria-hidden="true">
+                  </app-activity-type-icon>
+                }
+                <span>{{ option.label }}</span>
+              </span>
+            </button>
           }
-        </mat-button-toggle-group>
+        </div>
       </div>
       <button
         mat-icon-button

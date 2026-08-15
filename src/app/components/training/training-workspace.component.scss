@@ -32,12 +32,14 @@
 .training-destination-option { display: inline-flex; align-items: center; gap: 8px; }
 .training-destination-option mat-icon,
 .training-destination-option app-activity-type-icon { flex: 0 0 auto; width: 18px; height: 18px; font-size: 18px; line-height: 18px; }
-.training-mobile-shortcut-scroller { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
+.training-mobile-shortcut-scroller { display: flex; align-items: center; min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
 .training-mobile-shortcut-scroller::-webkit-scrollbar { display: none; }
-.training-mobile-shortcuts { width: max-content; }
-.training-mobile-shortcuts mat-button-toggle { min-width: 0; height: 48px; }
-.training-mobile-shortcuts mat-icon,
-.training-mobile-shortcuts app-activity-type-icon { width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
+.training-mobile-shortcuts { display: inline-flex; align-items: center; gap: 2px; width: max-content; min-height: 48px; }
+.training-mobile-shortcut { min-width: 48px; height: 40px; padding-inline: 6px; border-radius: var(--mat-sys-corner-full, 999px); color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); white-space: nowrap; }
+.training-mobile-shortcut-selected { color: var(--mat-sys-on-secondary-container); background: var(--mat-sys-secondary-container); }
+.training-mobile-shortcut-label { display: inline-flex; align-items: center; gap: 4px; }
+.training-mobile-shortcut-label mat-icon,
+.training-mobile-shortcut-label app-activity-type-icon { width: 16px; height: 16px; font-size: 16px; line-height: 16px; vertical-align: middle; }
 .training-mobile-more-action { align-self: center; width: 48px; height: 48px; }
 .training-mobile-more-action mat-icon { margin: 0; }
 .training-section-heading p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; letter-spacing: 0; text-transform: uppercase; }

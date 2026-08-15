@@ -184,7 +184,11 @@ describe('TrainingWorkspaceComponent', () => {
     expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
     const mobileDestination = element.querySelector('.training-destination-mobile');
     expect(mobileDestination?.querySelector('mat-select')).toBeNull();
-    expect(mobileDestination?.querySelector('.training-mobile-shortcuts')?.textContent).toContain('All');
+    const mobileShortcuts = mobileDestination?.querySelector('.training-mobile-shortcuts');
+    expect(mobileShortcuts?.textContent).toContain('All');
+    expect(mobileShortcuts?.querySelectorAll('button.training-mobile-shortcut').length).toBeGreaterThan(0);
+    expect(mobileDestination?.querySelector('mat-button-toggle-group')).toBeNull();
+    expect(mobileDestination?.querySelector('mat-chip-listbox')).toBeNull();
     const mobileMoreAction = mobileDestination?.querySelector('.training-mobile-more-action');
     expect(mobileMoreAction?.textContent).not.toContain('More');
     expect(mobileMoreAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('expand_more');
@@ -318,20 +322,29 @@ describe('TrainingWorkspaceComponent', () => {
     expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
   });
 
-  it('keeps mobile shortcuts swipeable while the all-sports icon remains fixed', () => {
+  it('uses compact swipeable Material buttons while the all-sports icon remains fixed', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
       'utf8',
     );
 
     expect(styles).toMatch(/\.training-mobile-shortcut-scroller\s*\{[^}]*overflow-x:\s*auto/s);
-    expect(styles).toMatch(/\.training-mobile-shortcuts\s*\{[^}]*width:\s*max-content/s);
+    expect(styles).toMatch(/\.training-mobile-shortcuts\s*\{[^}]*display:\s*inline-flex[^}]*width:\s*max-content[^}]*min-height:\s*48px/s);
+    expect(styles).toMatch(/\.training-mobile-shortcut\s*\{[^}]*min-width:\s*48px[^}]*height:\s*40px[^}]*padding-inline:\s*6px/s);
+    expect(styles).toContain('border-radius: var(--mat-sys-corner-full, 999px);');
+    expect(styles).toMatch(/\.training-mobile-shortcut-selected\s*\{[^}]*background:\s*var\(--mat-sys-secondary-container\)/s);
+    expect(styles).toMatch(/\.training-mobile-shortcut-label\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*4px/s);
     expect(styles).toMatch(/\.training-mobile-more-action\s*\{[^}]*width:\s*48px[^}]*height:\s*48px/s);
     expect(styles).toMatch(/\.training-destination-mobile\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 48px/s);
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
       'utf8',
     );
+    expect(template).toMatch(/<div\s+class="training-mobile-shortcuts"[\s\S]*?role="group"/);
+    expect(template).toMatch(/<button\s+mat-button[\s\S]*?class="training-mobile-shortcut"/);
+    expect(template).toContain('[attr.aria-current]');
+    expect(template).not.toContain('<mat-chip-listbox');
+    expect(template).not.toMatch(/<mat-button-toggle-group\s+class="training-mobile-shortcuts"/);
     expect(template).toMatch(/<button\s+mat-icon-button[\s\S]*?class="training-mobile-more-action"/);
     expect(template).toContain('matTooltip="All sports"');
   });

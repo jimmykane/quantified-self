@@ -599,8 +599,9 @@ Desktop uses one intrinsic-width Material button-toggle group for **All training
 with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
 with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
 temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
-widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable Material toggle
-rail exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. A fixed 48 px Material icon
+widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable rail of compact
+Material text buttons exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. The selected
+button uses a tonal state, and each 40 px visual button retains Material's 48 px touch target. A fixed 48 px Material icon
 button with the accessible **All sports** label preserves more width for that rail and opens a viewport-bounded Material
 bottom sheet. The sheet keeps **All training** first, groups automatic or pinned shortcuts next, sorts the remaining
 available destinations by label, marks the current view, and places **Manage sport shortcuts** in its stable footer.
