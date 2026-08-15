@@ -6,6 +6,15 @@ import * as oauth2 from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as serviceOAuthAccess from '../../service-oauth-access';
 
+const hoisted = vi.hoisted(() => ({
+    logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+    },
+}));
+
+vi.mock('firebase-functions/logger', () => hoisted.logger);
+
 // Mock firebase-functions/v2/https
 vi.mock('firebase-functions/v2/https', () => {
     return {
@@ -40,6 +49,26 @@ vi.mock('../../OAuth2', () => ({
 
 vi.mock('../../service-oauth-access', () => ({
     hasServiceOAuthConnectAccess: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('../../service-auth-lifecycle', () => ({
+    extractRefreshFailureDetails: vi.fn((error: any) => {
+        const statusCode = error?.statusCode || error?.output?.statusCode || null;
+        const providerErrorCode = error?.data?.payload?.error || null;
+        const providerErrorMessage = error?.data?.payload?.error_description || error?.message || null;
+        const isInvalidGrant = [providerErrorCode, providerErrorMessage, error?.message]
+            .filter(Boolean)
+            .some(value => `${value}`.toLowerCase().includes('invalid_grant'));
+        return {
+            statusCode,
+            providerErrorCode,
+            providerErrorMessage,
+            isInvalidGrant,
+            isTerminalAuthFailure: statusCode === 401 || isInvalidGrant,
+            isTransientError: [400, 401, 500, 502].includes(statusCode),
+            logMessage: providerErrorMessage || providerErrorCode || 'Unknown token exchange failure',
+        };
+    }),
 }));
 
 // Import AFTER mocks
@@ -143,6 +172,47 @@ describe('Suunto Auth Wrapper', () => {
                 'https://app.com/callback',
                 'validCode'
             );
+        });
+
+        it('should report Suunto invalid_grant as non-terminal without logging the authorization code', async () => {
+            const error: any = new Error('Response Error: 400 Bad Request');
+            error.statusCode = 400;
+            error.data = {
+                payload: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid authorization code: secret-authorization-code',
+                },
+            };
+            (oauth2.getAndSetServiceOAuth2AccessTokenForUser as any).mockRejectedValue(error);
+            const request = createMockRequest({
+                data: {
+                    state: 'validState',
+                    code: 'secret-authorization-code',
+                    redirectUri: 'https://app.com/callback'
+                }
+            });
+
+            await expect(requestAndSetSuuntoAPIAccessToken(request as any)).rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Suunto authorization code expired or was already used. Start the connection again.',
+            });
+
+            expect(hoisted.logger.error).not.toHaveBeenCalled();
+            expect(hoisted.logger.warn).toHaveBeenCalledWith(
+                '[SuuntoAuth] Authorization code exchange was rejected with a non-terminal invalid_grant.',
+                {
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: 'authorization_code_exchange',
+                    providerStatus: 400,
+                    providerErrorCode: 'invalid_grant',
+                    terminal: false,
+                    outcome: 'restart_oauth',
+                },
+            );
+            expect(JSON.stringify([
+                hoisted.logger.warn.mock.calls,
+                hoisted.logger.error.mock.calls,
+            ])).not.toContain('secret-authorization-code');
         });
 
         it('should throw error if state is invalid', async () => {

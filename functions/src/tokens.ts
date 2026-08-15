@@ -208,8 +208,18 @@ export async function getTokenData(
     const failure = extractRefreshFailureDetails(e);
     const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
     const isTerminalAuthFailure = isTerminalRefreshFailureForService(serviceName, failure);
+    const isProviderDowngradedAuthFailure = failure.isTerminalAuthFailure && !isTerminalAuthFailure;
 
-    if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
+    if (isProviderDowngradedAuthFailure) {
+      logger.warn('[ServiceAuth] Provider token refresh rejected with a known non-terminal error.', {
+        serviceName,
+        phase: 'token_refresh',
+        providerStatus: failure.statusCode || undefined,
+        providerErrorCode: failure.isInvalidGrant ? 'invalid_grant' : undefined,
+        terminal: false,
+        outcome: 'retry',
+      });
+    } else if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
       logger.warn(`Token refresh for user ${doc.id} failed`, getWahooErrorLogDetails(e));
     } else if (failure.isTransientError) {
       // Do not log the full stack trace for these known errors during cleanup
@@ -218,10 +228,6 @@ export async function getTokenData(
       logger.error(`Could not refresh token for user ${doc.id}`, getWahooErrorLogDetails(e));
     } else {
       logger.error(`Could not refresh token for user ${doc.id}`, e);
-    }
-
-    if (failure.isTerminalAuthFailure && !isTerminalAuthFailure) {
-      logger.warn(`Treating ${serviceName} invalid_grant for token ${doc.id} as retryable while waiting for the provider fix; preserving local token.`);
     }
 
     if (isTerminalAuthFailure) {

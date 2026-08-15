@@ -16,7 +16,14 @@ const hoisted = vi.hoisted(() => ({
         shouldSkip: false,
     }),
     isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+    logger: {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+    },
 }));
+
+vi.mock('firebase-functions/logger', () => hoisted.logger);
 
 vi.mock('firebase-functions', () => ({
     config: () => ({
@@ -553,6 +560,18 @@ describe('tokens', () => {
             expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(hoisted.logger.error).not.toHaveBeenCalled();
+            expect(hoisted.logger.warn).toHaveBeenCalledWith(
+                '[ServiceAuth] Provider token refresh rejected with a known non-terminal error.',
+                {
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: 'token_refresh',
+                    providerStatus: 400,
+                    providerErrorCode: 'invalid_grant',
+                    terminal: false,
+                    outcome: 'retry',
+                },
+            );
         });
 
         it('should delegate non-Suunto invalid_grant errors to the terminal auth lifecycle', async () => {
@@ -625,7 +644,7 @@ describe('tokens', () => {
             error.data = {
                 payload: {
                     error: 'invalid_grant',
-                    error_description: 'User no longer active/connected with the partner',
+                    error_description: 'Invalid refresh credential: secret-refresh-value',
                 },
             };
             mockToken.refresh.mockRejectedValue(error);
@@ -636,6 +655,8 @@ describe('tokens', () => {
             expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(hoisted.logger.error).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.warn.mock.calls)).not.toContain('secret-refresh-value');
         });
 
         it('should detect non-Suunto invalid_grant from nested provider payloads as terminal', async () => {
