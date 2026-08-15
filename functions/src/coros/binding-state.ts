@@ -307,6 +307,47 @@ async function persistBindingStateIfCurrent(params: {
   });
 }
 
+async function releaseCOROSBindingStateCheckLeaseIfCurrent(params: {
+  userID: string;
+  leaseId: string;
+}): Promise<void> {
+  const db = admin.firestore();
+  const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
+
+  await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(params.userID, 'coros_binding_state_release', error);
+    }
+    if (deletionGuard.shouldSkip) return;
+
+    const metaSnapshot = await transaction.get(metaRef);
+    const metaData = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+    if (metaData?.providerBindingCheckLeaseId !== params.leaseId) return;
+
+    transaction.set(metaRef, {
+      providerBindingCheckLeaseId: null,
+      providerBindingCheckLeaseExpiresAt: 0,
+    }, { merge: true });
+  });
+}
+
+async function releaseCOROSBindingStateCheckLeaseAfterFailure(
+  userID: string,
+  leaseId: string,
+): Promise<void> {
+  try {
+    await releaseCOROSBindingStateCheckLeaseIfCurrent({ userID, leaseId });
+  } catch (error) {
+    logger.warn('[COROSBindingState] Could not release the failed provider-check lease.', {
+      userID,
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+  }
+}
+
 export async function checkCOROSBindingStateForUser(
   userID: string,
   checkedAt = Date.now(),
@@ -333,22 +374,27 @@ export async function checkCOROSBindingStateForUser(
   });
   if (claim.status === 'cached') return claim.result;
 
-  const bound = await fetchCOROSBindingState(accessToken, openId);
-  const writeResult = await persistBindingStateIfCurrent({
-    userID,
-    openId,
-    accessToken,
-    tokenDateCreated,
-    tokenRef: tokenSnapshot.ref,
-    bound,
-    checkedAt,
-    leaseId: claim.leaseId,
-  });
-  if (writeResult === 'user_inactive') {
-    throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+  try {
+    const bound = await fetchCOROSBindingState(accessToken, openId);
+    const writeResult = await persistBindingStateIfCurrent({
+      userID,
+      openId,
+      accessToken,
+      tokenDateCreated,
+      tokenRef: tokenSnapshot.ref,
+      bound,
+      checkedAt,
+      leaseId: claim.leaseId,
+    });
+    if (writeResult === 'user_inactive') {
+      throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+    }
+    if (writeResult === 'stale') return { status: 'stale', bound: null };
+    return { status: bound ? 'bound' : 'unbound', bound, checkedAt };
+  } catch (error) {
+    await releaseCOROSBindingStateCheckLeaseAfterFailure(userID, claim.leaseId);
+    throw error;
   }
-  if (writeResult === 'stale') return { status: 'stale', bound: null };
-  return { status: bound ? 'bound' : 'unbound', bound, checkedAt };
 }
 
 export async function handleCOROSBindingStateRequest(request: {

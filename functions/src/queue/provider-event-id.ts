@@ -234,22 +234,10 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
       throw new EventWriteSkippedForDeletedUserError(request.userID, `provider_import_event_id:${request.serviceName}`);
     }
 
-    const metadataSnapshot = await transaction.get(metadataRef);
-    if (metadataSnapshot.exists) {
-      const eventID = request.preferProviderIdentityEventID
-        ? providerIdentityEventID
-        : metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
-          ? primaryEventID
-          : providerIdentityEventID;
-      transaction.set(
-        reservationRef,
-        reservationPayload(request, primaryEventID, providerIdentityKey, eventID),
-        { merge: true },
-      );
-      return eventID;
-    }
-
-    const reservationSnapshot = await transaction.get(reservationRef);
+    const [metadataSnapshot, reservationSnapshot] = await Promise.all([
+      transaction.get(metadataRef),
+      transaction.get(reservationRef),
+    ]);
     const providerIdentities = asReservationMap(reservationSnapshot.data()?.providerIdentities);
     const existingReservation = providerIdentities[providerIdentityKey];
     if (typeof existingReservation?.eventID === 'string' && existingReservation.eventID.length > 0) {
@@ -268,6 +256,20 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
         { merge: true },
       );
       return legacyReservation.eventID;
+    }
+
+    if (metadataSnapshot.exists) {
+      const eventID = request.preferProviderIdentityEventID
+        ? providerIdentityEventID
+        : metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
+          ? primaryEventID
+          : providerIdentityEventID;
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, eventID),
+        { merge: true },
+      );
+      return eventID;
     }
 
     const eventID = request.preferProviderIdentityEventID || hasReservedProviderIdentity(providerIdentities)

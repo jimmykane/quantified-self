@@ -405,6 +405,54 @@ describe('resolveProviderImportEventID', () => {
     );
   });
 
+  it('prefers an unambiguous legacy collision reservation when the primary event belongs to another activity', async () => {
+    mockMetadataGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        serviceWorkoutID: 'workout-2',
+        serviceFITFileURI: 'https://coros.example/workout-2.fit',
+      }),
+    });
+    mockReservationGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        providerIdentities: {
+          'legacy-url-derived-key': {
+            eventID: 'legacy-collision-event-id',
+            providerEventIDField: 'serviceWorkoutID',
+            providerEventID: 'workout-1',
+            providerEventSecondaryIDField: 'serviceFITFileURI',
+            providerEventSecondaryID: 'https://coros.example/expired-workout-1.fit',
+          },
+        },
+      }),
+    });
+
+    const eventID = await resolveProviderImportEventID({
+      ...corosRequest,
+      providerEventSecondaryID: 'root',
+      providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+      legacyProviderEventSecondaryIdentities: [{
+        field: 'serviceFITFileURI',
+        value: 'https://coros.example/refreshed-workout-1.fit',
+      }],
+      allowLegacySecondaryFieldPresenceMatch: true,
+    });
+
+    expect(eventID).toBe('legacy-collision-event-id');
+    expect(mockTransactionSet).toHaveBeenCalledWith(
+      mockReservationRef,
+      expect.objectContaining({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceWorkoutComponentKey|root': expect.objectContaining({
+            eventID: 'legacy-collision-event-id',
+          }),
+        },
+      }),
+      { merge: true },
+    );
+  });
+
   it('migrates one unambiguous root reservation after its legacy FIT URL has rotated', async () => {
     mockReservationGet.mockResolvedValue({
       exists: true,

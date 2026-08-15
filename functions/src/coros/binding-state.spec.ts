@@ -348,7 +348,48 @@ describe('COROS binding state', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
-  it('maps provider and malformed responses to retryable callable failures without writes', async () => {
+  it('releases a failed provider-check lease so an immediate retry can succeed', async () => {
+    mocks.requestGet
+      .mockRejectedValueOnce(Object.assign(new Error('network failed'), { statusCode: 503 }))
+      .mockResolvedValueOnce('{"result":"0000","data":{"bindState":1}}');
+
+    await expect(checkCOROSBindingStateForUser('user-1', 1_000)).rejects.toMatchObject({
+      name: 'COROSBindingStateUnavailableError',
+    });
+    expect(currentMetaData).toMatchObject({
+      providerBindingCheckLeaseId: null,
+      providerBindingCheckLeaseExpiresAt: 0,
+    });
+
+    await expect(checkCOROSBindingStateForUser('user-1', 1_001)).resolves.toEqual({
+      status: 'bound',
+      bound: true,
+      checkedAt: 1_001,
+    });
+    expect(mocks.requestGet).toHaveBeenCalledTimes(2);
+    expect(currentRateLimitData).toMatchObject({ count: 2 });
+  });
+
+  it('does not clear a newer provider-check lease when an older request fails', async () => {
+    mocks.requestGet.mockImplementationOnce(async () => {
+      currentMetaData = {
+        ...currentMetaData,
+        providerBindingCheckLeaseId: 'newer-request',
+        providerBindingCheckLeaseExpiresAt: 50_000,
+      };
+      throw Object.assign(new Error('network failed'), { statusCode: 503 });
+    });
+
+    await expect(checkCOROSBindingStateForUser('user-1', 1_000)).rejects.toMatchObject({
+      name: 'COROSBindingStateUnavailableError',
+    });
+    expect(currentMetaData).toMatchObject({
+      providerBindingCheckLeaseId: 'newer-request',
+      providerBindingCheckLeaseExpiresAt: 50_000,
+    });
+  });
+
+  it('maps provider and malformed responses to retryable callable failures without binding-state changes', async () => {
     mocks.requestGet.mockRejectedValueOnce(Object.assign(new Error('network failed'), { statusCode: 503 }));
     await expect(handleCOROSBindingStateRequest({ app: {}, auth: { uid: 'user-1' } }))
       .rejects.toMatchObject({ code: 'unavailable' });
@@ -368,7 +409,7 @@ describe('COROS binding state', () => {
 
     await expect(handleCOROSBindingStateRequest({ app: {}, auth: { uid: 'user-1' } }))
       .rejects.toMatchObject({ code: 'unavailable' });
-    expect(mocks.runTransaction).toHaveBeenCalledTimes(1);
+    expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
     expect(mocks.transactionSet).not.toHaveBeenCalledWith(
       mocks.metaRef,
       expect.objectContaining({ providerBindingState: expect.anything() }),
