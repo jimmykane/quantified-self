@@ -14,11 +14,12 @@ import {
   isSameCOROSQueueRevision,
 } from './queue-revision';
 
-export type COROSQueueClaimResult = 'claimed' | 'superseded' | 'busy';
+export type COROSQueueClaimResult = 'claimed' | 'superseded' | 'busy' | 'deleted_user';
 
-// The workout task has a 9-minute runtime cap. Keeping the lease valid for
-// 12 minutes prevents a replacement revision from persisting concurrently,
-// while the 15-minute Cloud Tasks backoff can reclaim a crashed worker.
+// The workout task has a 9-minute runtime cap. Claiming before provider access
+// and keeping the lease valid for 12 minutes prevents a replacement revision
+// from processing concurrently, while the 15-minute Cloud Tasks backoff can
+// reclaim a crashed worker.
 export const COROS_EVENT_WRITE_LEASE_MS = 12 * 60 * 1000;
 
 function requireQueueReference(
@@ -73,7 +74,7 @@ export async function claimCOROSEventWriteRevision(
     } catch (error) {
       throw new UserDeletionGuardReadError(userID, 'coros_event_write_claim', error);
     }
-    if (deletionGuard.shouldSkip) return 'superseded';
+    if (deletionGuard.shouldSkip) return 'deleted_user';
 
     const snapshot = await transaction.get(queueRef);
     if (!snapshot.exists) return 'superseded';

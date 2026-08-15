@@ -1,3 +1,81 @@
+export class ResponseBodyTooLargeError extends Error {
+    readonly name = 'ResponseBodyTooLargeError';
+
+    constructor(
+        public readonly maxResponseBytes: number,
+        public readonly receivedBytes: number,
+    ) {
+        super('Response body exceeded its configured byte limit.');
+    }
+}
+
+function normalizeMaxResponseBytes(value: unknown): number | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+        throw new TypeError('maxResponseBytes must be a positive safe integer.');
+    }
+    return value;
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+    try {
+        await response.body?.cancel();
+    } catch {
+        // The byte limit has already been enforced; cancellation is best-effort.
+    }
+}
+
+async function readResponseBodyWithinLimit(
+    response: Response,
+    maxResponseBytes: number,
+): Promise<Buffer> {
+    const contentLengthHeader = response.headers.get('content-length')?.trim() || '';
+    const contentLength = /^\d+$/.test(contentLengthHeader)
+        ? Number(contentLengthHeader)
+        : null;
+    if (contentLength !== null && contentLength > maxResponseBytes) {
+        await cancelResponseBody(response);
+        throw new ResponseBodyTooLargeError(maxResponseBytes, contentLength);
+    }
+
+    if (!response.body) return Buffer.alloc(0);
+
+    const reader = response.body.getReader();
+    let bodyBuffer = Buffer.allocUnsafe(Math.min(
+        maxResponseBytes,
+        Math.max(8 * 1024, contentLength || 0),
+    ));
+    let receivedBytes = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const nextReceivedBytes = receivedBytes + value.byteLength;
+            if (nextReceivedBytes > maxResponseBytes) {
+                try {
+                    await reader.cancel();
+                } catch {
+                    // The byte limit has already been enforced; cancellation is best-effort.
+                }
+                throw new ResponseBodyTooLargeError(maxResponseBytes, nextReceivedBytes);
+            }
+            if (nextReceivedBytes > bodyBuffer.length) {
+                const expandedBuffer = Buffer.allocUnsafe(Math.min(
+                    maxResponseBytes,
+                    Math.max(nextReceivedBytes, bodyBuffer.length * 2),
+                ));
+                bodyBuffer.copy(expandedBuffer, 0, 0, receivedBytes);
+                bodyBuffer = expandedBuffer;
+            }
+            bodyBuffer.set(value, receivedBytes);
+            receivedBytes = nextReceivedBytes;
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    return bodyBuffer.subarray(0, receivedBytes);
+}
+
 export async function get(urlOrOptions: string | any, options: any = {}) {
     return request(urlOrOptions, { ...options, method: 'GET' });
 }
@@ -54,6 +132,7 @@ async function request(urlOrOptions: string | any, options: any = {}) {
     }
 
     const timeoutMs = Number(opts.timeout);
+    const maxResponseBytes = normalizeMaxResponseBytes(opts.maxResponseBytes);
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
         if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
@@ -67,12 +146,17 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         const response = await fetch(url, fetchOptions);
+        const boundedResponseBody = maxResponseBytes === null
+            ? null
+            : await readResponseBodyWithinLimit(response, maxResponseBytes);
 
         if (!response.ok) {
             const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
             err.statusCode = response.status;
             try {
-                err.error = await response.text();
+                err.error = boundedResponseBody === null
+                    ? await response.text()
+                    : boundedResponseBody.toString('utf8');
                 try {
                     err.error = JSON.parse(err.error);
                 } catch { // ignore
@@ -83,15 +167,21 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         if (opts.encoding === null) {
-            return Buffer.from(await response.arrayBuffer());
+            return boundedResponseBody === null
+                ? Buffer.from(await response.arrayBuffer())
+                : boundedResponseBody;
         }
 
         // Default to JSON parsing only if json: true is explicitly set (matching request-promise-native)
         if (opts.json === true) {
-            return response.json();
+            return boundedResponseBody === null
+                ? response.json()
+                : JSON.parse(boundedResponseBody.toString('utf8'));
         }
 
-        return response.text();
+        return boundedResponseBody === null
+            ? response.text()
+            : boundedResponseBody.toString('utf8');
     } finally {
         if (timeout) clearTimeout(timeout);
     }

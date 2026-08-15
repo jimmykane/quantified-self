@@ -14,6 +14,7 @@ import { normalizeCOROSInt64Identifier } from './identifier';
 import { containsASCIIControlCharacter } from './input-validation';
 
 const MAX_COROS_FIT_URL_LENGTH = 4_096;
+const MAX_COROS_FIT_DETAIL_RESPONSE_BYTES = 1024 * 1024;
 
 interface COROSFITDetailComponent {
   mode?: unknown;
@@ -200,8 +201,12 @@ export async function recoverCOROSFITFileURL(
     rawResponse = await requestPromise.get({
       url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/detail/fit?${query.toString()}`,
       timeout: COROS_API_REQUEST_TIMEOUT_MS,
+      maxResponseBytes: MAX_COROS_FIT_DETAIL_RESPONSE_BYTES,
     });
   } catch (error) {
+    if (error instanceof requestPromise.ResponseBodyTooLargeError) {
+      throw new PermanentCOROSFITDetailError('detail_response_too_large');
+    }
     const statusCode = statusCodeFromError(error);
     if (statusCode === 401 || statusCode === 403) {
       throw new COROSFITDetailAuthError(`${statusCode}`);

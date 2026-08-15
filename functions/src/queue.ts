@@ -613,8 +613,133 @@ function getTokenQueryForWorkoutQueueItem(
   }
 }
 
+interface COROSQueueProcessingClaim {
+  processingOwner: string | null;
+  userID: string | null;
+}
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: ProviderWorkoutQueueItem, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+async function claimCOROSRevisionForProcessing(
+  queueItem: COROSAPIWorkoutQueueItemInterface,
+  userID: string,
+  claimState: COROSQueueProcessingClaim,
+  bulkWriter?: admin.firestore.BulkWriter,
+): Promise<QueueResult.Processed | QueueResult.Failed | null> {
+  const processingOwner = crypto.randomUUID();
+  const claimResult = await claimCOROSEventWriteRevision(
+    queueItem,
+    userID,
+    processingOwner,
+  );
+  if (claimResult === 'deleted_user') {
+    return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+  }
+  if (claimResult === 'superseded') {
+    logger.info('Skipping stale COROS queue revision before processing.', {
+      queueItemId: queueItem.id,
+      queueRevision: queueItem.queueRevision || 'legacy',
+    });
+    return QueueResult.Processed;
+  }
+  if (claimResult === 'busy') {
+    logger.info('Retrying COROS delivery after the active revision lease expires.', {
+      queueItemId: queueItem.id,
+      queueRevision: queueItem.queueRevision || 'legacy',
+    });
+    return QueueResult.Failed;
+  }
+  claimState.processingOwner = processingOwner;
+  claimState.userID = userID;
+  return null;
+}
+
+async function releaseCOROSRevisionClaimIfHeld(
+  queueItem: COROSAPIWorkoutQueueItemInterface,
+  claimState: COROSQueueProcessingClaim,
+): Promise<void> {
+  if (!claimState.processingOwner || !claimState.userID) return;
+  const processingOwner = claimState.processingOwner;
+  try {
+    await releaseCOROSEventWriteRevision(queueItem, claimState.userID, processingOwner);
+    claimState.processingOwner = null;
+  } catch (error) {
+    logger.error('Could not release the COROS revision lease after processing ended.', {
+      queueItemId: queueItem.id,
+      queueRevision: queueItem.queueRevision || 'legacy',
+      error,
+    });
+    throw error;
+  }
+}
+
+export async function parseWorkoutQueueItemForServiceName(
+  serviceName: ServiceNames,
+  queueItem: ProviderWorkoutQueueItem,
+  bulkWriter?: admin.firestore.BulkWriter,
+  tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
+  usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
+  pendingWrites?: Map<string, number>,
+): Promise<QueueResult> {
+  if (serviceName !== ServiceNames.COROSAPI) {
+    return parseWorkoutQueueItemForServiceNameInternal(
+      serviceName,
+      queueItem,
+      bulkWriter,
+      tokenCache,
+      usageCache,
+      pendingWrites,
+    );
+  }
+
+  const corosQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
+  const claimState: COROSQueueProcessingClaim = {
+    processingOwner: null,
+    userID: null,
+  };
+  const firebaseUserID = typeof corosQueueItem.firebaseUserID === 'string'
+    ? corosQueueItem.firebaseUserID.trim()
+    : '';
+  if (normalizeQueueRevision(corosQueueItem.queueRevision) && !firebaseUserID) {
+    logger.error('Refusing to process a revisioned COROS queue item without its Firebase owner.', {
+      queueItemId: corosQueueItem.id,
+      queueRevision: corosQueueItem.queueRevision,
+    });
+    return QueueResult.Failed;
+  }
+  if (firebaseUserID) {
+    const earlyResult = await claimCOROSRevisionForProcessing(
+      corosQueueItem,
+      firebaseUserID,
+      claimState,
+      bulkWriter,
+    );
+    if (earlyResult) return earlyResult;
+  }
+
+  try {
+    return await parseWorkoutQueueItemForServiceNameInternal(
+      serviceName,
+      queueItem,
+      bulkWriter,
+      tokenCache,
+      usageCache,
+      pendingWrites,
+      claimState,
+    );
+  } finally {
+    await releaseCOROSRevisionClaimIfHeld(corosQueueItem, claimState);
+  }
+}
+
+
+async function parseWorkoutQueueItemForServiceNameInternal(
+  serviceName: ServiceNames,
+  queueItem: ProviderWorkoutQueueItem,
+  bulkWriter?: admin.firestore.BulkWriter,
+  tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
+  usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
+  pendingWrites?: Map<string, number>,
+  corosClaimState?: COROSQueueProcessingClaim,
+): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
   }
@@ -673,12 +798,26 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
-    let corosEventWriteOwner: string | null = null;
     const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {
       throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
     }
     const parentID = parent1.parent!.id;
+
+    if (serviceName === ServiceNames.COROSAPI) {
+      if (!corosClaimState) {
+        throw new Error(`Missing COROS revision claim state for queue item ${queueItem.id}`);
+      }
+      if (corosClaimState.processingOwner && corosClaimState.userID !== parentID) {
+        sawInactiveProviderAccount = true;
+        logger.warn('Skipping a COROS token whose owner does not match the claimed queue revision.', {
+          queueItemId: queueItem.id,
+          claimedUserID: corosClaimState.userID,
+          tokenUserID: parentID,
+        });
+        continue;
+      }
+    }
 
     if (await shouldSkipQueueWorkForDeletedUser(parentID, serviceName, queueItem.id, 'before_token_refresh')) {
       sawUserDeletionSkip = true;
@@ -982,35 +1121,32 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           sourceServiceName: serviceName,
           queueItemId: queueItem.id,
         });
-        oneSuccess = true;
-        processedAdditionalData = {
+        const echoCompletionData = {
           resultStatus: 'skipped',
           skippedReason: 'outbound_provider_echo',
         };
+        if (serviceName === ServiceNames.COROSAPI && corosClaimState?.processingOwner) {
+          const completionResult = await completeCOROSEventWriteRevision(
+            queueItem as COROSAPIWorkoutQueueItemInterface,
+            parentID,
+            corosClaimState.processingOwner,
+            echoCompletionData,
+          );
+          corosClaimState.processingOwner = null;
+          return completionResult;
+        }
+        oneSuccess = true;
+        processedAdditionalData = echoCompletionData;
         break;
       }
-      if (serviceName === ServiceNames.COROSAPI) {
-        const processingOwner = crypto.randomUUID();
-        const claimResult = await claimCOROSEventWriteRevision(
+      if (serviceName === ServiceNames.COROSAPI && !corosClaimState?.processingOwner) {
+        const claimResult = await claimCOROSRevisionForProcessing(
           queueItem as COROSAPIWorkoutQueueItemInterface,
           parentID,
-          processingOwner,
+          corosClaimState!,
+          bulkWriter,
         );
-        if (claimResult === 'superseded') {
-          logger.info('Skipping stale COROS queue revision before event persistence.', {
-            queueItemId: queueItem.id,
-            queueRevision: queueItem.queueRevision || 'legacy',
-          });
-          return QueueResult.Processed;
-        }
-        if (claimResult === 'busy') {
-          logger.info('Retrying duplicate COROS delivery after the active event-write lease expires.', {
-            queueItemId: queueItem.id,
-            queueRevision: queueItem.queueRevision || 'legacy',
-          });
-          return QueueResult.Failed;
-        }
-        corosEventWriteOwner = processingOwner;
+        if (claimResult) return claimResult;
       }
       switch (serviceName) {
         default:
@@ -1055,21 +1191,19 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
               sourceFileData: Buffer.from(result),
             });
             if (skippedAfterDeletionStarted) {
-              await releaseCOROSEventWriteRevision(
-                corosWorkoutQueueItem,
-                parentID,
-                corosEventWriteOwner!,
-              );
-              corosEventWriteOwner = null;
+              await releaseCOROSRevisionClaimIfHeld(corosWorkoutQueueItem, corosClaimState!);
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }
+          }
+          if (!corosClaimState?.processingOwner) {
+            throw new Error(`COROS queue item ${queueItem.id} reached event completion without a revision claim.`);
           }
           const completionResult = await completeCOROSEventWriteRevision(
             corosWorkoutQueueItem,
             parentID,
-            corosEventWriteOwner!,
+            corosClaimState.processingOwner,
           );
-          corosEventWriteOwner = null;
+          corosClaimState.processingOwner = null;
           logger.info('Ending timer: InsertEvent');
           logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
           logger.info(`Parsed item successfully for ${queueItem.id}`);
@@ -1109,23 +1243,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e: any) {
       // @todo should delete event  or separate catch
       logger.error(e);
-      if (corosEventWriteOwner) {
-        try {
-          await releaseCOROSEventWriteRevision(
-            queueItem as COROSAPIWorkoutQueueItemInterface,
-            parentID,
-            corosEventWriteOwner,
-          );
-        } catch (releaseError) {
-          logger.error('Could not release the COROS event-write lease after processing failed.', {
-            queueItemId: queueItem.id,
-            queueRevision: queueItem.queueRevision || 'legacy',
-            error: releaseError,
-          });
-          return QueueResult.Failed;
-        }
-        corosEventWriteOwner = null;
-      }
       if (isEventWriteSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);

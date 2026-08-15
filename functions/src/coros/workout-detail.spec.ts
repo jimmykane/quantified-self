@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../request-helper', () => ({ get: vi.fn() }));
+vi.mock('../request-helper', () => ({
+  get: vi.fn(),
+  ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {
+    readonly name = 'ResponseBodyTooLargeError';
+
+    constructor(public readonly maxResponseBytes: number, public readonly receivedBytes: number) {
+      super('Response body exceeded its configured byte limit.');
+    }
+  },
+}));
 
 import * as requestPromise from '../request-helper';
 import {
@@ -46,6 +55,7 @@ describe('recoverCOROSFITFileURL', () => {
     expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringContaining('/v2/coros/sport/detail/fit?'),
       timeout: 30_000,
+      maxResponseBytes: 1_048_576,
     }));
     const requestedUrl = vi.mocked(requestPromise.get).mock.calls[0][0].url as string;
     expect(requestedUrl).toContain('token=access-token');
@@ -186,6 +196,17 @@ describe('recoverCOROSFITFileURL', () => {
 
     vi.mocked(requestPromise.get).mockRejectedValueOnce(Object.assign(new Error('forbidden'), { statusCode: 401 }));
     await expect(recoverCOROSFITFileURL(token, rootItem)).rejects.toBeInstanceOf(COROSFITDetailAuthError);
+  });
+
+  it('permanently rejects an oversized detail response without retrying it', async () => {
+    vi.mocked(requestPromise.get).mockRejectedValueOnce(
+      new requestPromise.ResponseBodyTooLargeError(1_048_576, 1_048_577),
+    );
+
+    await expect(recoverCOROSFITFileURL(token, rootItem)).rejects.toMatchObject({
+      name: 'PermanentCOROSFITDetailError',
+      reason: 'detail_response_too_large',
+    });
   });
 
   it('rejects missing metadata before making a provider request', async () => {

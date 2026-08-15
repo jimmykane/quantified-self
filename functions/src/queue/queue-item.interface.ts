@@ -21,7 +21,7 @@ export interface QueueItemInterface {
   expireAt?: Timestamp | Date,
   dispatchedToCloudTask: number | null,
   providerOperationStartedAt?: number | null,
-  /** Worker lease that serializes event persistence across queue revisions. */
+  /** Worker lease that serializes revision-sensitive provider processing and event persistence. */
   processingOwner?: string,
   processingRevision?: string,
   processingLeaseExpiresAt?: number,

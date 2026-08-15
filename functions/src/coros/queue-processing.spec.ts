@@ -157,6 +157,19 @@ describe('COROS event-write revision lease', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
+  it('distinguishes user deletion so the worker can run queue cleanup', async () => {
+    mocks.deletionGuard.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await expect(claimCOROSEventWriteRevision(queueItem('revision-1'), 'firebase-1', 'worker-1'))
+      .resolves.toBe('deleted_user');
+    expect(mocks.transactionGet).not.toHaveBeenCalled();
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
   it('releases a replacement left behind by an expired older-revision lease', async () => {
     mocks.state.current = {
       ...queueItem('revision-2'),
