@@ -18,8 +18,14 @@ const MAX_COROS_COMPONENTS_PER_WORKOUT = 100;
 const MAX_COROS_QUEUE_ITEMS_PER_BATCH = 1_000;
 const MAX_COROS_DEVICE_NAME_LENGTH = 200;
 const MAX_COROS_FIT_URL_LENGTH = 4_096;
+const MAX_COROS_WEBHOOK_BODY_BYTES = 8 * 1024 * 1024;
+const COROS_WEBHOOK_QUEUE_CONCURRENCY = 10;
 const INT32_MIN = -2_147_483_648;
 const INT32_MAX = 2_147_483_647;
+
+function isCOROSCompositeWorkout(mode: number, subMode: number): boolean {
+  return mode === 13 && (subMode === 1 || subMode === 2);
+}
 
 const WEBHOOK_RESPONSES = {
   success: { message: 'ok', result: '0000' },
@@ -146,10 +152,11 @@ function normalizeWorkoutSummary(value: unknown, overrideOpenId?: string): COROS
   }
   const mode = normalizeInt32(workout.mode, 'mode');
   const subMode = normalizeInt32(workout.subMode, 'sub_mode');
-  const triathlonItemList = Array.isArray(rawComponents) && rawComponents.length > 0
+  const compositeWorkout = isCOROSCompositeWorkout(mode, subMode);
+  const triathlonItemList = compositeWorkout && Array.isArray(rawComponents) && rawComponents.length > 0
     ? rawComponents.map(normalizeWorkoutComponent)
     : undefined;
-  if (mode === 13 && !triathlonItemList) {
+  if (compositeWorkout && !triathlonItemList) {
     throw new InvalidCOROSWorkoutPayloadError('missing_multisport_components');
   }
 
@@ -170,6 +177,9 @@ function normalizeWorkoutSummary(value: unknown, overrideOpenId?: string): COROS
 function parseWebhookBody(req: functions.https.Request): COROSWebhookPayload {
   const rawBody = (req as functions.https.Request & { rawBody?: Buffer }).rawBody;
   if (Buffer.isBuffer(rawBody) && rawBody.length > 0) {
+    if (rawBody.length > MAX_COROS_WEBHOOK_BODY_BYTES) {
+      throw new InvalidCOROSWorkoutPayloadError('body_too_large');
+    }
     return parseCOROSJSON<COROSWebhookPayload>(rawBody);
   }
   if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
@@ -196,7 +206,7 @@ function sendWebhookResponse(
 }
 
 export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: 60,
+  timeoutSeconds: 300,
   memory: '256MB',
   secrets: FUNCTION_SECRET_BINDINGS.insertCOROSAPIWorkoutDataToQueue,
 }).https.onRequest(async (req, res) => {
@@ -257,24 +267,33 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
 
   let queuedCount = 0;
   let skippedCount = 0;
-  for (const workout of queueItems) {
-    try {
-      await addToQueueForCOROS(workout);
-      queuedCount++;
-    } catch (error) {
-      if (isProviderQueueSkippedWithoutRetryError(error)) {
-        skippedCount++;
-        logger.warn('Skipping COROS workout webhook because no local token/user is connected or the user is being deleted.', {
-          provider: 'COROS',
-          reason: (error as { code?: unknown }).code,
-          queueItemId: workout.id,
-          providerUserId: redactProviderUserId(workout.openId),
-        });
-        continue;
-      }
+  for (let offset = 0; offset < queueItems.length; offset += COROS_WEBHOOK_QUEUE_CONCURRENCY) {
+    const queueResults = await Promise.all(
+      queueItems.slice(offset, offset + COROS_WEBHOOK_QUEUE_CONCURRENCY).map(async workout => {
+        try {
+          await addToQueueForCOROS(workout);
+          return { status: 'queued' as const };
+        } catch (error) {
+          if (isProviderQueueSkippedWithoutRetryError(error)) {
+            logger.warn('Skipping COROS workout webhook because no local token/user is connected or the user is being deleted.', {
+              provider: 'COROS',
+              reason: (error as { code?: unknown }).code,
+              queueItemId: workout.id,
+              providerUserId: redactProviderUserId(workout.openId),
+            });
+            return { status: 'skipped' as const };
+          }
+          return { status: 'failed' as const, error };
+        }
+      }),
+    );
+    queuedCount += queueResults.filter(result => result.status === 'queued').length;
+    skippedCount += queueResults.filter(result => result.status === 'skipped').length;
+    const failedResult = queueResults.find(result => result.status === 'failed');
+    if (failedResult?.status === 'failed') {
       logger.error('Temporarily failed to queue a COROS workout webhook item.', {
         provider: 'COROS',
-        errorName: error instanceof Error ? error.name : typeof error,
+        errorName: failedResult.error instanceof Error ? failedResult.error.name : typeof failedResult.error,
       });
       sendWebhookResponse(res, 503, WEBHOOK_RESPONSES.unavailable);
       return;

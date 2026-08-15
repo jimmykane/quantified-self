@@ -32,6 +32,8 @@ import { of } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../../models/app-user.interface';
 
 describe('ServicesCorosComponent', () => {
     let component: ServicesCorosComponent;
@@ -230,6 +232,24 @@ describe('ServicesCorosComponent', () => {
         expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
     });
 
+    it('checks the current token again when an in-flight provider result is stale', async () => {
+        mockUserService.checkCurrentUserCOROSBindingState
+            .mockResolvedValueOnce({ status: 'stale', bound: null })
+            .mockResolvedValueOnce({ status: 'bound', bound: true });
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as Auth2ServiceTokenInterface[];
+        const testComponent = component as unknown as { onServiceDataChanged(): void };
+
+        testComponent.onServiceDataChanged();
+        await vi.waitFor(() => {
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+        });
+        await Promise.resolve();
+
+        expect(component.isCheckingCOROSBindingState).toBe(false);
+        expect(component.corosBindingStateCheckError).toBe(false);
+    });
+
     it('shows a retry action when the binding check is temporarily unavailable', async () => {
         mockUserService.checkCurrentUserCOROSBindingState
             .mockRejectedValueOnce(new Error('temporarily unavailable'))
@@ -251,6 +271,31 @@ describe('ServicesCorosComponent', () => {
 
         expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
         expect(component.corosBindingStateCheckError).toBe(false);
+    });
+
+    it('does not update the view after an in-flight binding check outlives the component', async () => {
+        let resolveBindingState!: (value: { status: 'bound'; bound: true }) => void;
+        mockUserService.checkCurrentUserCOROSBindingState.mockReturnValueOnce(new Promise(resolve => {
+            resolveBindingState = resolve;
+        }));
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as Auth2ServiceTokenInterface[];
+        const testComponent = component as unknown as {
+            onServiceDataChanged(): void;
+            changeDetectorRef: { markForCheck(): void };
+        };
+        const markForCheck = vi.spyOn(testComponent.changeDetectorRef, 'markForCheck');
+
+        testComponent.onServiceDataChanged();
+        await Promise.resolve();
+        markForCheck.mockClear();
+        component.ngOnDestroy();
+        resolveBindingState({ status: 'bound', bound: true });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(component.isCheckingCOROSBindingState).toBe(false);
+        expect(markForCheck).not.toHaveBeenCalled();
     });
 
     it('renders only the pinned active COROS account when legacy tokens remain', () => {
@@ -312,7 +357,8 @@ describe('ServicesCorosComponent', () => {
         const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
 
         expect(component.isReconnectRequired).toBe(true);
-        expect(component.isConnectedToService()).toBe(true);
+        expect(component.hasStoredCOROSConnection).toBe(true);
+        expect(component.isConnectedToService()).toBe(false);
         expect(component.shouldShowConnectAction).toBe(true);
         expect(component.connectButtonLabel).toBe('Reconnect');
         expect(component.connectionDescription).toContain('Reconnect COROS');
@@ -321,6 +367,8 @@ describe('ServicesCorosComponent', () => {
         expect(content).toContain('Reconnect COROS before uploading activities.');
         expect(content).toContain('Reconnect COROS before uploading routes.');
         expect(connectButton?.textContent).toContain('Reconnect');
+        expect(fixture.nativeElement.querySelector('.connected-account-item')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.connection-disconnect-button')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();

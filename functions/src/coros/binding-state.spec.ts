@@ -225,6 +225,18 @@ describe('COROS binding state', () => {
     expect(mocks.runTransaction).not.toHaveBeenCalled();
   });
 
+  it('does not trust a contradictory provider success message', async () => {
+    mocks.requestGet.mockResolvedValueOnce(JSON.stringify({
+      result: '0000',
+      message: 'ERROR',
+      data: { bindState: 0 },
+    }));
+
+    await expect(handleCOROSBindingStateRequest({ app: {}, auth: { uid: 'user-1' } }))
+      .rejects.toMatchObject({ code: 'unavailable' });
+    expect(mocks.runTransaction).not.toHaveBeenCalled();
+  });
+
   it('requires authentication before contacting COROS', async () => {
     await expect(handleCOROSBindingStateRequest({ app: {}, auth: null }))
       .rejects.toMatchObject({ code: 'unauthenticated' });

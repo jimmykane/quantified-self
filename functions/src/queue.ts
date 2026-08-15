@@ -1002,6 +1002,9 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
                   field: 'serviceFITFileURI',
                   value: corosWorkoutQueueItem.FITFileURI,
                 }],
+                ...(corosWorkoutQueueItem.componentKey === 'root'
+                  ? { allowLegacySecondaryFieldPresenceMatch: true }
+                  : {}),
               }
               : {}),
           });

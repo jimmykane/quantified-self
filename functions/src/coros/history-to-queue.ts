@@ -13,6 +13,7 @@ import { getActiveCOROSTokenSnapshot } from './account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import {
+  addUTCCalendarDays,
   chunkCOROSInclusiveDateRange,
   parseCOROSCalendarDate,
   subtractUTCMonthsClamped,
@@ -68,6 +69,7 @@ async function assertCOROSHistoryAllowed(userID: string, phase: string): Promise
 export const addCOROSAPIHistoryToQueue = functions
   .runWith({
     memory: '256MB',
+    timeoutSeconds: 300,
     secrets: FUNCTION_SECRET_BINDINGS.addCOROSAPIHistoryToQueue,
   })
   .region(FUNCTIONS_MANIFEST.addCOROSAPIHistoryToQueue.region)
@@ -90,8 +92,8 @@ export const addCOROSAPIHistoryToQueue = functions
       throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }
 
-    let startDate = parseCOROSCalendarDate(data.startDate);
-    const endDate = parseCOROSCalendarDate(data.endDate);
+    let startDate = parseCOROSCalendarDate(data?.startDate);
+    const endDate = parseCOROSCalendarDate(data?.endDate);
 
     if (!startDate || !endDate) {
       throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
@@ -103,6 +105,13 @@ export const addCOROSAPIHistoryToQueue = functions
 
     // COROS V2 API Restriction: No data older than 3 months
     const todayUTC = parseCOROSCalendarDate(Date.now())!;
+    // The client submits a local calendar date without an offset. Permit one
+    // day beyond UTC for users whose local calendar has already rolled over,
+    // while keeping the number of provider windows strictly bounded.
+    const latestAllowedEndDate = addUTCCalendarDays(todayUTC, 1);
+    if (endDate > latestAllowedEndDate) {
+      throw new functions.https.HttpsError('invalid-argument', 'End date is too far in the future.');
+    }
     const threeMonthsAgo = subtractUTCMonthsClamped(todayUTC, COROS_HISTORY_IMPORT_LIMIT_MONTHS);
 
     if (endDate < threeMonthsAgo) {
@@ -153,6 +162,11 @@ export const addCOROSAPIHistoryToQueue = functions
         await assertCOROSHistoryAllowed(userID, 'before_provider_request');
         const stats = await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate, {
           expectedProviderUserId,
+          cumulativeMetadata: {
+            startDate,
+            endDate: batchEndDate,
+            processedActivitiesCountOffset: totalStats.successCount,
+          },
         });
 
         totalStats.successCount += stats.successCount;

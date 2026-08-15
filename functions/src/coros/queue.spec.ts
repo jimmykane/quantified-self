@@ -175,6 +175,33 @@ describe('coros/queue', () => {
       expect(result[2].id).toBe('open-id-123-418173315956375553-component:2:8:1');
     });
 
+    it('keeps mode-13 single-sport subtypes as root workouts', async () => {
+      const result = await convertCOROSWorkoutsToQueueItems([
+        regularWorkout({
+          mode: 13,
+          subMode: 3,
+          triathlonItemList: [{ mode: 8, subMode: 1 }],
+        }),
+        regularWorkout({ labelId: '418173315956375554', mode: 13, subMode: 4 }),
+      ]);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        mode: 13,
+        subMode: 3,
+        detailMode: 13,
+        detailSubMode: 3,
+        componentKey: 'root',
+      });
+      expect(result[1]).toMatchObject({
+        mode: 13,
+        subMode: 4,
+        detailMode: 13,
+        detailSubMode: 4,
+        componentKey: 'root',
+      });
+    });
+
     it('retains workouts without FIT URLs so detail recovery can process them', async () => {
       const result = await convertCOROSWorkoutsToQueueItems([
         regularWorkout(),
@@ -209,12 +236,18 @@ describe('coros/queue', () => {
         subMode: index % 2,
       }));
       await expect(convertCOROSWorkoutsToQueueItems([
-        regularWorkout({ triathlonItemList: [...components, { mode: 8, subMode: 1 }] }),
+        regularWorkout({
+          mode: 13,
+          subMode: 1,
+          triathlonItemList: [...components, { mode: 8, subMode: 1 }],
+        }),
       ])).rejects.toMatchObject({ reason: 'component_list_too_large' });
 
       await expect(convertCOROSWorkoutsToQueueItems(Array.from({ length: 11 }, (_, index) =>
         regularWorkout({
           labelId: `${418173315956375500n + BigInt(index)}`,
+          mode: 13,
+          subMode: 1,
           triathlonItemList: components,
         })))).rejects.toMatchObject({ reason: 'expanded_workout_list_too_large' });
     });
@@ -307,6 +340,20 @@ describe('coros/queue', () => {
       expect(response.send).toHaveBeenCalledWith(expect.objectContaining({ result: '1002' }));
     });
 
+    it('rejects an oversized raw webhook body before parsing or queueing it', async () => {
+      const response = createResponse();
+      const rawBody = Buffer.alloc((8 * 1024 * 1024) + 1, 0x20);
+
+      await insertCOROSAPIWorkoutDataToQueue(
+        createRequest({ body: {}, rawBody }) as never,
+        response as never,
+      );
+
+      expect(response.status).toHaveBeenCalledWith(400);
+      expect(response.send).toHaveBeenCalledWith(expect.objectContaining({ result: '1002' }));
+      expect(mockAddToQueueForCOROS).not.toHaveBeenCalled();
+    });
+
     it('rejects a webhook whose multisport expansion exceeds the queue batch limit', async () => {
       const response = createResponse();
       const components = Array.from({ length: 100 }, () => ({ mode: 8, subMode: 1 }));
@@ -314,6 +361,8 @@ describe('coros/queue', () => {
         body: {
           sportDataList: Array.from({ length: 11 }, (_, index) => regularWorkout({
             labelId: `${418173315956375500n + BigInt(index)}`,
+            mode: 13,
+            subMode: 1,
             triathlonItemList: components,
           })),
         },
@@ -369,6 +418,38 @@ describe('coros/queue', () => {
       );
       expect(response.status).toHaveBeenCalledWith(503);
       expect(response.send).toHaveBeenCalledWith(expect.objectContaining({ result: '2001' }));
+    });
+
+    it('queues webhook batches with bounded concurrency', async () => {
+      const response = createResponse();
+      const releases: Array<() => void> = [];
+      let activeCalls = 0;
+      let maximumActiveCalls = 0;
+      mockAddToQueueForCOROS.mockImplementation(() => new Promise(resolve => {
+        activeCalls += 1;
+        maximumActiveCalls = Math.max(maximumActiveCalls, activeCalls);
+        releases.push(() => {
+          activeCalls -= 1;
+          resolve({ id: 'queue-id' });
+        });
+      }));
+      const request = insertCOROSAPIWorkoutDataToQueue(createRequest({
+        body: {
+          sportDataList: Array.from({ length: 12 }, (_, index) => regularWorkout({
+            labelId: `${418173315956375500n + BigInt(index)}`,
+          })),
+        },
+      }) as never, response as never);
+
+      await vi.waitFor(() => expect(mockAddToQueueForCOROS).toHaveBeenCalledTimes(10));
+      expect(maximumActiveCalls).toBe(10);
+      releases.splice(0).forEach(release => release());
+      await vi.waitFor(() => expect(mockAddToQueueForCOROS).toHaveBeenCalledTimes(12));
+      expect(maximumActiveCalls).toBe(10);
+      releases.splice(0).forEach(release => release());
+      await request;
+
+      expect(response.status).toHaveBeenCalledWith(200);
     });
 
     it('logs safe metadata and counts recoverable missing FIT URLs', async () => {

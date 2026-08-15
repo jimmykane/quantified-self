@@ -401,7 +401,7 @@ describe('history', () => {
                 accessToken: 't',
                 openId: 'active-open-id',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
-            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ result: '0000', message: 'OK', data: [] }));
 
             await history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date('2026-08-01'), new Date('2026-08-02'));
 
@@ -420,7 +420,7 @@ describe('history', () => {
                 accessToken: 't',
                 openId: 'active-open-id',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
-            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ result: '0000', message: 'OK', data: [] }));
 
             await history.addHistoryToQueue(
                 'uid',
@@ -441,6 +441,7 @@ describe('history', () => {
                 openId: 'active-coros-token',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
             vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
                 message: 'OK',
                 data: [{ workoutId: 'c1' }],
             }));
@@ -458,6 +459,85 @@ describe('history', () => {
                 'active-coros-token',
                 expect.anything(),
             );
+        });
+
+        it('persists cumulative metadata across provider date windows', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-coros-token',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutId: 'c1' }],
+            }));
+            const metadataStartDate = new Date('2026-06-01T00:00:00.000Z');
+            const metadataEndDate = new Date('2026-07-30T00:00:00.000Z');
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-07-01T00:00:00.000Z'),
+                metadataEndDate,
+                {
+                    expectedProviderUserId: 'active-coros-token',
+                    cumulativeMetadata: {
+                        startDate: metadataStartDate,
+                        endDate: metadataEndDate,
+                        processedActivitiesCountOffset: 7,
+                    },
+                },
+            );
+
+            const metadataWrite = hoisted.batchSetMock.mock.calls.find(([, value]) =>
+                Object.prototype.hasOwnProperty.call(value, 'didLastHistoryImport'));
+            expect(metadataWrite?.[1]).toEqual(expect.objectContaining({
+                lastHistoryImportStartDate: metadataStartDate.getTime(),
+                lastHistoryImportEndDate: metadataEndDate.getTime(),
+                processedActivitiesFromLastHistoryImportCount: 8,
+            }));
+        });
+
+        it('advances cumulative metadata when a COROS date window is empty', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-coros-token',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [],
+            }));
+            const metadataStartDate = new Date('2026-06-01T00:00:00.000Z');
+            const metadataEndDate = new Date('2026-08-15T00:00:00.000Z');
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01T00:00:00.000Z'),
+                metadataEndDate,
+                {
+                    expectedProviderUserId: 'active-coros-token',
+                    cumulativeMetadata: {
+                        startDate: metadataStartDate,
+                        endDate: metadataEndDate,
+                        processedActivitiesCountOffset: 7,
+                    },
+                },
+            );
+
+            expect(hoisted.assertActiveCOROSAccountInTransaction).toHaveBeenCalledWith(
+                'uid',
+                'active-coros-token',
+                expect.anything(),
+            );
+            const metadataWrite = hoisted.batchSetMock.mock.calls.find(([, value]) =>
+                Object.prototype.hasOwnProperty.call(value, 'didLastHistoryImport'));
+            expect(metadataWrite?.[1]).toEqual(expect.objectContaining({
+                lastHistoryImportStartDate: metadataStartDate.getTime(),
+                lastHistoryImportEndDate: metadataEndDate.getTime(),
+                processedActivitiesFromLastHistoryImportCount: 7,
+            }));
         });
     });
 
@@ -527,6 +607,20 @@ describe('history', () => {
             )).rejects.toThrow(/COROS API Error with code 5006/);
         });
 
+        it('should reject COROS history data without an explicit success result code', async () => {
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                message: 'OK',
+                data: [],
+            }));
+
+            await expect(history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1' } as COROSAPIAuth2ServiceTokenInterface,
+                new Date(),
+                new Date()
+            )).rejects.toThrow(/COROS API Error/);
+        });
+
         it('should accept an explicit COROS success result code', async () => {
             const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
@@ -572,6 +666,7 @@ describe('history', () => {
         it('should convert COROS data via helper and include openId', async () => {
             const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
+                result: '0000',
                 message: 'OK',
                 data: [{ workoutId: 'c1' }]
             }));
@@ -591,6 +686,7 @@ describe('history', () => {
                 url: expect.stringContaining('token=t&openId=open-1'),
                 timeout: 30_000,
             }));
+            expect(vi.mocked(requestHelper.get).mock.calls.at(-1)?.[0]).not.toHaveProperty('headers');
             expect(items).toEqual([{ id: 'coros-open-1-0', workoutID: 'c1' }]);
         });
 

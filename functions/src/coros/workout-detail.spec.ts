@@ -110,6 +110,39 @@ describe('recoverCOROSFITFileURL', () => {
       .toMatchObject({ reason: 'parent_workout_type_mismatch' });
   });
 
+  it('rejects malformed or internally inconsistent multisport component identity', async () => {
+    const matchingResponse = JSON.stringify({
+      result: '0000',
+      data: {
+        labelId: rootItem.workoutID,
+        mode: 13,
+        subMode: 1,
+        triathlonItemList: [{
+          mode: 9,
+          subMode: 1,
+          fitUrl: 'https://oss.coros.com/fit/bike.fit',
+        }],
+      },
+    });
+    vi.mocked(requestPromise.get).mockResolvedValue(matchingResponse);
+
+    await expect(recoverCOROSFITFileURL(token, {
+      ...rootItem,
+      mode: 9,
+      detailMode: 13,
+      componentIndex: 0.5,
+      componentKey: 'component:0.5:9:1',
+    })).rejects.toMatchObject({ reason: 'invalid_multisport_component_identity' });
+
+    await expect(recoverCOROSFITFileURL(token, {
+      ...rootItem,
+      mode: 9,
+      detailMode: 13,
+      componentIndex: 0,
+      componentKey: 'component:1:9:1',
+    })).rejects.toMatchObject({ reason: 'invalid_multisport_component_identity' });
+  });
+
   it('classifies no-data, authentication, identity, and permanent provider errors', async () => {
     vi.mocked(requestPromise.get).mockResolvedValueOnce('{"result":"5016","message":"No data found"}');
     await expect(recoverCOROSFITFileURL(token, rootItem)).rejects.toBeInstanceOf(RetryableCOROSFITDetailError);
@@ -123,6 +156,24 @@ describe('recoverCOROSFITFileURL', () => {
 
     vi.mocked(requestPromise.get).mockResolvedValueOnce('{"result":"5001","message":"Bad request"}');
     await expect(recoverCOROSFITFileURL(token, rootItem)).rejects.toBeInstanceOf(PermanentCOROSFITDetailError);
+  });
+
+  it('rejects a contradictory success code and failure message', async () => {
+    vi.mocked(requestPromise.get).mockResolvedValueOnce(JSON.stringify({
+      result: '0000',
+      message: 'Invalid authorization',
+      data: {
+        labelId: rootItem.workoutID,
+        mode: rootItem.mode,
+        subMode: rootItem.subMode,
+        fitUrl: 'https://oss.coros.com/fit/untrusted.fit',
+      },
+    }));
+
+    await expect(recoverCOROSFITFileURL(token, rootItem)).rejects.toMatchObject({
+      reason: 'contradictory_success_response',
+      providerCode: '0000',
+    });
   });
 
   it('classifies transient HTTP/network failures without exposing provider bodies', async () => {

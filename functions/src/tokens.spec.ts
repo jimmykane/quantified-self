@@ -485,6 +485,7 @@ describe('tokens', () => {
             mockToken.refresh.mockResolvedValue({
                 token: {
                     access_token: 'new-coros',
+                    result: '0000',
                     message: 'OK',
                 },
             });
@@ -506,6 +507,63 @@ describe('tokens', () => {
                 expiresAt: 1000,
                 dateRefreshed: 750,
             }));
+        });
+
+        it('routes COROS invalid-authorization refresh results through reconnect handling', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                expiresAt: 1000,
+                dateCreated: 500,
+                dateRefreshed: 750,
+            });
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    result: '5006',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toBeInstanceOf(TerminalServiceAuthError);
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
+                mockDoc,
+                ServiceNames.COROSAPI,
+                expect.objectContaining({ openId: 'coros-user' }),
+                expect.objectContaining({
+                    statusCode: 401,
+                    providerErrorCode: '5006',
+                    isTerminalAuthFailure: true,
+                }),
+                expect.objectContaining({ name: 'COROSTokenRefreshRejectedError' }),
+            );
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('does not mark other COROS refresh rejections as terminal', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                expiresAt: 1000,
+                dateCreated: 500,
+                dateRefreshed: 750,
+            });
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    result: '5001',
+                    message: 'Parameter error',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({ name: 'COROSTokenRefreshRejectedError' });
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
         });
 
         it('should persist Wahoo rotating tokens with the exact provider expiry and stable user ID', async () => {

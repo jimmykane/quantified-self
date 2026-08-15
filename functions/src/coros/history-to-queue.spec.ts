@@ -103,7 +103,14 @@ describe('COROS History to Queue', () => {
                 SERVICE_NAME,
                 expect.any(Date),
                 expect.any(Date),
-                { expectedProviderUserId: 'coros-open-id-1' },
+                {
+                    expectedProviderUserId: 'coros-open-id-1',
+                    cumulativeMetadata: {
+                        startDate: expect.any(Date),
+                        endDate: expect.any(Date),
+                        processedActivitiesCountOffset: 0,
+                    },
+                },
             );
             expect(result).toEqual({
                 result: 'History items added to queue',
@@ -121,6 +128,30 @@ describe('COROS History to Queue', () => {
 
             await expect(addCOROSAPIHistoryToQueue(data, context))
                 .rejects.toThrow('Start date is after the end date');
+        });
+
+        it('rejects a missing request payload as an invalid date range', async () => {
+            await expect(addCOROSAPIHistoryToQueue(null as never, context)).rejects.toMatchObject({
+                code: 'invalid-argument',
+                message: 'No start and/or end date',
+            });
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+
+        it('rejects a future range before creating provider windows', async () => {
+            const futureDate = new Date(Date.now() + (3 * 24 * 60 * 60 * 1000));
+            data = {
+                startDate: new Date().toISOString(),
+                endDate: futureDate.toISOString(),
+            };
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'invalid-argument',
+                message: 'End date is too far in the future.',
+            });
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
         });
 
         it('should work if start date and end date are the same', async () => {
@@ -153,7 +184,14 @@ describe('COROS History to Queue', () => {
                 SERVICE_NAME,
                 expect.any(Date),
                 expect.any(Date),
-                { expectedProviderUserId: 'coros-open-id-1' },
+                {
+                    expectedProviderUserId: 'coros-open-id-1',
+                    cumulativeMetadata: {
+                        startDate: expect.any(Date),
+                        endDate: expect.any(Date),
+                        processedActivitiesCountOffset: 0,
+                    },
+                },
             );
             expect(history.addHistoryToQueue).toHaveBeenNthCalledWith(
                 2,
@@ -161,8 +199,21 @@ describe('COROS History to Queue', () => {
                 SERVICE_NAME,
                 expect.any(Date),
                 expect.any(Date),
-                { expectedProviderUserId: 'coros-open-id-1' },
+                {
+                    expectedProviderUserId: 'coros-open-id-1',
+                    cumulativeMetadata: {
+                        startDate: expect.any(Date),
+                        endDate: expect.any(Date),
+                        processedActivitiesCountOffset: 1,
+                    },
+                },
             );
+
+            const historyQueueCalls = vi.mocked(history.addHistoryToQueue).mock.calls;
+            const firstMetadata = historyQueueCalls[0][4].cumulativeMetadata;
+            const secondMetadata = historyQueueCalls[1][4].cumulativeMetadata;
+            expect(firstMetadata.startDate.getTime()).toBe(secondMetadata.startDate.getTime());
+            expect(firstMetadata.endDate.getTime()).toBeLessThan(secondMetadata.endDate.getTime());
         });
 
         it('should throw error during batch processing', async () => {

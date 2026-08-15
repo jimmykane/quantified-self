@@ -55,6 +55,21 @@ export class TokenUseSkippedForPendingDisconnectError extends Error {
   }
 }
 
+class COROSTokenRefreshRejectedError extends Error {
+  readonly name = 'COROSTokenRefreshRejectedError';
+  readonly statusCode?: number;
+  readonly data: { error: string; error_description: string };
+
+  constructor(providerCode: string) {
+    super('COROS token refresh was rejected.');
+    if (providerCode === '5006') this.statusCode = 401;
+    this.data = {
+      error: providerCode || 'invalid_response',
+      error_description: 'COROS token refresh was rejected.',
+    };
+  }
+}
+
 //
 export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames) {
   logger.info(`Found ${querySnapshot.size} auth tokens to process`);
@@ -203,9 +218,12 @@ export async function getTokenData(
   await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh', options);
   try {
     responseToken = await token.refresh();
-    // COROS Exception for response
-    if (responseToken.token.message && responseToken.token.message !== 'OK') {
-      throw new Error('Something went wrong');
+    if (serviceName === ServiceNames.COROSAPI) {
+      const resultCode = `${responseToken.token.result ?? ''}`.trim();
+      const message = `${responseToken.token.message ?? ''}`.trim();
+      if (!/^0+$/.test(resultCode) || message !== 'OK') {
+        throw new COROSTokenRefreshRejectedError(resultCode);
+      }
     }
     logger.info(`Successfully refreshed token ${doc.id}`);
   } catch (e: any) {

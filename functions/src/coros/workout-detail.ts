@@ -86,7 +86,12 @@ function responseCode(response: COROSFITDetailResponse): string {
 
 function toDetailError(response: COROSFITDetailResponse): Error | null {
   const code = responseCode(response);
-  if (code && /^0+$/.test(code)) return null;
+  const message = `${response.message ?? ''}`.trim();
+  if (code && /^0+$/.test(code)) {
+    return !message || message === 'OK'
+      ? null
+      : new PermanentCOROSFITDetailError('contradictory_success_response', code);
+  }
   if (code === '5016') return new RetryableCOROSFITDetailError(code);
   if (code === '5006') return new COROSFITDetailAuthError(code);
   if (code === '5010') return new PermanentCOROSFITDetailError('invalid_open_id', code);
@@ -138,17 +143,29 @@ function selectFitUrl(
     return fitUrl;
   }
 
+  const componentIndex = queueItem.componentIndex;
+  const expectedComponentMode = finiteInt32(queueItem.mode);
+  const expectedComponentSubMode = finiteInt32(queueItem.subMode);
+  if (!Number.isInteger(componentIndex)
+    || componentIndex < 0
+    || expectedComponentMode === null
+    || expectedComponentSubMode === null) {
+    throw new PermanentCOROSFITDetailError('invalid_multisport_component_identity');
+  }
+  const expectedComponentKey = `component:${componentIndex}:${expectedComponentMode}:${expectedComponentSubMode}`;
+  if (queueItem.componentKey && queueItem.componentKey !== expectedComponentKey) {
+    throw new PermanentCOROSFITDetailError('invalid_multisport_component_identity');
+  }
   if (!Array.isArray(data.triathlonItemList)
-    || queueItem.componentIndex < 0
-    || queueItem.componentIndex >= data.triathlonItemList.length) {
+    || componentIndex >= data.triathlonItemList.length) {
     throw new PermanentCOROSFITDetailError('missing_multisport_component');
   }
-  const component = data.triathlonItemList[queueItem.componentIndex] as COROSFITDetailComponent | null;
+  const component = data.triathlonItemList[componentIndex] as COROSFITDetailComponent | null;
   if (!component || typeof component !== 'object') {
     throw new PermanentCOROSFITDetailError('invalid_multisport_component');
   }
-  if (finiteInt32(component.mode) !== queueItem.mode
-    || finiteInt32(component.subMode) !== queueItem.subMode) {
+  if (finiteInt32(component.mode) !== expectedComponentMode
+    || finiteInt32(component.subMode) !== expectedComponentSubMode) {
     throw new PermanentCOROSFITDetailError('multisport_component_mismatch');
   }
   const fitUrl = normalizeFitUrl(component.fitUrl);

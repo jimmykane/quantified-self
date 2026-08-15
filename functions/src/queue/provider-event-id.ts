@@ -25,15 +25,30 @@ export interface ProviderImportEventIDRequest {
     field: string;
     value: string | number | null;
   }>;
+  /**
+   * Migration-only escape hatch for an ephemeral legacy secondary value.
+   * The primary provider identity must still match, and only a non-empty
+   * declared legacy field is accepted.
+   */
+  allowLegacySecondaryFieldPresenceMatch?: boolean;
   preferProviderIdentityEventID?: boolean;
 }
 
 interface ProviderImportEventIDReservation {
   eventID?: unknown;
+  providerEventIDField?: unknown;
+  providerEventID?: unknown;
+  providerEventSecondaryIDField?: unknown;
+  providerEventSecondaryID?: unknown;
 }
 
-function normalizeProviderIdentityPart(value: string | number | null | undefined): string {
+function normalizeProviderIdentityPart(value: unknown): string {
   return `${value ?? ''}`.trim();
+}
+
+function hasNonEmptyPrimitiveProviderIdentityPart(value: unknown): boolean {
+  return (typeof value === 'string' || typeof value === 'number')
+    && normalizeProviderIdentityPart(value).length > 0;
 }
 
 function metadataMatchesProviderIdentity(
@@ -57,11 +72,18 @@ function metadataMatchesProviderIdentity(
     return true;
   }
 
-  return (request.legacyProviderEventSecondaryIdentities || []).some(identity => {
+  const legacyIdentities = request.legacyProviderEventSecondaryIdentities || [];
+  if (legacyIdentities.some(identity => {
     const legacyValue = normalizeProviderIdentityPart(identity.value);
     return legacyValue.length > 0
       && normalizeProviderIdentityPart(metadata[identity.field]) === legacyValue;
-  });
+  })) {
+    return true;
+  }
+
+  return request.allowLegacySecondaryFieldPresenceMatch === true
+    && legacyIdentities.some(identity =>
+      hasNonEmptyPrimitiveProviderIdentityPart(metadata[identity.field]));
 }
 
 async function generateProviderIdentityEventID(
@@ -101,6 +123,30 @@ function asReservationMap(value: unknown): Record<string, ProviderImportEventIDR
 
 function hasReservedProviderIdentity(reservations: Record<string, ProviderImportEventIDReservation>): boolean {
   return Object.values(reservations).some((reservation) => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
+}
+
+function findUnambiguousLegacyReservationByFieldPresence(
+  reservations: Record<string, ProviderImportEventIDReservation>,
+  request: ProviderImportEventIDRequest,
+): ProviderImportEventIDReservation | undefined {
+  if (request.allowLegacySecondaryFieldPresenceMatch !== true) {
+    return undefined;
+  }
+
+  const legacyFields = new Set(
+    (request.legacyProviderEventSecondaryIdentities || []).map(identity => identity.field),
+  );
+  const matches = Object.values(reservations).filter(reservation => (
+    normalizeProviderIdentityPart(reservation.providerEventIDField) === request.providerEventIDField
+    && normalizeProviderIdentityPart(reservation.providerEventID)
+      === normalizeProviderIdentityPart(request.providerEventID)
+    && legacyFields.has(normalizeProviderIdentityPart(reservation.providerEventSecondaryIDField))
+    && hasNonEmptyPrimitiveProviderIdentityPart(reservation.providerEventSecondaryID)
+    && typeof reservation.eventID === 'string'
+    && reservation.eventID.length > 0
+  ));
+
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function reservationPayload(
@@ -210,9 +256,11 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
       return existingReservation.eventID;
     }
 
-    const legacyReservation = legacyProviderIdentityKeys
+    const exactLegacyReservation = legacyProviderIdentityKeys
       .map(identityKey => providerIdentities[identityKey])
       .find(reservation => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
+    const legacyReservation = exactLegacyReservation
+      || findUnambiguousLegacyReservationByFieldPresence(providerIdentities, request);
     if (typeof legacyReservation?.eventID === 'string' && legacyReservation.eventID.length > 0) {
       transaction.set(
         reservationRef,

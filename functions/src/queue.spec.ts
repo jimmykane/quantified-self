@@ -2907,6 +2907,7 @@ describe('queue', () => {
                     field: 'serviceFITFileURI',
                     value: 'https://oss.coros.com/fit/recovered.fit',
                 }],
+                allowLegacySecondaryFieldPresenceMatch: true,
             }));
             expect(mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         });

@@ -56,7 +56,8 @@ function parseBindingState(rawResponse: unknown): boolean {
     throw new COROSBindingStateUnavailableError('invalid_json');
   }
   const resultCode = `${response.result ?? ''}`.trim();
-  if (!resultCode || !/^0+$/.test(resultCode)) {
+  const message = `${response.message ?? ''}`.trim();
+  if (!resultCode || !/^0+$/.test(resultCode) || (message && message !== 'OK')) {
     throw new COROSBindingStateUnavailableError('provider_rejected_request');
   }
   if (!response.data || typeof response.data !== 'object' || Array.isArray(response.data)) {
