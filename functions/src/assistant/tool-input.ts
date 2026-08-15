@@ -5,9 +5,11 @@ import {
 import { resolveDateAggregationBucketStart } from '../../../shared/event-stat-aggregation';
 import { resolveMcpMeasurementDefinition } from '../mcp/measurement-catalog';
 import {
-  getSportsLibNumericMetricCatalog,
-  resolveSportsLibNumericMetric,
-} from '../mcp/metric-catalog';
+  expandAssistantSummaryMetricTypes,
+  normalizeAssistantCatalogTerm,
+  resolveAssistantMetricType,
+  resolveAssistantSummaryMetricType,
+} from './metric-intent';
 import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import type { AssistantMcpToolName } from './mcp-session';
 
@@ -37,30 +39,6 @@ export function assistantToolUsesDefaultTimeZone(
   toolName: AssistantMcpToolName,
 ): boolean {
   return ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES.has(toolName);
-}
-
-function normalizeAssistantCatalogTerm(value: string): string {
-  return value
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function resolveAssistantMetricType(value: string): string | null {
-  const exact = resolveSportsLibNumericMetric(value);
-  if (exact) {
-    return exact.type;
-  }
-  const normalized = normalizeAssistantCatalogTerm(value);
-  const matches = getSportsLibNumericMetricCatalog().filter(metric => (
-    normalizeAssistantCatalogTerm(metric.type) === normalized
-    || normalizeAssistantCatalogTerm(metric.displayType) === normalized
-  ));
-  return matches.length === 1 ? matches[0].type : null;
 }
 
 function resolveAssistantActivityGroup(value: string): string | null {
@@ -122,7 +100,13 @@ function normalizeAssistantSportsLibMetricInputs(
   toolName: AssistantMcpToolName,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (toolName === 'query_metric' || toolName === 'rank_activities_by_metric') {
+  if (toolName === 'query_metric') {
+    return {
+      ...input,
+      metric: resolveAssistantSummaryMetricType(input.metric, input.aggregation),
+    };
+  }
+  if (toolName === 'rank_activities_by_metric') {
     return {
       ...input,
       metric: normalizeAssistantMetricValue(input.metric),
@@ -138,7 +122,10 @@ function normalizeAssistantSportsLibMetricInputs(
         const metricSelector = selector as Record<string, unknown>;
         return {
           ...metricSelector,
-          metric: normalizeAssistantMetricValue(metricSelector.metric),
+          metric: resolveAssistantSummaryMetricType(
+            metricSelector.metric,
+            metricSelector.aggregation,
+          ),
         };
       }),
     };
@@ -146,7 +133,7 @@ function normalizeAssistantSportsLibMetricInputs(
   if (toolName === 'get_activity_metrics' && Array.isArray(input.metrics)) {
     return {
       ...input,
-      metrics: input.metrics.map(normalizeAssistantMetricValue),
+      metrics: expandAssistantSummaryMetricTypes(input.metrics),
     };
   }
   return input;

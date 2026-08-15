@@ -228,6 +228,12 @@ describe('Assistant runtime', () => {
       'do not silently limit the trend to a recent year',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'persisted Average, Minimum, and Maximum summary metrics',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'scanComplete field is false',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'Do not repeat opaque references',
     );
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
@@ -342,7 +348,7 @@ describe('Assistant runtime', () => {
     const runtime = createAssistantRuntime({
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
-        expect(input.publishedExample?.id).toBe('recent-jump-details');
+        expect(input.workflow?.id).toBe('recent-jump-details');
         await input.tools.find(tool => tool.name === 'query_activities')?.execute({});
         await input.tools.find(tool => tool.name === 'list_activity_jumps')?.execute({
           activityRef: latestJumpActivityRef,
@@ -434,7 +440,7 @@ describe('Assistant runtime', () => {
       timeZone: 'Europe/Helsinki',
       locationAccess: 'precise_activity',
       history: [],
-    })).rejects.toThrow('did not complete the published recent-jump-details workflow');
+    })).rejects.toThrow('did not complete the supported recent-jump-details workflow');
   });
 
   it('grounds a record jump map in the rank-one jump record rather than an activity summary', async () => {
@@ -442,7 +448,7 @@ describe('Assistant runtime', () => {
     const runtime = createAssistantRuntime({
       createMcpSession: vi.fn().mockResolvedValue(session),
       generateAnswer: async (input) => {
-        expect(input.publishedExample?.id).toBe('record-mtb-jump-location');
+        expect(input.workflow?.id).toBe('record-mtb-jump-location');
         await input.tools.find(tool => tool.name === 'list_activity_types')?.execute({});
         await input.tools.find(tool => tool.name === 'rank_activities_by_metric')?.execute({
           metric: 'Maximum Jump Distance',
@@ -483,6 +489,41 @@ describe('Assistant runtime', () => {
         label: 'Jump 2',
       }],
     })]);
+  });
+
+  it('keeps an existing authoritative workflow ahead of an overlapping summary-trend hint', async () => {
+    const { session, callTool } = createRecordJumpSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        expect(input.workflow?.id).toBe('biggest-mtb-jump');
+        expect(input.tools.map(tool => tool.name)).toEqual([
+          'list_activity_types',
+          'rank_activities_by_metric',
+          'list_activity_jumps',
+        ]);
+        await input.tools[0].execute({});
+        await input.tools[1].execute({
+          metric: 'Maximum Jump Distance',
+          activityGroup: 'mountain_biking_group',
+          order: 'highest',
+        });
+        return 'Your authoritative record jump is 10.41 metres.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Plot average and maximum MTB jump distance per year for all years.',
+      timeZone: 'UTC',
+      history: [],
+    });
+
+    expect(callTool.mock.calls.map(([toolName]) => toolName)).toEqual([
+      'list_activity_types',
+      'rank_activities_by_metric',
+    ]);
   });
 
   it('rejects a recent-jump workflow that uses a non-jump activity or summary map', async () => {
@@ -581,7 +622,7 @@ describe('Assistant runtime', () => {
       history: [],
       mcpInstructions: 'Use current data.',
       tools: [tool],
-      publishedExample: ASSISTANT_PROMPT_EXAMPLES[0],
+      workflow: ASSISTANT_PROMPT_EXAMPLES[0],
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toEqual({
       answer: 'Your readiness is 72 today.',
@@ -670,7 +711,7 @@ describe('Assistant runtime', () => {
       history: [],
       mcpInstructions: 'Use current data.',
       tools: [tool],
-      publishedExample: null,
+      workflow: null,
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).rejects.toThrow('The Assistant model returned invalid JSON.');
 
@@ -682,7 +723,7 @@ describe('Assistant runtime', () => {
       new Error('The Assistant model returned invalid JSON.'),
     )).toBe('invalid_model_json');
     expect(getAssistantRuntimeErrorReason(
-      new Error('The Assistant did not complete the published weight workflow.'),
+      new Error('The Assistant did not complete the supported weight workflow.'),
     )).toBe('published_workflow_incomplete');
     expect(getAssistantRuntimeErrorReason(
       new Error('The Assistant did not use a qualifying activity for the supported recent-jump-details workflow.'),
@@ -859,7 +900,7 @@ describe('Assistant runtime', () => {
       history: [],
       mcpInstructions: 'Use current data.',
       tools: [firstTool, secondTool],
-      publishedExample: null,
+      workflow: null,
       onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toEqual({
       answer: 'Your latest recorded weight is 75 kg.',
@@ -966,7 +1007,7 @@ describe('Assistant runtime', () => {
         createMcpSession: vi.fn().mockResolvedValue(session),
         now: () => new Date('2026-08-03T12:00:00.000Z'),
         generateAnswer: async (input) => {
-          expect(input.publishedExample).toEqual(example);
+          expect(input.workflow).toEqual(example);
           for (const toolName of example.toolWorkflow) {
             const tool = input.tools.find(candidate => candidate.name === toolName);
             expect(tool, `missing ${toolName} for ${example.id}`).toBeDefined();
@@ -1024,7 +1065,7 @@ describe('Assistant runtime', () => {
       timeZone: 'UTC',
       history: [],
     })).rejects.toThrow(
-      'Assistant example tools are unavailable: list_measurement_types, query_measurements',
+      'Assistant workflow tools are unavailable: list_measurement_types, query_measurements',
     );
     expect(generateAnswer).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledOnce();
@@ -1060,7 +1101,7 @@ describe('Assistant runtime', () => {
       prompt: example.prompt,
       timeZone: 'UTC',
       history: [],
-    })).rejects.toThrow(`did not complete the published ${example.id} workflow`);
+    })).rejects.toThrow(`did not complete the supported ${example.id} workflow`);
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -1093,7 +1134,7 @@ describe('Assistant runtime', () => {
       prompt: example.prompt,
       timeZone: 'UTC',
       history: [],
-    })).rejects.toThrow(`did not complete the published ${example.id} workflow`);
+    })).rejects.toThrow(`did not complete the supported ${example.id} workflow`);
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -1134,6 +1175,187 @@ describe('Assistant runtime', () => {
       title: 'Get daily report',
     })]);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('forces an unambiguous full-history summary trend through one canonical aggregate tool', async () => {
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        results: [{
+          metric: {
+            type: 'Average Temperature',
+            displayType: 'Average Temperature',
+            unit: '°C',
+          },
+          matchedEventCount: 2,
+          aggregation: {
+            dataType: 'Average Temperature',
+            valueType: 'Average',
+            categoryType: 'Date Type',
+            resolvedTimeInterval: 'Yearly',
+            buckets: [{
+              bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
+              time: Date.parse('2021-01-01T00:00:00.000Z'),
+              totalCount: 1,
+              aggregateValue: 22,
+              seriesValues: { 'Open Water Swimming': 22 },
+              seriesCounts: { 'Open Water Swimming': 1 },
+            }],
+          },
+        }, {
+          metric: {
+            type: 'Minimum Temperature',
+            displayType: 'Minimum Temperature',
+            unit: '°C',
+          },
+          matchedEventCount: 2,
+          aggregation: {
+            dataType: 'Minimum Temperature',
+            valueType: 'Minimum',
+            categoryType: 'Date Type',
+            resolvedTimeInterval: 'Yearly',
+            buckets: [{
+              bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
+              time: Date.parse('2021-01-01T00:00:00.000Z'),
+              totalCount: 1,
+              aggregateValue: 21,
+              seriesValues: { 'Open Water Swimming': 21 },
+              seriesCounts: { 'Open Water Swimming': 1 },
+            }],
+          },
+        }, {
+          metric: {
+            type: 'Maximum Temperature',
+            displayType: 'Maximum Temperature',
+            unit: '°C',
+          },
+          matchedEventCount: 2,
+          aggregation: {
+            dataType: 'Maximum Temperature',
+            valueType: 'Maximum',
+            categoryType: 'Date Type',
+            resolvedTimeInterval: 'Yearly',
+            buckets: [{
+              bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
+              time: Date.parse('2021-01-01T00:00:00.000Z'),
+              totalCount: 1,
+              aggregateValue: 24,
+              seriesValues: { 'Open Water Swimming': 24 },
+              seriesCounts: { 'Open Water Swimming': 1 },
+            }],
+          },
+        }],
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use current account facts only.',
+      tools: [{
+        name: 'query_activities',
+        title: 'Query activities',
+        description: 'Query matching activities.',
+        inputSchema: { type: 'object', properties: {} },
+      }, {
+        name: 'query_metrics',
+        title: 'Query metrics',
+        description: 'Aggregate several metrics.',
+        inputSchema: { type: 'object', properties: {} },
+      }],
+      callTool,
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-08-15T12:30:00.000Z'),
+      generateAnswer: async (input) => {
+        expect(input.workflow?.id).toBe('activity-summary-metric-history');
+        expect(input.tools.map(tool => tool.name)).toEqual(['query_metrics']);
+        await input.tools[0].execute({
+          metrics: [{ metric: 'Temperature', aggregation: 'average' }],
+          start: '2026-01-01T00:00:00.000Z',
+          end: '2026-08-15T12:30:00.000Z',
+          interval: 'daily',
+          activityTypes: ['Running'],
+        });
+        return {
+          answer: 'Your recorded 2021 open-water temperatures were 22 °C average, 21 °C minimum, and 24 °C maximum.',
+          visualRequest: { chart: null, map: null },
+        };
+      },
+    });
+
+    const result = await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Find all my open water and snorkeling activities over all years and plot avg/min/max temperatures per year.',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(callTool).toHaveBeenCalledWith('query_metrics', {
+      metrics: [{
+        metric: 'Average Temperature',
+        aggregation: 'average',
+      }, {
+        metric: 'Minimum Temperature',
+        aggregation: 'minimum',
+      }, {
+        metric: 'Maximum Temperature',
+        aggregation: 'maximum',
+      }],
+      start: '2000-01-01T00:00:00.000Z',
+      end: '2026-08-15T12:30:00.000Z',
+      groupBy: 'date',
+      interval: 'yearly',
+      timeZone: 'Europe/Helsinki',
+      activityTypes: ['Open Water Swimming', 'Snorkeling'],
+    });
+    expect(result.toolNames).toEqual(['query_metrics']);
+    expect(result.visuals).toEqual([expect.objectContaining({
+      kind: 'chart',
+      chartType: 'line',
+      series: [
+        expect.objectContaining({ label: 'Average Temperature (Average)' }),
+        expect.objectContaining({ label: 'Minimum Temperature (Minimum)' }),
+        expect.objectContaining({ label: 'Maximum Temperature (Maximum)' }),
+      ],
+    })]);
+  });
+
+  it('fails closed instead of treating an incomplete empty activity scan as no data', async () => {
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        activities: [],
+        scannedActivityCount: 100,
+        skippedActivityCount: 100,
+        nextCursor: 'opaque-next-cursor',
+        scanComplete: false,
+      },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use current account facts only.',
+      tools: [{
+        name: 'query_activities',
+        title: 'Query activities',
+        description: 'Query matching activities.',
+        inputSchema: { type: 'object', properties: {} },
+      }],
+      callTool,
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({});
+        return 'No matching activities exist.';
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Find my older swims.',
+      timeZone: 'UTC',
+      history: [],
+    })).rejects.toThrow('did not complete an empty activity scan');
   });
 
   it('lets the model select a server-owned visual descriptor without selecting values', async () => {
