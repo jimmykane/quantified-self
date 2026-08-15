@@ -149,16 +149,19 @@ export async function disableActivitySyncRoutesForDisconnectedService(
   disconnectedServiceName: ServiceNames,
   options: ActivitySyncRouteCleanupOptions = {},
 ): Promise<void> {
-  const serviceSyncSettings: Record<string, unknown> = {
-    ...getDisabledServiceSyncSettingsUpdate(disconnectedServiceName),
-  };
-  if (Object.keys(serviceSyncSettings).length === 0) {
+  if (Object.keys(getDisabledServiceSyncSettingsUpdate(disconnectedServiceName)).length === 0) {
     return;
   }
 
   const db = admin.firestore();
   const settingsRef = db.collection('users').doc(userID).collection('config').doc('settings');
   await db.runTransaction(async (transaction) => {
+    // Firestore can rerun this callback. Keep the mutable patch attempt-local so
+    // restore markers derived from an aborted snapshot cannot leak into a retry.
+    const serviceSyncSettings: Record<string, unknown> = {
+      ...getDisabledServiceSyncSettingsUpdate(disconnectedServiceName),
+    };
+
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);

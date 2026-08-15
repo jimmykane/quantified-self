@@ -399,6 +399,61 @@ describe('activity-sync/disconnect-routes', () => {
     }), { merge: true });
   });
 
+  it('reconstructs pending restore state when Firestore retries the disable transaction', async () => {
+    mockRunTransaction.mockImplementationOnce(async (runner: (transaction: {
+      get: (ref: { __mockType?: string; serviceName?: string }) => unknown;
+      set: typeof mockSettingsSet;
+    }) => unknown) => {
+      const transaction = {
+        get: vi.fn((ref: { __mockType?: string; serviceName?: string }) => (
+          ref?.__mockType === 'meta'
+            ? mockMetaGet(ref.serviceName)
+            : mockSettingsGet(ref)
+        )),
+        set: mockSettingsSet,
+      };
+      await runner(transaction);
+      return runner(transaction);
+    });
+    mockSettingsGet
+      .mockResolvedValueOnce({
+        data: () => ({
+          serviceSyncSettings: {
+            activitySyncRoutes: {
+              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: () => ({
+          serviceSyncSettings: {
+            activitySyncRoutes: {
+              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+          },
+        }),
+      });
+
+    await disableActivitySyncRoutesForDisconnectedService('user-1', ServiceNames.SuuntoApp, {
+      trackPendingDisconnectRestore: true,
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledTimes(2);
+    expect(mockSettingsSet.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      serviceSyncSettings: expect.objectContaining({
+        pendingDisconnectRouteRestore: {
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+        },
+      }),
+    }));
+    expect(mockSettingsSet.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      serviceSyncSettings: expect.not.objectContaining({
+        pendingDisconnectRouteRestore: expect.anything(),
+      }),
+    }));
+  });
+
   it('restores only routes tracked by pending disconnect recovery', async () => {
     mockSettingsGet.mockResolvedValueOnce({
       data: () => ({
