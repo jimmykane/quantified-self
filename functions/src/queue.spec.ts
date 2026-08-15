@@ -363,6 +363,7 @@ import {
     COROSFITDetailAuthError,
     PermanentCOROSFITDetailError,
 } from './coros/workout-detail';
+import { claimCOROSEventWriteRevision } from './coros/queue-processing';
 
 describe('queue', () => {
     beforeEach(async () => {
@@ -2570,6 +2571,7 @@ describe('queue', () => {
                 parent: { id: 'suuntoAppWorkoutQueue' },
                 update: vi.fn(),
                 delete: vi.fn(),
+                get: vi.fn(),
                 id: 'test-suunto-item'
             };
 
@@ -2996,6 +2998,7 @@ describe('queue', () => {
         });
 
         it('should handle COROSAPI item successfully', async () => {
+            const dateCreated = Date.now();
             const corosItem: COROSAPIWorkoutQueueItemInterface = {
                 id: 'test-coros-item',
                 ref: mockRef,
@@ -3004,10 +3007,17 @@ describe('queue', () => {
                 FITFileURI: 'https://coros.com/fit',
                 retryCount: 0,
                 processed: false,
-                dateCreated: Date.now(),
+                dateCreated,
                 dispatchedToCloudTask: null,
             };
             mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    ...corosItem,
+                    ref: undefined,
+                }),
+            });
 
             vi.mocked(getTokenData).mockResolvedValue({
                 accessToken: 'fresh-token',
@@ -3075,6 +3085,135 @@ describe('queue', () => {
             expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 processed: true,
             }));
+        });
+
+        it('keeps a duplicate COROS task retryable while another event-write lease is active', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'busy-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-busy',
+                FITFileURI: 'https://coros.com/busy.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 123,
+            };
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    ...corosItem,
+                    ref: undefined,
+                    processingOwner: 'other-worker',
+                    processingRevision: 'revision:revision-1',
+                    processingLeaseExpiresAt: Date.now() + 60_000,
+                }),
+            });
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as any);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+        });
+
+        it('serializes a COROS revision that advances after the claim but before setEvent begins', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            const firstRevision: COROSAPIWorkoutQueueItemInterface = {
+                id: 'mid-flight-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-mid-flight',
+                FITFileURI: 'https://coros.com/mid-flight.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: 123,
+            };
+            const secondRevision: COROSAPIWorkoutQueueItemInterface = {
+                ...firstRevision,
+                queueRevision: 'revision-2',
+                FITFileURI: 'https://coros.com/newer.fit',
+                dispatchedToCloudTask: null,
+            };
+            let liveQueueState: Record<string, unknown> = { ...firstRevision };
+            delete liveQueueState.ref;
+            mockRef.get.mockImplementation(async () => ({
+                exists: true,
+                data: () => ({ ...liveQueueState }),
+            }));
+            mockRunTransaction.mockImplementation(async (runner: (transaction: {
+                get: () => Promise<unknown>;
+                update: (_ref: unknown, update: Record<string, unknown>) => void;
+            }) => unknown) => runner({
+                get: async () => ({
+                    exists: true,
+                    data: () => ({ ...liveQueueState }),
+                }),
+                update: (_ref, update) => {
+                    for (const [field, value] of Object.entries(update)) {
+                        if (field === 'processingOwner'
+                            || field === 'processingRevision'
+                            || field === 'processingLeaseExpiresAt') {
+                            if (typeof value === 'object') {
+                                delete liveQueueState[field];
+                                continue;
+                            }
+                        }
+                        liveQueueState[field] = value;
+                    }
+                },
+            }));
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as any);
+
+            vi.mocked(resolveProviderImportEventID).mockImplementationOnce(async () => {
+                // History wins after R1's transactional claim and preserves its
+                // lease while installing R2 as the durable queue payload.
+                liveQueueState = {
+                    ...secondRevision,
+                    processingOwner: liveQueueState.processingOwner,
+                    processingRevision: liveQueueState.processingRevision,
+                    processingLeaseExpiresAt: liveQueueState.processingLeaseExpiresAt,
+                };
+                delete liveQueueState.ref;
+                return 'standardized-event-id';
+            });
+            let competingClaimResult: string | undefined;
+            vi.mocked(utils.setEvent).mockImplementationOnce(async () => {
+                expect(liveQueueState.queueRevision).toBe('revision-2');
+                expect(liveQueueState.processingRevision).toBe('revision:revision-1');
+                competingClaimResult = await claimCOROSEventWriteRevision(
+                    secondRevision,
+                    'mock-user-id',
+                    'worker-r2',
+                );
+                return undefined as any;
+            });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, firstRevision))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(competingClaimResult).toBe('busy');
+            expect(utils.setEvent).toHaveBeenCalledTimes(1);
+            expect(liveQueueState).toEqual(expect.objectContaining({
+                queueRevision: 'revision-2',
+                processed: false,
+                dispatchedToCloudTask: null,
+            }));
+            expect(liveQueueState).not.toHaveProperty('processingOwner');
+            expect(liveQueueState).not.toHaveProperty('processingRevision');
+            expect(liveQueueState).not.toHaveProperty('processingLeaseExpiresAt');
         });
 
         it('recovers and deletion-guards a missing COROS FIT URL before import', async () => {

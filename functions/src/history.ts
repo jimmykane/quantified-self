@@ -34,6 +34,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
+import { getActiveRevisionProcessingLease } from './queue/revision-processing-lease';
 
 const BATCH_SIZE = 450;
 
@@ -109,14 +110,36 @@ async function commitHistoryBatchForActiveUser(params: {
       );
     }
 
-    for (const workoutQueueItem of params.workoutQueueItems) {
-      const queueRef = db.collection(getServiceWorkoutQueueName(params.serviceName)).doc(`${workoutQueueItem.id}`);
+    const queueWrites = params.workoutQueueItems.map(workoutQueueItem => ({
+      workoutQueueItem,
+      queueRef: db.collection(getServiceWorkoutQueueName(params.serviceName)).doc(`${workoutQueueItem.id}`),
+    }));
+    const existingQueueSnapshots = params.serviceName === ServiceNames.COROSAPI && queueWrites.length > 0
+      ? await transaction.getAll(...queueWrites.map(({ queueRef }) => queueRef))
+      : [];
+    const nowMs = Date.now();
+
+    for (let index = 0; index < queueWrites.length; index++) {
+      const { workoutQueueItem, queueRef } = queueWrites[index];
+      const activeProcessingLease = params.serviceName === ServiceNames.COROSAPI
+        ? getActiveRevisionProcessingLease(
+          existingQueueSnapshots[index]?.exists
+            ? existingQueueSnapshots[index].data() as Record<string, unknown>
+            : null,
+          nowMs,
+        )
+        : null;
+      // The read and replacement share this transaction with the worker's
+      // lease claim. Whichever commits second must observe the other: either
+      // the old worker is superseded before writing, or its active lease is
+      // carried onto the replacement until event persistence finishes.
       transaction.set(queueRef, {
         ...workoutQueueItem,
         firebaseUserID: params.userID,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         fromHistory: true,
         dispatchedToCloudTask: null,
+        ...(activeProcessingLease || {}),
       });
     }
     transaction.set(

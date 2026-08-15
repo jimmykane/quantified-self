@@ -21,6 +21,10 @@ export interface QueueItemInterface {
   expireAt?: Timestamp | Date,
   dispatchedToCloudTask: number | null,
   providerOperationStartedAt?: number | null,
+  /** Worker lease that serializes event persistence across queue revisions. */
+  processingOwner?: string,
+  processingRevision?: string,
+  processingLeaseExpiresAt?: number,
   firebaseUserID?: string,
   resultStatus?: 'success' | 'skipped' | 'deferred' | 'manual_reconciliation_required',
   manualReconciliationRequiredAt?: number,
@@ -62,9 +66,6 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   edited?: boolean;
   fitnessAppID?: number;
   fromHistory?: boolean;
-  processingOwner?: string;
-  processingRevision?: string;
-  processingLeaseExpiresAt?: number;
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {

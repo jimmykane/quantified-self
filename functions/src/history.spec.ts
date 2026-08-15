@@ -18,6 +18,7 @@ const hoisted = vi.hoisted(() => {
     const getMock = vi.fn();
     const collectionMock = vi.fn();
     const runTransactionMock = vi.fn();
+    const transactionGetAllMock = vi.fn();
     const getUserDeletionGuardState = vi.fn();
     const getUserDeletionGuardStateInTransaction = vi.fn();
     const assertActiveCOROSAccountInTransaction = vi.fn();
@@ -35,6 +36,7 @@ const hoisted = vi.hoisted(() => {
         docMock,
         getActiveCOROSTokenSnapshot: vi.fn(),
         runTransactionMock,
+        transactionGetAllMock,
         getUserDeletionGuardState,
         getUserDeletionGuardStateInTransaction,
         assertActiveCOROSAccountInTransaction,
@@ -156,9 +158,18 @@ describe('history', () => {
             shouldSkip: false,
         });
         hoisted.runTransactionMock.mockReset();
+        hoisted.transactionGetAllMock.mockReset();
+        hoisted.transactionGetAllMock.mockImplementation(async (...refs: unknown[]) => refs.map(() => ({
+            exists: false,
+            data: () => undefined,
+        })));
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
-        }) => unknown) => runner({ set: hoisted.batchSetMock }));
+            getAll: typeof hoisted.transactionGetAllMock;
+        }) => unknown) => runner({
+            set: hoisted.batchSetMock,
+            getAll: hoisted.transactionGetAllMock,
+        }));
 
         // Default Firestore shape
         const defaultTokensGet = vi.fn().mockResolvedValue({
@@ -450,6 +461,80 @@ describe('history', () => {
                     fromHistory: true,
                 }),
             );
+        });
+
+        it('preserves an active event-write lease when history advances the COROS revision', async () => {
+            const processingLeaseExpiresAt = Date.now() + 60_000;
+            hoisted.transactionGetAllMock.mockResolvedValue([{
+                exists: true,
+                data: () => ({
+                    queueRevision: 'older-revision',
+                    processingOwner: 'r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt,
+                }),
+            }]);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    queueRevision: 'revision-0',
+                    processingOwner: 'r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt,
+                }),
+            );
+        });
+
+        it('drops an expired event-write lease when history advances the COROS revision', async () => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{
+                exists: true,
+                data: () => ({
+                    queueRevision: 'older-revision',
+                    processingOwner: 'crashed-r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt: Date.now() - 1,
+                }),
+            }]);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            const queuePayload = hoisted.batchSetMock.mock.calls.find(([, data]) => (
+                data as Record<string, unknown>
+            ).id === 'coros-active-open-id-0')?.[1] as Record<string, unknown>;
+            expect(queuePayload).not.toHaveProperty('processingOwner');
+            expect(queuePayload).not.toHaveProperty('processingRevision');
+            expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
         });
 
         it('requires the caller-pinned COROS account before and immediately before history retrieval', async () => {

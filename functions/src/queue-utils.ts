@@ -13,6 +13,7 @@ import {
     cleanupQueueItemAfterUserDeletionGuard,
     QueueItemUserGuardedUpdateResult,
 } from './queue/dispatch-marker';
+import { clearRevisionProcessingLeaseUpdate } from './queue/revision-processing-lease';
 
 
 export enum QueueResult {
@@ -123,6 +124,9 @@ function buildFailedQueueItem(
     // Signed provider continuation URLs are short-lived credentials. They are
     // needed only while the live queue item can retry the exact same request.
     delete failedItem.destinationUploadContinuation;
+    delete failedItem.processingOwner;
+    delete failedItem.processingRevision;
+    delete failedItem.processingLeaseExpiresAt;
     return failedItem;
 }
 
@@ -480,6 +484,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 errors: nextErrors,
                 dispatchedToCloudTask: null,
                 providerOperationStartedAt: null,
+                ...clearRevisionProcessingLeaseUpdate(),
             });
         });
 
@@ -603,6 +608,7 @@ async function updateToProcessedIfCurrentUserActive(
                 processed: true,
                 processedAt: nowMs,
                 ...additionalData,
+                ...clearRevisionProcessingLeaseUpdate(),
             });
         });
         if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {

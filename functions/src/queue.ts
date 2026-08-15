@@ -4,6 +4,7 @@ import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import * as crypto from 'crypto';
 
 import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
@@ -66,6 +67,11 @@ import {
   enqueueWorkoutTaskWithDispatchRecovery,
   markWorkoutTaskDispatchedWithRetry,
 } from './shared/cloud-tasks';
+import {
+  claimCOROSEventWriteRevision,
+  completeCOROSEventWriteRevision,
+  releaseCOROSEventWriteRevision,
+} from './coros/queue-processing';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -663,6 +669,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
+    let corosEventWriteOwner: string | null = null;
     const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {
       throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
@@ -960,13 +967,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           }
           throw error;
         }
-        if (!(await isWorkoutQueueRevisionCurrent(queueItem))) {
-          logger.info('Skipping stale COROS queue revision before event persistence.', {
-            queueItemId: queueItem.id,
-            queueRevision: queueItem.queueRevision || 'legacy',
-          });
-          return QueueResult.Processed;
-        }
       }
       if (await isActivitySyncOutboundEcho({
         userID: parentID,
@@ -984,6 +984,29 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           skippedReason: 'outbound_provider_echo',
         };
         break;
+      }
+      if (serviceName === ServiceNames.COROSAPI) {
+        const processingOwner = crypto.randomUUID();
+        const claimResult = await claimCOROSEventWriteRevision(
+          queueItem as COROSAPIWorkoutQueueItemInterface,
+          parentID,
+          processingOwner,
+        );
+        if (claimResult === 'superseded') {
+          logger.info('Skipping stale COROS queue revision before event persistence.', {
+            queueItemId: queueItem.id,
+            queueRevision: queueItem.queueRevision || 'legacy',
+          });
+          return QueueResult.Processed;
+        }
+        if (claimResult === 'busy') {
+          logger.info('Retrying duplicate COROS delivery after the active event-write lease expires.', {
+            queueItemId: queueItem.id,
+            queueRevision: queueItem.queueRevision || 'legacy',
+          });
+          return QueueResult.Failed;
+        }
+        corosEventWriteOwner = processingOwner;
       }
       switch (serviceName) {
         default:
@@ -1028,10 +1051,25 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
               sourceFileData: Buffer.from(result),
             });
             if (skippedAfterDeletionStarted) {
+              await releaseCOROSEventWriteRevision(
+                corosWorkoutQueueItem,
+                parentID,
+                corosEventWriteOwner!,
+              );
+              corosEventWriteOwner = null;
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }
           }
-          break;
+          const completionResult = await completeCOROSEventWriteRevision(
+            corosWorkoutQueueItem,
+            parentID,
+            corosEventWriteOwner!,
+          );
+          corosEventWriteOwner = null;
+          logger.info('Ending timer: InsertEvent');
+          logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
+          logger.info(`Parsed item successfully for ${queueItem.id}`);
+          return completionResult;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
@@ -1067,6 +1105,23 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e: any) {
       // @todo should delete event  or separate catch
       logger.error(e);
+      if (corosEventWriteOwner) {
+        try {
+          await releaseCOROSEventWriteRevision(
+            queueItem as COROSAPIWorkoutQueueItemInterface,
+            parentID,
+            corosEventWriteOwner,
+          );
+        } catch (releaseError) {
+          logger.error('Could not release the COROS event-write lease after processing failed.', {
+            queueItemId: queueItem.id,
+            queueRevision: queueItem.queueRevision || 'legacy',
+            error: releaseError,
+          });
+          return QueueResult.Failed;
+        }
+        corosEventWriteOwner = null;
+      }
       if (isEventWriteSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);
@@ -1164,19 +1219,6 @@ function workoutQueueGenerationMatches(
     ? currentQueueItem.queueRevision.trim()
     : '';
   return !currentRevision && currentQueueItem.dateCreated === attemptedQueueItem.dateCreated;
-}
-
-async function isWorkoutQueueRevisionCurrent(queueItem: QueueItemInterface): Promise<boolean> {
-  const queueRevision = typeof queueItem.queueRevision === 'string' ? queueItem.queueRevision.trim() : '';
-  // Legacy COROS work is still protected at retry/completion. Avoid adding a
-  // new pre-persistence read requirement to already-dispatched legacy tasks.
-  if (!queueRevision) return true;
-  if (!queueItem.ref) return true;
-  const snapshot = await queueItem.ref.get();
-  const currentQueueItem = snapshot.exists ? snapshot.data() as Record<string, unknown> : null;
-  return !!currentQueueItem
-    && currentQueueItem.processed !== true
-    && workoutQueueGenerationMatches(queueItem, currentQueueItem);
 }
 
 async function advanceWorkoutQueueDispatchRecoveryGeneration(
