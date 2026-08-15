@@ -308,7 +308,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**All sports**');
     expect(trainingSection?.content).toContain('swipeable sport shortcuts');
-    expect(trainingSection?.content).toContain('**More** opens every sport');
+    expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every sport');
     expect(trainingSection?.content).toContain('**Manage sport shortcuts**');
     expect(trainingSection?.content).toContain('training duration and workouts in the latest 28 days');
     expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, or Paddling');

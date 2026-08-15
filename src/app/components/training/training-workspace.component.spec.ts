@@ -185,8 +185,11 @@ describe('TrainingWorkspaceComponent', () => {
     const mobileDestination = element.querySelector('.training-destination-mobile');
     expect(mobileDestination?.querySelector('mat-select')).toBeNull();
     expect(mobileDestination?.querySelector('.training-mobile-shortcuts')?.textContent).toContain('All');
-    expect(mobileDestination?.querySelector('.training-mobile-more-action')?.textContent).toContain('More');
-    expect(mobileDestination?.querySelector('.training-mobile-more-action')?.getAttribute('aria-haspopup')).toBe('dialog');
+    const mobileMoreAction = mobileDestination?.querySelector('.training-mobile-more-action');
+    expect(mobileMoreAction?.textContent).not.toContain('More');
+    expect(mobileMoreAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('expand_more');
+    expect(mobileMoreAction?.getAttribute('aria-label')).toBe('Choose from all training sports');
+    expect(mobileMoreAction?.getAttribute('aria-haspopup')).toBe('dialog');
     expect(element.textContent).toContain('Viewing All training · All recorded training');
     expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
@@ -315,7 +318,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
   });
 
-  it('keeps mobile shortcuts swipeable while More remains a fixed action', () => {
+  it('keeps mobile shortcuts swipeable while the all-sports icon remains fixed', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
       'utf8',
@@ -323,8 +326,14 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(styles).toMatch(/\.training-mobile-shortcut-scroller\s*\{[^}]*overflow-x:\s*auto/s);
     expect(styles).toMatch(/\.training-mobile-shortcuts\s*\{[^}]*width:\s*max-content/s);
-    expect(styles).toMatch(/\.training-mobile-more-action\s*\{[^}]*min-width:\s*82px/s);
-    expect(styles).toMatch(/\.training-destination-mobile\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/s);
+    expect(styles).toMatch(/\.training-mobile-more-action\s*\{[^}]*width:\s*48px[^}]*height:\s*48px/s);
+    expect(styles).toMatch(/\.training-destination-mobile\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 48px/s);
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+    expect(template).toMatch(/<button\s+mat-icon-button[\s\S]*?class="training-mobile-more-action"/);
+    expect(template).toContain('matTooltip="All sports"');
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {

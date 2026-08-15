@@ -600,12 +600,12 @@ with the complete **All sports** selector and shortcut editor grouped at the opp
 with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
 temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
 widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable Material toggle
-rail exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations, while a fixed **More** action
-opens a viewport-bounded Material bottom sheet. The sheet keeps **All training** first, groups automatic or pinned
-shortcuts next, sorts the remaining available destinations by label, marks the current view, and places **Manage sport
-shortcuts** in its stable footer. Choosing an off-shortcut registered sport temporarily places it at the front of the
-rail's sport slots and returns the rail to its leading edge. The selected destination is intentionally not encoded in
-the URL or browser history.
+rail exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. A fixed 48 px Material icon
+button with the accessible **All sports** label preserves more width for that rail and opens a viewport-bounded Material
+bottom sheet. The sheet keeps **All training** first, groups automatic or pinned shortcuts next, sorts the remaining
+available destinations by label, marks the current view, and places **Manage sport shortcuts** in its stable footer.
+Choosing an off-shortcut registered sport temporarily places it at the front of the rail's sport slots and returns the
+rail to its leading edge. The selected destination is intentionally not encoded in the URL or browser history.
 
 Sport shortcuts have two modes:
 
