@@ -72,6 +72,10 @@ import {
   completeCOROSEventWriteRevision,
   releaseCOROSEventWriteRevision,
 } from './coros/queue-processing';
+import {
+  hasMatchingQueueRevision,
+  normalizeQueueRevision,
+} from './queue/revision-identity';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -1211,14 +1215,11 @@ function workoutQueueGenerationMatches(
   attemptedQueueItem: Pick<QueueItemInterface, 'queueRevision' | 'dateCreated'>,
   currentQueueItem: Record<string, unknown>,
 ): boolean {
-  const attemptedRevision = typeof attemptedQueueItem.queueRevision === 'string'
-    ? attemptedQueueItem.queueRevision.trim()
-    : '';
-  if (attemptedRevision) return currentQueueItem.queueRevision === attemptedRevision;
-  const currentRevision = typeof currentQueueItem.queueRevision === 'string'
-    ? currentQueueItem.queueRevision.trim()
-    : '';
-  return !currentRevision && currentQueueItem.dateCreated === attemptedQueueItem.dateCreated;
+  return hasMatchingQueueRevision({
+    currentQueueItem,
+    attemptedQueueItem,
+    legacyIdentityMatches: currentQueueItem.dateCreated === attemptedQueueItem.dateCreated,
+  });
 }
 
 async function advanceWorkoutQueueDispatchRecoveryGeneration(
@@ -1379,7 +1380,7 @@ function createWorkoutQueueDispatchCurrentGuard(
   if (serviceName === ServiceNames.WahooAPI) {
     return createWahooQueueRevisionCurrentGuard(queueItem);
   }
-  const hasQueueRevision = typeof queueItem.queueRevision === 'string' && !!queueItem.queueRevision.trim();
+  const hasQueueRevision = normalizeQueueRevision(queueItem.queueRevision) !== null;
   if (!hasQueueRevision && serviceName !== ServiceNames.COROSAPI) {
     return undefined;
   }

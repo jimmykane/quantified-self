@@ -14,6 +14,10 @@ import {
     QueueItemUserGuardedUpdateResult,
 } from './queue/dispatch-marker';
 import { clearRevisionProcessingLeaseUpdate } from './queue/revision-processing-lease';
+import {
+    isCurrentQueueRevision,
+    normalizeQueueRevision,
+} from './queue/revision-identity';
 
 
 export enum QueueResult {
@@ -63,9 +67,7 @@ interface QueueRevisionGuard {
 }
 
 function getQueueRevisionGuard(queueItem: QueueItemInterface): QueueRevisionGuard | null {
-    const queueRevision = typeof queueItem.queueRevision === 'string'
-        ? queueItem.queueRevision.trim()
-        : '';
+    const queueRevision = normalizeQueueRevision(queueItem.queueRevision);
     const userID = typeof queueItem.firebaseUserID === 'string'
         ? queueItem.firebaseUserID.trim()
         : '';
@@ -77,16 +79,12 @@ function getQueueRevisionGuard(queueItem: QueueItemInterface): QueueRevisionGuar
     if (!queueRevision && (!legacyCOROSOpenId || !Number.isFinite(legacyDateCreated))) return null;
     return {
         userID,
-        isCurrent: current => {
-            if (current.processed === true) return false;
-            if (queueRevision) return current.queueRevision === queueRevision;
-            const currentRevision = typeof current.queueRevision === 'string'
-                ? current.queueRevision.trim()
-                : '';
-            return !currentRevision
-                && current.dateCreated === legacyDateCreated
-                && current.openId === legacyCOROSOpenId;
-        },
+        isCurrent: current => isCurrentQueueRevision({
+            currentQueueItem: current,
+            attemptedQueueItem: queueItem,
+            legacyIdentityMatches: current.dateCreated === legacyDateCreated
+                && current.openId === legacyCOROSOpenId,
+        }),
     };
 }
 

@@ -155,6 +155,33 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
+    it('processes a legacy COROS task when its creation-time generation still matches', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false, dateCreated: 100 }),
+        });
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Processed);
+        const invokeTask = processWorkoutTask as unknown as (
+            request: { data: Record<string, unknown> },
+        ) => Promise<void>;
+
+        await expect(invokeTask({
+            data: {
+                queueItemId: 'legacy-coros-id',
+                serviceName: ServiceNames.COROSAPI,
+                queueDateCreated: 100,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(
+            ServiceNames.COROSAPI,
+            expect.objectContaining({
+                id: 'legacy-coros-id',
+                dateCreated: 100,
+            }),
+        );
+    });
+
     it('processes the matching COROS queue revision normally', async () => {
         mockGet.mockResolvedValue({
             exists: true,

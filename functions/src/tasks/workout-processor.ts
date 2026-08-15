@@ -7,6 +7,10 @@ import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { markQueueItemSkipped, QUEUE_SKIPPED_REASONS, QueueResult } from '../queue-utils';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
+import {
+    hasMatchingQueueRevision,
+    normalizeQueueRevision,
+} from '../queue/revision-identity';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 /**
@@ -54,18 +58,18 @@ export const processWorkoutTask = onTaskDispatched({
     }
 
     const queueItem = queueDoc.data();
-    const currentQueueRevision = typeof queueItem?.queueRevision === 'string'
-        ? queueItem.queueRevision.trim()
-        : '';
-    const expectedQueueRevision = typeof queueRevision === 'string' ? queueRevision.trim() : '';
+    const currentQueueRevision = normalizeQueueRevision(queueItem?.queueRevision);
+    const expectedQueueRevision = normalizeQueueRevision(queueRevision);
     const expectedQueueDateCreated = Number(queueDateCreated);
-    if ((expectedQueueRevision && currentQueueRevision !== expectedQueueRevision)
-        || (serviceName === ServiceNames.COROSAPI && currentQueueRevision && !expectedQueueRevision)
+    const shouldCheckQueueRevision = expectedQueueRevision !== null
         || (serviceName === ServiceNames.COROSAPI
-            && !currentQueueRevision
-            && !expectedQueueRevision
-            && Number.isFinite(expectedQueueDateCreated)
-            && queueItem?.dateCreated !== expectedQueueDateCreated)) {
+            && (currentQueueRevision !== null || Number.isFinite(expectedQueueDateCreated)));
+    if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
+        currentQueueItem: queueItem || {},
+        attemptedQueueItem: { queueRevision: expectedQueueRevision },
+        legacyIdentityMatches: Number.isFinite(expectedQueueDateCreated)
+            && queueItem?.dateCreated === expectedQueueDateCreated,
+    })) {
         logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
         return;
     }

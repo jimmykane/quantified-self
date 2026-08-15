@@ -20,6 +20,7 @@ import {
     normalizeDerivedMetricKindsStrict,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
+import { normalizeQueueRevision } from '../queue/revision-identity';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
@@ -272,9 +273,7 @@ export async function enqueueWorkoutTask(
     const sanitizedServiceName = sanitizeTaskNamePart(serviceName);
     const safeQueueItemId = sanitizeTaskNamePart(`${queueItemId}`);
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const queueRevision = typeof options.queueRevision === 'string'
-        ? options.queueRevision.trim()
-        : '';
+    const queueRevision = normalizeQueueRevision(options.queueRevision) || '';
     const safeQueueRevision = queueRevision
         ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
         : '';
@@ -364,9 +363,7 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
 }
 
 function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
-    const queueRevision = typeof queueItem.queueRevision === 'string'
-        ? queueItem.queueRevision.trim()
-        : '';
+    const queueRevision = normalizeQueueRevision(queueItem.queueRevision) || '';
     return {
         recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
         ...(queueRevision ? { queueRevision } : {}),
