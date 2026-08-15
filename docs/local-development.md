@@ -12,8 +12,7 @@ This is a development environment, not a production self-hosting recipe. It does
 npm ci
 npm --prefix functions ci
 cp src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
-cp functions/.secret.local.example functions/.secret.local
-# Replace only YOUR_PUBLIC_MAPBOX_TOKEN in mapbox-token.local.ts.
+# Replace only YOUR_PUBLIC_MAPBOX_TOKEN with a pk.* public token.
 npm start
 ```
 
@@ -23,7 +22,7 @@ The main commands are:
 | --- | --- |
 | `npm start` | Validate isolation, build Functions, start the required Firebase emulators and Angular, then import/export persistent emulator state |
 | `npm run local:config:test` | Test the configuration, project, endpoint, secret, credential, and Firebase CLI argument guards |
-| `npm run local:smoke` | Start an ephemeral emulator stack and verify Auth, Firestore, Storage, callable Functions, and authenticated HTTP upload behavior |
+| `npm run local:smoke` | Start an ephemeral emulator stack and verify Auth, Firestore, synthetic Pro-to-Free roles, Storage, callable Functions, and authenticated HTTP upload behavior |
 | `npm run local:role -- --email you@example.com --role pro` | Give an existing, onboarded fake account a synthetic Pro entitlement |
 | `npm run local:role -- --email you@example.com --role free` | Remove that synthetic Pro entitlement and restore the Free claim |
 | `npm run local:reset` | Delete the saved emulator export while the stack is stopped |
@@ -45,8 +44,8 @@ The main commands are:
 
 The launcher performs these operations in order:
 
-1. Validate that the project starts with `demo-`, every address is loopback, every required emulator matches the central configuration, and no Hosting, Extension, or Remote Config section was added to `firebase.local.json`.
-2. Refuse Functions `.env*` files, non-sentinel backend values, inherited Firebase/Google cloud settings, missing dependencies, a missing Mapbox token, and occupied ports.
+1. Validate that the project starts with `demo-`, the host is `127.0.0.1` or `localhost`, every required port is present and distinct, every required emulator matches the central configuration, the Emulator UI and legacy Runtime Config protection are enabled, the Angular `local` build/serve targets use only the isolated environment and local Mapbox replacement, and no Hosting, Extension, or Remote Config section was added to `firebase.local.json`.
+2. Refuse Functions credential/configuration files, an incomplete or non-sentinel backend template, inherited Firebase/Google cloud settings, missing dependencies, anything other than a `pk.*` public Mapbox token, unsafe saved-state links, and occupied ports.
 3. Create an isolated child-process environment. It hides Firebase CLI account state, masks workstation application-default credentials with a deliberately missing credential path, and disables metadata-server credential discovery.
 4. Compile Functions.
 5. Start only Auth, Functions, Firestore, Storage, and Cloud Tasks with the pinned repository Firebase CLI and explicit `--config`, `--project`, and `--only` arguments.
@@ -73,9 +72,9 @@ If any check fails, Functions do not initialize. In a hosted runtime the existin
 
 ### No local backend credentials
 
-`functions/.secret.local.example` contains `LOCAL_EMULATOR_DISABLED`, not credentials. Blank emulator secrets cause Firebase to query Secret Manager, so the explicit sentinel prevents that fallback. `npm start` creates or upgrades an all-blank ignored `.secret.local` from the safe example, then rejects any other value.
+`functions/.secret.local.example` contains `LOCAL_EMULATOR_DISABLED`, not credentials. Blank or missing emulator secrets cause Firebase to query Secret Manager, so the explicit sentinel prevents that fallback. `npm start` creates or upgrades an empty/all-blank ignored `.secret.local`, then requires its names and values to match the safe example exactly. It rejects symbolic links, non-regular files, and hard-linked placeholder files before any repair can overwrite them.
 
-The launcher also rejects inherited values such as `GOOGLE_APPLICATION_CREDENTIALS`, `FIREBASE_TOKEN`, `GCLOUD_PROJECT`, and `GOOGLE_CLOUD_PROJECT` before startup. Child processes receive an isolated config directory and an intentionally missing ADC path so code that accidentally initializes an un-emulated Google client fails before inheriting workstation credentials.
+The launcher also rejects inherited values such as `GOOGLE_APPLICATION_CREDENTIALS`, `FIREBASE_TOKEN`, `GCLOUD_PROJECT`, and `GOOGLE_CLOUD_PROJECT` before startup. It recursively refuses Functions `.env*`, `.runtimeconfig.json`, service-account, and Firebase Admin SDK credential files. Child processes receive an isolated config directory and an intentionally missing ADC path so code that accidentally initializes an un-emulated Google client fails before inheriting workstation credentials.
 
 Do not replace the sentinels with provider credentials. Provider-integration development requires a separate, reviewed workflow using development-only accounts.
 
@@ -126,17 +125,17 @@ For Pro, the command:
 - records a local claims-refresh marker; and
 - resumes triggers in a `finally` block.
 
-For Free, it deletes only `subscriptions/local-pro`, sets the role claim to `free`, and removes a stale grace-period claim. It never reads or writes a Stripe customer ID, price, checkout session, invoice, or payment record.
+For Free, it deletes only `subscriptions/local-pro`, sets the role claim to `free`, and removes stale grace-period values from both Auth claims and the local status document. It never reads or writes a Stripe customer ID, price, checkout session, invoice, or payment record.
 
 The command verifies the Emulator Hub and expected loopback services before importing Firebase Admin. This prevents it from being aimed at a hosted user by changing CLI flags.
 
 ## Persistence and reset
 
-Normal `npm start` sessions import `.local/firebase-emulator-data` when a valid export exists and always request an export on exit. Stop with one Ctrl+C and wait for Firebase to report shutdown before closing the terminal.
+Normal `npm start` sessions import `.local/firebase-emulator-data` when a valid export exists and always request an export on exit. Before Firebase touches that path, the launcher requires the exact repository-local directory and rejects a symlink at any level of the saved export. Stop with one Ctrl+C and wait for Firebase to report shutdown before closing the terminal.
 
-`npm run local:smoke` is deliberately ephemeral: it does not import or export that directory and therefore cannot change the saved local dataset.
+`npm run local:smoke` is deliberately ephemeral: it does not import or export that directory and therefore cannot change the saved local dataset. It exercises the role command from Pro back to Free and verifies the synthetic subscription, Auth claims, and grace-period cleanup.
 
-`npm run local:reset` resolves and verifies the exact repository-local state path, refuses to run while the Emulator Hub is reachable, and then deletes that directory. This operation is not recoverable unless the developer made a separate copy.
+`npm run local:reset` applies the same exact-path and symlink checks, requires the Emulator Hub port to be free, and then deletes that directory. This operation is not recoverable unless the developer made a separate copy.
 
 ## Troubleshooting
 
@@ -148,7 +147,7 @@ The smoke test does not need port 4200, so it checks only emulator/UI/Hub ports.
 
 ### The Mapbox token is missing
 
-Copy `src/environments/mapbox-token.local.example.ts` to the ignored `.local.ts` path and replace the placeholder with a public token. Backend Mapbox secrets remain disabled.
+Copy `src/environments/mapbox-token.local.example.ts` to the ignored `.local.ts` path and replace the placeholder with a `pk.*` public token. The launcher rejects secret `sk.*` tokens so they cannot be bundled into the browser. Backend Mapbox secrets remain disabled.
 
 ### Java or Node warnings appear
 
@@ -160,7 +159,7 @@ Confirm the email exactly matches the fake Auth emulator user and that onboardin
 
 ### Startup rejects a secret or credential
 
-Remove the inherited variable or local Functions `.env*` file. Restore `functions/.secret.local` from the committed example. Do not add an exception for a real key to the safe launcher.
+Remove the inherited variable or local Functions environment, Runtime Config, or service-account file. Restore `functions/.secret.local` from the committed example. Do not add an exception for a real key to the safe launcher.
 
 ## Maintainer checklist
 

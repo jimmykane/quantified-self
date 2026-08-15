@@ -67,16 +67,15 @@ The root application and Functions use separate lockfiles, so both installs are 
 
 ### 2. Create the ignored local files
 
-Copy the safe templates:
+Copy the safe Mapbox template:
 
 ```bash
 cp src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
-cp functions/.secret.local.example functions/.secret.local
 ```
 
-Edit only `src/environments/mapbox-token.local.ts` and replace `YOUR_PUBLIC_MAPBOX_TOKEN` with your own public Mapbox token. Do not edit the `LOCAL_EMULATOR_DISABLED` values in `functions/.secret.local`: they are deliberate non-secret sentinels that stop Firebase from falling back to Secret Manager.
+Edit only `src/environments/mapbox-token.local.ts` and replace `YOUR_PUBLIC_MAPBOX_TOKEN` with your own `pk.*` public Mapbox token. On first start, the launcher creates `functions/.secret.local` from its safe sentinel template if the file is missing. Do not edit the `LOCAL_EMULATOR_DISABLED` values: they stop Firebase from falling back to Secret Manager.
 
-Both copied files are ignored by Git. Never put a maintainer credential, production secret, service-account file, or private user data in a local checkout.
+The copied Mapbox file and generated Functions secret file are ignored by Git. Never put a maintainer credential, production secret, service-account file, or private user data in a local checkout.
 
 ### 3. Start the isolated app
 
@@ -91,7 +90,7 @@ Open:
 - Application: [http://127.0.0.1:4200](http://127.0.0.1:4200)
 - Firebase Emulator UI: [http://127.0.0.1:4000](http://127.0.0.1:4000)
 
-`npm start` validates the local-only configuration, refuses real Firebase project IDs, inherited cloud credentials, backend secrets, non-loopback hosts, occupied ports, and Functions `.env*` files. It then builds Functions and starts Angular plus the Auth, Firestore, Storage, Functions, and Cloud Tasks emulators. The first run downloads the Firebase emulator binaries.
+`npm start` validates the local-only configuration, refuses real Firebase project IDs, inherited cloud credentials, backend secrets, linked secret placeholders, non-public Mapbox tokens, unsupported hosts, occupied ports, unsafe saved-state links, and Functions environment, runtime-config, or service-account files. It then builds Functions and starts Angular plus the Auth, Firestore, Storage, Functions, and Cloud Tasks emulators. The first run downloads the Firebase emulator binaries.
 
 Sign in with a fake local identity. Email magic links appear in the emulator output/UI instead of being sent; Google and GitHub use the Auth emulator's mock provider flow. Complete onboarding normally. No real Firebase account or OAuth login is needed.
 
@@ -116,7 +115,7 @@ Run the disposable full-stack smoke test while `npm start` is stopped:
 npm run local:smoke
 ```
 
-It proves local Auth, Firestore, Storage, a callable Function, and an authenticated upload endpoint work together without App Check. To erase saved emulator data, stop the stack and run:
+It proves local Auth, Firestore, synthetic Pro-to-Free roles, Storage, a callable Function, and an authenticated upload endpoint work together without App Check. To erase saved emulator data, stop the stack and run:
 
 ```bash
 npm run local:reset
@@ -165,7 +164,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | --- | --- | --- |
 | Start the isolated local stack | `npm start` | Builds Functions, starts all required emulators and Angular, and persists emulator state on exit |
 | Verify local safety configuration | `npm run local:config:test` | Tests project, endpoint, credential, and CLI-argument guards |
-| Run disposable local smoke test | `npm run local:smoke` | Requires the local stack to be stopped; never imports or exports persistent emulator state |
+| Run disposable local smoke test | `npm run local:smoke` | Verifies a synthetic Pro-to-Free transition too; requires the local stack to be stopped and never imports or exports persistent state |
 | Change a fake local role | `npm run local:role -- --email you@example.com --role pro` | Accepts `free` or `pro`; requires the stack to be running and never calls Stripe |
 | Erase saved local emulator state | `npm run local:reset` | Requires the stack to be stopped; browser site data is separate |
 | Frontend tests once | `npm test -- --run` | Deterministic command used by CI |

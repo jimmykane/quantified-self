@@ -152,6 +152,18 @@ describe('utils', () => {
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
+        it('should reject origins that only contain a loopback-looking prefix', () => {
+            for (const origin of [
+                'http://127.0.0.1:4200.evil.example',
+                'http://localhost:4200@evil.example',
+            ]) {
+                const mockReq = {
+                    get: vi.fn().mockReturnValue(origin),
+                } as unknown as Parameters<typeof isCorsAllowed>[0];
+                expect(isCorsAllowed(mockReq)).toBe(false);
+            }
+        });
+
         it('should allow quantified-self.io', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://quantified-self.io'),

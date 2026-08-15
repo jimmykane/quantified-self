@@ -1,4 +1,6 @@
-import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
+import { access, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,13 +9,31 @@ import { fileURLToPath } from 'node:url';
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const localRuntimeConfigPath = path.join(repositoryRoot, 'local-runtime.config.json');
 export const localFirebaseConfigPath = path.join(repositoryRoot, 'firebase.local.json');
+export const angularConfigPath = path.join(repositoryRoot, 'angular.json');
 export const localStatePath = path.join(repositoryRoot, '.local', 'firebase-emulator-data');
 export const localSecretPath = path.join(repositoryRoot, 'functions', '.secret.local');
 export const localSecretExamplePath = path.join(repositoryRoot, 'functions', '.secret.local.example');
 
 const EXPECTED_EMULATORS = ['auth', 'functions', 'firestore', 'storage', 'tasks'];
+const REQUIRED_PORT_NAMES = ['app', ...EXPECTED_EMULATORS, 'ui', 'hub'];
 const DISALLOWED_FIREBASE_KEYS = ['extensions', 'hosting', 'remoteconfig'];
 export const LOCAL_SECRET_SENTINEL = 'LOCAL_EMULATOR_DISABLED';
+export const LOCAL_SMOKE_CHECK_COMMAND = 'npm run local:smoke:check';
+const FORBIDDEN_FUNCTION_SOURCE_FILE_PATTERNS = [
+  /(?:^|\/)\.env(?:\..*)?$/u,
+  /(?:^|\/)\.runtimeconfig\.json$/u,
+  /(?:^|\/)[^/]*service[-_]?account[^/]*\.json$/iu,
+  /(?:^|\/)[^/]*firebase-adminsdk[^/]*\.json$/iu,
+];
+const FUNCTION_SOURCE_SCAN_IGNORED_DIRECTORIES = new Set([
+  '.git',
+  'coverage',
+  'emulator-export',
+  'firestore_export',
+  'lib',
+  'node_modules',
+  'tmp',
+]);
 const CLOUD_CREDENTIAL_ENV_NAMES = [
   'FIREBASE_CONFIG',
   'FIREBASE_TOKEN',
@@ -23,7 +43,7 @@ const CLOUD_CREDENTIAL_ENV_NAMES = [
 ];
 
 export function isLoopbackHost(host) {
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  return host === '127.0.0.1' || host === 'localhost';
 }
 
 function assertPort(value, name) {
@@ -37,11 +57,16 @@ export function validateRuntimeConfiguration(runtimeConfig, firebaseConfig) {
     throw new Error('[local] The local Firebase project ID must start with demo-.');
   }
   if (!isLoopbackHost(runtimeConfig.host)) {
-    throw new Error('[local] The local runtime must bind to a loopback host.');
+    throw new Error('[local] The local runtime must use the supported loopback host 127.0.0.1 or localhost.');
   }
 
-  for (const [name, port] of Object.entries(runtimeConfig.ports ?? {})) {
+  const configuredPorts = REQUIRED_PORT_NAMES.map(name => {
+    const port = runtimeConfig?.ports?.[name];
     assertPort(port, `${name} port`);
+    return port;
+  });
+  if (new Set(configuredPorts).size !== configuredPorts.length) {
+    throw new Error('[local] Every local service must use a distinct TCP port.');
   }
 
   for (const key of DISALLOWED_FIREBASE_KEYS) {
@@ -55,6 +80,9 @@ export function validateRuntimeConfiguration(runtimeConfig, firebaseConfig) {
   if (firebaseConfig?.functions?.source !== 'functions') {
     throw new Error('[local] The local Functions source must be functions/.');
   }
+  if (firebaseConfig?.functions?.disallowLegacyRuntimeConfig !== true) {
+    throw new Error('[local] Legacy Functions runtime configuration must be disabled.');
+  }
   if (!firebaseConfig?.firestore?.rules || !firebaseConfig?.storage?.rules) {
     throw new Error('[local] Firestore and Storage rules must be configured locally.');
   }
@@ -65,8 +93,37 @@ export function validateRuntimeConfiguration(runtimeConfig, firebaseConfig) {
       throw new Error(`[local] ${emulator} emulator configuration does not match local-runtime.config.json.`);
     }
   }
+  if (firebaseConfig.emulators.ui.enabled !== true) {
+    throw new Error('[local] The local Emulator UI must be enabled.');
+  }
 
   return runtimeConfig;
+}
+
+export function validateAngularLocalConfiguration(angularConfig) {
+  const buildConfigurations = angularConfig?.projects?.['track-tools']?.architect?.build?.configurations;
+  const localReplacements = buildConfigurations?.local?.fileReplacements;
+  const expectedReplacements = new Map([
+    ['src/environments/environment.ts', 'src/environments/environment.local.ts'],
+    ['src/environments/mapbox-token.ts', 'src/environments/mapbox-token.local.ts'],
+  ]);
+  if (!Array.isArray(localReplacements) || localReplacements.length !== expectedReplacements.size) {
+    throw new Error('[local] Angular local file replacements do not match the isolated runtime.');
+  }
+  const seenReplacements = new Set();
+  for (const replacement of localReplacements) {
+    const expectedTarget = expectedReplacements.get(replacement?.replace);
+    if (!expectedTarget || replacement.with !== expectedTarget || seenReplacements.has(replacement.replace)) {
+      throw new Error('[local] Angular local file replacements do not match the isolated runtime.');
+    }
+    seenReplacements.add(replacement.replace);
+  }
+
+  const localServeTarget = angularConfig?.projects?.['track-tools']?.architect?.serve?.configurations?.local?.buildTarget;
+  if (localServeTarget !== 'track-tools:build:local') {
+    throw new Error('[local] Angular local serve must target track-tools:build:local.');
+  }
+  return angularConfig;
 }
 
 export function parseEnvAssignments(contents) {
@@ -105,6 +162,132 @@ export function assertNoLocalSecrets(secretContents, processEnvironment = proces
   }
 }
 
+export function assertExactLocalSecretTemplate(secretContents, exampleContents) {
+  const expectedAssignments = parseEnvAssignments(exampleContents);
+  const actualAssignments = parseEnvAssignments(secretContents);
+  const invalidExampleNames = [...expectedAssignments.entries()]
+    .filter(([, value]) => value !== LOCAL_SECRET_SENTINEL)
+    .map(([name]) => name)
+    .sort();
+  if (expectedAssignments.size === 0 || invalidExampleNames.length > 0) {
+    throw new Error(`[local] The committed local secret template is invalid${invalidExampleNames.length > 0 ? `: ${invalidExampleNames.join(', ')}` : '.'}`);
+  }
+
+  const missingNames = [...expectedAssignments.keys()]
+    .filter(name => !actualAssignments.has(name))
+    .sort();
+  const unexpectedNames = [...actualAssignments.keys()]
+    .filter(name => !expectedAssignments.has(name))
+    .sort();
+  const invalidValueNames = [...actualAssignments.entries()]
+    .filter(([, value]) => value !== LOCAL_SECRET_SENTINEL)
+    .map(([name]) => name)
+    .sort();
+  const mismatches = [
+    missingNames.length > 0 ? `missing ${missingNames.join(', ')}` : '',
+    unexpectedNames.length > 0 ? `unexpected ${unexpectedNames.join(', ')}` : '',
+    invalidValueNames.length > 0 ? `non-sentinel ${invalidValueNames.join(', ')}` : '',
+  ].filter(Boolean);
+  if (mismatches.length > 0) {
+    throw new Error(`[local] Local backend placeholders must exactly match functions/.secret.local.example: ${mismatches.join('; ')}.`);
+  }
+}
+
+async function assertSafeLocalSecretFilePath(filePath, label, allowMissing = false) {
+  try {
+    const metadata = await lstat(filePath);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`[local] Refusing to use ${label} through a symbolic link.`);
+    }
+    if (!metadata.isFile()) {
+      throw new Error(`[local] ${label} must be a regular file.`);
+    }
+    if (metadata.nlink !== 1) {
+      throw new Error(`[local] Refusing to use ${label} with multiple filesystem links.`);
+    }
+    return true;
+  } catch (error) {
+    if (allowMissing && error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function replaceWithLocalSecretTemplate(examplePath, secretPath) {
+  const temporaryPath = `${secretPath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await copyFile(examplePath, temporaryPath, constants.COPYFILE_EXCL);
+    await rename(temporaryPath, secretPath);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
+}
+
+export async function ensureLocalSecretFileAt(
+  secretPath,
+  examplePath,
+  processEnvironment = process.env,
+) {
+  await assertSafeLocalSecretFilePath(examplePath, 'the committed local secret template');
+  const secretExists = await assertSafeLocalSecretFilePath(
+    secretPath,
+    'the local secret placeholder file',
+    true,
+  );
+  if (!secretExists) {
+    await replaceWithLocalSecretTemplate(examplePath, secretPath);
+    await assertSafeLocalSecretFilePath(secretPath, 'the local secret placeholder file');
+  }
+
+  const exampleContents = await readFile(examplePath, 'utf8');
+  let secretContents = await readFile(secretPath, 'utf8');
+  assertNoLocalSecrets(secretContents, processEnvironment);
+
+  const assignments = [...parseEnvAssignments(secretContents).values()];
+  if (assignments.every(value => value.length === 0)) {
+    await assertSafeLocalSecretFilePath(secretPath, 'the local secret placeholder file');
+    await replaceWithLocalSecretTemplate(examplePath, secretPath);
+    secretContents = await readFile(secretPath, 'utf8');
+  }
+  assertExactLocalSecretTemplate(secretContents, exampleContents);
+  assertNoLocalSecrets(secretContents, processEnvironment);
+}
+
+export function findForbiddenFunctionSourceFiles(fileNames) {
+  return fileNames
+    .filter(fileName => FORBIDDEN_FUNCTION_SOURCE_FILE_PATTERNS.some(pattern => pattern.test(fileName)))
+    .sort();
+}
+
+export function assertPublicMapboxTokenSource(tokenSource) {
+  const tokenMatch = tokenSource.match(/^\s*export\s+const\s+mapboxAccessToken\s*=\s*['"]([^'"]*)['"]\s*;?\s*$/mu);
+  if (!tokenMatch?.[1] || !/^pk\.\S+$/u.test(tokenMatch[1])) {
+    throw new Error('[local] src/environments/mapbox-token.local.ts must contain a Mapbox pk.* public token.');
+  }
+}
+
+async function listFunctionSourceFiles(rootDirectory) {
+  const files = [];
+  const pendingDirectories = [rootDirectory];
+
+  while (pendingDirectories.length > 0) {
+    const directory = pendingDirectories.pop();
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!FUNCTION_SOURCE_SCAN_IGNORED_DIRECTORIES.has(entry.name)) {
+          pendingDirectories.push(entryPath);
+        }
+        continue;
+      }
+      files.push(path.relative(rootDirectory, entryPath).split(path.sep).join('/'));
+    }
+  }
+
+  return files.sort();
+}
+
 export function buildEmulatorArguments(runtimeConfig, importExistingState) {
   const args = [
     'emulators:start',
@@ -120,43 +303,28 @@ export function buildEmulatorArguments(runtimeConfig, importExistingState) {
 }
 
 export async function readLocalRuntimeConfiguration() {
-  const [runtimeContents, firebaseContents] = await Promise.all([
+  const [runtimeContents, firebaseContents, angularContents] = await Promise.all([
     readFile(localRuntimeConfigPath, 'utf8'),
     readFile(localFirebaseConfigPath, 'utf8'),
+    readFile(angularConfigPath, 'utf8'),
   ]);
   const runtimeConfig = JSON.parse(runtimeContents);
   const firebaseConfig = JSON.parse(firebaseContents);
+  const angularConfig = JSON.parse(angularContents);
   validateRuntimeConfiguration(runtimeConfig, firebaseConfig);
-  return { runtimeConfig, firebaseConfig };
+  validateAngularLocalConfiguration(angularConfig);
+  return { runtimeConfig, firebaseConfig, angularConfig };
 }
 
 export async function ensureEmptyLocalSecretFile() {
-  try {
-    await access(localSecretPath);
-  } catch {
-    await copyFile(localSecretExamplePath, localSecretPath);
-  }
+  await ensureLocalSecretFileAt(localSecretPath, localSecretExamplePath);
 
-  let secretContents = await readFile(localSecretPath, 'utf8');
-  assertNoLocalSecrets(secretContents);
-
-  const assignments = [...parseEnvAssignments(secretContents).values()];
-  if (assignments.length > 0 && assignments.every(value => value.length === 0)) {
-    await copyFile(localSecretExamplePath, localSecretPath);
-    secretContents = await readFile(localSecretPath, 'utf8');
-  }
-  const unsafePlaceholderNames = [...parseEnvAssignments(secretContents).entries()]
-    .filter(([, value]) => value !== LOCAL_SECRET_SENTINEL)
-    .map(([name]) => name);
-  if (unsafePlaceholderNames.length > 0) {
-    throw new Error(`[local] Local backend placeholders must use ${LOCAL_SECRET_SENTINEL}: ${unsafePlaceholderNames.join(', ')}.`);
-  }
-  assertNoLocalSecrets(secretContents);
-
-  const functionFiles = await readdir(path.join(repositoryRoot, 'functions'));
-  const environmentFiles = functionFiles.filter(name => name.startsWith('.env'));
-  if (environmentFiles.length > 0) {
-    throw new Error(`[local] Refusing to start while Functions environment files exist: ${environmentFiles.join(', ')}.`);
+  const functionSourceDirectory = path.join(repositoryRoot, 'functions');
+  const forbiddenFiles = findForbiddenFunctionSourceFiles(
+    await listFunctionSourceFiles(functionSourceDirectory),
+  );
+  if (forbiddenFiles.length > 0) {
+    throw new Error(`[local] Refusing to start while Functions credential or environment files exist: ${forbiddenFiles.join(', ')}.`);
   }
 }
 
@@ -200,14 +368,13 @@ export async function assertLocalPrerequisites() {
   }
 
   const tokenContents = await readFile(path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts'), 'utf8');
-  if (/YOUR_PUBLIC_MAPBOX_TOKEN/u.test(tokenContents) || /mapboxAccessToken\s*=\s*['"]\s*['"]/u.test(tokenContents)) {
-    throw new Error('[local] Replace YOUR_PUBLIC_MAPBOX_TOKEN in src/environments/mapbox-token.local.ts.');
-  }
+  assertPublicMapboxTokenSource(tokenContents);
 }
 
 export async function hasSavedEmulatorState() {
+  await assertLocalStatePersistencePathAt(repositoryRoot, localStatePath);
   try {
-    const metadata = await stat(path.join(localStatePath, 'firebase-export-metadata.json'));
+    const metadata = await lstat(path.join(localStatePath, 'firebase-export-metadata.json'));
     return metadata.isFile();
   } catch {
     return false;
@@ -215,15 +382,70 @@ export async function hasSavedEmulatorState() {
 }
 
 export async function ensureLocalStateDirectory() {
+  await assertLocalStatePersistencePathAt(repositoryRoot, localStatePath);
   await mkdir(path.dirname(localStatePath), { recursive: true });
+  await assertLocalStatePersistencePathAt(repositoryRoot, localStatePath);
+}
+
+function resolveExpectedLocalStatePath(rootDirectory, statePath) {
+  const resolvedRoot = path.resolve(rootDirectory);
+  const expectedPath = path.resolve(resolvedRoot, '.local', 'firebase-emulator-data');
+  if (path.resolve(statePath) !== expectedPath || !expectedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    throw new Error('[local] Refusing to use an unexpected local state path.');
+  }
+  return expectedPath;
+}
+
+export async function assertLocalStatePersistencePathAt(rootDirectory, statePath) {
+  const expectedPath = resolveExpectedLocalStatePath(rootDirectory, statePath);
+  const parentPath = path.dirname(expectedPath);
+
+  for (const [candidatePath, label] of [[parentPath, 'parent'], [expectedPath, 'directory']]) {
+    try {
+      const metadata = await lstat(candidatePath);
+      if (metadata.isSymbolicLink()) {
+        throw new Error('[local] Refusing to use local state through a symbolic link.');
+      }
+      if (!metadata.isDirectory()) {
+        throw new Error(`[local] The local state ${label} must be a directory.`);
+      }
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const pendingDirectories = [expectedPath];
+  while (pendingDirectories.length > 0) {
+    const directory = pendingDirectories.pop();
+    try {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (entry.isSymbolicLink()) {
+          throw new Error('[local] Refusing to use saved emulator state containing a symbolic link.');
+        }
+        if (entry.isDirectory()) {
+          pendingDirectories.push(path.join(directory, entry.name));
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+export async function removeLocalStateAt(rootDirectory, statePath) {
+  const expectedPath = resolveExpectedLocalStatePath(rootDirectory, statePath);
+  await assertLocalStatePersistencePathAt(rootDirectory, statePath);
+  await rm(expectedPath, { recursive: true, force: true });
 }
 
 export async function removeLocalState() {
-  const expectedPath = path.resolve(repositoryRoot, '.local', 'firebase-emulator-data');
-  if (path.resolve(localStatePath) !== expectedPath || !expectedPath.startsWith(`${repositoryRoot}${path.sep}`)) {
-    throw new Error('[local] Refusing to remove an unexpected local state path.');
-  }
-  await rm(expectedPath, { recursive: true, force: true });
+  await removeLocalStateAt(repositoryRoot, localStatePath);
 }
 
 export async function assertPortsAvailable(runtimeConfig, portNames = Object.keys(runtimeConfig.ports)) {

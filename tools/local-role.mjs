@@ -60,7 +60,7 @@ export async function updateLocalRole({ email, role }, now = new Date()) {
   process.env.FIRESTORE_EMULATOR_HOST = `${runtimeConfig.host}:${runtimeConfig.ports.firestore}`;
   process.env.FIREBASE_STORAGE_EMULATOR_HOST = `${runtimeConfig.host}:${runtimeConfig.ports.storage}`;
 
-  const [{ initializeApp, deleteApp }, { getAuth }, { getFirestore, Timestamp }] = await Promise.all([
+  const [{ initializeApp, deleteApp }, { getAuth }, { FieldValue, getFirestore, Timestamp }] = await Promise.all([
     import('firebase-admin/app'),
     import('firebase-admin/auth'),
     import('firebase-admin/firestore'),
@@ -77,7 +77,7 @@ export async function updateLocalRole({ email, role }, now = new Date()) {
     const user = await auth.getUserByEmail(email);
     const userRef = firestore.doc(`users/${user.uid}`);
     const userSnapshot = await userRef.get();
-    if (!userSnapshot.exists) {
+    if (!userSnapshot.exists || userSnapshot.data()?.onboardingCompleted !== true) {
       throw new Error('[local-role] Complete local onboarding before changing the synthetic role.');
     }
 
@@ -101,6 +101,7 @@ export async function updateLocalRole({ email, role }, now = new Date()) {
     await auth.setCustomUserClaims(user.uid, nextClaims);
     await firestore.doc(`users/${user.uid}/system/status`).set({
       claimsUpdatedAt: Timestamp.fromMillis(now.getTime() + 5_000),
+      gracePeriodUntil: FieldValue.delete(),
       localSyntheticRole: role,
       localSyntheticRoleUpdatedAt: Timestamp.fromDate(now),
     }, { merge: true });

@@ -32,6 +32,7 @@ describe('AppToolsComparisonService', () => {
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
+  let originalBackendMode: typeof environment.backendMode;
   let originalFileReader: typeof FileReader;
   let originalCrypto: Crypto | undefined;
   let originalDecompressionStream: typeof DecompressionStream | undefined;
@@ -43,6 +44,7 @@ describe('AppToolsComparisonService', () => {
   beforeEach(() => {
     originalLocalhost = environment.localhost;
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
+    originalBackendMode = environment.backendMode;
     originalFileReader = globalThis.FileReader;
     originalCrypto = globalThis.crypto;
     originalDecompressionStream = globalThis.DecompressionStream;
@@ -128,6 +130,7 @@ describe('AppToolsComparisonService', () => {
   afterEach(() => {
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
+    environment.backendMode = originalBackendMode;
     globalThis.FileReader = originalFileReader;
     Object.defineProperty(globalThis, 'crypto', {
       configurable: true,
@@ -472,6 +475,7 @@ describe('AppToolsComparisonService', () => {
   });
 
   it('uses production function URL when the emulator is disabled', async () => {
+    environment.backendMode = 'hosted';
     environment.useFunctionsEmulator = false;
     fetchMock.mockResolvedValue({
       ok: true,
@@ -492,6 +496,9 @@ describe('AppToolsComparisonService', () => {
       'https://europe-west2-quantified-self-io.cloudfunctions.net/createToolComparisonEvent',
       expect.any(Object),
     );
+    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
   });
 
   it('counts saved benchmark comparisons through AppEventService', async () => {

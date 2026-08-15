@@ -25,6 +25,7 @@
     "credentials:test": "node --test tools/check-staged-credential-files.test.mjs",
     "local:config:test": "node --test tools/local-runtime.test.mjs",
     "local:smoke": "node tools/run-local-smoke.mjs",
+    "local:smoke:check": "node tools/local-smoke-check.mjs",
     "local:role": "node tools/local-role.mjs",
     "local:reset": "node tools/reset-local.mjs",
     "hooks:mcp:pre-push": "npm --prefix functions run mcp:contract:check && npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts",
