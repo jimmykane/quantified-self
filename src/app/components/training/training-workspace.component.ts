@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -138,6 +139,11 @@ import {
   TrainingSportVisibilityDialogComponent,
   type TrainingSportVisibilityDialogResult,
 } from './training-sport-visibility-dialog.component';
+import {
+  TrainingMobileDestinationSheetComponent,
+  type TrainingMobileDestinationSheetData,
+  type TrainingMobileDestinationSheetResult,
+} from './training-mobile-destination-sheet.component';
 import {
   formatTrainingVisibleDisciplinesActivityLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
@@ -382,8 +388,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingDestinationScopeLabel = 'All recorded training';
   public trainingDestinationOptions: TrainingDestinationOptionViewModel[] = [];
   public sportShortcuts: TrainingVisibleDiscipline[] = [];
-  public desktopSportShortcuts: TrainingVisibleDiscipline[] = [];
-  public desktopSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
+  public visibleSportShortcuts: TrainingVisibleDiscipline[] = [];
+  public visibleSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
   public desktopAllSportsSelectorValue: TrainingDestinationId | null = null;
   public sportShortcutsCompactLabel = 'Automatic shortcuts';
   public sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
@@ -439,9 +445,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private trainingBuildBenchmarkDialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent> | null = null;
   private trainingBuildBenchmarkDialogDiscipline: DerivedTrainingDiscipline | null = null;
   private trainingSportVisibilityDialogRef: MatDialogRef<TrainingSportVisibilityDialogComponent> | null = null;
+  private trainingMobileDestinationSheetRef: MatBottomSheetRef<
+    TrainingMobileDestinationSheetComponent,
+    TrainingMobileDestinationSheetResult
+  > | null = null;
   private trainingStateDetailsDialogRef: MatDialogRef<unknown> | null = null;
 
   @ViewChild('trainingStateDetailsDialogTemplate') private trainingStateDetailsDialogTemplate?: TemplateRef<unknown>;
+  @ViewChild('mobileDestinationScroller') private mobileDestinationScroller?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly authService: AppAuthService,
@@ -457,6 +468,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     @Optional() @Inject(TRAINING_WORKSPACE_PREFERENCE_WRITER)
     private readonly userSettingsService: TrainingWorkspacePreferenceWriter | null = null,
     @Optional() private readonly snackBar: MatSnackBar | null = null,
+    @Optional() private readonly bottomSheet: MatBottomSheet | null = null,
   ) {
     this.useTrainingStateDetailsDialog = breakpointObserver
       ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
@@ -533,6 +545,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.queuedDestinationWrite = null;
     this.acknowledgedDestinationWrites.clear();
     this.trainingStateDetailsDialogRef?.close();
+    this.trainingMobileDestinationSheetRef?.dismiss();
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
     this.dataSubscriptions.unsubscribe();
@@ -773,11 +786,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.clearTrainingReadinessDayRolloverTimer();
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
     const activeVisibilityDialogRef = this.trainingSportVisibilityDialogRef;
+    const activeMobileDestinationSheetRef = this.trainingMobileDestinationSheetRef;
     this.trainingBuildBenchmarkDialogRef = null;
     this.trainingBuildBenchmarkDialogDiscipline = null;
     this.trainingSportVisibilityDialogRef = null;
+    this.trainingMobileDestinationSheetRef = null;
     activeDialogRef?.close();
     activeVisibilityDialogRef?.close();
+    activeMobileDestinationSheetRef?.dismiss();
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
@@ -823,8 +839,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingDestinationScopeLabel = 'All recorded training';
     this.trainingDestinationOptions = [];
     this.sportShortcuts = [];
-    this.desktopSportShortcuts = [];
-    this.desktopSportShortcutOptions = [];
+    this.visibleSportShortcuts = [];
+    this.visibleSportShortcutOptions = [];
     this.desktopAllSportsSelectorValue = null;
     this.sportShortcutsCompactLabel = 'Automatic shortcuts';
     this.sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
@@ -1113,7 +1129,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       ? formatTrainingVisibleDisciplinesLabel(this.sportShortcuts)
       : 'no current shortcuts';
     this.sportShortcutsAccessibleLabel = `Choose sport shortcuts. ${shortcutResolution.isAutomatic ? 'Automatic' : 'Fixed'} selection: ${shortcutLabels}.`;
-    this.desktopSportShortcuts = resolveTrainingShortcutDestinations(
+    this.visibleSportShortcuts = resolveTrainingShortcutDestinations(
       this.sportShortcuts,
       this.selectedTrainingDestination,
     );
@@ -1149,7 +1165,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         materialIcon: 'bolt',
       }] : []),
     ];
-    this.desktopSportShortcutOptions = this.desktopSportShortcuts
+    this.visibleSportShortcutOptions = this.visibleSportShortcuts
       .map(id => this.trainingDestinationOptions.find(option => option.id === id))
       .filter((option): option is TrainingDestinationOptionViewModel => option !== undefined);
     this.desktopAllSportsSelectorValue = this.isOtherPowerDestination
@@ -1221,6 +1237,55 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     // null and Angular has no changed input to write back, so clear it through
     // the component's public value API to avoid showing the destination twice.
     select.value = this.desktopAllSportsSelectorValue;
+  }
+
+  public openTrainingMobileDestinationSheet(): void {
+    if (
+      !this.bottomSheet
+      || this.trainingMobileDestinationSheetRef
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingBuildBenchmarkDialogRef
+    ) {
+      return;
+    }
+    const data: TrainingMobileDestinationSheetData = {
+      options: this.trainingDestinationOptions.map(option => ({
+        id: option.id,
+        label: option.label,
+        iconActivityType: option.sport?.iconActivityType || null,
+        materialIcon: option.materialIcon,
+      })),
+      shortcutIds: [...this.sportShortcuts],
+      selectedDestination: this.selectedTrainingDestination,
+      isAutomatic: this.isAutomaticSportVisibility,
+    };
+    const sheetRef = this.bottomSheet.open(TrainingMobileDestinationSheetComponent, {
+      ariaLabel: 'Choose training view',
+      data,
+    });
+    this.trainingMobileDestinationSheetRef = sheetRef;
+    this.subscriptions.add(sheetRef.afterDismissed().subscribe((result) => {
+      const applyResult = (): void => {
+        if (this.trainingMobileDestinationSheetRef === sheetRef) {
+          this.trainingMobileDestinationSheetRef = null;
+        }
+        if (result?.kind === 'destination') {
+          this.selectTrainingDestination(result.destination, 'mobile_selector');
+          if (this.mobileDestinationScroller) {
+            this.mobileDestinationScroller.nativeElement.scrollLeft = 0;
+          }
+          return;
+        }
+        if (result?.kind === 'manage_shortcuts') {
+          this.openTrainingSportVisibilityDialog();
+        }
+      };
+      if (this.ngZone) {
+        this.ngZone.run(applyResult);
+      } else {
+        applyResult();
+      }
+    }));
   }
 
   private queuePreferredTrainingDestinationWrite(
@@ -1347,7 +1412,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   public openTrainingSportVisibilityDialog(): void {
     const userUID = this.currentUserUID;
-    if (!userUID || this.trainingSportVisibilityDialogRef || this.trainingBuildBenchmarkDialogRef) {
+    if (
+      !userUID
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingBuildBenchmarkDialogRef
+      || this.trainingMobileDestinationSheetRef
+    ) {
       return;
     }
     const dialogRef = this.dialog.open(TrainingSportVisibilityDialogComponent, {
@@ -1384,7 +1454,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   public openTrainingBuildBenchmarkDialog(discipline: DerivedTrainingDiscipline): void {
-    if (this.trainingBuildBenchmarkDialogRef || this.trainingSportVisibilityDialogRef) {
+    if (
+      this.trainingBuildBenchmarkDialogRef
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingMobileDestinationSheetRef
+    ) {
       return;
     }
     const card = this.trainingBuildCards.find(item => item.discipline === discipline);

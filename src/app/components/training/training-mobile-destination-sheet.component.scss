@@ -1,0 +1,72 @@
+:host {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.training-mobile-destination-sheet {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+}
+
+.training-mobile-destination-content {
+  min-height: 0;
+  padding: 0 12px 8px;
+  overflow-y: auto;
+}
+
+.training-mobile-destination-intro {
+  margin: 0;
+  padding: 14px 4px 10px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.training-mobile-destination-section + .training-mobile-destination-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.training-mobile-destination-section h3 {
+  margin: 0;
+  padding: 8px 16px 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-large);
+  letter-spacing: 0;
+}
+
+.training-mobile-destination-section mat-action-list {
+  padding-top: 0;
+}
+
+.training-mobile-destination-item {
+  min-height: 52px;
+}
+
+.training-mobile-destination-item-selected {
+  color: var(--mat-sys-primary);
+}
+
+.training-mobile-destination-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mat-sys-primary);
+}
+
+.training-mobile-destination-footer {
+  flex: 0 0 auto;
+  padding: 8px 12px 0;
+}
+
+.training-mobile-destination-footer button {
+  width: 100%;
+}

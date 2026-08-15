@@ -78,7 +78,7 @@
           <mat-icon aria-hidden="true">monitoring</mat-icon>
           <span>All training</span>
         </mat-button-toggle>
-        @for (option of desktopSportShortcutOptions; track option.id) {
+        @for (option of visibleSportShortcutOptions; track option.id) {
           <mat-button-toggle [value]="option.id">
             @if (option.sport; as sport) {
               <app-activity-type-icon
@@ -132,23 +132,40 @@
     </div>
 
     <div class="training-destination-mobile">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Training view</mat-label>
-        <mat-select
+      <div #mobileDestinationScroller class="training-mobile-shortcut-scroller">
+        <mat-button-toggle-group
+          class="training-mobile-shortcuts"
           [value]="selectedTrainingDestination"
-          (selectionChange)="selectTrainingDestination($event.value, 'mobile_selector')">
-          @for (option of trainingDestinationOptions; track option.id) {
-            <mat-option [value]="option.id">{{ option.label }}</mat-option>
+          aria-label="Training shortcuts"
+          hideSingleSelectionIndicator
+          (change)="selectTrainingDestination($event.value, 'mobile_selector')">
+          <mat-button-toggle value="overview" aria-label="View all training">
+            <mat-icon aria-hidden="true">monitoring</mat-icon>
+            <span>All</span>
+          </mat-button-toggle>
+          @for (option of visibleSportShortcutOptions; track option.id) {
+            <mat-button-toggle [value]="option.id">
+              @if (option.sport; as sport) {
+                <app-activity-type-icon
+                  [activityType]="sport.iconActivityType"
+                  size="18px"
+                  aria-hidden="true">
+                </app-activity-type-icon>
+              }
+              <span>{{ option.label }}</span>
+            </mat-button-toggle>
           }
-        </mat-select>
-      </mat-form-field>
+        </mat-button-toggle-group>
+      </div>
       <button
-        mat-icon-button
+        mat-button
         type="button"
-        (click)="openTrainingSportVisibilityDialog()"
-        [matTooltip]="sportShortcutsCompactLabel"
-        [attr.aria-label]="sportShortcutsAccessibleLabel">
-        <mat-icon aria-hidden="true">tune</mat-icon>
+        class="training-mobile-more-action"
+        aria-haspopup="dialog"
+        aria-label="Choose from all training sports"
+        (click)="openTrainingMobileDestinationSheet()">
+        <span>More</span>
+        <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
       </button>
     </div>
 

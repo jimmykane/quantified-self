@@ -169,6 +169,7 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Historical readiness builder: `functions/src/derived-metrics/derived-metrics.service.ts`
 - Benchmark dialog: `src/app/components/training/training-build-benchmark-dialog.component.*`
 - Sport-shortcuts dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
+- Mobile destination sheet: `src/app/components/training/training-mobile-destination-sheet.component.*`
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
 - Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
@@ -598,8 +599,13 @@ Desktop uses one intrinsic-width Material button-toggle group for **All training
 with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
 with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
 temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
-widths the compact shortcut group occupies its own row; at 800 px and below a single **Training view** selector replaces
-the desktop controls. The selected destination is intentionally not encoded in the URL or browser history.
+widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable Material toggle
+rail exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations, while a fixed **More** action
+opens a viewport-bounded Material bottom sheet. The sheet keeps **All training** first, groups automatic or pinned
+shortcuts next, sorts the remaining available destinations by label, marks the current view, and places **Manage sport
+shortcuts** in its stable footer. Choosing an off-shortcut registered sport temporarily places it at the front of the
+rail's sport slots and returns the rail to its leading edge. The selected destination is intentionally not encoded in
+the URL or browser history.
 
 Sport shortcuts have two modes:
 
@@ -1668,7 +1674,7 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 
 - Overview, every registered sport, and Other power activities;
 - automatic and fixed one-to-four-sport shortcuts, legacy fallback, and a selected off-shortcut sport;
-- desktop hybrid navigation, intermediate-width wrapping, and the mobile destination selector;
+- desktop hybrid navigation, intermediate-width wrapping, and the mobile shortcut rail plus complete-destination sheet;
 - rapid destination switching, a pre-acknowledgement local Firestore echo, failed persistence, and an account switch
   during an in-flight preference write;
 - benchmark unset, saving, updating, invalid, cleared, and ready;

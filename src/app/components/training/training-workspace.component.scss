@@ -32,6 +32,14 @@
 .training-destination-option { display: inline-flex; align-items: center; gap: 8px; }
 .training-destination-option mat-icon,
 .training-destination-option app-activity-type-icon { flex: 0 0 auto; width: 18px; height: 18px; font-size: 18px; line-height: 18px; }
+.training-mobile-shortcut-scroller { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
+.training-mobile-shortcut-scroller::-webkit-scrollbar { display: none; }
+.training-mobile-shortcuts { width: max-content; }
+.training-mobile-shortcuts mat-button-toggle { min-width: 0; height: 48px; }
+.training-mobile-shortcuts mat-icon,
+.training-mobile-shortcuts app-activity-type-icon { width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
+.training-mobile-more-action { align-self: stretch; min-width: 82px; }
+.training-mobile-more-action mat-icon { margin-left: 4px; margin-right: 0; }
 .training-section-heading p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
 .training-derived-metrics-status { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 4px; color: var(--mat-sys-primary); font-size: var(--training-inter-caption-font-size); line-height: 1.2; }
 .training-derived-metrics-status > mat-icon { flex: 0 0 auto; width: 16px; height: 16px; font-size: 16px; line-height: 16px; }
@@ -410,8 +418,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 @media (max-width: 800px) {
   .training-destination-navigation { margin-top: 0; }
   .training-destination-desktop { display: none; }
-  .training-destination-mobile { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 8px; }
-  .training-destination-mobile mat-form-field { width: 100%; }
+  .training-destination-mobile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
   .training-destination-scope { align-items: flex-start; flex-direction: column; gap: 5px; }
 
   .training-page-actions {

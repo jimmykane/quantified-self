@@ -182,6 +182,11 @@ describe('TrainingWorkspaceComponent', () => {
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sport shortcuts.');
     expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
+    const mobileDestination = element.querySelector('.training-destination-mobile');
+    expect(mobileDestination?.querySelector('mat-select')).toBeNull();
+    expect(mobileDestination?.querySelector('.training-mobile-shortcuts')?.textContent).toContain('All');
+    expect(mobileDestination?.querySelector('.training-mobile-more-action')?.textContent).toContain('More');
+    expect(mobileDestination?.querySelector('.training-mobile-more-action')?.getAttribute('aria-haspopup')).toBe('dialog');
     expect(element.textContent).toContain('Viewing All training · All recorded training');
     expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
@@ -308,6 +313,18 @@ describe('TrainingWorkspaceComponent', () => {
     const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
 
     expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
+  });
+
+  it('keeps mobile shortcuts swipeable while More remains a fixed action', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).toMatch(/\.training-mobile-shortcut-scroller\s*\{[^}]*overflow-x:\s*auto/s);
+    expect(styles).toMatch(/\.training-mobile-shortcuts\s*\{[^}]*width:\s*max-content/s);
+    expect(styles).toMatch(/\.training-mobile-more-action\s*\{[^}]*min-width:\s*82px/s);
+    expect(styles).toMatch(/\.training-destination-mobile\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/s);
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
@@ -1432,9 +1449,99 @@ describe('TrainingWorkspaceComponent', () => {
     component.selectDesktopTrainingDestination('walking-hiking', select as any);
 
     expect(component.selectedTrainingDestination).toBe('walking-hiking');
-    expect(component.desktopSportShortcuts[0]).toBe('walking-hiking');
+    expect(component.visibleSportShortcuts[0]).toBe('walking-hiking');
     expect(component.desktopAllSportsSelectorValue).toBeNull();
     expect(select.value).toBeNull();
+  });
+
+  it('opens the complete mobile sport picker and applies its destination result', () => {
+    const ngZone = { run: vi.fn((callback: () => void) => callback()) };
+    const bottomSheetRef = {
+      dismiss: vi.fn(),
+      afterDismissed: () => of({ kind: 'destination' as const, destination: 'cycling' as const }),
+    };
+    const bottomSheet = { open: vi.fn(() => bottomSheetRef) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      ngZone as any,
+      analyticsService as any,
+      null,
+      'en-US',
+      null,
+      null,
+      bottomSheet as any,
+    );
+    component.sportShortcuts = ['cycling', 'swimming'];
+    component.isAutomaticSportVisibility = true;
+    component.trainingDestinationOptions = [
+      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring' },
+      {
+        id: 'cycling',
+        label: 'Cycling',
+        details: 'Cycling',
+        sport: { id: 'cycling', iconActivityType: 'Cycling' } as any,
+        materialIcon: null,
+      },
+    ];
+
+    component.openTrainingMobileDestinationSheet();
+
+    expect(bottomSheet.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      ariaLabel: 'Choose training view',
+      data: expect.objectContaining({
+        shortcutIds: ['cycling', 'swimming'],
+        selectedDestination: 'overview',
+        isAutomatic: true,
+        options: expect.arrayContaining([
+          expect.objectContaining({ id: 'cycling', iconActivityType: 'Cycling' }),
+        ]),
+      }),
+    }));
+    expect(ngZone.run).toHaveBeenCalledOnce();
+    expect(component.selectedTrainingDestination).toBe('cycling');
+  });
+
+  it('opens shortcut management after the mobile picker dismisses', () => {
+    const dialogRef = { afterClosed: () => NEVER };
+    const dialog = { open: vi.fn(() => dialogRef) };
+    const bottomSheet = {
+      open: vi.fn(() => ({
+        dismiss: vi.fn(),
+        afterDismissed: () => of({ kind: 'manage_shortcuts' as const }),
+      })),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      null,
+      null,
+      bottomSheet as any,
+    );
+    (component as any).currentUserUID = 'user-1';
+    component.sportShortcuts = ['cycling'];
+
+    component.openTrainingMobileDestinationSheet();
+
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: {
+        userUID: 'user-1',
+        visibleDisciplines: ['cycling'],
+        isAutomatic: true,
+      },
+    }));
   });
 
   it('keeps the selected destination open and reports a failed account-default write', async () => {
