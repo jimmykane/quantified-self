@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -103,6 +103,7 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
         mockIsActivitySyncOutboundEcho: vi.fn().mockResolvedValue(false),
         mockGetActiveCOROSTokenSnapshot: vi.fn().mockResolvedValue({ id: 'corosOpenId' }),
         mockDownloadCOROSFITFile: vi.fn().mockResolvedValue(Buffer.from('test-fit-data')),
+        mockRecoverCOROSFITFileURL: vi.fn().mockResolvedValue('https://oss.coros.com/fit/recovered.fit'),
     };
 });
 
@@ -255,6 +256,33 @@ vi.mock('./coros/file-download', () => ({
     },
 }));
 
+vi.mock('./coros/workout-detail', () => {
+    class RetryableCOROSFITDetailError extends Error {
+        readonly name = 'RetryableCOROSFITDetailError';
+        constructor(public readonly providerCode?: string) {
+            super('COROS FIT detail is temporarily unavailable.');
+        }
+    }
+    class COROSFITDetailAuthError extends Error {
+        readonly name = 'COROSFITDetailAuthError';
+        constructor(public readonly providerCode?: string) {
+            super('COROS authorization is required to recover the FIT detail.');
+        }
+    }
+    class PermanentCOROSFITDetailError extends Error {
+        readonly name = 'PermanentCOROSFITDetailError';
+        constructor(public readonly reason: string, public readonly providerCode?: string) {
+            super('COROS FIT detail response cannot be used.');
+        }
+    }
+    return {
+        recoverCOROSFITFileURL: (...args: unknown[]) => mockRecoverCOROSFITFileURL(...args),
+        RetryableCOROSFITDetailError,
+        COROSFITDetailAuthError,
+        PermanentCOROSFITDetailError,
+    };
+});
+
 vi.mock('./shared/user-deletion-guard', () => {
     class MockUserDeletionGuardReadError extends Error {
         readonly name = 'UserDeletionGuardReadError';
@@ -331,6 +359,10 @@ import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUs
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { PermanentCOROSFITDownloadError } from './coros/file-download';
+import {
+    COROSFITDetailAuthError,
+    PermanentCOROSFITDetailError,
+} from './coros/workout-detail';
 
 describe('queue', () => {
     beforeEach(async () => {
@@ -355,6 +387,8 @@ describe('queue', () => {
         mockGetActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'corosOpenId' });
         mockDownloadCOROSFITFile.mockReset();
         mockDownloadCOROSFITFile.mockResolvedValue(Buffer.from('test-fit-data'));
+        mockRecoverCOROSFITFileURL.mockReset();
+        mockRecoverCOROSFITFileURL.mockResolvedValue('https://oss.coros.com/fit/recovered.fit');
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -2267,6 +2301,16 @@ describe('queue', () => {
                 openId: 'oid1',
                 workoutID: 'wid1',
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
                 retryCount: 0,
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -2301,6 +2345,16 @@ describe('queue', () => {
                 openId: 'oid1',
                 workoutID: 'wid1',
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
                 retryCount: 0,
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -2309,6 +2363,16 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             expect(mockDocRef.update).toHaveBeenCalledWith({
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
             });
             expect(mockDocRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 retryCount: 0,
@@ -2795,6 +2859,193 @@ describe('queue', () => {
                 providerEventIDField: 'serviceWorkoutID',
                 providerEventSecondaryID: 'https://coros.com/fit',
                 providerEventSecondaryIDField: 'serviceFITFileURI',
+            });
+        });
+
+        it('recovers and deletion-guards a missing COROS FIT URL before import', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'missing-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                detailMode: 8,
+                detailSubMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockRecoverCOROSFITFileURL).toHaveBeenCalledWith(
+                expect.objectContaining({ accessToken: 'fresh-token' }),
+                expect.objectContaining({ id: 'missing-fit-url', componentKey: 'root' }),
+            );
+            expect(mockRef.update).toHaveBeenCalledWith({
+                FITFileURI: 'https://oss.coros.com/fit/recovered.fit',
+            });
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/recovered.fit');
+            expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith(expect.objectContaining({
+                providerEventSecondaryID: 'root',
+                providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+                legacyProviderEventSecondaryIdentities: [{
+                    field: 'serviceFITFileURI',
+                    value: 'https://oss.coros.com/fit/recovered.fit',
+                }],
+            }));
+            expect(mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
+        });
+
+        it('recovers an expired signed COROS URL without refreshing OAuth', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            mockDownloadCOROSFITFile
+                .mockRejectedValueOnce(Object.assign(new Error('expired signed URL'), { statusCode: 403 }))
+                .mockResolvedValueOnce(Buffer.from('test-fit-data'));
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'expired-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                FITFileURI: 'https://oss.coros.com/fit/expired.fit',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockDownloadCOROSFITFile).toHaveBeenNthCalledWith(1, 'https://oss.coros.com/fit/expired.fit');
+            expect(mockDownloadCOROSFITFile).toHaveBeenNthCalledWith(2, 'https://oss.coros.com/fit/recovered.fit');
+            expect(getTokenData).toHaveBeenCalledTimes(1);
+        });
+
+        it('refreshes OAuth once only when the COROS detail endpoint rejects authorization', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            mockRecoverCOROSFITFileURL
+                .mockRejectedValueOnce(new COROSFITDetailAuthError('5006'))
+                .mockResolvedValueOnce('https://oss.coros.com/fit/after-refresh.fit');
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'detail-auth-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(getTokenData).toHaveBeenLastCalledWith(expect.anything(), ServiceNames.COROSAPI, true);
+            expect(mockRecoverCOROSFITFileURL).toHaveBeenCalledTimes(2);
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/after-refresh.fit');
+        });
+
+        it('moves permanently invalid COROS detail responses to the DLQ', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRecoverCOROSFITFileURL.mockRejectedValueOnce(
+                new PermanentCOROSFITDetailError('workout_id_mismatch'),
+            );
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'invalid-fit-detail',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'COROS_FIT_DETAIL_REJECTED',
+            }));
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+        });
+
+        it('does not process a recovered URL when the guarded queue identity is stale', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'component:1:9:1',
+                }),
+            });
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'stale-fit-detail',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.RetryIncremented);
+
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalledWith({
+                FITFileURI: 'https://oss.coros.com/fit/recovered.fit',
             });
         });
 

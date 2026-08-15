@@ -29,7 +29,7 @@ import {
   TokenRefreshSkippedForDeletedUserError,
 } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
+import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
@@ -55,6 +55,13 @@ import {
   downloadCOROSFITFile,
   PermanentCOROSFITDownloadError,
 } from './coros/file-download';
+import { COROSEventMetaData } from './coros/event-metadata';
+import {
+  COROSFITDetailAuthError,
+  PermanentCOROSFITDetailError,
+  recoverCOROSFITFileURL,
+  RetryableCOROSFITDetailError,
+} from './coros/workout-detail';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
   markWorkoutTaskDispatchedWithRetry,
@@ -463,11 +470,90 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
  * @param queueItem
  */
 export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
-  logger.info(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
+  logger.info('Inserting COROS workout into the provider queue.', { queueItemId: queueItem.id });
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem(queueItem, ServiceNames.COROSAPI), ServiceNames.COROSAPI, {
     intent: 'provider_webhook',
     dispatchMode: 'immediate',
   });
+}
+
+function getCOROSFITDownloadStatusCode(error: unknown): number | null {
+  const statusCode = Number((error as { statusCode?: unknown } | null)?.statusCode);
+  return Number.isFinite(statusCode) ? statusCode : null;
+}
+
+function shouldRecoverCOROSFITUrl(error: unknown): boolean {
+  const statusCode = getCOROSFITDownloadStatusCode(error);
+  return statusCode === 401 || statusCode === 403 || statusCode === 404 || statusCode === 410;
+}
+
+async function persistRecoveredCOROSFITUrl(
+  queueItem: COROSAPIWorkoutQueueItemInterface,
+  firebaseUserID: string,
+  fitFileURI: string,
+): Promise<void> {
+  if (!queueItem.ref) {
+    queueItem.FITFileURI = fitFileURI;
+    return;
+  }
+
+  const updateResult = await updateQueueItemIfUserActive({
+    queueItemDocument: queueItem.ref,
+    queueItemId: queueItem.id,
+    userID: firebaseUserID,
+    phase: 'coros_fit_detail_url_persist',
+    updateData: { FITFileURI: fitFileURI },
+    logPrefix: 'COROSFITDetail',
+    actionDescription: 'recovered FIT URL write',
+    isCurrent: currentQueueItem => currentQueueItem.processed !== true
+      && currentQueueItem.openId === queueItem.openId
+      && `${currentQueueItem.workoutID ?? ''}` === queueItem.workoutID
+      && (queueItem.componentKey
+        ? currentQueueItem.componentKey === queueItem.componentKey
+        : currentQueueItem.FITFileURI === queueItem.FITFileURI),
+  });
+  if (updateResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+    throw new TokenRefreshSkippedForDeletedUserError(
+      firebaseUserID,
+      ServiceNames.COROSAPI,
+      queueItem.openId,
+      'before_persist',
+    );
+  }
+  if (updateResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
+    throw new RetryableCOROSFITDetailError('queue_item_changed');
+  }
+  queueItem.FITFileURI = fitFileURI;
+}
+
+async function recoverAndPersistCOROSFITUrl(
+  queueItem: COROSAPIWorkoutQueueItemInterface,
+  serviceToken: COROSAPIAuth2ServiceTokenInterface,
+  firebaseUserID: string,
+): Promise<string> {
+  const fitFileURI = await recoverCOROSFITFileURL(serviceToken, queueItem);
+  await persistRecoveredCOROSFITUrl(queueItem, firebaseUserID, fitFileURI);
+  return fitFileURI;
+}
+
+async function downloadCOROSWorkoutWithRecovery(
+  queueItem: COROSAPIWorkoutQueueItemInterface,
+  serviceToken: COROSAPIAuth2ServiceTokenInterface,
+  firebaseUserID: string,
+  recoverBeforeDownload = false,
+): Promise<Buffer> {
+  let fitFileURI = queueItem.FITFileURI;
+  if (recoverBeforeDownload || !fitFileURI) {
+    fitFileURI = await recoverAndPersistCOROSFITUrl(queueItem, serviceToken, firebaseUserID);
+  }
+
+  try {
+    return await downloadCOROSFITFile(fitFileURI);
+  } catch (error) {
+    if (recoverBeforeDownload || !shouldRecoverCOROSFITUrl(error)) throw error;
+    const recoveredFitFileURI = await recoverAndPersistCOROSFITUrl(queueItem, serviceToken, firebaseUserID);
+    return downloadCOROSFITFile(recoveredFitFileURI);
+  }
 }
 
 export function getWorkoutForService(
@@ -477,8 +563,13 @@ export function getWorkoutForService(
   switch (serviceName) {
     default:
       throw new Error('Not Implemented');
-    case ServiceNames.COROSAPI:
-      return downloadCOROSFITFile((workoutQueueItem as COROSAPIWorkoutQueueItemInterface).FITFileURI);
+    case ServiceNames.COROSAPI: {
+      const fitFileURI = (workoutQueueItem as COROSAPIWorkoutQueueItemInterface).FITFileURI;
+      if (!fitFileURI) {
+        throw new PermanentCOROSFITDownloadError('COROS FIT URL is missing.');
+      }
+      return downloadCOROSFITFile(fitFileURI);
+    }
     case ServiceNames.SuuntoApp:
       return requestPromise.get({
         headers: {
@@ -668,7 +759,17 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
+      const downloadedPayload = serviceName === ServiceNames.COROSAPI
+        ? await downloadCOROSWorkoutWithRecovery(
+          queueItem as COROSAPIWorkoutQueueItemInterface,
+          serviceToken as COROSAPIAuth2ServiceTokenInterface,
+          parentID,
+        )
+        : await getWorkoutForService(
+          serviceName,
+          queueItem as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
+          serviceToken as SuuntoAPIAuth2ServiceTokenInterface,
+        );
       const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
       if (normalizedPayload.normalizedFromMultipart) {
         const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -678,20 +779,89 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
       logger.info('Ending timer: DownloadFit');
-      if (e instanceof PermanentCOROSFITDownloadError) {
+      if (serviceName === ServiceNames.COROSAPI) {
+        if (e instanceof PermanentCOROSFITDetailError) {
+          return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DETAIL_REJECTED');
+        }
+        if (e instanceof PermanentCOROSFITDownloadError) {
+          return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+        }
+        if (isTokenRefreshSkippedForDeletedUserError(e)) {
+          sawUserDeletionSkip = true;
+          continue;
+        }
+        if (e instanceof COROSFITDetailAuthError) {
+          logger.warn(`COROS FIT detail authorization failed for ${queueItem.id}; refreshing the provider token once.`);
+          try {
+            serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
+            await getActiveCOROSTokenSnapshot(
+              parentID,
+              (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
+            );
+            const downloadedPayload = await downloadCOROSWorkoutWithRecovery(
+              queueItem as COROSAPIWorkoutQueueItemInterface,
+              serviceToken as COROSAPIAuth2ServiceTokenInterface,
+              parentID,
+              true,
+            );
+            result = normalizeDownloadedFitPayload(downloadedPayload).data;
+          } catch (retryError: unknown) {
+            if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
+              sawPendingDisconnectSkip = true;
+              continue;
+            }
+            if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
+              sawUserDeletionSkip = true;
+              continue;
+            }
+            if (retryError instanceof PermanentCOROSFITDetailError) {
+              return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DETAIL_REJECTED');
+            }
+            if (retryError instanceof PermanentCOROSFITDownloadError) {
+              return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+            }
+            if (retryError instanceof COROSFITDetailAuthError) {
+              return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DETAIL_AUTH_REQUIRED');
+            }
+            const retryCode = `${(retryError as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+            if (retryCode === 'unauthenticated' || retryCode === 'failed-precondition') {
+              sawInactiveProviderAccount = true;
+              continue;
+            }
+            if (retryError instanceof TerminalServiceAuthError) {
+              terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
+              continue;
+            }
+            lastError = new RetryableCOROSFITDetailError();
+            sawRetryableFailure = true;
+            logger.warn(`COROS FIT detail recovery still failed for ${queueItem.id} after one token refresh.`, {
+              errorName: retryError instanceof Error ? retryError.name : typeof retryError,
+            });
+            continue;
+          }
+        } else {
+          lastError = e instanceof RetryableCOROSFITDetailError
+            ? e
+            : new RetryableCOROSFITDetailError();
+          sawRetryableFailure = true;
+          logger.warn(`COROS FIT download or detail recovery failed retryably for ${queueItem.id}.`, {
+            errorName: e instanceof Error ? e.name : typeof e,
+            statusCode: getCOROSFITDownloadStatusCode(e),
+          });
+          continue;
+        }
+      } else if (e instanceof PermanentCOROSFITDownloadError) {
         return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
       } else if (e.statusCode === 401) {
         logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          if (serviceName === ServiceNames.COROSAPI) {
-            await getActiveCOROSTokenSnapshot(
-              parentID,
-              (queueItem as COROSAPIWorkoutQueueItemInterface).openId,
-            );
-          }
-          const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
+          const downloadedPayload = await getWorkoutForService(
+            serviceName,
+            queueItem as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
+            serviceToken as SuuntoAPIAuth2ServiceTokenInterface,
+          );
           const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
           if (normalizedPayload.normalizedFromMultipart) {
             const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -701,18 +871,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         } catch (retryError: any) {
           if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
             sawPendingDisconnectSkip = true;
-            logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before the refreshed FIT download.`);
+            logger.info(`Deferring ${serviceName} queue item ${queueItem.id} because service disconnect started before the refreshed FIT download.`);
             continue;
           }
           if (retryError instanceof PermanentCOROSFITDownloadError) {
             return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
-          }
-          const retryCode = `${retryError?.code || ''}`.replace(/^functions\//, '');
-          if (serviceName === ServiceNames.COROSAPI
-            && (retryCode === 'unauthenticated' || retryCode === 'failed-precondition')) {
-            sawInactiveProviderAccount = true;
-            logger.info(`Skipping COROS queue item ${queueItem.id} because its account changed before the refreshed FIT download.`);
-            continue;
           }
           if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
             sawUserDeletionSkip = true;
@@ -818,15 +981,29 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           throw new Error('Not Implemented');
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
-          const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
+          const corosMetaData = new COROSEventMetaData(corosWorkoutQueueItem, new Date());
+          const hasStableComponentIdentity = typeof corosWorkoutQueueItem.componentKey === 'string'
+            && corosWorkoutQueueItem.componentKey.length > 0;
           const deterministicID = await resolveProviderImportEventID({
             userID: parentID,
             startDate: event.startDate,
             serviceName: ServiceNames.COROSAPI,
             providerEventID: corosWorkoutQueueItem.workoutID,
             providerEventIDField: 'serviceWorkoutID',
-            providerEventSecondaryID: corosWorkoutQueueItem.FITFileURI,
-            providerEventSecondaryIDField: 'serviceFITFileURI',
+            providerEventSecondaryID: hasStableComponentIdentity
+              ? corosWorkoutQueueItem.componentKey
+              : corosWorkoutQueueItem.FITFileURI,
+            providerEventSecondaryIDField: hasStableComponentIdentity
+              ? 'serviceWorkoutComponentKey'
+              : 'serviceFITFileURI',
+            ...(hasStableComponentIdentity && corosWorkoutQueueItem.FITFileURI
+              ? {
+                legacyProviderEventSecondaryIdentities: [{
+                  field: 'serviceFITFileURI',
+                  value: corosWorkoutQueueItem.FITFileURI,
+                }],
+              }
+              : {}),
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
@@ -1244,9 +1421,25 @@ function getDuplicateProviderWebhookRefreshData(
       refreshCandidates.startTimeInSeconds = garminQueuePayload.startTimeInSeconds;
       break;
     }
-    case ServiceNames.COROSAPI:
-      refreshCandidates.FITFileURI = (queuePayload as COROSAPIWorkoutQueueItemInterface).FITFileURI;
+    case ServiceNames.COROSAPI: {
+      const corosQueuePayload = queuePayload as COROSAPIWorkoutQueueItemInterface;
+      for (const field of [
+        'FITFileURI',
+        'mode',
+        'subMode',
+        'detailMode',
+        'detailSubMode',
+        'deviceName',
+        'startTimezone',
+        'endTimezone',
+        'planWorkoutId',
+        'componentIndex',
+        'componentKey',
+      ] as const) {
+        refreshCandidates[field] = corosQueuePayload[field];
+      }
       break;
+    }
     default:
       return {};
   }

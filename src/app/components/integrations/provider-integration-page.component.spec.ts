@@ -79,6 +79,9 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('GPX and FIT route delivery');
     expect(text).toContain('COROS history import');
     expect(text).toContain('one active COROS account');
+    expect(text).toContain('Connection health check');
+    expect(text).toContain('What happens if COROS is no longer connected?');
+    expect(text).toContain('turns off related automatic activity and saved-route settings');
   });
 
   it('should render Wahoo import, explicit delivery, and retention boundaries', () => {

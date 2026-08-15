@@ -12,6 +12,11 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import {
+  chunkCOROSInclusiveDateRange,
+  parseCOROSCalendarDate,
+  subtractUTCMonthsClamped,
+} from './date-range';
 
 interface HistoryToQueueRequest {
   startDate: string;
@@ -85,10 +90,10 @@ export const addCOROSAPIHistoryToQueue = functions
       throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }
 
-    const startDate = new Date(data.startDate);
-    const endDate = new Date(data.endDate);
+    let startDate = parseCOROSCalendarDate(data.startDate);
+    const endDate = parseCOROSCalendarDate(data.endDate);
 
-    if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
+    if (!startDate || !endDate) {
       throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
     }
 
@@ -97,9 +102,8 @@ export const addCOROSAPIHistoryToQueue = functions
     }
 
     // COROS V2 API Restriction: No data older than 3 months
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - COROS_HISTORY_IMPORT_LIMIT_MONTHS);
-    threeMonthsAgo.setHours(0, 0, 0, 0);
+    const todayUTC = parseCOROSCalendarDate(Date.now())!;
+    const threeMonthsAgo = subtractUTCMonthsClamped(todayUTC, COROS_HISTORY_IMPORT_LIMIT_MONTHS);
 
     if (endDate < threeMonthsAgo) {
       logger.warn(`User ${userID} requested COROS history older than ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months (end date ${endDate}). Rejected.`);
@@ -111,7 +115,7 @@ export const addCOROSAPIHistoryToQueue = functions
 
     if (startDate < threeMonthsAgo) {
       logger.info(`Clamping COROS history start date from ${startDate} to ${threeMonthsAgo} for user ${userID}`);
-      startDate.setTime(threeMonthsAgo.getTime());
+      startDate = threeMonthsAgo;
     }
 
     // First check last history import
@@ -121,9 +125,7 @@ export const addCOROSAPIHistoryToQueue = functions
       throw new functions.https.HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
     }
 
-    // We need to break down the requests to multiple of 30 days max. 2592000000ms
-    const maxDeltaInMS = 2592000000;
-    const batchCount = Math.max(1, Math.ceil((+endDate - +startDate) / maxDeltaInMS));
+    const dateWindows = chunkCOROSInclusiveDateRange(startDate, endDate);
 
     const totalStats: HistoryImportResult = {
       successCount: 0,
@@ -144,11 +146,8 @@ export const addCOROSAPIHistoryToQueue = functions
       throw toHistoryCallableError(error);
     }
 
-    for (let i = 0; i < batchCount; i++) {
-      const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
-      const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime() ?
-        endDate :
-        new Date(batchStartDate.getTime() + maxDeltaInMS);
+    for (let i = 0; i < dateWindows.length; i++) {
+      const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
 
       try {
         await assertCOROSHistoryAllowed(userID, 'before_provider_request');

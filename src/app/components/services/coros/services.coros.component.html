@@ -65,6 +65,18 @@
       </button>
     </div>
     }
+    @if (isCheckingCOROSBindingState) {
+    <div class="coros-binding-check" role="status">
+      <mat-spinner diameter="18"></mat-spinner>
+      <span>Checking the COROS connection…</span>
+    </div>
+    } @else if (corosBindingStateCheckError && isConnectedToService() && !isReconnectRequired && !isDisconnectPending) {
+    <div class="coros-binding-check coros-binding-check--error" role="status">
+      <mat-icon>cloud_off</mat-icon>
+      <span>Could not verify the COROS connection.</span>
+      <button mat-button type="button" (click)="retryCOROSBindingStateCheck()">Retry</button>
+    </div>
+    }
     </div>
 
     <div connection-actions class="tool-actions">

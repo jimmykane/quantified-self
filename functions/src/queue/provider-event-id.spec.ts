@@ -225,8 +225,10 @@ describe('resolveProviderImportEventID', () => {
         primaryEventID: 'primary-event-id',
         collisionSafeEventID: 'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceFITFileURI|https://coros.example/workout-1.fit',
         providerEventSecondaryIDPresent: true,
+        providerEventIDPresent: true,
       }),
     );
+    expect(mockWarn.mock.calls[0][1]).not.toHaveProperty('providerEventID');
     expect(mockWarn.mock.calls[0][1]).not.toHaveProperty('providerEventSecondaryID');
   });
 
@@ -259,6 +261,75 @@ describe('resolveProviderImportEventID', () => {
 
     expect(eventID).toBe('uid-1|corosAPI|serviceWorkoutID|workout-1|serviceFITFileURI|https://coros.example/workout-1.fit');
     expect(mockWarn).toHaveBeenCalled();
+  });
+
+  it('reuses primary metadata that matches a declared legacy secondary identity', async () => {
+    mockMetadataGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        serviceWorkoutID: 'workout-1',
+        serviceFITFileURI: 'https://coros.example/workout-1.fit',
+      }),
+    });
+
+    const eventID = await resolveProviderImportEventID({
+      ...corosRequest,
+      providerEventSecondaryID: 'root',
+      providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+      legacyProviderEventSecondaryIdentities: [{
+        field: 'serviceFITFileURI',
+        value: 'https://coros.example/workout-1.fit',
+      }],
+    });
+
+    expect(eventID).toBe('primary-event-id');
+    expect(mockTransactionSet).toHaveBeenCalledWith(
+      mockReservationRef,
+      expect.objectContaining({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceWorkoutComponentKey|root': expect.objectContaining({
+            eventID: 'primary-event-id',
+          }),
+        },
+      }),
+      { merge: true },
+    );
+  });
+
+  it('upgrades a legacy reservation to the stable secondary identity without changing its event ID', async () => {
+    mockReservationGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceFITFileURI|https://coros.example/workout-1.fit': {
+            eventID: 'primary-event-id',
+          },
+        },
+      }),
+    });
+
+    const eventID = await resolveProviderImportEventID({
+      ...corosRequest,
+      providerEventSecondaryID: 'root',
+      providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+      legacyProviderEventSecondaryIdentities: [{
+        field: 'serviceFITFileURI',
+        value: 'https://coros.example/workout-1.fit',
+      }],
+    });
+
+    expect(eventID).toBe('primary-event-id');
+    expect(mockTransactionSet).toHaveBeenCalledWith(
+      mockReservationRef,
+      expect.objectContaining({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceWorkoutComponentKey|root': expect.objectContaining({
+            eventID: 'primary-event-id',
+          }),
+        },
+      }),
+      { merge: true },
+    );
   });
 
   it('compares numeric metadata and provider identities by normalized string value', async () => {

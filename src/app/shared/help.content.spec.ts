@@ -787,6 +787,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination');
     expect(serviceConnectionsSection?.content).toContain('Automatic delivery is off by default');
     expect(serviceConnectionsSection?.content).toContain('one active connected account');
+    expect(serviceConnectionsSection?.content).toContain('asks COROS whether that account is still bound');
+    expect(serviceConnectionsSection?.content).toContain('related automatic activity and saved-route settings turn off');
+    expect(serviceConnectionsSection?.content).toContain('temporary check failure shows **Retry**');
+    expect(serviceConnectionsSection?.content).toContain('recover a missing or expired COROS FIT download link');
+    expect(serviceConnectionsSection?.content).toContain('mode, submode, device, source timezones, training-plan workout ID, and multisport component');
     expect(serviceConnectionsSection?.content).toContain('cycling-family routes use bike');
     expect(serviceConnectionsSection?.content).toContain('exact-file and semantic FIT fingerprints');
     expect(serviceConnectionsSection?.content).toContain('expire after about 120 days');

@@ -38,6 +38,7 @@ export {
   requestAndSetCOROSAPIAccessToken,
   deauthorizeCOROSAPI,
 } from './coros/auth/wrapper';
+export { getCOROSAPIBindingState } from './coros/binding-state';
 
 export {
   getWahooAPIAuthRequestTokenRedirectURI,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 import {
     getTokenData,
     refreshTokens,
@@ -470,12 +470,16 @@ describe('tokens', () => {
         });
 
         it('should handle COROS token refresh', async () => {
-            mockDoc.data.mockReturnValue({
+            const storedToken = {
                 accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
                 serviceName: ServiceNames.COROSAPI,
                 openId: 'coros-user',
                 expiresAt: 1000,
-            });
+                dateCreated: 500,
+                dateRefreshed: 750,
+            };
+            mockDoc.data.mockReturnValue(storedToken);
 
             mockToken.expired.mockReturnValue(true);
             mockToken.refresh.mockResolvedValue({
@@ -485,10 +489,23 @@ describe('tokens', () => {
                 },
             });
 
+            const beforeRefreshMs = Date.now();
             const result = await getTokenData(mockDoc, ServiceNames.COROSAPI, false);
+            const afterRefreshMs = Date.now();
 
             expect(result.accessToken).toBe('old-coros');
-            expect(mockDoc.ref.update).toHaveBeenCalled();
+            expect(result.refreshToken).toBe('old-coros-refresh');
+            expect((result as COROSAPIAuth2ServiceTokenInterface).openId).toBe('coros-user');
+            expect(result.dateCreated).toBe(500);
+            expect(result.dateRefreshed).toBeGreaterThanOrEqual(beforeRefreshMs);
+            expect(result.dateRefreshed).toBeLessThanOrEqual(afterRefreshMs);
+            expect(result.expiresAt).toBeGreaterThanOrEqual(beforeRefreshMs + (30 * 24 * 60 * 60 * 1000) - (5 * 60 * 1000));
+            expect(result.expiresAt).toBeLessThanOrEqual(afterRefreshMs + (30 * 24 * 60 * 60 * 1000) - (5 * 60 * 1000));
+            expect(mockDoc.ref.update).toHaveBeenCalledWith(result);
+            expect(storedToken).toEqual(expect.objectContaining({
+                expiresAt: 1000,
+                dateRefreshed: 750,
+            }));
         });
 
         it('should persist Wahoo rotating tokens with the exact provider expiry and stable user ID', async () => {

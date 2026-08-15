@@ -19,6 +19,10 @@ import {
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
 import { getWahooErrorLogDetails } from './wahoo/error-details';
+import {
+  COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
+  COROS_ACCESS_TOKEN_VALIDITY_MS,
+} from './coros/constants';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -266,6 +270,7 @@ export async function getTokenData(
   }
 
   let newToken;
+  const refreshCompletedAtMs = Date.now();
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
@@ -297,9 +302,16 @@ export async function getTokenData(
       };
       break;
     case ServiceNames.COROSAPI:
-      newToken = <COROSAPIAuth2ServiceTokenInterface>serviceTokenData;
-      newToken.expiresAt = date.getTime() - 6000;
-      newToken.dateRefreshed = date.getTime();
+      newToken = <COROSAPIAuth2ServiceTokenInterface>{
+        ...serviceTokenData,
+        serviceName,
+        accessToken: serviceTokenData.accessToken,
+        refreshToken: serviceTokenData.refreshToken,
+        expiresAt: refreshCompletedAtMs
+          + COROS_ACCESS_TOKEN_VALIDITY_MS
+          - COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
+        dateRefreshed: refreshCompletedAtMs,
+      };
       break;
     case ServiceNames.WahooAPI:
       newToken = <WahooAPIAuth2ServiceTokenInterface>{

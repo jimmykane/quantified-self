@@ -21,6 +21,8 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
+import { formatCOROSCalendarDate } from './coros/date-range';
+import { parseCOROSJSON } from './coros/json';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import {
   assertActiveCOROSAccountInTransaction,
@@ -45,6 +47,12 @@ export interface HistoryImportResult {
 
 export interface HistoryImportOptions {
   expectedProviderUserId?: string;
+}
+
+interface COROSHistoryResponse {
+  result?: unknown;
+  message?: unknown;
+  data?: unknown;
 }
 
 export class HistoryImportSkippedForDeletedUserError extends Error {
@@ -268,19 +276,19 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
         headers: {
           json: true,
         },
-        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${encodeURIComponent(accessToken)}&openId=${encodeURIComponent(openId)}&startDate=${startDate.toISOString().slice(0, 10).replace(/-/g, '')}&endDate=${endDate.toISOString().slice(0, 10).replace(/-/g, '')}`,
+        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${encodeURIComponent(accessToken)}&openId=${encodeURIComponent(openId)}&startDate=${formatCOROSCalendarDate(startDate)}&endDate=${formatCOROSCalendarDate(endDate)}`,
         timeout: COROS_API_REQUEST_TIMEOUT_MS,
       });
-      result = JSON.parse(result);
-      const resultCode = `${result.result ?? ''}`.trim();
+      const corosResult = parseCOROSJSON<COROSHistoryResponse>(result);
+      const resultCode = `${corosResult.result ?? ''}`.trim();
       const hasFailureResultCode = !!resultCode && !/^0+$/.test(resultCode);
-      if (hasFailureResultCode || (result.message && result.message !== 'OK')) {
-        throw new Error(`COROS API Error with code ${result.result}`);
+      if (hasFailureResultCode || (corosResult.message && corosResult.message !== 'OK')) {
+        throw new Error(`COROS API Error with code ${corosResult.result}`);
       }
-      if (!Array.isArray(result.data)) {
+      if (!Array.isArray(corosResult.data)) {
         throw new Error('COROS returned an invalid history response.');
       }
-      return await convertCOROSWorkoutsToQueueItems(result.data, openId);
+      return await convertCOROSWorkoutsToQueueItems(corosResult.data, openId);
     }
   }
 }

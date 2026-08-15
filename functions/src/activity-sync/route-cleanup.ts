@@ -20,6 +20,11 @@ interface ActivitySyncRouteCleanupOptions {
   trackPendingDisconnectRestore?: boolean;
 }
 
+export interface DisabledServiceSyncSettingsUpdate {
+  activitySyncRoutes?: Partial<Record<ActivitySyncRouteId, { enabled: false }>>;
+  routeDeliverySyncRoutes?: Partial<Record<RouteDeliverySyncRouteId, { enabled: false }>>;
+}
+
 type ServiceSyncRouteKind = 'activity' | 'routeDelivery';
 
 interface ServiceSyncRouteDescriptor {
@@ -57,6 +62,24 @@ function getAffectedRouteDeliveryRouteIds(serviceName: ServiceNames): RouteDeliv
       normalizeServiceName(route.destinationServiceName) === normalizedServiceName
     ))
     .map((route) => route.id);
+}
+
+/** Builds the canonical settings patch for every sync route involving a service. */
+export function getDisabledServiceSyncSettingsUpdate(
+  serviceName: ServiceNames,
+): DisabledServiceSyncSettingsUpdate {
+  const activitySyncRoutes: Partial<Record<ActivitySyncRouteId, { enabled: false }>> = {};
+  for (const routeId of getAffectedActivityRouteIds(serviceName)) {
+    activitySyncRoutes[routeId] = { enabled: false };
+  }
+  const routeDeliverySyncRoutes: Partial<Record<RouteDeliverySyncRouteId, { enabled: false }>> = {};
+  for (const routeId of getAffectedRouteDeliveryRouteIds(serviceName)) {
+    routeDeliverySyncRoutes[routeId] = { enabled: false };
+  }
+  return {
+    ...(Object.keys(activitySyncRoutes).length > 0 ? { activitySyncRoutes } : {}),
+    ...(Object.keys(routeDeliverySyncRoutes).length > 0 ? { routeDeliverySyncRoutes } : {}),
+  };
 }
 
 function getAffectedServiceSyncRoutes(serviceName: ServiceNames): ServiceSyncRouteDescriptor[] {
@@ -126,20 +149,11 @@ export async function disableActivitySyncRoutesForDisconnectedService(
   disconnectedServiceName: ServiceNames,
   options: ActivitySyncRouteCleanupOptions = {},
 ): Promise<void> {
-  const affectedActivityRouteIds = getAffectedActivityRouteIds(disconnectedServiceName);
-  const affectedRouteDeliveryRouteIds = getAffectedRouteDeliveryRouteIds(disconnectedServiceName);
-
-  if (affectedActivityRouteIds.length === 0 && affectedRouteDeliveryRouteIds.length === 0) {
+  const serviceSyncSettings: Record<string, unknown> = {
+    ...getDisabledServiceSyncSettingsUpdate(disconnectedServiceName),
+  };
+  if (Object.keys(serviceSyncSettings).length === 0) {
     return;
-  }
-
-  const routeUpdates: Partial<Record<ActivitySyncRouteId, { enabled: boolean }>> = {};
-  for (const routeId of affectedActivityRouteIds) {
-    routeUpdates[routeId] = { enabled: false };
-  }
-  const routeDeliveryUpdates: Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>> = {};
-  for (const routeId of affectedRouteDeliveryRouteIds) {
-    routeDeliveryUpdates[routeId] = { enabled: false };
   }
 
   const db = admin.firestore();
@@ -157,14 +171,6 @@ export async function disableActivitySyncRoutesForDisconnectedService(
         `[ActivitySyncRouteCleanup] Skipping route disable for ${disconnectedServiceName} user ${userID} because the user is missing or deletion is in progress.`,
       );
       return;
-    }
-
-    const serviceSyncSettings: Record<string, unknown> = {};
-    if (Object.keys(routeUpdates).length > 0) {
-      serviceSyncSettings.activitySyncRoutes = routeUpdates;
-    }
-    if (Object.keys(routeDeliveryUpdates).length > 0) {
-      serviceSyncSettings.routeDeliverySyncRoutes = routeDeliveryUpdates;
     }
 
     if (options.trackPendingDisconnectRestore) {

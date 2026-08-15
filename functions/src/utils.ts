@@ -6,12 +6,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import {
-  COROSAPIEventMetaData,
-  SuuntoAppEventMetaData,
-  WahooAPIEventMetaData,
-} from '@sports-alliance/sports-lib';
-import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
@@ -272,7 +266,12 @@ export async function setEventDocumentIfUserActive(
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
+interface EventServiceMetaData {
+  serviceName: string;
+  toJSON(): unknown;
+}
+
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: EventServiceMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
   const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];

@@ -33,6 +33,7 @@ import {
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -671,7 +672,7 @@ export const backfillCorosAPISleep = onCall({
     const token = await getCorosSleepBackfillToken(userID);
     const startMs = getCorosSleepBackfillStartMs(nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI, 'COROS');
-    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+    const windows = chunkCOROSInclusiveTimestampRange(startMs, nowMs, windowDays);
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
     const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.COROSAPI, startMs, nowMs, nextAllowedAtMs);
     if (!cooldownClaimed) {

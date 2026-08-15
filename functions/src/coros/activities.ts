@@ -29,10 +29,11 @@ import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
   recordActivitySyncOutboundFingerprint,
 } from '../activity-sync/outbound-fingerprint';
+import { parseCOROSJSON } from './json';
+import { normalizeCOROSInt64Identifier } from './identifier';
 
 const COROS_SUCCESS_CODE = '0000';
 const COROS_DUPLICATE_CODE = '5082';
-const COROS_UPLOAD_ID_PATTERN = /^\d{1,20}$/;
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 
 export interface COROSActivityUploadResult {
@@ -75,24 +76,14 @@ function getCOROSBaseUrl(): string {
   return USE_STAGING ? STAGING_URL : PRODUCTION_URL;
 }
 
-function normalizeIdentifier(value: unknown): string | undefined {
-  const normalized = `${value ?? ''}`.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function normalizeUploadId(value: unknown): string | undefined {
-  const normalized = normalizeIdentifier(value);
-  return normalized && COROS_UPLOAD_ID_PATTERN.test(normalized) ? normalized : undefined;
-}
-
-function protectCOROSInt64Identifiers(raw: string): string {
-  return raw.replace(/("(?:uploadId|labelId)"\s*:\s*)(-?\d{16,20})(?=\s*[,}\]])/g, '$1"$2"');
+  return normalizeCOROSInt64Identifier(value) || undefined;
 }
 
 function parseCOROSResponse(rawResponse: unknown, operation: ProviderOperation): COROSUploadResponse {
   if (typeof rawResponse === 'string') {
     try {
-      return JSON.parse(protectCOROSInt64Identifiers(rawResponse)) as COROSUploadResponse;
+      return parseCOROSJSON<COROSUploadResponse>(rawResponse);
     } catch {
       throw new ProviderOperationError({
         serviceName: ServiceNames.COROSAPI,

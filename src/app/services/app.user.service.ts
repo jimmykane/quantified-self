@@ -156,6 +156,12 @@ export interface RouteSyncCatchUpSummary {
   totalCount: number;
 }
 
+export interface COROSBindingStateResult {
+  status: 'bound' | 'unbound' | 'stale';
+  bound: boolean | null;
+  checkedAt?: number;
+}
+
 export interface SuuntoRouteCatchUpPromptContext {
   connectionView: SuuntoServiceConnectionViewModel;
   serviceMeta: AppUserServiceMetaInterface | null;
@@ -242,6 +248,7 @@ export class AppUserService implements OnDestroy {
   private profileReadGeneration = 0;
   private profilePublicationGeneration = 0;
   private lastPublishedProfileRead: { uid: string; generation: number } | null = null;
+  private readonly corosBindingStateRequests = new Map<string, Promise<COROSBindingStateResult>>();
   private readonly profileReadStateSignal = signal<AppUserProfileReadState>({ status: 'initializing' });
 
   public readonly profileReadState = this.profileReadStateSignal.asReadonly();
@@ -1266,7 +1273,10 @@ export class AppUserService implements OnDestroy {
     switch (serviceName) {
       case ServiceNames.COROSAPI:
         functionName = 'addCOROSAPIHistoryToQueue';
-        payload = { startDate, endDate };
+        payload = {
+          startDate: this.formatLocalCalendarDate(startDate, 'startDate'),
+          endDate: this.formatLocalCalendarDate(endDate, 'endDate'),
+        };
         break;
       case ServiceNames.GarminAPI:
         functionName = 'backfillGarminAPIActivities';
@@ -1286,6 +1296,32 @@ export class AppUserService implements OnDestroy {
 
     const result = await this.functionsService.call(functionName, payload);
     return result.data;
+  }
+
+  public checkCurrentUserCOROSBindingState(
+    userID: string,
+    providerUserId: string,
+  ): Promise<COROSBindingStateResult> {
+    const normalizedUserID = `${userID || ''}`.trim();
+    const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+    if (!normalizedUserID || !normalizedProviderUserId || this.auth.currentUser?.uid !== normalizedUserID) {
+      return Promise.reject(new Error('Cannot check COROS binding state for an inactive account.'));
+    }
+
+    const requestKey = `${normalizedUserID}:${normalizedProviderUserId}`;
+    const existingRequest = this.corosBindingStateRequests.get(requestKey);
+    if (existingRequest) return existingRequest;
+
+    const request = this.functionsService
+      .call<undefined, COROSBindingStateResult>('getCOROSAPIBindingState')
+      .then(result => result.data)
+      .finally(() => {
+        if (this.corosBindingStateRequests.get(requestKey) === request) {
+          this.corosBindingStateRequests.delete(requestKey);
+        }
+      });
+    this.corosBindingStateRequests.set(requestKey, request);
+    return request;
   }
 
   async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
@@ -1350,6 +1386,14 @@ export class AppUserService implements OnDestroy {
       throw new Error(`Invalid ${fieldName}`);
     }
     return date;
+  }
+
+  private formatLocalCalendarDate(value: Date, fieldName: 'startDate' | 'endDate'): string {
+    const date = this.coerceValidDate(value, fieldName);
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   async deauthorizeService(serviceName: ServiceNames): Promise<any> {

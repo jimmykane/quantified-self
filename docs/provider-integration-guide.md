@@ -126,8 +126,10 @@ For every new persistent write path:
 - Verify the provider's documented authentication or shared secret before accepting work. Reject malformed, unrelated, unknown, disconnected, deletion-pending, and non-entitled payloads before queueing.
 - Resolve provider identity through server-owned credentials or an optional server-owned mapping, never browser-visible metadata. Token-index lookup must validate the expected collection path and reject ambiguous matches.
 - Treat webhook delivery as at-least-once. Duplicate, delayed, and out-of-order deliveries must not create duplicate events.
+- Match the provider's acknowledgement contract exactly. Return success only after durable enqueue or a deliberate permanent skip; return the provider's non-success result (and retryable HTTP status where supported) when persistence or dispatch preparation fails so the provider retries. Keep health-check behavior separate from authenticated delivery handling.
 - If provider revisions exist, persist a revision timestamp or version. A newer revision should safely supersede an older queued one; an older delivery must not reopen or overwrite newer work.
 - Return quickly. Queue a compact, validated work reference rather than doing file download, parsing, or event persistence in the webhook handler.
+- Protect integer-shaped provider IDs before JSON parsing when the API can emit 64-bit numbers. Normalize them to bounded decimal strings and test values above JavaScript's safe-integer limit.
 
 ### History imports
 
@@ -136,6 +138,7 @@ For every new persistent write path:
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.
 - Record enough cursor/range state to make failures observable without exposing provider data.
 - Confirm the partner pagination order. For descending history, include both selected date boundaries and stop only once records are older than the start boundary. Do not assume API ordering without tests.
+- Confirm whether a provider range is made of calendar dates or instants and whether both ends are inclusive. Use one canonical representation end to end, split by the provider's maximum number of included dates, and make adjacent windows non-overlapping. Test timezone boundaries plus one-day, exact-limit, and limit-plus-one ranges.
 - Classify provider 429 responses separately and surface reset metadata where available. Do not convert rate limits into rapid retries.
 
 ### Queue item design
@@ -147,10 +150,13 @@ Queue items generally need:
 - Firebase UID and stable provider owner ID;
 - provider activity/workout ID and revision/version;
 - minimal processing data such as source URL or payload fields needed after the webhook ends;
+- stable provider mode/submode, device, timezone, plan/workout, and multipart-component metadata needed for faithful attribution or later detail recovery;
 - `processed`, `retryCount`, `dateCreated`, dispatch marker, result/error fields, and TTL expiry;
 - lease owner, lease expiry, and revision claim fields where the provider can update the same activity.
 
 Use a transaction for an upsert that can race with another webhook or history page. Claim a revision before processing it. A newer revision must invalidate an older lease, and a worker that discovers its queue snapshot was superseded must acknowledge only its own work and leave the newer revision intact. Reuse the shared workout-dispatch recovery and post-enqueue marker helpers; a provider-specific marker write must also prove its queue revision is still current so a stale webhook cannot mark a newer revision as dispatched.
+
+Keep stable identity separate from transport data. A short-lived signed file URL must not be part of a new queue or event ID. When a provider offers a detail endpoint, retain the bounded stable request fields needed to recover a missing or expired URL, validate that the returned record/component matches the queue item, and persist only the refreshed queue URL under deletion and revision guards.
 
 ### Outbound activity delivery
 
@@ -216,6 +222,7 @@ Do not use a provider's short-lived file URL as durable application data. Downlo
 ### Persisting events
 
 - Resolve a deterministic event ID before writing. Put provider identity fields in safe event metadata for future deduplication and attribution.
+- Preserve normalized provider metadata that has durable meaning—such as mode/submode, device, source timezone, plan/workout ID, and multipart component identity—without retaining ephemeral URLs or raw partner payloads.
 - Call the shared event persistence path rather than hand-writing an alternate event document schema.
 - Recheck deletion immediately before the write; a check only at the beginning of a long FIT parse is insufficient.
 - Mark the exact claimed queue revision complete only after event persistence succeeds. On errors, sanitize the error, increment retries atomically, and move terminal work to the existing DLQ/TTL model.
@@ -231,6 +238,8 @@ Every new provider needs a lifecycle plan before it is enabled.
 3. Keep disconnect available even when a formerly-Pro user no longer has entitlement.
 4. Use the scheduled pending-disconnect retry workflow; add the provider token root to its collection configuration.
 5. When cleanup runs, recursively remove provider token subtrees and feature-owned operational state, including queues, optional mappings, history leases, and pending disconnect state.
+
+If the provider exposes a binding/status endpoint, check it server-side when the browser opens the connection overview rather than trusting token-document presence. Project only a safe checked state and timestamp. An authoritative unbound response should atomically mark reconnect-required and disable every automatic route involving that provider after proving the credential and account are still current; a timeout, malformed response, or stale result must leave connection state unchanged and offer a retry.
 
 ### Subscription enforcement
 
@@ -290,11 +299,11 @@ Add deterministic tests next to the code being changed. The minimum set for an a
 | Shared contracts | Service enum/metadata, provider presentation, source icon, function manifest, and required configuration validation (plus any explicitly approved rollout gate).                                  |
 | OAuth            | State binding, approved redirect, explicit provider denial, incomplete callback, token refresh/rotation, stable identity, duplicate handling, and disconnect after entitlement expiry.             |
 | API boundary     | Request timeout, input normalization, pagination, rate-limit mapping, secret redaction, and no unsafe retry behavior.                                                                           |
-| Webhook/history  | Authentication, entitlement/connection/deletion rejection, deterministic IDs, duplicate delivery, out-of-order or newer revision, date boundaries, skip rules, and lease contention.            |
-| File worker      | Allowed host/redirect checks, unsafe URL rejection, size/type/FIT validation, timeout, retry/DLQ behavior, and original-file persistence.                                                       |
+| Webhook/history  | Health and delivery acknowledgement, authentication, entitlement/connection/deletion rejection, lossless 64-bit IDs, deterministic IDs, duplicate delivery, out-of-order or newer revision, inclusive/date-window boundaries, skip rules, and lease contention. |
+| File worker      | Allowed host/redirect checks, unsafe URL rejection, size/type/FIT validation, missing/expired URL detail recovery, metadata preservation, timeout, retry/DLQ behavior, and original-file persistence. |
 | Lifecycle        | Disconnect pending/retry, entitlement enforcement, cleanup ownership races, recursive deletion, and account deletion guards before every write.                                                 |
 | Rules            | Token/queue client denial, optional-mapping denial, and safe owner metadata read.                                                                                                               |
-| Frontend         | Provider navigation, query selection, connection states, focused tool dialog, Pro and keyboard-accessible upsell behavior, help, policies, integration page, route metadata, sitemap, and logo. |
+| Frontend         | Provider navigation, query selection, server-verified connection states and retry behavior, focused tool dialog, Pro and keyboard-accessible upsell behavior, help, policies, integration page, route metadata, sitemap, and logo. |
 | Admin            | Queue stats inclusion, user filter/enrichment, labels/logos, and existing admin authorization.                                                                                                  |
 
 Run the narrowest tests after each edit round, then run the relevant builds before handoff:

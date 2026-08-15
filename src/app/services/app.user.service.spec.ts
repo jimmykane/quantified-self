@@ -2132,8 +2132,20 @@ describe('AppUserService', () => {
                 await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
-                    startDate,
-                    endDate
+                    startDate: '2023-01-01',
+                    endDate: '2023-01-31'
+                });
+            });
+
+            it('sends COROS history dates as local calendar dates rather than UTC timestamps', async () => {
+                const localStart = new Date(2023, 0, 1, 23, 30);
+                const localEnd = new Date(2023, 0, 2, 1, 30);
+
+                await service.importServiceHistoryForCurrentUser(ServiceNames.COROSAPI, localStart, localEnd);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
+                    startDate: '2023-01-01',
+                    endDate: '2023-01-02',
                 });
             });
 
@@ -2438,6 +2450,35 @@ describe('AppUserService', () => {
                     code: 'code',
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                 });
+            });
+        });
+
+        describe('checkCurrentUserCOROSBindingState', () => {
+            it('coalesces concurrent checks for the same local and provider account', async () => {
+                let resolveCall!: (value: unknown) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise(resolve => {
+                    resolveCall = resolve;
+                }));
+
+                const first = service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+                const second = service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+
+                expect(second).toBe(first);
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIBindingState');
+
+                resolveCall({ data: { status: 'bound', bound: true, checkedAt: 123 } });
+                await expect(first).resolves.toEqual({ status: 'bound', bound: true, checkedAt: 123 });
+
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { status: 'bound', bound: true } });
+                await service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+            });
+
+            it('rejects a binding check for a user other than the authenticated user', async () => {
+                await expect(service.checkCurrentUserCOROSBindingState('other-user', 'open-id'))
+                    .rejects.toThrow('inactive account');
+                expect(mockFunctionsService.call).not.toHaveBeenCalled();
             });
         });
 

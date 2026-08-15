@@ -36,7 +36,17 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {
 export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   workoutID: string,
   openId: string,
-  FITFileURI: string,
+  FITFileURI?: string,
+  mode?: number,
+  subMode?: number,
+  detailMode?: number,
+  detailSubMode?: number,
+  deviceName?: string,
+  startTimezone?: number,
+  endTimezone?: number,
+  planWorkoutId?: string,
+  componentIndex?: number,
+  componentKey?: string,
 }
 
 export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {

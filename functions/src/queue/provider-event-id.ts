@@ -21,6 +21,10 @@ export interface ProviderImportEventIDRequest {
   providerEventIDField: string;
   providerEventSecondaryID?: string | number | null;
   providerEventSecondaryIDField?: string;
+  legacyProviderEventSecondaryIdentities?: Array<{
+    field: string;
+    value: string | number | null;
+  }>;
   preferProviderIdentityEventID?: boolean;
 }
 
@@ -48,18 +52,31 @@ function metadataMatchesProviderIdentity(
     return true;
   }
 
-  return normalizeProviderIdentityPart(metadata[request.providerEventSecondaryIDField])
-    === normalizeProviderIdentityPart(request.providerEventSecondaryID);
+  if (normalizeProviderIdentityPart(metadata[request.providerEventSecondaryIDField])
+    === normalizeProviderIdentityPart(request.providerEventSecondaryID)) {
+    return true;
+  }
+
+  return (request.legacyProviderEventSecondaryIdentities || []).some(identity => {
+    const legacyValue = normalizeProviderIdentityPart(identity.value);
+    return legacyValue.length > 0
+      && normalizeProviderIdentityPart(metadata[identity.field]) === legacyValue;
+  });
 }
 
-async function generateProviderIdentityEventID(request: ProviderImportEventIDRequest): Promise<string> {
+async function generateProviderIdentityEventID(
+  request: ProviderImportEventIDRequest,
+  secondaryIdentity: { field?: string; value?: string | number | null } = {},
+): Promise<string> {
   return generateIDFromParts([
     request.userID,
     request.serviceName,
     request.providerEventIDField,
     normalizeProviderIdentityPart(request.providerEventID),
-    request.providerEventSecondaryIDField || '',
-    normalizeProviderIdentityPart(request.providerEventSecondaryID),
+    secondaryIdentity.field ?? request.providerEventSecondaryIDField ?? '',
+    normalizeProviderIdentityPart(secondaryIdentity.field === undefined
+      ? request.providerEventSecondaryID
+      : secondaryIdentity.value),
   ]);
 }
 
@@ -123,7 +140,7 @@ function logCollision(
     primaryEventID,
     collisionSafeEventID,
     providerEventIDField: request.providerEventIDField,
-    providerEventID: normalizeProviderIdentityPart(request.providerEventID),
+    providerEventIDPresent: normalizeProviderIdentityPart(request.providerEventID).length > 0,
     providerEventSecondaryIDField: request.providerEventSecondaryIDField || null,
     providerEventSecondaryIDPresent: request.providerEventSecondaryIDField
       ? normalizeProviderIdentityPart(request.providerEventSecondaryID).length > 0
@@ -135,6 +152,12 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
   const db = admin.firestore();
   const primaryEventID = await generateEventID(request.userID, request.startDate);
   const providerIdentityEventID = await generateProviderIdentityEventID(request);
+  const legacyProviderIdentityKeys = Array.from(new Set(await Promise.all(
+    (request.legacyProviderEventSecondaryIdentities || [])
+      .filter(identity => normalizeProviderIdentityPart(identity.value).length > 0)
+      .map(identity =>
+      generateProviderIdentityEventID(request, identity)),
+  ))).filter(identityKey => identityKey !== providerIdentityEventID);
   const reservationID = await generateReservationID(request, primaryEventID);
   const providerIdentityKey = providerIdentityEventID;
 
@@ -185,6 +208,18 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
     const existingReservation = providerIdentities[providerIdentityKey];
     if (typeof existingReservation?.eventID === 'string' && existingReservation.eventID.length > 0) {
       return existingReservation.eventID;
+    }
+
+    const legacyReservation = legacyProviderIdentityKeys
+      .map(identityKey => providerIdentities[identityKey])
+      .find(reservation => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
+    if (typeof legacyReservation?.eventID === 'string' && legacyReservation.eventID.length > 0) {
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, legacyReservation.eventID),
+        { merge: true },
+      );
+      return legacyReservation.eventID;
     }
 
     const eventID = request.preferProviderIdentityEventID || hasReservedProviderIdentity(providerIdentities)

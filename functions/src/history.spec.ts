@@ -4,7 +4,7 @@ import * as history from './history';
 import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
 const hoisted = vi.hoisted(() => {
@@ -543,6 +543,28 @@ describe('history', () => {
 
             expect(convertCOROSWorkoutsToQueueItems).toHaveBeenCalledWith(
                 [{ workoutId: 'c1' }],
+                'open-1'
+            );
+        });
+
+        it('preserves unquoted 64-bit identifiers in COROS history responses', async () => {
+            const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
+            vi.mocked(requestHelper.get).mockResolvedValue(
+                '{"result":"0000","data":[{"labelId":418173315956375553,"planWorkoutId":443847671331979261}]}'
+            );
+
+            await history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1', userName: 'user-1' } as unknown as COROSAPIAuth2ServiceTokenInterface,
+                new Date('2026-01-01'),
+                new Date('2026-01-02')
+            );
+
+            expect(convertCOROSWorkoutsToQueueItems).toHaveBeenCalledWith(
+                [{
+                    labelId: '418173315956375553',
+                    planWorkoutId: '443847671331979261',
+                }],
                 'open-1'
             );
         });

@@ -52,6 +52,7 @@ import {
 } from '../queue/cleanup-tombstone';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { COROS_API_REQUEST_TIMEOUT_MS } from '../coros/constants';
+import { formatCOROSCalendarDate } from '../coros/date-range';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
@@ -628,8 +629,8 @@ async function processCorosQueueItem(
         }
         throw error;
     }
-    const startDate = formatCorosDate(queueItem.rangeStartMs || 0);
-    const endDate = formatCorosDate(queueItem.rangeEndMs || 0);
+    const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
+    const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
     const payload = await requestPromise.get({
         url: `https://open.coros.com/coros/daily/query?token=${encodeURIComponent(tokenData.accessToken)}&openId=${encodeURIComponent(queueItem.providerUserId)}&startDate=${startDate}&endDate=${endDate}`,
         json: true,
@@ -644,14 +645,6 @@ async function processCorosQueueItem(
     return dailyList
         .map((daily) => mapCorosDailySleep(daily, queueItem.providerUserId, Date.now()))
         .filter((result): result is SleepMapperResult => result !== null);
-}
-
-function formatCorosDate(timestampMs: number): string {
-    const date = new Date(timestampMs);
-    const year = date.getUTCFullYear();
-    const month = `${date.getUTCMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getUTCDate()}`.padStart(2, '0');
-    return `${year}${month}${day}`;
 }
 
 function assertNeverQueueItemType(type: never): never {

@@ -26,6 +26,7 @@ export const FUNCTIONS_MANIFEST = {
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetCOROSAPIAccessToken: { name: 'requestAndSetCOROSAPIAccessToken', region: 'europe-west2' },
     deauthorizeCOROSAPI: { name: 'deauthorizeCOROSAPI', region: 'europe-west2' },
+    getCOROSAPIBindingState: { name: 'getCOROSAPIBindingState', region: 'europe-west2' },
     addCOROSAPIHistoryToQueue: { name: 'addCOROSAPIHistoryToQueue', region: 'europe-west2' },
     backfillCorosAPISleep: { name: 'backfillCorosAPISleep', region: 'europe-west2' },
     importActivityToCOROSAPI: { name: 'importActivityToCOROSAPI', region: 'europe-west2' },

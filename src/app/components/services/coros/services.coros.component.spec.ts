@@ -54,6 +54,7 @@ describe('ServicesCorosComponent', () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserCOROSAPIAccessToken: vi.fn(),
+            checkCurrentUserCOROSBindingState: vi.fn().mockResolvedValue({ status: 'bound', bound: true }),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),
             watchSuuntoServiceConnectionView: vi.fn().mockReturnValue(of(buildSuuntoServiceConnectionViewModel({
@@ -181,6 +182,75 @@ describe('ServicesCorosComponent', () => {
         expect(accountRow.querySelector('mat-list')).toBeFalsy();
         expect(accountRow.querySelector('.connection-disconnect-button')?.textContent).toContain('Disconnect');
         expect(fixture.nativeElement.querySelector('.service-connection-status__actions .connection-disconnect-button')).toBeFalsy();
+    });
+
+    it('checks the active COROS binding once when the connection summary is shown', async () => {
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as any;
+
+        (component as any).onServiceDataChanged();
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledWith('user-1', 'coros-user');
+        expect(component.isCheckingCOROSBindingState).toBe(false);
+        expect(component.corosBindingStateCheckError).toBe(false);
+    });
+
+    it('does not check binding state in the tools-only dialog or while reconnect is required', async () => {
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as any;
+        component.showConnectionSummary = false;
+
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+        expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
+
+        component.showConnectionSummary = true;
+        component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+        expect(mockUserService.checkCurrentUserCOROSBindingState).not.toHaveBeenCalled();
+    });
+
+    it('checks again after the same COROS account reconnects', async () => {
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as any;
+        component.serviceMeta = { connectionState: 'connected', providerUserId: 'coros-user' } as any;
+
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+        component.serviceMeta = { connectionState: 'reconnect_required', providerUserId: 'coros-user' } as any;
+        (component as any).onServiceDataChanged();
+        component.serviceMeta = { connectionState: 'connected', providerUserId: 'coros-user' } as any;
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows a retry action when the binding check is temporarily unavailable', async () => {
+        mockUserService.checkCurrentUserCOROSBindingState
+            .mockRejectedValueOnce(new Error('temporarily unavailable'))
+            .mockResolvedValueOnce({ status: 'bound', bound: true });
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as any;
+
+        (component as any).onServiceDataChanged();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(component.corosBindingStateCheckError).toBe(true);
+        expect(fixture.nativeElement.querySelector('.coros-binding-check--error')?.textContent)
+            .toContain('Could not verify the COROS connection.');
+
+        component.retryCOROSBindingStateCheck();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+        expect(component.corosBindingStateCheckError).toBe(false);
     });
 
     it('renders only the pinned active COROS account when legacy tokens remain', () => {

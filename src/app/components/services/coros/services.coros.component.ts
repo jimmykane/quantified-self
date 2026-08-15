@@ -43,9 +43,12 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
+  public isCheckingCOROSBindingState = false;
+  public corosBindingStateCheckError = false;
   @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
+  private lastCOROSBindingStateCheckKey: string | null = null;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
     hasToken: false,
     serviceMeta: null,
@@ -89,6 +92,15 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     super.ngOnDestroy();
     this.suuntoConnectionSubscription?.unsubscribe();
     this.suuntoConnectionSubscription = null;
+  }
+
+  protected override onServiceDataChanged(): void {
+    void this.checkCOROSBindingStateIfEligible();
+  }
+
+  public retryCOROSBindingStateCheck(): void {
+    this.corosBindingStateCheckError = false;
+    void this.checkCOROSBindingStateIfEligible(true);
   }
 
   isConnectedToService = () => !this.isDisconnectPending && (!!this.activeCorosServiceToken || this.forceConnected);
@@ -166,6 +178,44 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   private getTokenTimestamp(value: unknown): number {
     const timestamp = Number(value);
     return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
+    const userID = `${this.user?.uid || ''}`.trim();
+    const providerUserId = `${this.activeCorosServiceToken?.openId || ''}`.trim();
+    const isEligible = this.showConnectionSummary
+      && !!userID
+      && !!providerUserId
+      && !this.isReconnectRequired
+      && !this.isDisconnectPending;
+    if (!isEligible) {
+      this.lastCOROSBindingStateCheckKey = null;
+      this.isCheckingCOROSBindingState = false;
+      return;
+    }
+
+    const checkKey = `${userID}:${providerUserId}`;
+    if (!force && this.lastCOROSBindingStateCheckKey === checkKey) return;
+    this.lastCOROSBindingStateCheckKey = checkKey;
+    this.isCheckingCOROSBindingState = true;
+    this.corosBindingStateCheckError = false;
+    this.changeDetectorRef.markForCheck();
+    try {
+      const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
+      if (result.status === 'stale' && this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.lastCOROSBindingStateCheckKey = null;
+      }
+    } catch (error) {
+      if (this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.corosBindingStateCheckError = true;
+      }
+      this.logger.error(error);
+    } finally {
+      if (this.lastCOROSBindingStateCheckKey === checkKey || this.lastCOROSBindingStateCheckKey === null) {
+        this.isCheckingCOROSBindingState = false;
+        this.changeDetectorRef.markForCheck();
+      }
+    }
   }
 
   private watchSuuntoConnectionState(): void {

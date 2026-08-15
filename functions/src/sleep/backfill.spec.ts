@@ -7,6 +7,7 @@ import {
     getSleepBackfillWindowDays,
 } from '../../../shared/sleep-backfill';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
 
 const hoisted = vi.hoisted(() => ({
     tokenDocs: [] as Array<{ id: string; data: () => Record<string, unknown> }>,
@@ -478,7 +479,7 @@ describe('backfillCorosAPISleep', () => {
 
     it('queues COROS sleep poll windows for the documented three-month provider lookback', async () => {
         seedCorosToken();
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkCOROSInclusiveTimestampRange(startMs, nowMs, windowDays);
 
         const result = await backfillCorosAPISleep(createRequest() as any);
 
