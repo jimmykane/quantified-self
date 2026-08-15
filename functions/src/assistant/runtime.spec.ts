@@ -719,6 +719,64 @@ describe('Assistant runtime', () => {
     expect(generate.mock.calls[1][0]).not.toHaveProperty('output');
   });
 
+  it('keeps a valid grounded answer when the optional model visual hint is malformed', async () => {
+    const tool: AssistantRuntimeTool = {
+      name: 'query_metrics',
+      description: 'Return yearly temperatures.',
+      inputJsonSchema: { type: 'object', properties: {} },
+      execute: vi.fn().mockResolvedValue({ results: [] }),
+    };
+    vi.spyOn(assistantGenkit, 'generate')
+      .mockResolvedValueOnce({
+        toolRequests: [{
+          toolRequest: {
+            name: 'query_metrics',
+            input: {},
+            ref: 'tool-1',
+          },
+        }],
+        messages: [{
+          role: 'model',
+          content: [{
+            toolRequest: {
+              name: 'query_metrics',
+              input: {},
+              ref: 'tool-1',
+            },
+          }],
+        }],
+      } as never)
+      .mockResolvedValueOnce({
+        toolRequests: [],
+        text: JSON.stringify({
+          answer: 'The yearly temperature trend is available.',
+          visuals: {
+            chart: {
+              sourceId: 'source_1',
+              seriesKeys: 'metric_0',
+              chartType: 'line',
+            },
+            map: null,
+          },
+          ignoredModelMetadata: true,
+        }),
+      } as never);
+
+    await expect(generateAssistantModelAnswer({
+      currentTime: '2026-08-03T12:00:00.000Z',
+      timeZone: 'Europe/Helsinki',
+      prompt: 'Plot my temperatures by year.',
+      history: [],
+      mcpInstructions: 'Use current data.',
+      tools: [tool],
+      workflow: null,
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toEqual({
+      answer: 'The yearly temperature trend is available.',
+      visualRequest: { chart: null, map: null },
+    });
+  });
+
   it('classifies only safe, server-owned runtime failures for diagnostics', () => {
     expect(getAssistantRuntimeErrorReason(
       new Error('The Assistant model returned invalid JSON.'),

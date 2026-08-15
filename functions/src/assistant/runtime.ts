@@ -51,18 +51,27 @@ export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   backoffFactor: 2,
 } satisfies NonNullable<Parameters<typeof retry>[0]>;
 
+const AssistantAnswerTextSchema = z.string()
+  .trim()
+  .min(1)
+  .max(ASSISTANT_MAX_RESPONSE_CHARS);
+const AssistantVisualRequestSchema = z.object({
+  chart: z.object({
+    sourceId: z.string().regex(/^source_[1-6]$/),
+    seriesKeys: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
+    chartType: z.enum(['line', 'bar']),
+  }).strict().nullable(),
+  map: z.object({
+    sourceId: z.string().regex(/^source_[1-6]$/),
+  }).strict().nullable(),
+}).strict();
+const EMPTY_ASSISTANT_VISUAL_REQUEST: AssistantVisualRequest = {
+  chart: null,
+  map: null,
+};
 const AssistantModelOutputSchema = z.object({
-  answer: z.string().trim().min(1).max(ASSISTANT_MAX_RESPONSE_CHARS),
-  visuals: z.object({
-    chart: z.object({
-      sourceId: z.string().regex(/^source_[1-6]$/),
-      seriesKeys: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
-      chartType: z.enum(['line', 'bar']),
-    }).strict().nullable(),
-    map: z.object({
-      sourceId: z.string().regex(/^source_[1-6]$/),
-    }).strict().nullable(),
-  }).strict().default({ chart: null, map: null }),
+  answer: AssistantAnswerTextSchema,
+  visuals: AssistantVisualRequestSchema.default(EMPTY_ASSISTANT_VISUAL_REQUEST),
 }).strict();
 
 export interface AssistantModelGenerationResult {
@@ -505,13 +514,34 @@ function parseAssistantModelText(value: string): AssistantModelGenerationResult 
   } catch {
     throw new Error('The Assistant model returned invalid JSON.');
   }
-  const parsed = AssistantModelOutputSchema.safeParse(decoded);
-  if (!parsed.success) {
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
     throw new Error('The Assistant model returned an invalid response.');
   }
+  const record = decoded as Record<string, unknown>;
+  const answer = AssistantAnswerTextSchema.safeParse(record.answer);
+  if (!answer.success) {
+    logger.warn('[Assistant] Model answer text failed validation.', {
+      issuePaths: answer.error.issues.slice(0, 8).map(issue => (
+        `${issue.code}:${issue.path.join('.') || 'answer'}`
+      )),
+    });
+    throw new Error('The Assistant model returned an invalid response.');
+  }
+  const visuals = AssistantVisualRequestSchema.safeParse(
+    record.visuals ?? EMPTY_ASSISTANT_VISUAL_REQUEST,
+  );
+  if (!visuals.success) {
+    logger.warn('[Assistant] Ignoring an invalid optional model visual request.', {
+      issuePaths: visuals.error.issues.slice(0, 8).map(issue => (
+        `${issue.code}:${issue.path.join('.') || 'visuals'}`
+      )),
+    });
+  }
   return {
-    answer: parsed.data.answer,
-    visualRequest: parsed.data.visuals,
+    answer: answer.data,
+    visualRequest: visuals.success
+      ? visuals.data
+      : EMPTY_ASSISTANT_VISUAL_REQUEST,
   };
 }
 
