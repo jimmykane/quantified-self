@@ -15,10 +15,12 @@ describe('AppRouteUploadService', () => {
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
+  let originalBackendMode: typeof environment.backendMode;
 
   beforeEach(() => {
     originalLocalhost = environment.localhost;
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
+    originalBackendMode = environment.backendMode;
     environment.localhost = true;
     environment.useFunctionsEmulator = true;
 
@@ -54,6 +56,7 @@ describe('AppRouteUploadService', () => {
   afterEach(() => {
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
+    environment.backendMode = originalBackendMode;
   });
 
   it('uploads route bytes locally without requesting a hosted App Check token', async () => {
@@ -92,6 +95,32 @@ describe('AppRouteUploadService', () => {
     expect(headers.get('X-Original-Filename-Encoded')).toBe('morning-route.gpx');
     expect(result.routeId).toBe('route-1');
     expect(result.duplicate).toBe(true);
+  });
+
+  it('keeps the hosted upload URL and App Check header outside emulator mode', async () => {
+    environment.backendMode = 'hosted';
+    environment.useFunctionsEmulator = false;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        routeId: 'route-1',
+        routesCount: 1,
+        routeCount: 1,
+        uploadLimit: 10,
+        uploadCountAfterWrite: 1,
+      }),
+    });
+
+    await service.uploadRouteFile(new Uint8Array([1]).buffer, 'gpx');
+
+    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadRoute',
+      expect.any(Object),
+    );
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
   });
 
   it('uses only encoded filename header when the original route filename contains unicode', async () => {

@@ -29,6 +29,8 @@
 
 import type Stripe from 'stripe';
 
+const LOCAL_EMULATOR_DISABLED_SECRET = 'LOCAL_EMULATOR_DISABLED';
+
 /**
  * Cached Stripe client instance.
  * Initialized lazily on first call to `getStripe()`.
@@ -41,7 +43,7 @@ export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
 
 async function createStripeClient(secretName: 'STRIPE_SECRET_KEY' | 'STRIPE_ADMIN_BILLING_KEY'): Promise<Stripe> {
     const stripeKey = process.env[secretName];
-    if (!stripeKey) {
+    if (!stripeKey || stripeKey === LOCAL_EMULATOR_DISABLED_SECRET) {
         throw new Error(`${secretName} is unavailable to this Function invocation.`);
     }
 

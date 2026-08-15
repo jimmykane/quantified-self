@@ -7,6 +7,7 @@ import {
   assertPortsAvailable,
   createIsolatedLocalProcessEnvironment,
   ensureEmptyLocalSecretFile,
+  LOCAL_SMOKE_CHECK_COMMAND,
   localBinary,
   readLocalRuntimeConfiguration,
   repositoryRoot,
@@ -46,13 +47,12 @@ async function main() {
   try {
     await runChecked(npm, ['--prefix', 'functions', 'run', 'build'], isolation.environment);
 
-    const smokeScript = `${JSON.stringify(process.execPath)} ${JSON.stringify(path.join(repositoryRoot, 'tools', 'local-smoke-check.mjs'))}`;
     await runChecked(localBinary('firebase'), [
       'emulators:exec',
       '--config', 'firebase.local.json',
       '--project', runtimeConfig.projectId,
       '--only', 'auth,functions,firestore,storage,tasks',
-      smokeScript,
+      LOCAL_SMOKE_CHECK_COMMAND,
     ], isolation.environment);
   } finally {
     await isolation.cleanup();

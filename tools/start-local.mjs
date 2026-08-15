@@ -23,6 +23,23 @@ function spawnInherited(command, args, environment) {
   });
 }
 
+function observeChildTermination(child, processName) {
+  return new Promise(resolve => {
+    child.once('error', error => resolve({ processName, code: null, signal: null, error }));
+    child.once('exit', (code, signal) => resolve({ processName, code, signal, error: null }));
+  });
+}
+
+function describeChildTermination(termination) {
+  if (termination.error instanceof Error) {
+    return `${termination.processName} failed to start: ${termination.error.message}`;
+  }
+  if (termination.signal) {
+    return `${termination.processName} stopped with ${termination.signal}`;
+  }
+  return `${termination.processName} stopped with exit code ${termination.code ?? 'unknown'}`;
+}
+
 async function runChecked(command, args, environment) {
   const child = spawnInherited(command, args, environment);
   const [code, signal] = await once(child, 'exit');
@@ -61,6 +78,7 @@ async function main() {
       buildEmulatorArguments(runtimeConfig, await hasSavedEmulatorState()),
       isolation.environment,
     );
+    const firebaseTermination = observeChildTermination(firebase, 'Firebase emulators');
     let angular;
     let shuttingDown = false;
 
@@ -84,7 +102,17 @@ async function main() {
     process.once('SIGTERM', () => void shutdown(0));
 
     try {
-      await waitForEmulators(runtimeConfig);
+      const startupResult = await Promise.race([
+        waitForEmulators(runtimeConfig).then(() => ({ ready: true })),
+        firebaseTermination.then(termination => ({ ready: false, termination })),
+      ]);
+      if (!startupResult.ready) {
+        if (shuttingDown) {
+          return;
+        }
+        throw new Error(`[local] ${describeChildTermination(startupResult.termination)} before becoming ready.`);
+      }
+
       angular = spawnInherited(localBinary('ng'), [
         'serve',
         '--configuration', 'local',
@@ -92,17 +120,18 @@ async function main() {
         '--port', String(runtimeConfig.ports.app),
         '--ssl=false',
       ], isolation.environment);
+      const angularTermination = observeChildTermination(angular, 'Angular');
 
       console.info(`\n[local] Application: http://${runtimeConfig.host}:${runtimeConfig.ports.app}`);
       console.info(`[local] Emulator UI: http://${runtimeConfig.host}:${runtimeConfig.ports.ui}`);
       console.info('[local] Billing and all backend provider credentials are disabled. Press Ctrl+C to save emulator state.\n');
 
       const exited = await Promise.race([
-        once(firebase, 'exit').then(([code]) => ({ processName: 'Firebase emulators', code })),
-        once(angular, 'exit').then(([code]) => ({ processName: 'Angular', code })),
+        firebaseTermination,
+        angularTermination,
       ]);
       if (!shuttingDown) {
-        console.error(`[local] ${exited.processName} stopped unexpectedly.`);
+        console.error(`[local] ${describeChildTermination(exited)} unexpectedly.`);
         await shutdown(typeof exited.code === 'number' && exited.code !== 0 ? exited.code : 1);
       }
     } catch (error) {

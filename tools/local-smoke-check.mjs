@@ -29,9 +29,11 @@ import {
   deleteApp as deleteAdminApp,
   initializeApp as initializeAdminApp,
 } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { readLocalRuntimeConfiguration } from './local-runtime.mjs';
+import { updateLocalRole } from './local-role.mjs';
 
 function assert(condition, message) {
   if (!condition) {
@@ -74,9 +76,10 @@ async function main() {
   let clientUser;
   let storageFile;
   try {
+    const email = `local-smoke-${suffix}@example.test`;
     const credential = await createUserWithEmailAndPassword(
       auth,
-      `local-smoke-${suffix}@example.test`,
+      email,
       `Local-smoke-${suffix}!`,
     );
     clientUser = credential.user;
@@ -96,6 +99,28 @@ async function main() {
     const clientUserSnapshot = await getDoc(doc(firestore, `users/${clientUser.uid}`));
     assert(clientUserSnapshot.exists(), 'Authenticated Firestore read failed.');
     console.info('[local-smoke] Firestore emulator check passed.');
+
+    await updateLocalRole({ email, role: 'pro' });
+    const proUser = await getAdminAuth(adminApp).getUser(clientUser.uid);
+    assert(proUser.customClaims?.stripeRole === 'pro', 'Synthetic Pro claim was not applied.');
+    const syntheticSubscription = await adminFirestore
+      .doc(`customers/${clientUser.uid}/subscriptions/local-pro`)
+      .get();
+    assert(syntheticSubscription.exists, 'Synthetic Pro subscription was not created.');
+    assert(syntheticSubscription.data()?.role === 'pro', 'Synthetic subscription has the wrong role.');
+    assert(syntheticSubscription.data()?.localSynthetic === true, 'Synthetic subscription is not marked local-only.');
+
+    await updateLocalRole({ email, role: 'free' });
+    const freeUser = await getAdminAuth(adminApp).getUser(clientUser.uid);
+    assert(freeUser.customClaims?.stripeRole === 'free', 'Synthetic Free claim was not applied.');
+    assert(freeUser.customClaims?.gracePeriodUntil === undefined, 'Synthetic Free left a stale grace-period claim.');
+    const deletedSubscription = await adminFirestore
+      .doc(`customers/${clientUser.uid}/subscriptions/local-pro`)
+      .get();
+    assert(!deletedSubscription.exists, 'Synthetic Pro subscription was not removed.');
+    const status = await adminFirestore.doc(`users/${clientUser.uid}/system/status`).get();
+    assert(status.data()?.gracePeriodUntil === undefined, 'Synthetic Free left a stale grace-period status.');
+    console.info('[local-smoke] Synthetic Pro-to-Free role check passed.');
 
     const storagePath = `users/${clientUser.uid}/local-smoke/probe.txt`;
     storageFile = getAdminStorage(adminApp).bucket().file(storagePath);
@@ -123,7 +148,7 @@ async function main() {
     );
     assert(uploadResponse.status === 400, `Expected authenticated upload validation to return HTTP 400, received ${uploadResponse.status}.`);
 
-    console.info('[local-smoke] Auth, Firestore, Storage, callable Functions, and local HTTP upload checks passed.');
+    console.info('[local-smoke] Auth, Firestore, synthetic roles, Storage, callable Functions, and local HTTP upload checks passed.');
     console.info('[local-smoke] The HTTP upload succeeded without an App Check token only inside the Functions emulator.');
   } finally {
     if (storageFile) {

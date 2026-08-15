@@ -1,15 +1,12 @@
 import process from 'node:process';
-import { readEmulatorHub, readLocalRuntimeConfiguration, removeLocalState } from './local-runtime.mjs';
+import { assertPortsAvailable, readLocalRuntimeConfiguration, removeLocalState } from './local-runtime.mjs';
 
 async function main() {
   const { runtimeConfig } = await readLocalRuntimeConfiguration();
   try {
-    await readEmulatorHub(runtimeConfig);
+    await assertPortsAvailable(runtimeConfig, ['hub']);
+  } catch {
     throw new Error('[local-reset] Stop npm start before resetting emulator data.');
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('[local-reset]')) {
-      throw error;
-    }
   }
   await removeLocalState();
   console.info('[local-reset] Removed .local/firebase-emulator-data. This cannot be recovered unless you made a separate copy.');
