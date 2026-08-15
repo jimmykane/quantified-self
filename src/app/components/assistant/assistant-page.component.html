@@ -46,6 +46,14 @@
         </button>
       </section>
     } @else {
+      @if (isEmpty() && !sending()) {
+        <section class="assistant-empty-state" aria-labelledby="assistant-empty-state-title">
+          <mat-icon aria-hidden="true">history</mat-icon>
+          <h2 id="assistant-empty-state-title">If you could ask your training history one question, what would it be?</h2>
+          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified, read-only evidence.</p>
+        </section>
+      }
+
       @if (!isEmpty() || sending()) {
       <section class="conversation qs-scrollbar" aria-label="Assistant conversation">
         @for (message of messages(); track message.id) {

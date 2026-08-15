@@ -500,7 +500,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
     description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, saved-route summaries, and optional interactive charts or activity maps. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
-    h1: 'A fitness-data Assistant grounded in your own history',
+    h1: 'If you could ask your training history one question, what would it be?',
     intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools, shows the results that grounded each answer, and can add a deterministic chart or opt-in activity map when it clarifies the result. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Charts & maps', 'Saved routes'],
     actions: [

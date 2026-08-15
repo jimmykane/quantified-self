@@ -108,7 +108,8 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('A fitness-data Assistant grounded in your own history');
+    expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('If you could ask your training history one question, what would it be?');
+    expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('saved-route summaries');
