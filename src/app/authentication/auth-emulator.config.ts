@@ -7,6 +7,15 @@ export function maybeConnectAuthEmulator(auth: FirebaseAuthType): FirebaseAuthTy
     return auth;
   }
 
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+  const emulatorConfig = environment.emulatorConfig;
+  if (environment.backendMode !== 'emulator' || !emulatorConfig) {
+    throw new Error('[auth] Auth emulator was enabled without an isolated emulator configuration.');
+  }
+
+  connectAuthEmulator(
+    auth,
+    `http://${emulatorConfig.host}:${emulatorConfig.ports.auth}`,
+    { disableWarnings: true },
+  );
   return auth;
 }

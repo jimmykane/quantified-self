@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { FirebaseApp } from 'app/firebase/app';
-import { Functions, connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'app/firebase/functions';
 import type { Functions as FirebaseFunctions } from 'firebase/functions';
 import { environment } from '../../environments/environment';
 import { FunctionName, FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
@@ -12,8 +12,6 @@ import { AppCheckReadinessService } from './app-check-readiness.service';
 export class AppFunctionsService {
     private app = inject(FirebaseApp);
     private appCheckReadiness = inject(AppCheckReadinessService);
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private functionsByRegion = new Map<string, FirebaseFunctions>();
     /**
      * Map of pre-initialized callable functions.
@@ -71,10 +69,14 @@ export class AppFunctionsService {
 
         const functions = getFunctions(this.app, region);
         if (this.shouldUseFunctionsEmulator()) {
+            const emulatorConfig = environment.emulatorConfig;
+            if (!emulatorConfig) {
+                throw new Error('Functions emulator configuration is missing.');
+            }
             connectFunctionsEmulator(
                 functions,
-                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_HOST,
-                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT,
+                emulatorConfig.host,
+                emulatorConfig.ports.functions,
             );
         }
 
@@ -83,7 +85,7 @@ export class AppFunctionsService {
     }
 
     private shouldUseFunctionsEmulator(): boolean {
-        return environment.localhost === true && environment.useFunctionsEmulator === true;
+        return environment.backendMode === 'emulator' && environment.useFunctionsEmulator === true;
     }
 
     private shouldRetryAfterAppCheckFailure(error: unknown): boolean {

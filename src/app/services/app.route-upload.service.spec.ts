@@ -56,7 +56,7 @@ describe('AppRouteUploadService', () => {
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
   });
 
-  it('uploads route bytes to uploadRoute with auth, app check, extension, and filename headers', async () => {
+  it('uploads route bytes locally without requesting a hosted App Check token', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -74,9 +74,9 @@ describe('AppRouteUploadService', () => {
     const result = await service.uploadRouteFile(payload, ' GPX.GZ ', 'morning-route.gpx');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
-    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    expect(appCheckReadinessMock.getToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:5001/quantified-self-io/europe-west2/uploadRoute',
+      'http://127.0.0.1:5001/quantified-self-io/europe-west2/uploadRoute',
       expect.objectContaining({
         method: 'POST',
         body: payload,
@@ -86,7 +86,7 @@ describe('AppRouteUploadService', () => {
     const fetchOptions = fetchMock.mock.calls[0][1];
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer id-token');
-    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
+    expect(headers.get('X-Firebase-AppCheck')).toBeNull();
     expect(headers.get('X-File-Extension')).toBe('gpx.gz');
     expect(headers.get('X-Original-Filename')).toBe('morning-route.gpx');
     expect(headers.get('X-Original-Filename-Encoded')).toBe('morning-route.gpx');

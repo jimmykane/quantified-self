@@ -15,6 +15,8 @@ import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
+export const LOCAL_BILLING_DISABLED_MESSAGE = 'Billing is disabled in the isolated local runtime. Use npm run local:role to test free or pro access.';
+
 export interface StripeProduct {
     id: string;
     active: boolean;
@@ -100,6 +102,10 @@ export class AppPaymentService {
      * Transforms Single-Product-Multi-Price model into Virtual Multi-Products for UI.
      */
     getProducts(): Observable<StripeProduct[]> {
+        if (environment.billingMode === 'disabled') {
+            return of([]);
+        }
+
         return from(this.getProductsFromServer());
     }
 
@@ -294,6 +300,7 @@ export class AppPaymentService {
      * Creates a checkout session and redirects the user to Stripe.
      */
     async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string): Promise<void> {
+        this.assertBillingEnabled();
         const user = this.auth.currentUser;
         if (!user) {
             throw new Error('User must be authenticated to create a checkout session.');
@@ -730,6 +737,10 @@ export class AppPaymentService {
     }
 
     async getUpcomingRenewalAmount(): Promise<UpcomingRenewalAmountResult> {
+        if (environment.billingMode === 'disabled') {
+            return { status: 'no_upcoming_charge' };
+        }
+
         if (!this.auth.currentUser) {
             return { status: 'unavailable' };
         }
@@ -778,6 +789,7 @@ export class AppPaymentService {
      * Opens the Stripe Customer Portal for managing subscriptions.
      */
     async manageSubscriptions(expectedUserId?: string): Promise<void> {
+        this.assertBillingEnabled();
         const userId = expectedUserId ?? this.auth.currentUser?.uid;
         if (!userId) {
             throw new Error('User must be authenticated to manage subscriptions.');
@@ -799,6 +811,7 @@ export class AppPaymentService {
      * Restores purchases by force-refreshing the user's claims.
      */
     async restorePurchases(): Promise<string> {
+        this.assertBillingEnabled();
         try {
             const result = await this.functionsService.call<void, { success: boolean, role: string }>('restoreUserClaims');
             // Force token refresh to pick up new claims
@@ -810,6 +823,12 @@ export class AppPaymentService {
         } catch (error) {
             this.logger.error('Error restoring purchases:', error);
             throw error;
+        }
+    }
+
+    private assertBillingEnabled(): void {
+        if (environment.billingMode === 'disabled') {
+            throw new Error(LOCAL_BILLING_DISABLED_MESSAGE);
         }
     }
 }

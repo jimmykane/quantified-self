@@ -5,7 +5,16 @@
     <p>Verifying subscription...</p>
   </div>
   } @else {
-  <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+  <h1>{{ billingDisabled ? 'Local Access' : (currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan') }}</h1>
+  @if (billingDisabled) {
+  <mat-card class="local-billing-notice">
+    <mat-card-content>
+      Stripe and billing are disabled in this isolated local runtime. Use
+      <code>npm run local:role -- --email you@example.com --role pro</code>
+      to test Pro access without creating a payment or contacting Stripe.
+    </mat-card-content>
+  </mat-card>
+  }
   @if (currentRole !== 'pro' && currentRole !== 'basic') {
   <p class="pricing-intro">Start free, then upgrade whenever you need more history, automation, or sync.</p>
   }
@@ -19,14 +28,16 @@
           <div class="manage-title">
             {{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}
             @if (subscriptionSummary$ | async; as summary) {
+            @if (!billingDisabled) {
             <span class="manage-title-cadence">{{ summary.billingCadenceDisplay }}</span>
+            }
             }
           </div>
           <div class="manage-subtitle">{{ currentRole === 'pro' ? 'Full access plan' : 'Essential access plan' }}</div>
         </div>
         @if (subscriptionSummary$ | async; as summary) {
         <mat-chip-set class="status-chips">
-          <mat-chip class="pricing-chip-primary" selected>{{ summary.isTrialing ? 'Trialing' : 'Active' }}</mat-chip>
+          <mat-chip class="pricing-chip-primary" selected>{{ billingDisabled ? 'Local override' : (summary.isTrialing ? 'Trialing' : 'Active') }}</mat-chip>
           @if (summary.cancelAtPeriodEnd) {
           <mat-chip class="pricing-chip-warn" selected>Ends at period end</mat-chip>
           }
@@ -36,7 +47,12 @@
         }
       </div>
       <mat-card-content class="manage-content">
-        @if (currentRole === 'pro') {
+        @if (billingDisabled) {
+        <div class="manage-description">
+          <p class="manage-description-main">This role is synthetic emulator data for feature testing. It has no Stripe customer, payment, invoice, or renewal.</p>
+          <p class="manage-description-help">Switch back with <code>npm run local:role -- --email you@example.com --role free</code>.</p>
+        </div>
+        } @else if (currentRole === 'pro') {
         <div class="manage-description">
           <p class="manage-description-main">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
           <p class="manage-description-help">Use the billing portal to change your payment method, update your plan, or cancel anytime.</p>
@@ -48,6 +64,7 @@
         </div>
         }
 
+        @if (!billingDisabled) {
         @if (subscriptionSummary$ | async; as summary) {
         <div class="subscription-meta-grid">
           <div class="meta-item">
@@ -104,6 +121,7 @@
           </button>
           }
         </div>
+        }
       </mat-card-content>
     </mat-card>
   </div>

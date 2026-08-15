@@ -17,7 +17,7 @@ import {
 } from '../../../shared/assistant.types';
 import { isValidIanaTimeZone } from '../../../shared/event-stat-aggregation';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck, shouldEnforceAppCheck } from '../utils';
 import {
   finalizeAssistantQuotaReservation,
   getAssistantQuotaStatus as getAssistantQuotaStatusForUser,
@@ -614,7 +614,7 @@ export const ASSISTANT_CALLABLE_OPTIONS = {
   region: FUNCTIONS_MANIFEST.assistantChat.region,
   secrets: FUNCTION_SECRET_BINDINGS.assistantChat,
   cors: ALLOWED_CORS_ORIGINS,
-  enforceAppCheck: true,
+  enforceAppCheck: shouldEnforceAppCheck(),
   memory: '2GiB' as const,
   timeoutSeconds: 180,
   concurrency: 10,
@@ -629,17 +629,17 @@ export const assistantChat = onCall(
 export const getAssistantQuotaStatus = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantQuotaStatus.region,
   cors: ALLOWED_CORS_ORIGINS,
-  enforceAppCheck: true,
+  enforceAppCheck: shouldEnforceAppCheck(),
 }, request => runGetAssistantQuotaStatus(request));
 
 export const getAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
-  enforceAppCheck: true,
+  enforceAppCheck: shouldEnforceAppCheck(),
 }, request => runGetAssistantConversation(request));
 
 export const resetAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.resetAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
-  enforceAppCheck: true,
+  enforceAppCheck: shouldEnforceAppCheck(),
 }, request => runResetAssistantConversation(request.data, request));
