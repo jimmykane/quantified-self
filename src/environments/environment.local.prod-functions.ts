@@ -17,7 +17,7 @@ export const environment: AppEnvironment = {
   remoteConfigEnabled: true,
   appCheckEnabled: true,
   performanceEnabled: true,
-  observabilityEnabled: true,
+  observabilityEnabled: false,
   useAuthEmulator: false,
   useFunctionsEmulator: false,
   firebase: {

@@ -250,6 +250,7 @@ export class AppUserService implements OnDestroy {
   private profilePublicationGeneration = 0;
   private lastPublishedProfileRead: { uid: string; generation: number } | null = null;
   private readonly corosBindingStateRequests = new Map<string, Promise<COROSBindingStateResult>>();
+  private consumedClaimsRefreshRevision: { uid: string; seconds: number; nanoseconds: number } | null = null;
   private readonly profileReadStateSignal = signal<AppUserProfileReadState>({ status: 'initializing' });
 
   public readonly profileReadState = this.profileReadStateSignal.asReadonly();
@@ -268,6 +269,7 @@ export class AppUserService implements OnDestroy {
       if (!firebaseUser) {
         this.usersWithIncompleteProfileReads.clear();
         this.lastPublishedProfileRead = null;
+        this.consumedClaimsRefreshRevision = null;
         this.profileReadStateSignal.set({ status: 'signed-out' });
         return of(null);
       }
@@ -427,10 +429,25 @@ export class AppUserService implements OnDestroy {
     // Check for force-refresh (if DB was updated more recently than token issuance)
     const claimsUpdatedAt = identity.claimsUpdatedAt;
     if (claimsUpdatedAt) {
-      const updatedAtDate = claimsUpdatedAt.toDate();
+      const revisionSeconds = claimsUpdatedAt.seconds;
+      const revisionNanoseconds = claimsUpdatedAt.nanoseconds;
       const issuedAtSeconds = Number(claims['iat']);
-      const issuedAtMilliseconds = Number.isFinite(issuedAtSeconds) ? issuedAtSeconds * 1000 : null;
-      if (issuedAtMilliseconds !== null && updatedAtDate.getTime() > issuedAtMilliseconds + 2000) {
+      const revisionIsAfterToken = Number.isFinite(issuedAtSeconds)
+        && (revisionSeconds > issuedAtSeconds
+          || (revisionSeconds === issuedAtSeconds && revisionNanoseconds > 0));
+      const consumedRevision = this.consumedClaimsRefreshRevision;
+      const revisionAlreadyConsumed = consumedRevision?.uid === firebaseUser.uid
+        && (revisionSeconds < consumedRevision.seconds
+          || (revisionSeconds === consumedRevision.seconds
+            && revisionNanoseconds <= consumedRevision.nanoseconds));
+      if (revisionIsAfterToken
+        && !revisionAlreadyConsumed) {
+        // Consume before refreshing because getIdToken(true) re-emits through onIdTokenChanged.
+        this.consumedClaimsRefreshRevision = {
+          uid: firebaseUser.uid,
+          seconds: revisionSeconds,
+          nanoseconds: revisionNanoseconds,
+        };
         this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
         try {
           await firebaseUser.getIdToken(true);

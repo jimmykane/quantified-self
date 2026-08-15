@@ -4,19 +4,19 @@ import process from 'node:process';
 import {
   assertLocalPrerequisites,
   assertPortsAvailable,
+  buildLocalNodeCommand,
   buildEmulatorArguments,
   createIsolatedLocalProcessEnvironment,
   ensureEmptyLocalSecretFile,
   ensureLocalStateDirectory,
   hasSavedEmulatorState,
-  localBinary,
   readLocalRuntimeConfiguration,
   repositoryRoot,
   waitForEmulators,
 } from './local-runtime.mjs';
 
-function spawnInherited(command, args, environment) {
-  return spawn(command, args, {
+function spawnInherited(invocation, environment) {
+  return spawn(invocation.command, invocation.args, {
     cwd: repositoryRoot,
     env: environment,
     stdio: 'inherit',
@@ -40,11 +40,11 @@ function describeChildTermination(termination) {
   return `${termination.processName} stopped with exit code ${termination.code ?? 'unknown'}`;
 }
 
-async function runChecked(command, args, environment) {
-  const child = spawnInherited(command, args, environment);
+async function runChecked(invocation, environment) {
+  const child = spawnInherited(invocation, environment);
   const [code, signal] = await once(child, 'exit');
   if (code !== 0) {
-    throw new Error(`[local] ${command} failed${signal ? ` with ${signal}` : ` with exit code ${code}`}.`);
+    throw new Error(`[local] ${invocation.args[0]} failed${signal ? ` with ${signal}` : ` with exit code ${code}`}.`);
   }
 }
 
@@ -67,15 +67,13 @@ async function main() {
   const isolation = await createIsolatedLocalProcessEnvironment();
 
   try {
-    await runChecked(
-      process.platform === 'win32' ? 'npm.cmd' : 'npm',
-      ['--prefix', 'functions', 'run', 'build'],
-      isolation.environment,
-    );
+    await runChecked(buildLocalNodeCommand('functions-build'), isolation.environment);
 
     const firebase = spawnInherited(
-      localBinary('firebase'),
-      buildEmulatorArguments(runtimeConfig, await hasSavedEmulatorState()),
+      buildLocalNodeCommand(
+        'firebase',
+        buildEmulatorArguments(runtimeConfig, await hasSavedEmulatorState()),
+      ),
       isolation.environment,
     );
     const firebaseTermination = observeChildTermination(firebase, 'Firebase emulators');
@@ -113,13 +111,16 @@ async function main() {
         throw new Error(`[local] ${describeChildTermination(startupResult.termination)} before becoming ready.`);
       }
 
-      angular = spawnInherited(localBinary('ng'), [
-        'serve',
-        '--configuration', 'local',
-        '--host', runtimeConfig.host,
-        '--port', String(runtimeConfig.ports.app),
-        '--ssl=false',
-      ], isolation.environment);
+      angular = spawnInherited(
+        buildLocalNodeCommand('ng', [
+          'serve',
+          '--configuration', 'local',
+          '--host', runtimeConfig.host,
+          '--port', String(runtimeConfig.ports.app),
+          '--ssl=false',
+        ]),
+        isolation.environment,
+      );
       const angularTermination = observeChildTermination(angular, 'Angular');
 
       console.info(`\n[local] Application: http://${runtimeConfig.host}:${runtimeConfig.ports.app}`);

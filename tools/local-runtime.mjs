@@ -14,6 +14,12 @@ export const localStatePath = path.join(repositoryRoot, '.local', 'firebase-emul
 export const localSecretPath = path.join(repositoryRoot, 'functions', '.secret.local');
 export const localSecretExamplePath = path.join(repositoryRoot, 'functions', '.secret.local.example');
 
+const LOCAL_NODE_COMMAND_SCRIPTS = Object.freeze({
+  firebase: path.join(repositoryRoot, 'node_modules', 'firebase-tools', 'lib', 'bin', 'firebase.js'),
+  'functions-build': path.join(repositoryRoot, 'functions', 'scripts', 'build.mjs'),
+  ng: path.join(repositoryRoot, 'node_modules', '@angular', 'cli', 'bin', 'ng.js'),
+});
+
 const EXPECTED_EMULATORS = ['auth', 'functions', 'firestore', 'storage', 'tasks'];
 const REQUIRED_PORT_NAMES = ['app', ...EXPECTED_EMULATORS, 'ui', 'hub'];
 const DISALLOWED_FIREBASE_KEYS = ['extensions', 'hosting', 'remoteconfig'];
@@ -44,6 +50,17 @@ const CLOUD_CREDENTIAL_ENV_NAMES = [
 
 export function isLoopbackHost(host) {
   return host === '127.0.0.1' || host === 'localhost';
+}
+
+export function buildLocalNodeCommand(name, args = []) {
+  const scriptPath = LOCAL_NODE_COMMAND_SCRIPTS[name];
+  if (!scriptPath) {
+    throw new Error(`[local] Unknown local command: ${name}.`);
+  }
+  return {
+    command: process.execPath,
+    args: [scriptPath, ...args],
+  };
 }
 
 function assertPort(value, name) {
@@ -350,9 +367,10 @@ export async function createIsolatedLocalProcessEnvironment(sourceEnvironment = 
 
 export async function assertLocalPrerequisites() {
   const requiredPaths = [
-    path.join(repositoryRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'ng.cmd' : 'ng'),
-    path.join(repositoryRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'firebase.cmd' : 'firebase'),
-    path.join(repositoryRoot, 'functions', 'node_modules'),
+    buildLocalNodeCommand('ng').args[0],
+    buildLocalNodeCommand('firebase').args[0],
+    buildLocalNodeCommand('functions-build').args[0],
+    path.join(repositoryRoot, 'functions', 'node_modules', 'typescript', 'bin', 'tsc'),
     path.join(repositoryRoot, 'src', 'environments', 'mapbox-token.local.ts'),
   ];
   const missing = [];
@@ -494,9 +512,4 @@ export async function waitForEmulators(runtimeConfig, timeoutMs = 120_000) {
     }
   }
   throw new Error(`[local] Timed out waiting for Firebase emulators: ${lastError instanceof Error ? lastError.message : 'unknown error'}`);
-}
-
-export function localBinary(name) {
-  const extension = process.platform === 'win32' ? '.cmd' : '';
-  return path.join(repositoryRoot, 'node_modules', '.bin', `${name}${extension}`);
 }
