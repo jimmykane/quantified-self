@@ -377,7 +377,7 @@ describe('AppRoutingModule routes', () => {
       {
         path: PUBLIC_FEATURE_PATHS.assistant,
         title: 'AI Training Assistant Grounded in Your Fitness Data',
-        h1: 'A fitness-data Assistant grounded in your own history',
+        h1: 'If you could ask your training history one question, what would it be?',
         descriptionText: 'grounded in read-only Quantified Self tools',
       },
       {
