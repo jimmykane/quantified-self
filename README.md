@@ -53,6 +53,16 @@ The repository pins its own Firebase CLI; do not install or log in to a global C
 
 ## Quick start
 
+### Choose a runtime mode
+
+| Mode | Entry point | Services and data | Intended use |
+| --- | --- | --- | --- |
+| Isolated demo (recommended) | Follow the steps below and run `npm start` | Disposable `demo-quantified-self-local` project, loopback emulators, and synthetic roles without Stripe | Normal contributor development |
+| Hosted project (maintainers only) | See [Intentional hosted opt-in](docs/local-development.md#intentional-hosted-opt-in) | Real hosted Firebase configuration; the app can read and write hosted resources | Narrow, explicitly confirmed maintainer debugging |
+| Self-hosted deployment | See [Deployment and self-hosting](#deployment-and-self-hosting) | A fork owner's Firebase project, provider accounts, secrets, domains, and infrastructure | Advanced operators; not a turnkey setup |
+
+The Quick Start below is exclusively for the isolated demo mode. Do not substitute the hosted-project workflow into these steps.
+
 ### 1. Clone and install
 
 ```bash
