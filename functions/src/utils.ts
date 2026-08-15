@@ -108,7 +108,7 @@ export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
 export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
   'https://quantified-self.io',
   'https://beta.quantified-self.io',
-  /https?:\/\/localhost:\d+/
+  /https?:\/\/(?:localhost|127\.0\.0\.1):\d+/
 ];
 
 /**

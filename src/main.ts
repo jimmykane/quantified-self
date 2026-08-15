@@ -16,8 +16,8 @@ registerAppLocales();
 redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
 
-// Only initialize Sentry in non-localhost environments
-if (!environment.localhost) {
+// Only initialize Sentry when the selected environment explicitly enables it.
+if (environment.observabilityEnabled) {
   Sentry.init({
     dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
     environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',

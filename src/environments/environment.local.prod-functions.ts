@@ -1,15 +1,23 @@
 import { mapboxAccessToken } from './mapbox-token';
+import type { AppEnvironment } from './environment.interface';
 declare function require(moduleName: string): any;
 const appVersion = require('../../package.json').version;
 
-export const environment = {
+export const environment: AppEnvironment = {
   appVersion: appVersion,
   supportEmail: 'support@quantified-self.io',
   appUrl: 'http://localhost:4200',
   production: false,
   beta: false,
   localhost: true,
+  backendMode: 'hosted',
+  billingMode: 'stripe',
+  analyticsEnabled: true,
   forceAnalyticsCollection: true,
+  remoteConfigEnabled: true,
+  appCheckEnabled: true,
+  performanceEnabled: true,
+  observabilityEnabled: true,
   useAuthEmulator: false,
   useFunctionsEmulator: false,
   firebase: {

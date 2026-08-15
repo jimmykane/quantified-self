@@ -112,7 +112,7 @@ describe('Function secret deployment safety', () => {
     ]);
   });
 
-  it('keeps the emulator secret template exhaustive and value-free', () => {
+  it('keeps the emulator secret template exhaustive and limited to the non-secret sentinel', () => {
     const templateLines = readFileSync(resolve(FUNCTIONS_ROOT, '.secret.local.example'), 'utf8')
       .split(/\r?\n/)
       .map(line => line.trim())
@@ -126,7 +126,7 @@ describe('Function secret deployment safety', () => {
     });
 
     expect(entries.map(entry => entry.name).sort()).toEqual([...ALL_SECRET_NAMES].sort());
-    expect(entries.every(entry => entry.value === '')).toBe(true);
+    expect(entries.every(entry => entry.value === 'LOCAL_EMULATOR_DISABLED')).toBe(true);
     const functionsGitignore = readFileSync(resolve(FUNCTIONS_ROOT, '.gitignore'), 'utf8');
     expect(functionsGitignore).toMatch(/^\.env\*$/m);
     expect(functionsGitignore).toMatch(/^\.secret\.local\*$/m);

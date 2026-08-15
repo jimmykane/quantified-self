@@ -221,7 +221,7 @@ describe('AppToolsComparisonService', () => {
     });
   }
 
-  it('uploads comparison files with auth, App Check, manifest, and title headers', async () => {
+  it('uploads comparison files locally without requesting a hosted App Check token', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -242,9 +242,9 @@ describe('AppToolsComparisonService', () => {
     const result = await service.createComparison(files, 'Review set');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
-    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    expect(appCheckReadinessMock.getToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:5001/quantified-self-io/europe-west2/createToolComparisonEvent',
+      'http://127.0.0.1:5001/quantified-self-io/europe-west2/createToolComparisonEvent',
       expect.objectContaining({
         method: 'POST',
       }),
@@ -253,7 +253,7 @@ describe('AppToolsComparisonService', () => {
     const fetchOptions = fetchMock.mock.calls[0][1];
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer id-token');
-    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
+    expect(headers.get('X-Firebase-AppCheck')).toBeNull();
     expect(headers.get('X-Tool-Comparison-Title-Encoded')).toBe('Review%20set');
     expect(headers.get(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(expectedComparisonEventID('user-1', [
       { extension: 'fit', bytes: [1, 2, 3] },
