@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import console from 'node:console';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
