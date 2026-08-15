@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   ASSISTANT_PROMPT_EXAMPLES,
   findAssistantPromptExample,
@@ -1191,7 +1192,7 @@ describe('Assistant runtime', () => {
             dataType: 'Average Temperature',
             valueType: 'Average',
             categoryType: 'Date Type',
-            resolvedTimeInterval: 'Yearly',
+            resolvedTimeInterval: TimeIntervals.Yearly,
             buckets: [{
               bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
               time: Date.parse('2021-01-01T00:00:00.000Z'),
@@ -1212,7 +1213,7 @@ describe('Assistant runtime', () => {
             dataType: 'Minimum Temperature',
             valueType: 'Minimum',
             categoryType: 'Date Type',
-            resolvedTimeInterval: 'Yearly',
+            resolvedTimeInterval: TimeIntervals.Yearly,
             buckets: [{
               bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
               time: Date.parse('2021-01-01T00:00:00.000Z'),
@@ -1233,7 +1234,7 @@ describe('Assistant runtime', () => {
             dataType: 'Maximum Temperature',
             valueType: 'Maximum',
             categoryType: 'Date Type',
-            resolvedTimeInterval: 'Yearly',
+            resolvedTimeInterval: TimeIntervals.Yearly,
             buckets: [{
               bucketKey: Date.parse('2021-01-01T00:00:00.000Z'),
               time: Date.parse('2021-01-01T00:00:00.000Z'),

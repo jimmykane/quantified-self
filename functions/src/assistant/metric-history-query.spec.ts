@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import {
   AssistantMetricHistoryQueryError,
   ASSISTANT_METRIC_QUERY_WINDOW_MS,
@@ -18,8 +19,8 @@ function metricResult(overrides: Record<string, unknown> = {}) {
     aggregation: {
       dataType: 'Distance',
       valueType: 'Total',
-      categoryType: 'Date',
-      resolvedTimeInterval: 'Yearly',
+      categoryType: 'Date Type',
+      resolvedTimeInterval: TimeIntervals.Yearly,
       buckets: [{
         bucketKey: Date.parse('2024-01-01T00:00:00.000Z'),
         time: Date.parse('2024-01-01T00:00:00.000Z'),
@@ -214,9 +215,41 @@ describe('Assistant metric history queries', () => {
 
     expect(merged).toMatchObject({
       results: [
-        { matchedEventCount: 2 },
+        {
+          matchedEventCount: 2,
+          aggregation: { resolvedTimeInterval: TimeIntervals.Yearly },
+        },
         { matchedEventCount: 2 },
       ],
+    });
+  });
+
+  it('accepts the numeric Sports Lib interval enum returned by the MCP schema', () => {
+    const merged = mergeAssistantMetricHistoryResponses('query_metrics', [{
+      results: [metricResult({
+        metric: {
+          type: 'Average Temperature',
+          displayType: 'Average Temperature',
+          unit: '°C',
+          unitSystem: 'metric',
+        },
+        aggregation: {
+          ...metricResult().aggregation,
+          dataType: 'Average Temperature',
+          valueType: 'Average',
+          resolvedTimeInterval: TimeIntervals.Yearly,
+        },
+      })],
+    }]);
+
+    expect(merged).toMatchObject({
+      results: [{
+        metric: { type: 'Average Temperature' },
+        aggregation: {
+          valueType: 'Average',
+          resolvedTimeInterval: TimeIntervals.Yearly,
+        },
+      }],
     });
   });
 });

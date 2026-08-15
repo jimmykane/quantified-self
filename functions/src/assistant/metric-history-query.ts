@@ -24,7 +24,7 @@ interface AssistantMetricAggregation {
   dataType: string;
   valueType: AssistantMetricValueType;
   categoryType: string;
-  resolvedTimeInterval: string;
+  resolvedTimeInterval: number;
   buckets: AssistantMetricBucket[];
 }
 
@@ -113,7 +113,7 @@ function asAggregation(value: unknown): AssistantMetricAggregation | null {
   if (!record
     || typeof record.dataType !== 'string'
     || typeof record.categoryType !== 'string'
-    || typeof record.resolvedTimeInterval !== 'string'
+    || asFiniteNumber(record.resolvedTimeInterval) === null
     || !['Total', 'Average', 'Minimum', 'Maximum'].includes(String(record.valueType))
     || !Array.isArray(record.buckets)
   ) {
@@ -127,7 +127,7 @@ function asAggregation(value: unknown): AssistantMetricAggregation | null {
     dataType: record.dataType,
     valueType: record.valueType as AssistantMetricValueType,
     categoryType: record.categoryType,
-    resolvedTimeInterval: record.resolvedTimeInterval,
+    resolvedTimeInterval: record.resolvedTimeInterval as number,
     buckets: buckets as AssistantMetricBucket[],
   };
 }

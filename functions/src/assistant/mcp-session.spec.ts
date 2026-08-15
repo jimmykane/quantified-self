@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
@@ -265,8 +266,8 @@ describe('Assistant MCP session', () => {
             aggregation: {
               dataType: 'Distance',
               valueType: 'Total',
-              categoryType: 'Date',
-              resolvedTimeInterval: 'Yearly',
+              categoryType: 'Date Type',
+              resolvedTimeInterval: TimeIntervals.Yearly,
               buckets: [{
                 bucketKey: Date.parse('2024-01-01T00:00:00.000Z'),
                 time: Date.parse('2024-01-01T00:00:00.000Z'),
