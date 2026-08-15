@@ -221,12 +221,13 @@ Five additional high-value analytical intents use server-owned workflows without
 six-week Cycling load/sleep/HRV comparison aligns weekly TSS and sleep-trend ranges; late-session Cycling fade uses the
 persisted durability snapshot rather than sampling arbitrary raw charts; strongest-build questions use the configured
 equal-window Best Build comparison and never substitute current-versus-usual; body weight versus volume aligns a
-28-day measurement query with Training Summary; and two-hour endurance-route questions discover the complete Cycling
-family before one combined saved-route scan. Fixed metric kinds, aggregations, lookbacks, and limits override model
+28-day measurement query with Training Summary; and two-hour endurance-route questions use the complete Cycling family
+in one saved-route scan. Fixed metric kinds, aggregations, lookbacks, and limits override model
 guesses, while returned account evidence remains authoritative. Each workflow fails closed when its required tool
 sequence is not completed. The model sees only the tools in the matched workflow;
 Cycling load and route workflows also receive the complete app-owned Cycling/MTB activity family server-side instead
-of relying on the model to reproduce catalog values.
+of relying on the model to reproduce catalog values. Because these selectors are server-owned, the workflows omit
+redundant discovery calls and spend their bounded tool budget only on account-data reads.
 
 ## Grounded evidence
 

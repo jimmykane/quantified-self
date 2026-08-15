@@ -118,17 +118,9 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'cycling-load-sleep-hrv-comparison',
     examplePrompt: 'Compare my cycling load, sleep and HRV over the last six weeks.',
-    toolWorkflow: [
-      'list_activity_types',
-      'list_metrics',
-      'query_metric',
-      'get_sleep_trend',
-    ],
-    routingHint: 'Discover every canonical Cycling-family activity type and the persisted Training Stress Score metric. Query weekly total cycling load and weekly main-sleep duration plus recorded HRV over the same exact six-week range. Compare aligned weeks, report coverage, and never treat missing sleep or HRV as zero.',
+    toolWorkflow: ['query_metric', 'get_sleep_trend'],
+    routingHint: 'Query weekly total cycling load and weekly main-sleep duration plus recorded HRV over the same exact six-week range. Compare aligned weeks, report coverage, and never treat missing sleep or HRV as zero. The server owns the canonical Cycling-family activity types and Training Stress Score selector.',
     toolInputOverrides: {
-      list_metrics: {
-        search: 'training stress',
-      },
       query_metric: {
         metric: 'Training Stress Score',
         aggregation: 'total',
@@ -151,12 +143,9 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'late-session-cycling-power-decline',
     examplePrompt: 'Which long rides showed the greatest late-session power decline?',
-    toolWorkflow: ['list_training_metrics', 'get_training_metric'],
-    routingHint: 'Discover and read the ready Aerobic durability snapshot using metricKind training_durability. Use only the Cycling scope and its recent supporting eligible activities. Rank late-session fade by the persisted output-retention and decoupling evidence, identify rides by their recorded UTC day, state the snapshot window and coverage, and do not substitute a sample of raw power charts or claim an all-time result.',
+    toolWorkflow: ['get_training_metric'],
+    routingHint: 'Read the ready Aerobic durability snapshot using the server-owned training_durability metric kind. Use only the Cycling scope and its recent supporting eligible activities. Rank late-session fade by the persisted output-retention and decoupling evidence, identify rides by their recorded UTC day, state the snapshot window and coverage, and do not substitute a sample of raw power charts or claim an all-time result.',
     toolInputOverrides: {
-      list_training_metrics: {
-        search: 'durability',
-      },
       get_training_metric: {
         metricKind: 'training_durability',
       },
@@ -165,12 +154,9 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'strongest-training-build-comparison',
     examplePrompt: 'What changed between my strongest training build and what I’m doing now?',
-    toolWorkflow: ['list_training_metrics', 'get_training_metric'],
-    routingHint: 'Discover and read Best build comparison using metricKind training_build_comparison. Compare the configured historical build with the equal-length current build, including workload, intensity, durability, and recovery evidence that is actually available. If no valid benchmark is configured, say so; never replace the requested build comparison with current-versus-usual or a daily report.',
+    toolWorkflow: ['get_training_metric'],
+    routingHint: 'Read Best build comparison using the server-owned training_build_comparison metric kind. Compare the configured historical build with the equal-length current build, including workload, intensity, durability, and recovery evidence that is actually available. If no valid benchmark is configured, say so; never replace the requested build comparison with current-versus-usual or a daily report.',
     toolInputOverrides: {
-      list_training_metrics: {
-        search: 'best build comparison',
-      },
       get_training_metric: {
         metricKind: 'training_build_comparison',
       },
@@ -179,21 +165,13 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'body-weight-training-volume-comparison',
     examplePrompt: 'How has my body weight moved alongside training volume?',
-    toolWorkflow: [
-      'list_measurement_types',
-      'query_measurements',
-      'list_training_metrics',
-      'get_training_metric',
-    ],
-    routingHint: 'Use weekly median body-weight measurements for the latest 28 days, then read the ready Training summary for its aligned current 28-day volume and equivalent usual 28-day comparison. Describe the two recorded movements side by side without claiming causation or treating missing weigh-ins as zero.',
+    toolWorkflow: ['query_measurements', 'get_training_metric'],
+    routingHint: 'Use weekly median body-weight measurements for the latest 28 days, then read the ready Training summary using the server-owned selectors for its aligned current 28-day volume and equivalent usual 28-day comparison. Describe the two recorded movements side by side without claiming causation or treating missing weigh-ins as zero.',
     toolInputOverrides: {
       query_measurements: {
         measurementType: 'body_weight',
         aggregation: 'median',
         interval: 'week',
-      },
-      list_training_metrics: {
-        search: 'training summary',
       },
       get_training_metric: {
         metricKind: 'training_summary',
@@ -207,8 +185,8 @@ export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
   {
     id: 'two-hour-endurance-route-suitability',
     examplePrompt: 'Which saved routes would suit a two-hour endurance ride?',
-    toolWorkflow: ['list_activity_types', 'list_routes'],
-    routingHint: 'Discover every canonical Cycling-family activity type, then list those saved routes once with one combined filter. Compare the available route distance and ascent summaries. Recommend only plausible options, explain when none fit, and state that exact ride time depends on the rider and conditions rather than inventing a duration.',
+    toolWorkflow: ['list_routes'],
+    routingHint: 'List saved routes once using the server-owned complete Cycling-family filter. Compare the available route distance and ascent summaries. Recommend only plausible options, explain when none fit, and state that exact ride time depends on the rider and conditions rather than inventing a duration.',
     toolInputOverrides: {
       list_routes: {
         limit: 100,
