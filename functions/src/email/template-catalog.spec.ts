@@ -96,6 +96,7 @@ describe('refreshed email template catalog', () => {
         const registrationWelcome = render('registration_welcome', 'named-user');
         expect(registrationWelcome).toContain('People come to the platform for different reasons');
         expect(registrationWelcome).toContain('make it useful on your own terms');
+        expect(registrationWelcome).toContain('I’d be glad to hear what would make Quantified Self most valuable to you.');
         expect(registrationWelcome).toContain('If you could ask your training history one question, what would it be?');
         expect(registrationWelcome).not.toContain('complete training history');
         expect(registrationWelcome).toContain('have a feature request');
