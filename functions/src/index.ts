@@ -3,7 +3,6 @@
 // Firebase Setup
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { resolveServiceAccountPath } from './firebase-admin-config';
 import {
   RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME,
   SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,
@@ -16,26 +15,10 @@ import { processSportsLibReparseHeavyTask as processSportsLibReparseHeavyTaskFun
 const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';
 
 if (admin.apps.length === 0) {
-  try {
-    const serviceAccountPath = resolveServiceAccountPath();
-    if (serviceAccountPath) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const serviceAccount = require(serviceAccountPath);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
-        storageBucket: PRIMARY_STORAGE_BUCKET,
-      });
-    } else {
-      throw new Error('service-account.json not found');
-    }
-  } catch {
-    logger.warn('Service account not found, initializing with default credentials');
-    admin.initializeApp({
-      databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
-      storageBucket: PRIMARY_STORAGE_BUCKET,
-    });
-  }
+  admin.initializeApp({
+    databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
+    storageBucket: PRIMARY_STORAGE_BUCKET,
+  });
 }
 
 // Configure Firestore to ignore undefined properties when writing documents.

@@ -8,6 +8,7 @@ import {
 import { REFRESHED_EMAIL_TEMPLATE_CATALOG } from '../email/template-catalog';
 import { createLocalEmailTemplateRenderer } from '../email/template-renderer';
 import {
+    buildEmailTestAdminOptions,
     buildTestMailDocument,
     parseTestEmailArguments,
 } from './test-all-emails';
@@ -18,18 +19,49 @@ const TARGET_EMAIL = 'controlled-inbox@example.com';
 describe('test-all-emails', () => {
     const renderer = createLocalEmailTemplateRenderer(TEMPLATE_ROOT);
 
-    it('requires one recipient and accepts only the explicit inline flag', () => {
-        expect(parseTestEmailArguments([TARGET_EMAIL])).toEqual({
+    it('requires one recipient and an explicit project while accepting only the inline flag', () => {
+        expect(parseTestEmailArguments([TARGET_EMAIL, '--project=quantified-self-test'])).toEqual({
             targetEmail: TARGET_EMAIL,
+            projectId: 'quantified-self-test',
             inline: false,
         });
-        expect(parseTestEmailArguments([TARGET_EMAIL, '--inline'])).toEqual({
+        expect(parseTestEmailArguments([
+            '--inline',
+            '--project=quantified-self-test',
+            TARGET_EMAIL,
+        ])).toEqual({
             targetEmail: TARGET_EMAIL,
+            projectId: 'quantified-self-test',
             inline: true,
         });
         expect(() => parseTestEmailArguments([])).toThrow(/Usage/);
-        expect(() => parseTestEmailArguments([TARGET_EMAIL, '--unknown'])).toThrow(/Usage/);
-        expect(() => parseTestEmailArguments([TARGET_EMAIL, 'second@example.com'])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([TARGET_EMAIL])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([
+            TARGET_EMAIL,
+            '--project=quantified-self-test',
+            '--unknown',
+        ])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([
+            TARGET_EMAIL,
+            'second@example.com',
+            '--project=quantified-self-test',
+        ])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([TARGET_EMAIL, '--project='])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([
+            TARGET_EMAIL,
+            '--project=first-project',
+            '--project=second-project',
+        ])).toThrow(/Usage/);
+    });
+
+    it('builds keyless Admin options for the explicitly selected project', () => {
+        const options = buildEmailTestAdminOptions('quantified-self-test');
+
+        expect(options).toEqual({
+            projectId: 'quantified-self-test',
+            databaseURL: 'https://quantified-self-test.firebaseio.com',
+        });
+        expect(options).not.toHaveProperty('credential');
     });
 
     it('keeps the original Firestore-template queue format by default', () => {

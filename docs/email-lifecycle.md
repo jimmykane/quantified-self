@@ -39,10 +39,10 @@ The template spec compiles every approved subject, HTML body, plaintext body, an
 To send the local, unseeded template sources through the already-installed Trigger Email extension, use the explicit inline smoke-test mode with a controlled inbox:
 
 ```bash
-npm --prefix functions run test-emails -- controlled-inbox@example.com --inline
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline
 ```
 
-Inline mode compiles the local subjects, HTML, plaintext, and partials before writing each message to the `mail` collection. It does not read or modify `email_templates`, and `development_update` remains excluded. In an isolated worktree where the ignored `.env` and `service-account.json` files are not present, set `QS_EMAIL_TEST_CONFIG_DIR` to the trusted Functions directory that contains those local files. Because inline mode bypasses the extension's Firestore template lookup and Handlebars rendering, run at least one template-based smoke test after seeding as part of the final rollout.
+Inline mode compiles the local subjects, HTML, plaintext, and partials before writing each message to the `mail` collection. It does not read or modify `email_templates`, and `development_update` remains excluded. The command uses Application Default Credentials and requires `--project` so the write target is explicit; authenticate with `gcloud auth application-default login` or an approved service-account impersonation flow before running it. Because inline mode bypasses the extension's Firestore template lookup and Handlebars rendering, run at least one template-based smoke test after seeding as part of the final rollout.
 
 ## Firebase Authentication templates
 
@@ -133,7 +133,7 @@ All steps below require separate operational approval.
 5. Queue all refreshed plan/trial variants to a controlled inbox:
 
    ```bash
-   npm --prefix functions run test-emails -- controlled-inbox@example.com
+   npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io
    ```
 
 6. Verify From, Reply-To, subject, plaintext alternative, links, 390px mobile layout, desktop layout, trial copy, Free/Basic/Pro limits, grace dates, and device-sync conditions.
