@@ -71,7 +71,9 @@ export function buildTrainingExplanationViewModel(
   if (sportDriver) {
     cards.push({
       key: 'mix',
-      title: `${sportDriver.label} load`,
+      title: `${Math.abs(sportDriver.currentTss - sportDriver.usualTss) < 0.5
+        ? 'Sport load comparison'
+        : 'Largest sport load change'} · ${sportDriver.label}`,
       iconActivityType: sportDriver.iconActivityType,
       valueText: formatLoadOutcome(sportDriver.currentTss, sportDriver.usualTss),
       description: `${formatNumber(sportDriver.currentTss)} TSS now; the usual 28-day median is ${formatNumber(sportDriver.usualTss)} TSS. ${sportDriver.currentActivities} workouts now; ${sportDriver.usualActivities} usual.`,
@@ -85,7 +87,7 @@ export function buildTrainingExplanationViewModel(
     const disciplineLabel = formatDiscipline(rhythmDriver.current.discipline);
     cards.push({
       key: 'rhythm',
-      title: `${disciplineLabel} rhythm`,
+      title: `${delta === 0 ? 'Sport rhythm comparison' : 'Largest rhythm change'} · ${disciplineLabel}`,
       iconActivityType: disciplineLabel,
       valueText: formatRhythmOutcome(delta),
       description: `${rhythmDriver.current.sessionCount} workouts across ${rhythmDriver.current.activeWeekCount} active weeks. Longest inactivity gap: ${formatDayCount(rhythmDriver.current.longestInactivityGapDays)}; usual is ${formatDayCount(rhythmDriver.usual.longestInactivityGapDays)}.`,

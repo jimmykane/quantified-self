@@ -279,6 +279,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('compact line above the **Training** title');
     expect(trainingSection?.content).toContain('content does not shift');
     expect(trainingSection?.content).toContain('failed update adds **Retry**');
+    expect(trainingSection?.content).toContain('**Largest sport load change**');
+    expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');

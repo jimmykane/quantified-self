@@ -921,9 +921,13 @@ The four driver cards use one balanced row on wide screens, a two-by-two tablet 
 Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
 levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
 supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
-event label and its load share do not split into an ambiguous separator-delimited sentence. Registered-family load and
-rhythm headings reuse the shared registry icon activity type; overall load, contributor, Other, and Unclassified cards
-remain text-only.
+event label and its load share do not split into an ambiguous separator-delimited sentence. The two selected sport-driver
+headings state both the overview rule and its result, for example `Largest sport load change · Cycling` and
+`Largest rhythm change · Cycling`, so they cannot be mistaken for Cycling-destination cards. If the selected sport's
+effective load delta is under 0.5 TSS or its active-day delta is zero, the corresponding heading uses the neutral
+`Sport load comparison` or `Sport rhythm comparison` label instead of claiming a change. Registered-family driver
+headings reuse the shared registry icon activity type; overall load, contributor, Other, and Unclassified cards remain
+text-only.
 
 The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
 turning missing data into a negative or positive training judgment.

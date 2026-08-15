@@ -430,7 +430,9 @@ describe('TrainingWorkspaceComponent', () => {
     const cards = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.training-insight-panel'),
     );
-    const sportCards = cards.filter(card => /Cycling load|Running rhythm/u.test(card.textContent || ''));
+    const sportCards = cards.filter(card => (
+      /Largest sport load change · Cycling|Largest rhythm change · Running/u.test(card.textContent || '')
+    ));
     const globalCards = cards.filter(card => /Overall load|Top contributors/u.test(card.textContent || ''));
     const icons = sportCards.map(card => card.querySelector<HTMLElement>('app-activity-type-icon'));
 
