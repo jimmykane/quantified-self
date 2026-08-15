@@ -3,10 +3,12 @@ import { GenkitError } from 'genkit';
 import { retry } from 'genkit/model/middleware';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import {
+  ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_PROMPT_EXAMPLES,
   findAssistantPromptExample,
   findAssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
+import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { assistantGenkit } from './model';
 import {
   createAssistantRuntime,
@@ -340,6 +342,132 @@ describe('Assistant runtime', () => {
     });
   });
 
+  it.each(ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS)(
+    'routes the $id analytical prompt through its bounded workflow',
+    (workflow) => {
+      expect(findAssistantPromptWorkflow(
+        `  ${workflow.examplePrompt.toUpperCase()}  `,
+      )).toEqual(workflow);
+    },
+  );
+
+  it('does not hijack nearby single-domain prompts with analytical workflows', () => {
+    expect(findAssistantPromptWorkflow(
+      'How did my sleep change this week?',
+    )).toBeNull();
+    expect(findAssistantPromptWorkflow(
+      'Show my latest cycling activity.',
+    )).toBeNull();
+    expect(findAssistantPromptWorkflow(
+      ASSISTANT_PROMPT_EXAMPLES[4].prompt,
+    )).toEqual(ASSISTANT_PROMPT_EXAMPLES[4]);
+  });
+
+  it.each(ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS)(
+    'enforces server-owned inputs and workflow order for $id',
+    async (workflow) => {
+      const callTool = vi.fn().mockResolvedValue({
+        structuredContent: { workflowId: workflow.id },
+      });
+      const close = vi.fn().mockResolvedValue(undefined);
+      const session: AssistantMcpSession = {
+        instructions: 'Use current account facts only.',
+        tools: [
+          ...workflow.toolWorkflow.map(toolName => ({
+            name: toolName as AssistantMcpToolName,
+            title: `Title ${toolName}`,
+            description: `Description ${toolName}`,
+            inputSchema: { type: 'object', properties: {} },
+          })),
+          {
+            name: 'get_daily_report',
+            title: 'Unrelated daily report',
+            description: 'This tool must not be offered to an analytical workflow.',
+            inputSchema: { type: 'object', properties: {} },
+          },
+        ],
+        callTool,
+        close,
+      };
+      const suppliedInputs: Partial<Record<AssistantMcpToolName, Record<string, unknown>>> = {
+        query_metric: {
+          metric: 'wrong metric',
+          aggregation: 'average',
+          interval: 'daily',
+          start: '2000-01-01T00:00:00.000Z',
+          end: '2000-01-02T00:00:00.000Z',
+          activityTypes: ['Cycling'],
+        },
+        get_sleep_trend: {
+          groupBy: 'day',
+          start: '2000-01-01T00:00:00.000Z',
+          end: '2000-01-02T00:00:00.000Z',
+        },
+        get_training_metric: { metricKind: 'wrong_kind' },
+        query_measurements: {
+          measurementType: 'wrong_measurement',
+          aggregation: 'average',
+          interval: 'day',
+          start: '2000-01-01T00:00:00.000Z',
+          end: '2000-01-02T00:00:00.000Z',
+        },
+        list_routes: { activityTypes: ['Cycling'], limit: 1 },
+      };
+      const now = new Date('2026-08-15T12:00:00.000Z');
+      const runtime = createAssistantRuntime({
+        createMcpSession: vi.fn().mockResolvedValue(session),
+        now: () => now,
+        generateAnswer: async (input) => {
+          expect(input.workflow).toEqual(workflow);
+          expect(input.tools.map(tool => tool.name)).toEqual(workflow.toolWorkflow);
+          for (const toolName of workflow.toolWorkflow) {
+            const tool = input.tools.find(candidate => candidate.name === toolName);
+            expect(tool).toBeDefined();
+            await tool?.execute(
+              suppliedInputs[toolName as AssistantMcpToolName] || {},
+            );
+          }
+          return `Grounded ${workflow.id} answer.`;
+        },
+      });
+
+      const result = await runtime.answer({
+        uid: 'user-1',
+        appBaseUrl: 'https://quantified-self.io',
+        prompt: workflow.examplePrompt,
+        timeZone: 'Europe/Helsinki',
+        history: [],
+      });
+
+      expect(result.toolNames).toEqual(workflow.toolWorkflow);
+      expect(callTool.mock.calls.map(([toolName]) => toolName))
+        .toEqual(workflow.toolWorkflow);
+      workflow.toolWorkflow.forEach((toolName, index) => {
+        const calledInput = callTool.mock.calls[index][1] as Record<string, unknown>;
+        expect(calledInput).toEqual(expect.objectContaining(
+          workflow.toolInputOverrides?.[toolName] || {},
+        ));
+        const activityDiscipline = workflow.activityDisciplineOverrides?.[toolName];
+        if (activityDiscipline) {
+          expect(calledInput.activityTypes).toEqual([...new Set(
+            TRAINING_SPORT_DEFINITIONS
+              .filter(sport => sport.id === activityDiscipline)
+              .flatMap(sport => sport.contexts)
+              .flatMap(context => context.activityTypes),
+          )]);
+        }
+        if (workflow.dateRange?.toolNames.includes(toolName)) {
+          expect(calledInput.start).toBe(new Date(
+            now.getTime() - (workflow.dateRange.lookbackDays * 24 * 60 * 60 * 1_000),
+          ).toISOString());
+          expect(calledInput.end).toBe(now.toISOString());
+          expect(calledInput.timeZone).toBe('Europe/Helsinki');
+        }
+      });
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
   it('grounds a recent jump map in the first discovered activity with jump records', async () => {
     const {
       session,
@@ -501,7 +629,6 @@ describe('Assistant runtime', () => {
         expect(input.tools.map(tool => tool.name)).toEqual([
           'list_activity_types',
           'rank_activities_by_metric',
-          'list_activity_jumps',
         ]);
         await input.tools[0].execute({});
         await input.tools[1].execute({

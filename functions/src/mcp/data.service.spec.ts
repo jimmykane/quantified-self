@@ -5765,6 +5765,38 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('providerRecoveryScore');
   });
 
+  it('keeps grouped HRV sample-count averages inside the integer wire contract', async () => {
+    const secondSession = sleepDocument({
+      sleepDate: '2024-04-02',
+      startTimeMs: Date.parse('2024-04-01T20:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-02T04:00:00.000Z'),
+      vitals: { hrvSampleCount: 97 },
+    });
+    secondSession.id = 'sleep-2';
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({ vitals: { hrvSampleCount: 96 } }),
+      secondSession,
+    ]);
+
+    const result = await createMcpDataService(dependencies).getSleepTrend({
+      uid: 'user-1',
+      startTimeMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-08T00:00:00.000Z'),
+      groupBy: 'week',
+      timeZone: 'UTC',
+    });
+
+    expect(result.buckets).toHaveLength(1);
+    expect(result.buckets[0].averageVitals.hrvSampleCount).toBe(97);
+    expect(Number.isInteger(
+      result.buckets[0].averageVitals.hrvSampleCount,
+    )).toBe(true);
+    expect(createMcpOutputSchemaRegistry({
+      activityLocation: false,
+      routeLocation: false,
+    }).get_sleep_trend.safeParse(result).success).toBe(true);
+  });
+
   it('keeps normalized sleep vitals consistent across summaries, trends, and the daily report', async () => {
     const session = sleepDocument({
       vitals: {

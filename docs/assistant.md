@@ -217,6 +217,17 @@ avoiding a redundant scan that can exceed the Assistant's turn budget on jump-he
 path available to external MCP clients. It never substitutes `jumpCount` or a newest-first sample for jump quality, and
 an over-budget all-history scan fails instead of being described as an all-time result.
 
+Five additional high-value analytical intents use server-owned workflows without becoming public starter prompts. A
+six-week Cycling load/sleep/HRV comparison aligns weekly TSS and sleep-trend ranges; late-session Cycling fade uses the
+persisted durability snapshot rather than sampling arbitrary raw charts; strongest-build questions use the configured
+equal-window Best Build comparison and never substitute current-versus-usual; body weight versus volume aligns a
+28-day measurement query with Training Summary; and two-hour endurance-route questions discover the complete Cycling
+family before one combined saved-route scan. Fixed metric kinds, aggregations, lookbacks, and limits override model
+guesses, while returned account evidence remains authoritative. Each workflow fails closed when its required tool
+sequence is not completed. The model sees only the tools in the matched workflow;
+Cycling load and route workflows also receive the complete app-owned Cycling/MTB activity family server-side instead
+of relying on the model to reproduce catalog values.
+
 ## Grounded evidence
 
 The model writes only the answer. Evidence shown in the UI is generated deterministically from validated tool results,

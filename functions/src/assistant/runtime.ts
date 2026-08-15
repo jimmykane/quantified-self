@@ -12,6 +12,7 @@ import {
   findAssistantPromptWorkflow,
   type AssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
+import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { assistantGenkit } from './model';
 import {
   buildAssistantEvidenceList,
@@ -43,6 +44,7 @@ const ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL = ASSISTANT_MAX_TOOL_CALLS_PER_TUR
 const ASSISTANT_MAX_CUMULATIVE_TOOL_OUTPUT_BYTES = 512 * 1024;
 const ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS = 1_024;
 const ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS = 2_048;
+const ASSISTANT_WORKFLOW_DAY_MS = 24 * 60 * 60 * 1_000;
 export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   maxRetries: 2,
   statuses: ['UNAVAILABLE'],
@@ -195,6 +197,56 @@ function asToolInput(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   throw new Error('The Assistant model returned invalid tool input.');
+}
+
+function resolveAssistantWorkflowActivityTypes(
+  discipline: NonNullable<
+    AssistantPromptWorkflow['activityDisciplineOverrides']
+  >[string],
+): string[] {
+  const activityTypes = new Set<string>();
+  for (const sport of TRAINING_SPORT_DEFINITIONS) {
+    if (sport.id !== discipline) {
+      continue;
+    }
+    for (const context of sport.contexts) {
+      context.activityTypes.forEach(activityType => activityTypes.add(activityType));
+    }
+  }
+  return [...activityTypes];
+}
+
+function applyAssistantWorkflowToolPolicy(
+  workflow: AssistantPromptWorkflow | null,
+  toolName: AssistantMcpToolName,
+  toolInput: Record<string, unknown>,
+  currentTime: Date,
+): Record<string, unknown> {
+  if (!workflow) {
+    return toolInput;
+  }
+  const overriddenInput = {
+    ...toolInput,
+    ...(workflow.toolInputOverrides?.[toolName] || {}),
+  };
+  const activityDiscipline = workflow.activityDisciplineOverrides?.[toolName];
+  const activityTypes = activityDiscipline
+    ? resolveAssistantWorkflowActivityTypes(activityDiscipline)
+    : null;
+  const activityScopedInput = activityTypes
+    ? { ...overriddenInput, activityTypes }
+    : overriddenInput;
+  if (!workflow.dateRange?.toolNames.includes(toolName)) {
+    return activityScopedInput;
+  }
+  return {
+    ...activityScopedInput,
+    start: new Date(
+      currentTime.getTime()
+        - (workflow.dateRange.lookbackDays * ASSISTANT_WORKFLOW_DAY_MS),
+    ).toISOString(),
+    end: currentTime.toISOString(),
+  };
 }
 
 function buildAssistantModelInputSchema(
@@ -789,9 +841,11 @@ export function createAssistantRuntime(
             );
           }
         }
-        const modelToolDefinitions = metricTrendIntent
-          ? session.tools.filter(tool => tool.name === 'query_metrics')
-          : session.tools;
+        const modelToolDefinitions = workflow
+          ? session.tools.filter(tool => workflow.toolWorkflow.includes(tool.name))
+          : metricTrendIntent
+            ? session.tools.filter(tool => tool.name === 'query_metrics')
+            : session.tools;
         const tools: AssistantRuntimeTool[] = modelToolDefinitions.map(tool => ({
           name: tool.name,
           description: `${tool.title}. ${tool.description}`,
@@ -804,12 +858,18 @@ export function createAssistantRuntime(
               throw new Error('The Assistant tool-call budget was exceeded.');
             }
             toolCallCount += 1;
+            const workflowToolInput = applyAssistantWorkflowToolPolicy(
+              workflow,
+              tool.name,
+              toolInput,
+              currentTime,
+            );
             const policyToolInput = metricTrendIntent && tool.name === 'query_metrics'
               ? {
-                  ...toolInput,
+                  ...workflowToolInput,
                   ...metricTrendIntent.toolInput,
                 }
-              : toolInput;
+              : workflowToolInput;
             const resolvedToolInput = normalizeAssistantToolInput(
               tool.name,
               policyToolInput,
