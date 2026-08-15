@@ -594,11 +594,12 @@ The route has three destination kinds:
   The destination is discoverable when such evidence exists and remains renderable as an honest empty state if it was
   the account's saved destination before that evidence disappeared.
 
-Desktop uses one Material button-toggle group for **All training** plus at most four sport shortcuts, a complete
-**All sports** selector, and a shortcut editor. Selecting a sport outside the four saved slots temporarily places it in
-the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet widths the shortcuts
-occupy their own row; at 800 px and below a single **Training view** selector replaces the desktop controls. The selected
-destination is intentionally not encoded in the URL or browser history.
+Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
+with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
+with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
+temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
+widths the compact shortcut group occupies its own row; at 800 px and below a single **Training view** selector replaces
+the desktop controls. The selected destination is intentionally not encoded in the URL or browser history.
 
 Sport shortcuts have two modes:
 

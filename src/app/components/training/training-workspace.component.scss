@@ -19,11 +19,11 @@
 .training-page-actions mat-icon { margin-right: 4px; }
 .training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 18px; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
 .training-destination-desktop { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.training-destination-shortcuts { flex: 1 1 auto; min-width: 0; }
+.training-destination-shortcuts { flex: 0 1 auto; width: fit-content; max-width: 100%; min-width: 0; }
 .training-destination-shortcuts mat-button-toggle { min-width: 0; }
 .training-destination-shortcuts mat-icon,
 .training-destination-shortcuts app-activity-type-icon { width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
-.training-all-sports-selector { flex: 0 0 210px; width: 210px; }
+.training-all-sports-selector { flex: 0 0 210px; width: 210px; margin-left: auto; }
 .training-destination-desktop > .training-sport-visibility-action { flex: 0 0 auto; }
 .training-destination-mobile { display: none; }
 .training-destination-scope { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 20px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
@@ -380,9 +380,10 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 @media (max-width: 1200px) { .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-insights-grid > .training-insight-panel:nth-of-type(3):last-of-type { grid-column: 1 / -1; } }
 @media (max-width: 1050px) { .training-build-grid:has(> :nth-child(3)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-build-grid:has(> :nth-child(3)) > :last-child { grid-column: 1 / -1; } }
 @media (min-width: 801px) and (max-width: 1100px) {
-  .training-destination-desktop { flex-wrap: wrap; }
-  .training-destination-shortcuts { flex: 1 0 100%; width: 100%; }
-  .training-all-sports-selector { margin-left: auto; }
+  .training-destination-desktop { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .training-destination-shortcuts { grid-column: 1 / -1; justify-self: start; }
+  .training-all-sports-selector { grid-column: 1; justify-self: end; margin-left: 0; }
+  .training-destination-desktop > .training-sport-visibility-action { grid-column: 2; }
 }
 @media (max-width: 960px) { .training-current-context-grid, .training-load-grid, .training-performance-grid, .training-readiness-overview { grid-template-columns: 1fr; } .training-readiness-history { padding: 16px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); border-left: 0; } .training-readiness-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-readiness-metrics > div:nth-child(odd) { padding-left: 0; border-left: 0; } .training-readiness-metrics > div:nth-child(even) { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel-wide { grid-row: auto; min-height: 360px; } .training-power-systems-trends { grid-template-columns: 1fr; } .training-intensity-chart, .training-swim-performance-panel, .training-durability-panel { grid-column: auto; } }
 @media (max-width: 640px) {
