@@ -43,10 +43,7 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('firebase-admin/firestore', () => ({
   FieldValue: { delete: () => 'delete-sentinel' },
-}));
-
-vi.mock('../queue-utils', () => ({
-  QueueResult: { Processed: 'PROCESSED' },
+  Timestamp: { fromDate: (date: Date) => date },
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
@@ -58,7 +55,14 @@ import {
   claimCOROSEventWriteRevision,
   completeCOROSEventWriteRevision,
   COROS_EVENT_WRITE_LEASE_MS,
+  releaseCOROSEventWriteRevision,
 } from './queue-processing';
+import {
+  deferQueueItemForPendingDisconnect,
+  PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+  QUEUE_DEFERRED_REASONS,
+  QueueResult,
+} from '../queue-utils';
 
 function queueItem(queueRevision: string): COROSAPIWorkoutQueueItemInterface {
   return {
@@ -130,6 +134,27 @@ describe('COROS event-write revision lease', () => {
       queueRevision: 'revision-2',
       processed: true,
     }));
+  });
+
+  it('preserves pending-disconnect parking across claim, deferral, and final release', async () => {
+    const item = queueItem('revision-1');
+
+    await expect(claimCOROSEventWriteRevision(item, 'firebase-1', 'worker-r1'))
+      .resolves.toBe('claimed');
+    await expect(deferQueueItemForPendingDisconnect(item))
+      .resolves.toBe(QueueResult.Deferred);
+    await releaseCOROSEventWriteRevision(item, 'firebase-1', 'worker-r1');
+
+    expect(mocks.transactionUpdate).toHaveBeenCalledTimes(2);
+    expect(mocks.state.current).toEqual(expect.objectContaining({
+      processed: true,
+      resultStatus: 'deferred',
+      deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+      dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+    }));
+    expect(mocks.state.current).not.toHaveProperty('processingOwner');
+    expect(mocks.state.current).not.toHaveProperty('processingRevision');
+    expect(mocks.state.current).not.toHaveProperty('processingLeaseExpiresAt');
   });
 
   it('reclaims an expired lease after a crashed worker', async () => {

@@ -377,6 +377,7 @@ export async function deferQueueItemForPendingDisconnectIfCurrentUserActive(
                 serviceDisconnectPendingDeferredAt: nowMs,
                 dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS),
+                ...clearRevisionProcessingLeaseUpdate(),
             });
         });
 
