@@ -7,6 +7,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 ## Supported scope
 
 - OAuth 2.0 connection and refresh using the COROS `openId` as the stable provider identity.
+- Server-side binding-state verification when a connected account is shown in the Services connection grid.
 - One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Legacy multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
 - Recent COROS activity-history import within the provider's rolling three-month limit.
 - Daily sleep-summary polling plus a user-requested three-month sleep backfill in 30-day windows, subject to the existing cooldown. COROS does not supply sleep stages through this integration.
@@ -28,9 +29,31 @@ All COROS imports and deliveries resolve the same active token through `function
 3. The selected `openId` is persisted through the deletion-safe service-metadata writer before it is used.
 4. Once pinned, a missing or mismatched token never falls back to another COROS account.
 
-A multi-window activity-history request resolves that account once and passes the expected `openId` through every 30-day window; each provider request revalidates the pin. Daily sleep polling deduplicates candidate users and resolves active accounts with bounded concurrency rather than fanning out an unbounded number of metadata/token reads.
+A multi-window activity-history request resolves that account once and passes the expected `openId` through every 30-day window; each provider request revalidates the pin, while persisted range and activity-count metadata remain cumulative across successful windows, including windows with no activities. Daily sleep polling deduplicates candidate users and resolves active accounts with bounded concurrency rather than fanning out an unbounded number of metadata/token reads.
+
+When the connected COROS card is opened, the authenticated `getCOROSAPIBindingState` callable checks `GET /coros/bindState` with the active server-side token. A bound response records only the safe binding status and check timestamp. An unbound response atomically marks the connection reconnect-required and disables every COROS activity-sync and route-delivery setting so no automatic route remains active for a revoked provider account. The transaction proves the token, pinned `openId`, connection lifecycle, and account-deletion state are still current; a stale response is ignored. Before returning a stale result, the callable atomically replaces only its own lease with a per-account cooldown and gives the browser the retry time. Provider outages and malformed responses show a retry state and do not mark an account disconnected.
+
+Binding checks are protected on the server rather than relying on one browser's request coalescing. A result is reused for five minutes, each account can hold only one 45-second provider-call lease, and a recent result can be served while that lease is active. Uncached calls also consume a transactionally enforced shared COROS budget of 60 checks per fixed minute. Exhausting either control returns a retryable callable error before contacting COROS, while structured budget-exhaustion logs provide aggregate monitoring. The decoded provider response is capped at 16 KiB before JSON parsing. A handled provider failure or stale result atomically replaces only that request's lease with a 15-second per-account cooldown; the cooldown is checked before the shared budget is read or debited. The callable returns `retryAt`, the Services grid coalesces state changes while waiting, and at most one delayed automatic retry is attempted for a stale result. The upstream attempt still consumes the shared budget, and many distinct accounts remain bounded by the global limit. Reconnect and disconnect cleanup remove obsolete lease and cooldown state.
 
 COROS route multipart requests require a partner-platform `openUserId`. Quantified Self derives a stable 128-bit, provider-scoped digest from the Firebase UID rather than sending the UID itself. The value is stable for a Quantified Self account but cannot be used as a browser credential.
+
+## Inbound activity ingestion
+
+### Webhook acknowledgement
+
+The COROS webhook supports unauthenticated `GET` health checks and credential-verified `POST` deliveries. A POST receives result `0000` only after every valid workout component has been durably queued, or when the delivery is a known non-retryable skip such as an unknown local account. Authentication, malformed payload, and transient queue failures return distinct non-zero result codes; transient failures also use a retryable HTTP status so COROS can deliver the message again. The handler caps the raw body at 8 MiB, bounds the batch and string fields, queues items with concurrency limited to 10, preserves integer-shaped 64-bit identifiers as strings, and never logs the raw body or signed FIT URL.
+
+Regular and multisport webhook records share the same queue and worker. Queue identity uses `openId`, `labelId`, and a stable component key rather than the ephemeral signed download URL. Each newly stored or history-replaced payload also receives an opaque queue revision. That revision is carried in the Cloud Task name and payload, and dispatch recovery, dispatch markers, FIT-detail updates, retries, deferrals, DLQ moves, and completion all require the stored revision to remain current. At queue-wrapper entry, the worker transactionally claims revisioned work before token lookup, provider access, download or FIT-detail recovery, parsing, echo detection, or any revision-sensitive retry, deferral, DLQ, or completion transition. The revision-bound lease lasts longer than the worker timeout and remains held through event identity resolution, original-file persistence, and activity-sync fan-out. A racing history transaction may install the newer payload only while preserving that active lease; its worker remains retryable until those older-revision writes finish. Completion then releases the replacement as unprocessed and undispatched, so the newer revision necessarily persists last. A crashed owner is reclaimable after the lease expires and the Cloud Task retry backoff has elapsed. Already-queued pre-revision COROS rows use their original creation time as a rollout-generation guard, so they cannot mark a new revision dispatched, retried, or complete. Duplicate webhook deliveries preserve the active revision and update the latest bounded workout metadata and URL without resetting lifecycle state. Event-ID migration first honors the current stable reservation, then positively matching primary-event metadata, and only then an exact or unambiguous legacy URL-derived reservation; ambiguous multisport collisions stay separate rather than guessing and overwriting an event.
+
+### History ranges and FIT-detail recovery
+
+COROS activity and sleep dates are provider calendar dates, inclusive at both boundaries. Server helpers validate real UTC dates, clamp history to the rolling three-month limit, reject end dates beyond a one-day UTC allowance for the user's local calendar, and split requests into non-overlapping windows of at most 30 calendar dates. The browser sends `YYYY-MM-DD` values for COROS so local timezone conversion cannot shift the selected date.
+
+Webhook/history records may omit a FIT URL, and signed URLs may expire before a worker downloads them. The worker recovers a fresh URL from `GET /v2/coros/sport/detail/fit` using the stable `labelId`, parent `mode`/`subMode`, and multisport component identity. It validates the returned workout and component before a deletion-guarded queue update. A detail-auth response gets one forced OAuth refresh; a signed-URL 401/403/404/410 by itself does not incorrectly mark the account disconnected. Retryable detail failures stay retryable, while unusable detail responses enter the existing DLQ with a sanitized reason.
+
+### Imported event metadata
+
+Imported COROS events preserve bounded provider attribution when supplied: effective `mode` and `subMode`, device name, start/end timezone, `planWorkoutId`, and stable multisport component identity. New events do not retain the provider's expiring FIT URL; the owned original file remains the durable source for export, reprocessing, and downstream delivery.
 
 ## Activity delivery
 
@@ -101,10 +124,10 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 ## Security and lifecycle controls
 
-- Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree and its pre-existing owner-readable connection model. The new delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.
-- Callables require authentication, App Check, and Pro access. Disconnect remains available after entitlement ends.
+- Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree and its pre-existing owner-readable connection model, but browser writes to the token subtree are denied. OAuth exchange, refresh, and disconnect mutations use the Admin SDK. The delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.
+- User-triggered import and delivery callables require authentication, App Check, and Pro access. Binding verification requires authentication and App Check but intentionally remains available after entitlement ends, as does disconnect.
 - Activity and route providers are called only after account-deletion and disconnect-pending checks; the checks repeat immediately before the provider request.
-- Token refresh retries once after a terminal COROS authentication signal. A changed or missing active account fails closed.
+- Token refresh extends the same COROS access token for 30 days from successful refresh completion and stores an expiry five minutes early as an operational buffer. The refresh token is retained because COROS documents it as non-expiring. A provider operation retries refresh once after a terminal COROS authentication signal; a changed or missing active account fails closed.
 - Activity initialization/status and route-push requests have a 30-second provider deadline; timeout outcomes retain the operation's safe restart/resume policy.
 - Multipart values remove CR/LF characters, names are bounded, source/generated files and provider payloads are never logged, and provider errors are reduced to allowlisted messages and typed dispositions.
 - Activity fingerprints, queue state, service metadata, and provider tokens live under existing recursive account-deletion ownership. Browser Rules explicitly deny fingerprint access.
@@ -115,13 +138,14 @@ The implementation adds no new COROS credential secret. It reuses `COROSAPI_CLIE
 
 `activitySyncOutboundFingerprints.expireAt` requires the Firestore TTL field override in `firestore.indexes.json`; the collection's hash/routing fields have automatic indexes disabled. Deploy indexes and Rules before Functions and Hosting so receipt writes and browser denial are active before users can start delivery.
 
-The new callable exports are:
+The affected callable exports are:
 
+- `getCOROSAPIBindingState`;
 - `importActivityToCOROSAPI` (updated asynchronous contract);
 - `getCOROSAPIWorkoutFileUploadStatus`;
 - `importRouteToCOROSAPI`.
 
-The existing shared activity-sync and route-delivery backfill, dispatch, worker, token-delete trigger, route-send, and inbound COROS queue functions also contain changed behavior and must be included in the normal Functions deployment rather than deploying only the three callable names.
+The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history callable (`addCOROSAPIHistoryToQueue`), activity worker (`parseCOROSAPIWorkoutQueue`), COROS sleep polling/backfill paths, token refresh scheduler, and existing shared activity-sync/route-delivery functions also contain changed behavior. Include those affected exports in the normal Functions deployment rather than deploying only the callable names above.
 
 ## Release checklist
 
@@ -129,9 +153,10 @@ The existing shared activity-sync and route-delivery backfill, dispatch, worker,
 2. With a dedicated test account, send one valid FIT activity and poll the same upload ID to terminal success; repeat it and verify duplicate-as-success without a second event.
 3. From an allowlisted test account, send one small valid GPX route to production only after confirming the route test is authorized. Stop the release if COROS returns HTTP 403 or result `30009`; do not empty the route allowlist until the partner enables that permission.
 4. Deploy Firestore indexes/TTL and Rules, then Functions, then Hosting through the normal release workflow. Do not use implementation work as deployment approval.
-5. Exercise direct FIT activity upload/status, each source-to-COROS automatic route, all date-range backfills, COROS-to-Suunto/Wahoo routes, direct GPX/FIT route upload, saved-route row/bulk/detail sends, Suunto route automatic/backfill delivery, duplicate handling, reconnect, disconnect-pending, expired-Pro, and deletion races.
-6. Send the same test FIT to both COROS and Suunto, then import provider-returned copies and verify both destination-namespaced echo receipts remain effective and no duplicate event or fan-out is created.
-7. Monitor provider permission/auth errors, upload pending age, unknown/mismatched statuses, queue retries/DLQ, route rejection and duplicate codes, echo-suppression counts, fingerprint-write failures, disconnect-pending age, and account-cleanup failures.
+5. Exercise webhook GET health and POST acknowledgement, missing/expired FIT URL recovery, regular and multisport metadata, direct FIT activity upload/status, each source-to-COROS automatic route, inclusive 1/30/31-day history windows, all date-range backfills, COROS-to-Suunto/Wahoo routes, direct GPX/FIT route upload, saved-route row/bulk/detail sends, Suunto route automatic/backfill delivery, duplicate handling, reconnect, disconnect-pending, expired-Pro, deletion races, and a history replacement while its prior Cloud Task is live.
+6. Revoke the dedicated COROS account at the provider, open the Services connection grid, and verify the card becomes reconnect-required while every COROS activity and saved-route automatic setting turns off. Repeat with a simulated provider outage and verify it shows Retry without changing connection state. Verify repeated grid requests reuse the five-minute server cache, overlapping uncached requests make only one provider call, and the shared request budget rejects excess calls before the COROS API.
+7. Send the same test FIT to both COROS and Suunto, then import provider-returned copies and verify both destination-namespaced echo receipts remain effective and no duplicate event or fan-out is created.
+8. Monitor provider permission/auth/binding errors, binding-check budget exhaustion, upload pending age, unknown/mismatched statuses, FIT-detail recovery, stale queue-revision skips, queue retries/DLQ, route rejection and duplicate codes, echo-suppression counts, fingerprint-write failures, disconnect-pending age, and account-cleanup failures.
 
 ## Rollback
 

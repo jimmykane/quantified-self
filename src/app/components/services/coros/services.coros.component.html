@@ -32,7 +32,7 @@
       </div>
     </div>
     }
-    @if (isConnectedToService()) {
+    @if (hasStoredCOROSConnection) {
     <div class="connection-account-row">
       <div class="connection-account-info">
     @if (!corosOpenId) {
@@ -63,6 +63,20 @@
         </span>
         }
       </button>
+    </div>
+    }
+    @if (isCheckingCOROSBindingState) {
+    <div class="coros-binding-check" role="status">
+      <mat-spinner diameter="18"></mat-spinner>
+      <span>Checking the COROS connection…</span>
+    </div>
+    } @else if (corosBindingStateCheckError && isConnectedToService() && !isReconnectRequired && !isDisconnectPending) {
+    <div class="coros-binding-check coros-binding-check--error" role="status">
+      <mat-icon>cloud_off</mat-icon>
+      <span>Could not verify the COROS connection.</span>
+      <button mat-button type="button"
+        [disabled]="isCOROSBindingStateRetryDisabled"
+        (click)="retryCOROSBindingStateCheck()">Retry</button>
     </div>
     }
     </div>

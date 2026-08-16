@@ -154,6 +154,16 @@ describe('AppFunctionsService', () => {
             .toBeGreaterThan(180_000);
     });
 
+    it('should keep the COROS history client deadline beyond its server runtime budget', async () => {
+        const actualManifest = await vi.importActual<typeof import('@shared/functions-manifest')>(
+            '@shared/functions-manifest',
+        );
+
+        expect(actualManifest.FUNCTIONS_MANIFEST.addCOROSAPIHistoryToQueue.clientTimeoutMs)
+            .toBe(actualManifest.COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS);
+        expect(actualManifest.COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS).toBeGreaterThan(300_000);
+    });
+
     it('should call the pre-initialized callable', async () => {
         // Call the service method
         await service.call('defaultRegionFunc' as any);

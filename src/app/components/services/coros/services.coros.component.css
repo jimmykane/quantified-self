@@ -1,0 +1,15 @@
+.coros-binding-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
+.coros-binding-check--error {
+  color: var(--mat-sys-error);
+}
+
+.coros-binding-check--error button {
+  margin-inline-start: auto;
+}

@@ -21,15 +21,34 @@ export interface ProviderImportEventIDRequest {
   providerEventIDField: string;
   providerEventSecondaryID?: string | number | null;
   providerEventSecondaryIDField?: string;
+  legacyProviderEventSecondaryIdentities?: Array<{
+    field: string;
+    value: string | number | null;
+  }>;
+  /**
+   * Migration-only escape hatch for an ephemeral legacy secondary value.
+   * The primary provider identity must still match, and only a non-empty
+   * declared legacy field is accepted.
+   */
+  allowLegacySecondaryFieldPresenceMatch?: boolean;
   preferProviderIdentityEventID?: boolean;
 }
 
 interface ProviderImportEventIDReservation {
   eventID?: unknown;
+  providerEventIDField?: unknown;
+  providerEventID?: unknown;
+  providerEventSecondaryIDField?: unknown;
+  providerEventSecondaryID?: unknown;
 }
 
-function normalizeProviderIdentityPart(value: string | number | null | undefined): string {
+function normalizeProviderIdentityPart(value: unknown): string {
   return `${value ?? ''}`.trim();
+}
+
+function hasNonEmptyPrimitiveProviderIdentityPart(value: unknown): boolean {
+  return (typeof value === 'string' || typeof value === 'number')
+    && normalizeProviderIdentityPart(value).length > 0;
 }
 
 function metadataMatchesProviderIdentity(
@@ -48,18 +67,38 @@ function metadataMatchesProviderIdentity(
     return true;
   }
 
-  return normalizeProviderIdentityPart(metadata[request.providerEventSecondaryIDField])
-    === normalizeProviderIdentityPart(request.providerEventSecondaryID);
+  if (normalizeProviderIdentityPart(metadata[request.providerEventSecondaryIDField])
+    === normalizeProviderIdentityPart(request.providerEventSecondaryID)) {
+    return true;
+  }
+
+  const legacyIdentities = request.legacyProviderEventSecondaryIdentities || [];
+  if (legacyIdentities.some(identity => {
+    const legacyValue = normalizeProviderIdentityPart(identity.value);
+    return legacyValue.length > 0
+      && normalizeProviderIdentityPart(metadata[identity.field]) === legacyValue;
+  })) {
+    return true;
+  }
+
+  return request.allowLegacySecondaryFieldPresenceMatch === true
+    && legacyIdentities.some(identity =>
+      hasNonEmptyPrimitiveProviderIdentityPart(metadata[identity.field]));
 }
 
-async function generateProviderIdentityEventID(request: ProviderImportEventIDRequest): Promise<string> {
+async function generateProviderIdentityEventID(
+  request: ProviderImportEventIDRequest,
+  secondaryIdentity: { field?: string; value?: string | number | null } = {},
+): Promise<string> {
   return generateIDFromParts([
     request.userID,
     request.serviceName,
     request.providerEventIDField,
     normalizeProviderIdentityPart(request.providerEventID),
-    request.providerEventSecondaryIDField || '',
-    normalizeProviderIdentityPart(request.providerEventSecondaryID),
+    secondaryIdentity.field ?? request.providerEventSecondaryIDField ?? '',
+    normalizeProviderIdentityPart(secondaryIdentity.field === undefined
+      ? request.providerEventSecondaryID
+      : secondaryIdentity.value),
   ]);
 }
 
@@ -84,6 +123,30 @@ function asReservationMap(value: unknown): Record<string, ProviderImportEventIDR
 
 function hasReservedProviderIdentity(reservations: Record<string, ProviderImportEventIDReservation>): boolean {
   return Object.values(reservations).some((reservation) => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
+}
+
+function findUnambiguousLegacyReservationByFieldPresence(
+  reservations: Record<string, ProviderImportEventIDReservation>,
+  request: ProviderImportEventIDRequest,
+): ProviderImportEventIDReservation | undefined {
+  if (request.allowLegacySecondaryFieldPresenceMatch !== true) {
+    return undefined;
+  }
+
+  const legacyFields = new Set(
+    (request.legacyProviderEventSecondaryIdentities || []).map(identity => identity.field),
+  );
+  const matches = Object.values(reservations).filter(reservation => (
+    normalizeProviderIdentityPart(reservation.providerEventIDField) === request.providerEventIDField
+    && normalizeProviderIdentityPart(reservation.providerEventID)
+      === normalizeProviderIdentityPart(request.providerEventID)
+    && legacyFields.has(normalizeProviderIdentityPart(reservation.providerEventSecondaryIDField))
+    && hasNonEmptyPrimitiveProviderIdentityPart(reservation.providerEventSecondaryID)
+    && typeof reservation.eventID === 'string'
+    && reservation.eventID.length > 0
+  ));
+
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function reservationPayload(
@@ -123,7 +186,7 @@ function logCollision(
     primaryEventID,
     collisionSafeEventID,
     providerEventIDField: request.providerEventIDField,
-    providerEventID: normalizeProviderIdentityPart(request.providerEventID),
+    providerEventIDPresent: normalizeProviderIdentityPart(request.providerEventID).length > 0,
     providerEventSecondaryIDField: request.providerEventSecondaryIDField || null,
     providerEventSecondaryIDPresent: request.providerEventSecondaryIDField
       ? normalizeProviderIdentityPart(request.providerEventSecondaryID).length > 0
@@ -135,6 +198,12 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
   const db = admin.firestore();
   const primaryEventID = await generateEventID(request.userID, request.startDate);
   const providerIdentityEventID = await generateProviderIdentityEventID(request);
+  const legacyProviderIdentityKeys = Array.from(new Set(await Promise.all(
+    (request.legacyProviderEventSecondaryIdentities || [])
+      .filter(identity => normalizeProviderIdentityPart(identity.value).length > 0)
+      .map(identity =>
+      generateProviderIdentityEventID(request, identity)),
+  ))).filter(identityKey => identityKey !== providerIdentityEventID);
   const reservationID = await generateReservationID(request, primaryEventID);
   const providerIdentityKey = providerIdentityEventID;
 
@@ -165,26 +234,48 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
       throw new EventWriteSkippedForDeletedUserError(request.userID, `provider_import_event_id:${request.serviceName}`);
     }
 
-    const metadataSnapshot = await transaction.get(metadataRef);
-    if (metadataSnapshot.exists) {
-      const eventID = request.preferProviderIdentityEventID
-        ? providerIdentityEventID
-        : metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
-          ? primaryEventID
-          : providerIdentityEventID;
-      transaction.set(
-        reservationRef,
-        reservationPayload(request, primaryEventID, providerIdentityKey, eventID),
-        { merge: true },
-      );
-      return eventID;
-    }
-
-    const reservationSnapshot = await transaction.get(reservationRef);
+    const [metadataSnapshot, reservationSnapshot] = await Promise.all([
+      transaction.get(metadataRef),
+      transaction.get(reservationRef),
+    ]);
     const providerIdentities = asReservationMap(reservationSnapshot.data()?.providerIdentities);
     const existingReservation = providerIdentities[providerIdentityKey];
     if (typeof existingReservation?.eventID === 'string' && existingReservation.eventID.length > 0) {
       return existingReservation.eventID;
+    }
+
+    if (metadataSnapshot.exists
+      && !request.preferProviderIdentityEventID
+      && metadataMatchesProviderIdentity(metadataSnapshot.data(), request)) {
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, primaryEventID),
+        { merge: true },
+      );
+      return primaryEventID;
+    }
+
+    const exactLegacyReservation = legacyProviderIdentityKeys
+      .map(identityKey => providerIdentities[identityKey])
+      .find(reservation => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
+    const legacyReservation = exactLegacyReservation
+      || findUnambiguousLegacyReservationByFieldPresence(providerIdentities, request);
+    if (typeof legacyReservation?.eventID === 'string' && legacyReservation.eventID.length > 0) {
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, legacyReservation.eventID),
+        { merge: true },
+      );
+      return legacyReservation.eventID;
+    }
+
+    if (metadataSnapshot.exists) {
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, providerIdentityEventID),
+        { merge: true },
+      );
+      return providerIdentityEventID;
     }
 
     const eventID = request.preferProviderIdentityEventID || hasReservedProviderIdentity(providerIdentities)

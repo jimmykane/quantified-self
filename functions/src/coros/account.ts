@@ -10,19 +10,10 @@ import {
 import { getServiceConnectionMeta, pinServiceConnectionProviderUserIdIfUnset } from '../service-connection-meta';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
+import { containsASCIIControlCharacter } from './input-validation';
 
 type COROSTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 const MAX_COROS_OPEN_ID_LENGTH = 200;
-
-function containsASCIIControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export function normalizeCOROSOpenId(value: unknown): string | null {
   if (typeof value !== 'string') return null;

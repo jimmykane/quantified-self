@@ -1,5 +1,4 @@
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
@@ -16,6 +15,10 @@ import { updateQueueItemIfUserActive, QueueItemUserGuardedUpdateResult } from '.
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { QueueResult } from '../queue-utils';
 import {
+  clearRevisionProcessingLeaseUpdate,
+  getActiveRevisionProcessingLease,
+} from '../queue/revision-processing-lease';
+import {
   SERVICE_NAME,
   WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from './constants';
@@ -24,11 +27,6 @@ export type WahooQueueDispatchMode = 'immediate' | 'deferred';
 export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
 
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
-
-type WahooProcessingLease = Required<Pick<
-  WahooAPIWorkoutQueueItemInterface,
-  'processingOwner' | 'processingRevision' | 'processingLeaseExpiresAt'
->>;
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -56,31 +54,6 @@ function isNewerRevision(
       && existingSummaryID.length > 0
       && incomingSummaryID.length > 0
       && existingSummaryID !== incomingSummaryID);
-}
-
-function clearProcessingLeaseUpdate(): Record<string, FieldValue> {
-  return {
-    processingOwner: FieldValue.delete(),
-    processingRevision: FieldValue.delete(),
-    processingLeaseExpiresAt: FieldValue.delete(),
-  };
-}
-
-function activeProcessingLease(
-  queueItem: Partial<WahooAPIWorkoutQueueItemInterface>,
-  now: number,
-): WahooProcessingLease | null {
-  const processingOwner = `${queueItem.processingOwner || ''}`.trim();
-  const processingRevision = `${queueItem.processingRevision || ''}`.trim();
-  const processingLeaseExpiresAt = Number(queueItem.processingLeaseExpiresAt || 0);
-  if (!processingOwner || !processingRevision || processingLeaseExpiresAt <= now) {
-    return null;
-  }
-  return {
-    processingOwner,
-    processingRevision,
-    processingLeaseExpiresAt,
-  };
 }
 
 function wahooDispatchRecoveryGeneration(
@@ -201,7 +174,7 @@ export async function upsertWahooWorkoutQueueItem(
       totalRetryCount: 0,
       dispatchedToCloudTask: null,
       expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-      ...(existing ? activeProcessingLease(existing, now) || {} : {}),
+      ...(existing ? getActiveRevisionProcessingLease(existing, now) || {} : {}),
     });
     return { queued: true, dateCreated: now };
   });
@@ -316,7 +289,7 @@ export async function completeWahooWorkoutQueueRevision(
         processed: true,
         processedAt: now,
         ...additionalData,
-        ...clearProcessingLeaseUpdate(),
+        ...clearRevisionProcessingLeaseUpdate(),
       });
       return;
     }
@@ -326,7 +299,7 @@ export async function completeWahooWorkoutQueueRevision(
     transaction.update(queueItem.ref!, {
       processed: false,
       dispatchedToCloudTask: null,
-      ...clearProcessingLeaseUpdate(),
+      ...clearRevisionProcessingLeaseUpdate(),
     });
   });
   return QueueResult.Processed;
@@ -355,7 +328,7 @@ export async function failWahooWorkoutQueueRevision(
         transaction.update(queueItem.ref!, {
           processed: false,
           dispatchedToCloudTask: null,
-          ...clearProcessingLeaseUpdate(),
+          ...clearRevisionProcessingLeaseUpdate(),
         });
         return QueueResult.Processed;
       }
@@ -390,7 +363,7 @@ export async function failWahooWorkoutQueueRevision(
         totalRetryCount,
         errors,
         dispatchedToCloudTask: null,
-        ...clearProcessingLeaseUpdate(),
+        ...clearRevisionProcessingLeaseUpdate(),
       });
       return QueueResult.RetryIncremented;
     });

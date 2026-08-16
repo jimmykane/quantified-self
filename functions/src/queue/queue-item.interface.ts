@@ -13,12 +13,18 @@ export interface QueueItemInterface {
   processed: false,
   retryCount: number,
   totalRetryCount?: number,
+  /** Opaque provider-payload revision used to reject stale Cloud Task writes. */
+  queueRevision?: string,
   dispatchRecoveryGeneration?: number,
   errors?: QueueItemError[],
   processedAt?: number,
   expireAt?: Timestamp | Date,
   dispatchedToCloudTask: number | null,
   providerOperationStartedAt?: number | null,
+  /** Worker lease that serializes revision-sensitive provider processing and event persistence. */
+  processingOwner?: string,
+  processingRevision?: string,
+  processingLeaseExpiresAt?: number,
   firebaseUserID?: string,
   resultStatus?: 'success' | 'skipped' | 'deferred' | 'manual_reconciliation_required',
   manualReconciliationRequiredAt?: number,
@@ -36,7 +42,17 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {
 export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   workoutID: string,
   openId: string,
-  FITFileURI: string,
+  FITFileURI?: string,
+  mode?: number,
+  subMode?: number,
+  detailMode?: number,
+  detailSubMode?: number,
+  deviceName?: string,
+  startTimezone?: number,
+  endTimezone?: number,
+  planWorkoutId?: string,
+  componentIndex?: number,
+  componentKey?: string,
 }
 
 export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
@@ -50,9 +66,6 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   edited?: boolean;
   fitnessAppID?: number;
   fromHistory?: boolean;
-  processingOwner?: string;
-  processingRevision?: string;
-  processingLeaseExpiresAt?: number;
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {

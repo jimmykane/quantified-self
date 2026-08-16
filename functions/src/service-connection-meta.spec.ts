@@ -171,6 +171,11 @@ describe('service-connection-meta', () => {
       disconnectLastStatusCode: 'delete-sentinel',
       disconnectLastErrorMessage: 'delete-sentinel',
       disconnectManualReviewRequired: 'delete-sentinel',
+      providerBindingState: 'delete-sentinel',
+      providerBindingCheckedAt: 'delete-sentinel',
+      providerBindingCheckLeaseId: 'delete-sentinel',
+      providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
+      providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
   });
 
@@ -232,6 +237,11 @@ describe('service-connection-meta', () => {
 
     expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       providerUserId: 'delete-sentinel',
+      providerBindingState: 'delete-sentinel',
+      providerBindingCheckedAt: 'delete-sentinel',
+      providerBindingCheckLeaseId: 'delete-sentinel',
+      providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
+      providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
   });
 

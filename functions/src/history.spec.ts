@@ -4,7 +4,7 @@ import * as history from './history';
 import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
 const hoisted = vi.hoisted(() => {
@@ -18,6 +18,7 @@ const hoisted = vi.hoisted(() => {
     const getMock = vi.fn();
     const collectionMock = vi.fn();
     const runTransactionMock = vi.fn();
+    const transactionGetAllMock = vi.fn();
     const getUserDeletionGuardState = vi.fn();
     const getUserDeletionGuardStateInTransaction = vi.fn();
     const assertActiveCOROSAccountInTransaction = vi.fn();
@@ -35,6 +36,7 @@ const hoisted = vi.hoisted(() => {
         docMock,
         getActiveCOROSTokenSnapshot: vi.fn(),
         runTransactionMock,
+        transactionGetAllMock,
         getUserDeletionGuardState,
         getUserDeletionGuardStateInTransaction,
         assertActiveCOROSAccountInTransaction,
@@ -96,7 +98,12 @@ vi.mock('./config', () => ({
 vi.mock('./coros/queue', () => ({
     convertCOROSWorkoutsToQueueItems: vi.fn(async (data: any[], openId: string) => data.map((d, i) => ({
         id: `coros-${openId}-${i}`,
-        workoutID: d.workoutId ?? d.workoutID ?? `w-${i}`
+        workoutID: d.workoutId ?? d.workoutID ?? `w-${i}`,
+        queueRevision: `revision-${i}`,
+        dateCreated: 1_777_000_000_000 + i,
+        retryCount: 0,
+        processed: false,
+        dispatchedToCloudTask: null,
     })))
 }));
 
@@ -151,9 +158,18 @@ describe('history', () => {
             shouldSkip: false,
         });
         hoisted.runTransactionMock.mockReset();
+        hoisted.transactionGetAllMock.mockReset();
+        hoisted.transactionGetAllMock.mockImplementation(async (...refs: unknown[]) => refs.map(() => ({
+            exists: false,
+            data: () => undefined,
+        })));
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
-        }) => unknown) => runner({ set: hoisted.batchSetMock }));
+            getAll: typeof hoisted.transactionGetAllMock;
+        }) => unknown) => runner({
+            set: hoisted.batchSetMock,
+            getAll: hoisted.transactionGetAllMock,
+        }));
 
         // Default Firestore shape
         const defaultTokensGet = vi.fn().mockResolvedValue({
@@ -401,7 +417,7 @@ describe('history', () => {
                 accessToken: 't',
                 openId: 'active-open-id',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
-            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ result: '0000', message: 'OK', data: [] }));
 
             await history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date('2026-08-01'), new Date('2026-08-02'));
 
@@ -415,12 +431,118 @@ describe('history', () => {
             );
         });
 
+        it('persists a new COROS payload revision bound to the Firebase user', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    id: 'coros-active-open-id-0',
+                    queueRevision: 'revision-0',
+                    firebaseUserID: 'uid',
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                    fromHistory: true,
+                }),
+            );
+        });
+
+        it('preserves an active event-write lease when history advances the COROS revision', async () => {
+            const processingLeaseExpiresAt = Date.now() + 60_000;
+            hoisted.transactionGetAllMock.mockResolvedValue([{
+                exists: true,
+                data: () => ({
+                    queueRevision: 'older-revision',
+                    processingOwner: 'r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt,
+                }),
+            }]);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    queueRevision: 'revision-0',
+                    processingOwner: 'r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt,
+                }),
+            );
+        });
+
+        it('drops an expired event-write lease when history advances the COROS revision', async () => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{
+                exists: true,
+                data: () => ({
+                    queueRevision: 'older-revision',
+                    processingOwner: 'crashed-r1-worker',
+                    processingRevision: 'revision:older-revision',
+                    processingLeaseExpiresAt: Date.now() - 1,
+                }),
+            }]);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-open-id',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutID: 'workout-1' }],
+            }));
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01'),
+                new Date('2026-08-02'),
+            );
+
+            const queuePayload = hoisted.batchSetMock.mock.calls.find(([, data]) => (
+                data as Record<string, unknown>
+            ).id === 'coros-active-open-id-0')?.[1] as Record<string, unknown>;
+            expect(queuePayload).not.toHaveProperty('processingOwner');
+            expect(queuePayload).not.toHaveProperty('processingRevision');
+            expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
+        });
+
         it('requires the caller-pinned COROS account before and immediately before history retrieval', async () => {
             vi.mocked(tokens.getTokenData).mockResolvedValue({
                 accessToken: 't',
                 openId: 'active-open-id',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
-            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ message: 'OK', data: [] }));
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ result: '0000', message: 'OK', data: [] }));
 
             await history.addHistoryToQueue(
                 'uid',
@@ -441,6 +563,7 @@ describe('history', () => {
                 openId: 'active-coros-token',
             } as Awaited<ReturnType<typeof tokens.getTokenData>>);
             vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
                 message: 'OK',
                 data: [{ workoutId: 'c1' }],
             }));
@@ -458,6 +581,85 @@ describe('history', () => {
                 'active-coros-token',
                 expect.anything(),
             );
+        });
+
+        it('persists cumulative metadata across provider date windows', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-coros-token',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [{ workoutId: 'c1' }],
+            }));
+            const metadataStartDate = new Date('2026-06-01T00:00:00.000Z');
+            const metadataEndDate = new Date('2026-07-30T00:00:00.000Z');
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-07-01T00:00:00.000Z'),
+                metadataEndDate,
+                {
+                    expectedProviderUserId: 'active-coros-token',
+                    cumulativeMetadata: {
+                        startDate: metadataStartDate,
+                        endDate: metadataEndDate,
+                        processedActivitiesCountOffset: 7,
+                    },
+                },
+            );
+
+            const metadataWrite = hoisted.batchSetMock.mock.calls.find(([, value]) =>
+                Object.prototype.hasOwnProperty.call(value, 'didLastHistoryImport'));
+            expect(metadataWrite?.[1]).toEqual(expect.objectContaining({
+                lastHistoryImportStartDate: metadataStartDate.getTime(),
+                lastHistoryImportEndDate: metadataEndDate.getTime(),
+                processedActivitiesFromLastHistoryImportCount: 8,
+            }));
+        });
+
+        it('advances cumulative metadata when a COROS date window is empty', async () => {
+            vi.mocked(tokens.getTokenData).mockResolvedValue({
+                accessToken: 't',
+                openId: 'active-coros-token',
+            } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                result: '0000',
+                message: 'OK',
+                data: [],
+            }));
+            const metadataStartDate = new Date('2026-06-01T00:00:00.000Z');
+            const metadataEndDate = new Date('2026-08-15T00:00:00.000Z');
+
+            await history.addHistoryToQueue(
+                'uid',
+                ServiceNames.COROSAPI,
+                new Date('2026-08-01T00:00:00.000Z'),
+                metadataEndDate,
+                {
+                    expectedProviderUserId: 'active-coros-token',
+                    cumulativeMetadata: {
+                        startDate: metadataStartDate,
+                        endDate: metadataEndDate,
+                        processedActivitiesCountOffset: 7,
+                    },
+                },
+            );
+
+            expect(hoisted.assertActiveCOROSAccountInTransaction).toHaveBeenCalledWith(
+                'uid',
+                'active-coros-token',
+                expect.anything(),
+            );
+            const metadataWrite = hoisted.batchSetMock.mock.calls.find(([, value]) =>
+                Object.prototype.hasOwnProperty.call(value, 'didLastHistoryImport'));
+            expect(metadataWrite?.[1]).toEqual(expect.objectContaining({
+                lastHistoryImportStartDate: metadataStartDate.getTime(),
+                lastHistoryImportEndDate: metadataEndDate.getTime(),
+                processedActivitiesFromLastHistoryImportCount: 7,
+            }));
         });
     });
 
@@ -527,6 +729,20 @@ describe('history', () => {
             )).rejects.toThrow(/COROS API Error with code 5006/);
         });
 
+        it('should reject COROS history data without an explicit success result code', async () => {
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({
+                message: 'OK',
+                data: [],
+            }));
+
+            await expect(history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1' } as COROSAPIAuth2ServiceTokenInterface,
+                new Date(),
+                new Date()
+            )).rejects.toThrow(/COROS API Error/);
+        });
+
         it('should accept an explicit COROS success result code', async () => {
             const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
@@ -547,9 +763,32 @@ describe('history', () => {
             );
         });
 
+        it('preserves unquoted 64-bit identifiers in COROS history responses', async () => {
+            const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
+            vi.mocked(requestHelper.get).mockResolvedValue(
+                '{"result":"0000","data":[{"labelId":418173315956375553,"planWorkoutId":443847671331979261}]}'
+            );
+
+            await history.getWorkoutQueueItems(
+                ServiceNames.COROSAPI,
+                { accessToken: 't', openId: 'open-1', userName: 'user-1' } as unknown as COROSAPIAuth2ServiceTokenInterface,
+                new Date('2026-01-01'),
+                new Date('2026-01-02')
+            );
+
+            expect(convertCOROSWorkoutsToQueueItems).toHaveBeenCalledWith(
+                [{
+                    labelId: '418173315956375553',
+                    planWorkoutId: '443847671331979261',
+                }],
+                'open-1'
+            );
+        });
+
         it('should convert COROS data via helper and include openId', async () => {
             const { convertCOROSWorkoutsToQueueItems } = await import('./coros/queue');
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
+                result: '0000',
                 message: 'OK',
                 data: [{ workoutId: 'c1' }]
             }));
@@ -569,7 +808,10 @@ describe('history', () => {
                 url: expect.stringContaining('token=t&openId=open-1'),
                 timeout: 30_000,
             }));
-            expect(items).toEqual([{ id: 'coros-open-1-0', workoutID: 'c1' }]);
+            expect(vi.mocked(requestHelper.get).mock.calls.at(-1)?.[0]).not.toHaveProperty('headers');
+            expect(items).toEqual([
+                expect.objectContaining({ id: 'coros-open-1-0', workoutID: 'c1' }),
+            ]);
         });
 
         it('should throw for unimplemented service', async () => {

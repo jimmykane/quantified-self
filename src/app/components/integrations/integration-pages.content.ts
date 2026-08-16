@@ -421,6 +421,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         copy: 'COROS sleep summaries import every 24 hours, including sleep timing and available heart-rate/HRV summaries. Pro users can also request the available three-month sleep history from Connections. The current COROS API does not expose sleep stages.',
       },
       {
+        icon: 'verified_user',
+        title: 'Connection health check',
+        copy: 'Opening the COROS connection overview verifies that the active account is still bound. An unbound account changes to Reconnect required and turns off related automatic activity and saved-route settings; a temporary provider error can be retried without disconnecting it.',
+      },
+      {
         icon: 'upload_file',
         title: 'FIT activity upload to COROS',
         copy: 'Use asynchronous FIT activity uploads for corrections, migrations, or missing sessions. Per-file status and retry controls resume the same COROS upload instead of blindly sending it again.',
@@ -476,6 +481,10 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         question: 'How much COROS history can I import?',
         answer: 'COROS history import is currently limited to the last 3 months because of provider API restrictions. The Help page explains processing times for larger imports.',
+      },
+      {
+        question: 'What happens if COROS is no longer connected?',
+        answer: 'The COROS connection overview verifies the active account with COROS. If COROS reports it unbound, Quantified Self shows Reconnect required and turns off related automatic activity and saved-route settings. Temporary verification failures show a retry without changing the connection.',
       },
     ],
     closingTitle: 'Connect COROS, then keep service data aligned',

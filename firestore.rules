@@ -407,11 +407,10 @@ service cloud.firestore {
         && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
           allow read: if isNonAnonymousOwner(userID);
-          allow write: if isNonAnonymousOwner(userID)
-            && (
-              !exists(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID))
-              || get(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
-            );
+          // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.
+          // Legacy browser reads still derive connection state from this tree,
+          // but credentials and stable provider identity are server-owned for writes.
+          allow write: if false;
        }
     }
 

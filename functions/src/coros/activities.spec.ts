@@ -286,6 +286,15 @@ describe('COROS asynchronous activity uploads', () => {
     expect(mocks.recordSuccessfulActivityUpload).not.toHaveBeenCalled();
   });
 
+  it('rejects upload resume identifiers outside signed 64-bit range', async () => {
+    await expect(getCOROSActivityUploadStatus(
+      'test-user-id',
+      '9223372036854775808',
+      'open-id-1',
+    )).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(mocks.get).not.toHaveBeenCalled();
+  });
+
   it('records a completed upload idempotently with its queue reference', async () => {
     mocks.get.mockResolvedValueOnce(JSON.stringify({
       result: '0000',
