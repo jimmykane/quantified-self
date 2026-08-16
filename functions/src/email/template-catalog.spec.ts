@@ -127,7 +127,8 @@ describe('refreshed email template catalog', () => {
         expect(generalAvailability).toContain('Upload a GPX or FIT route directly to COROS');
         expect(generalAvailability).toContain('I read every reply personally');
         expect(generalAvailability).toContain('Founder, Quantified Self');
-        expect(generalAvailability).toContain('you opted in to marketing updates');
+        expect(generalAvailability).toContain('because COROS is connected to your Quantified Self account');
+        expect(generalAvailability).not.toContain('you opted in to marketing updates');
         expect(generalAvailability).not.toMatch(/\bpilot\b/i);
     });
 
