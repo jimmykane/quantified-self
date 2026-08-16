@@ -9,6 +9,13 @@ export class ResponseBodyTooLargeError extends Error {
     }
 }
 
+export interface BoundedBinaryResponse {
+    body: Buffer;
+    statusCode: number;
+    contentType: string | null;
+    contentLength: number | null;
+}
+
 function normalizeMaxResponseBytes(value: unknown): number | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -80,6 +87,18 @@ export async function get(urlOrOptions: string | any, options: any = {}) {
     return request(urlOrOptions, { ...options, method: 'GET' });
 }
 
+export async function getBinaryResponse(
+    urlOrOptions: string | any,
+    options: any = {},
+): Promise<BoundedBinaryResponse> {
+    return request(urlOrOptions, {
+        ...options,
+        method: 'GET',
+        encoding: null,
+        includeBinaryResponseMetadata: true,
+    });
+}
+
 export async function post(urlOrOptions: string | any, options: any = {}) {
     return request(urlOrOptions, { ...options, method: 'POST' });
 }
@@ -133,6 +152,9 @@ async function request(urlOrOptions: string | any, options: any = {}) {
 
     const timeoutMs = Number(opts.timeout);
     const maxResponseBytes = normalizeMaxResponseBytes(opts.maxResponseBytes);
+    if (opts.includeBinaryResponseMetadata === true && maxResponseBytes === null) {
+        throw new TypeError('Binary responses require an explicit maxResponseBytes limit.');
+    }
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
         if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
@@ -167,9 +189,21 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         if (opts.encoding === null) {
-            return boundedResponseBody === null
+            const body = boundedResponseBody === null
                 ? Buffer.from(await response.arrayBuffer())
                 : boundedResponseBody;
+            if (opts.includeBinaryResponseMetadata === true) {
+                const contentLengthHeader = response.headers.get('content-length')?.trim() || '';
+                return {
+                    body,
+                    statusCode: response.status,
+                    contentType: response.headers.get('content-type'),
+                    contentLength: /^\d+$/.test(contentLengthHeader)
+                        ? Number(contentLengthHeader)
+                        : null,
+                } satisfies BoundedBinaryResponse;
+            }
+            return body;
         }
 
         // Default to JSON parsing only if json: true is explicitly set (matching request-promise-native)
@@ -189,6 +223,7 @@ async function request(urlOrOptions: string | any, options: any = {}) {
 
 const requestFn = request as any;
 requestFn.get = get;
+requestFn.getBinaryResponse = getBinaryResponse;
 requestFn.post = post;
 requestFn.put = put;
 requestFn.delete = del;

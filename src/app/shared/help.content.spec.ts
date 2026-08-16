@@ -47,6 +47,14 @@ describe('help.content', () => {
     });
   });
 
+  it('should explain automatic retry for incomplete Suunto activity files', () => {
+    const troubleshootingSection = HELP_SECTIONS.find(section => section.id === 'troubleshooting');
+
+    expect(troubleshootingSection?.content).toContain(
+      'If Suunto temporarily returns an incomplete activity file, Quantified Self validates it and retries automatically',
+    );
+  });
+
   it('should document the bounded MCP-backed Assistant and external MCP alternative', () => {
     const assistantSection = HELP_SECTIONS.find(section => section.id === 'ai-insights');
 

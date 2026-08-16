@@ -217,6 +217,8 @@ Provider file URLs are external input even if they came from an authenticated pa
 - validate response type and file magic bytes before parsing;
 - never persist or log the full signed URL.
 
+Treat a successful HTTP status as transport success, not proof that a provider file is ready. Bound the decoded body, normalize only recognized wrappers, and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only bounded structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
+
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 
 ### Persisting events

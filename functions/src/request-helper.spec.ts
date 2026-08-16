@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Unmock the global mock from test-setup.ts
 vi.unmock('./request-helper');
 
-import requestHelper, { ResponseBodyTooLargeError } from './request-helper';
+import requestHelper, { getBinaryResponse, ResponseBodyTooLargeError } from './request-helper';
 
 describe('request-helper', () => {
     beforeEach(() => {
@@ -130,6 +130,34 @@ describe('request-helper', () => {
             url: 'https://example.com',
             maxResponseBytes: 15,
         })).resolves.toBe('bounded payload');
+    });
+
+    it('returns bounded binary response metadata without exposing unrelated headers', async () => {
+        vi.mocked(fetch).mockResolvedValue(new Response(Buffer.from([0x01, 0x02, 0x03]), {
+            headers: {
+                'content-length': '3',
+                'content-type': 'application/octet-stream',
+                'set-cookie': 'secret=value',
+            },
+        }));
+
+        await expect(getBinaryResponse({
+            url: 'https://example.com/file.fit',
+            maxResponseBytes: 8,
+        })).resolves.toEqual({
+            body: Buffer.from([0x01, 0x02, 0x03]),
+            statusCode: 200,
+            contentType: 'application/octet-stream',
+            contentLength: 3,
+        });
+    });
+
+    it('refuses to fetch binary response metadata without an explicit byte limit', async () => {
+        await expect(getBinaryResponse({
+            url: 'https://example.com/file.fit',
+        })).rejects.toThrow('Binary responses require an explicit maxResponseBytes limit.');
+
+        expect(fetch).not.toHaveBeenCalled();
     });
 
     it('bounds error bodies before buffering them', async () => {

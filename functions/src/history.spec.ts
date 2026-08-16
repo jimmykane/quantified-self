@@ -322,7 +322,10 @@ describe('history', () => {
 
             expect(tokens.getTokenData).toHaveBeenCalled();
             expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
-                url: expect.stringContaining('/v3/workouts')
+                url: expect.stringContaining('/v3/workouts'),
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer testToken',
+                }),
             }));
             expect(firestore.runTransaction).toHaveBeenCalled();
             expect(hoisted.batchSetMock).toHaveBeenCalledWith(

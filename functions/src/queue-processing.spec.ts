@@ -90,11 +90,13 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
 import { parseWorkoutQueueItemForServiceName } from './queue';
 
 vi.mock('./request-helper', () => ({
+    ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
     default: {
         get: mockGetWorkoutForService,
         post: vi.fn(),
     },
     get: mockGetWorkoutForService,
+    getBinaryResponse: mockGetWorkoutForService,
     post: vi.fn(),
 }));
 
@@ -207,8 +209,17 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         mockGetTokenData.mockResolvedValue({ accessToken: 'token' });
 
         // Mock successful download
-        const arrayBuffer = new ArrayBuffer(8);
-        mockGetWorkoutForService.mockResolvedValue(arrayBuffer);
+        const fit = Buffer.alloc(32);
+        fit.writeUInt8(14, 0);
+        fit.writeUInt8(0x20, 1);
+        fit.writeUInt32LE(16, 4);
+        fit.write('.FIT', 8, 'ascii');
+        mockGetWorkoutForService.mockResolvedValue({
+            body: fit,
+            statusCode: 200,
+            contentType: 'application/octet-stream',
+            contentLength: fit.length,
+        });
 
         // Mock UsageLimitExceededError from setEvent
         mockSetEvent.mockRejectedValue(new UsageLimitExceededError('Limit reached'));

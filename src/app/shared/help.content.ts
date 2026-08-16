@@ -993,6 +993,7 @@ This action cannot be undone.
 
 - Garmin history imports can arrive gradually.
 - Suunto and COROS imports run in the background and can take hours or days.
+- If Suunto temporarily returns an incomplete activity file, Quantified Self validates it and retries automatically instead of saving an empty activity.
 - Check cooldowns and connection status before retrying.
 - If Services shows **Reconnect required**, reconnect that provider before retrying imports or sleep sync.
 

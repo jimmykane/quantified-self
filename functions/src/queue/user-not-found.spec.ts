@@ -125,10 +125,25 @@ vi.mock('../queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('../request-helper', () => ({
-    default: { get: vi.fn().mockResolvedValue(new ArrayBuffer(10)) },
-    get: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
-}));
+vi.mock('../request-helper', () => {
+    const fit = Buffer.alloc(32);
+    fit.writeUInt8(14, 0);
+    fit.writeUInt8(0x20, 1);
+    fit.writeUInt32LE(16, 4);
+    fit.write('.FIT', 8, 'ascii');
+    const getBinaryResponse = vi.fn().mockResolvedValue({
+        body: fit,
+        statusCode: 200,
+        contentType: 'application/octet-stream',
+        contentLength: fit.length,
+    });
+    return {
+        default: { get: getBinaryResponse, getBinaryResponse },
+        get: getBinaryResponse,
+        getBinaryResponse,
+        ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
+    };
+});
 
 vi.mock('../queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('event-id'),
@@ -250,7 +265,7 @@ describe('User Not Found Scenarios', () => {
 
             // Mock network error during download (request-helper) to trigger generic error catch
             const requestHelper = await import('../request-helper');
-            requestHelper.default.get.mockRejectedValueOnce(new Error('Network Error'));
+            requestHelper.getBinaryResponse.mockRejectedValueOnce(new Error('Network Error'));
 
             const bulkWriter = (admin.firestore() as any).bulkWriter();
 

@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
-import * as requestHelper from '../request-helper';
 import * as tokens from '../tokens';
 import { getSuuntoFITFile } from './get-suunto-fit-file';
 import { SERVICE_NAME } from './constants';
+
+const { mockDownloadSuuntoFITFile } = vi.hoisted(() => ({
+    mockDownloadSuuntoFITFile: vi.fn(),
+}));
 
 // Mock dependencies
 const mockVerifyIdToken = vi.fn().mockResolvedValue({ uid: 'testUID' });
@@ -28,9 +31,19 @@ vi.mock('../tokens', () => ({
     getTokenData: vi.fn()
 }));
 
-vi.mock('../request-helper', () => ({
-    get: vi.fn()
-}));
+vi.mock('./fit-download', () => {
+    class MockRetryableSuuntoFITPayloadError extends Error {
+        readonly name = 'RetryableSuuntoFITPayloadError';
+    }
+    class MockPermanentSuuntoFITPayloadError extends Error {
+        readonly name = 'PermanentSuuntoFITPayloadError';
+    }
+    return {
+        downloadSuuntoFITFile: (...args: unknown[]) => mockDownloadSuuntoFITFile(...args),
+        RetryableSuuntoFITPayloadError: MockRetryableSuuntoFITPayloadError,
+        PermanentSuuntoFITPayloadError: MockPermanentSuuntoFITPayloadError,
+    };
+});
 
 // We need to unmock and re-mock utils to control isCorsAllowed
 vi.mock('../utils', () => ({
@@ -82,19 +95,32 @@ describe('getSuuntoFITFile', () => {
             docs: [mockTokenDoc]
         });
 
-        // Setup token and request helper
+        // Setup token and provider download
         (tokens.getTokenData as any).mockResolvedValue({ userName: 'u1', accessToken: 'at' });
-        (requestHelper.get as any).mockResolvedValue(Buffer.from('fit content'));
+        mockDownloadSuuntoFITFile.mockResolvedValue(Buffer.from('fit content'));
 
         await getSuuntoFITFile(req, res);
 
         expect(mockVerifyIdToken).toHaveBeenCalledWith('Bearer token');
-        expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
-            url: expect.stringContaining('/v3/workouts/w1/fit'),
-            headers: expect.objectContaining({ Authorization: 'at' })
-        }));
+        expect(mockDownloadSuuntoFITFile).toHaveBeenCalledWith('at', 'w1');
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.send).toHaveBeenCalled();
+    });
+
+    it('returns unavailable for a structurally incomplete provider response', async () => {
+        const firestore = admin.firestore();
+        (firestore.collection('').doc('').collection('').get as any).mockResolvedValue({
+            size: 1,
+            docs: [{ id: 't1' }]
+        });
+        (tokens.getTokenData as any).mockResolvedValue({ userName: 'u1', accessToken: 'at' });
+        const { RetryableSuuntoFITPayloadError } = await import('./fit-download');
+        mockDownloadSuuntoFITFile.mockRejectedValue(new RetryableSuuntoFITPayloadError());
+
+        await getSuuntoFITFile(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(503);
+        expect(res.send).toHaveBeenCalledWith();
     });
 
     it('should return 404 if no matching username token found', async () => {
