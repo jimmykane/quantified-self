@@ -47,6 +47,7 @@ import {
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
 import {
+    getWahooWorkoutTypeById,
     resolveCanonicalActivityTypes,
     resolveWahooWorkoutType,
 } from '../../../shared/wahoo-activity-types';
@@ -448,11 +449,37 @@ async function uploadToDestination(
     }
 }
 
-async function resolveExpectedWahooWorkoutTypeId(
+interface ExpectedWahooWorkoutTypeResolution {
+    workoutTypeId?: number;
+    persistedWorkoutTypeId?: number | null;
+}
+
+async function ensureExpectedWahooWorkoutTypeBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
-): Promise<number | undefined> {
+): Promise<ExpectedWahooWorkoutTypeResolution> {
     if (queueItem.destinationServiceName !== ServiceNames.WahooAPI) {
-        return undefined;
+        return {};
+    }
+    if (queueItem.destinationExpectedWorkoutTypeID !== undefined) {
+        if (queueItem.destinationExpectedWorkoutTypeID === null) {
+            return { persistedWorkoutTypeId: null };
+        }
+        const workoutType = getWahooWorkoutTypeById(queueItem.destinationExpectedWorkoutTypeID);
+        if (!workoutType) {
+            throw new ProviderOperationError({
+                serviceName: ServiceNames.WahooAPI,
+                operation: 'activity_upload_init',
+                disposition: 'permanent',
+                retryMode: 'none',
+                code: 'failed-precondition',
+                message: 'Activity sync contains an invalid persisted Wahoo workout type.',
+                dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_INVALID_TYPE',
+            });
+        }
+        return {
+            workoutTypeId: workoutType.id,
+            persistedWorkoutTypeId: workoutType.id,
+        };
     }
 
     const eventSnapshot = await admin.firestore()
@@ -471,9 +498,12 @@ async function resolveExpectedWahooWorkoutTypeId(
             eventID: queueItem.eventID,
             canonicalActivityTypes,
         });
-        return undefined;
     }
-    return expectedWorkoutType.id;
+    const destinationExpectedWorkoutTypeID = expectedWorkoutType?.id ?? null;
+    return {
+        workoutTypeId: expectedWorkoutType?.id,
+        persistedWorkoutTypeId: destinationExpectedWorkoutTypeID,
+    };
 }
 
 function getSuuntoBlobContinuation(
@@ -598,6 +628,7 @@ function isSameActivitySyncProviderState(
         && areEquivalentOptionalStrings(currentQueueItem.destinationProviderUserID, expectedQueueItem.destinationProviderUserID)
         && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedQueueItem.destinationWorkoutKey)
         && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedQueueItem.destinationInfoCode)
+        && currentQueueItem.destinationExpectedWorkoutTypeID === expectedQueueItem.destinationExpectedWorkoutTypeID
         && areEquivalentOptionalStrings(currentQueueItem.outboundFingerprintID, expectedQueueItem.outboundFingerprintID)
         && isSameUploadContinuation(
             currentQueueItem.destinationUploadContinuation,
@@ -780,6 +811,7 @@ function buildUnresolvedDestinationProviderOperationError(
 
 async function markDestinationProviderOperationInFlight(
     queueItem: ActivitySyncQueueItemInterface,
+    expectedWahooWorkoutType: ExpectedWahooWorkoutTypeResolution,
 ): Promise<boolean> {
     if (!queueItem.ref) {
         throw new Error('Destination provider operation cannot start without a queue document reference.');
@@ -794,6 +826,9 @@ async function markDestinationProviderOperationInFlight(
         updateData: {
             dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
             providerOperationStartedAt,
+            ...(expectedWahooWorkoutType.persistedWorkoutTypeId !== undefined
+                ? { destinationExpectedWorkoutTypeID: expectedWahooWorkoutType.persistedWorkoutTypeId }
+                : {}),
         },
         logPrefix: 'ActivitySync',
         actionDescription: 'destination provider in-flight marker',
@@ -804,6 +839,9 @@ async function markDestinationProviderOperationInFlight(
     }
     queueItem.dispatchedToCloudTask = PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER;
     queueItem.providerOperationStartedAt = providerOperationStartedAt;
+    if (expectedWahooWorkoutType.persistedWorkoutTypeId !== undefined) {
+        queueItem.destinationExpectedWorkoutTypeID = expectedWahooWorkoutType.persistedWorkoutTypeId;
+    }
     return true;
 }
 
@@ -1424,9 +1462,12 @@ export async function processActivitySyncQueueItem(
             return QueueResult.Processed;
         }
 
-        const expectedWahooWorkoutTypeId = await resolveExpectedWahooWorkoutTypeId(queueItem);
+        const expectedWahooWorkoutType = await ensureExpectedWahooWorkoutTypeBeforeProviderUpload(queueItem);
 
-        const operationMarked = await markDestinationProviderOperationInFlight(queueItem);
+        const operationMarked = await markDestinationProviderOperationInFlight(
+            queueItem,
+            expectedWahooWorkoutType,
+        );
         if (!operationMarked) {
             return QueueResult.Processed;
         }
@@ -1435,7 +1476,7 @@ export async function processActivitySyncQueueItem(
         const uploadResult = await uploadToDestination(
             queueItem,
             fileBuffer,
-            expectedWahooWorkoutTypeId,
+            expectedWahooWorkoutType.workoutTypeId,
         );
         if (uploadResult.status === 'pending') {
             const pendingError = buildPendingDestinationUploadError(queueItem, uploadResult);
@@ -1598,6 +1639,41 @@ export async function processActivitySyncQueueItem(
                 bulkWriter,
                 routeMeta,
             );
+        }
+
+        if (
+            duringDestinationUpload
+            && queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isProviderOperationError(error)
+            && error.serviceName === ServiceNames.WahooAPI
+            && error.providerOperationId
+            && !hasMatchingPersistedDestinationUpload(
+                queueItem,
+                error.providerOperationId,
+                error.providerUserId,
+            )
+        ) {
+            const acceptedUploadState = {
+                status: 'pending',
+                message: error.message,
+                uploadId: error.providerOperationId,
+                providerUserId: error.providerUserId,
+            } satisfies UploadActivityFileResult;
+            let persisted: boolean;
+            try {
+                persisted = await persistDestinationUploadState(queueItem, acceptedUploadState);
+            } catch (persistenceError) {
+                return moveUploadStatePersistenceFailureToDlq(
+                    queueItem,
+                    acceptedUploadState,
+                    persistenceError,
+                    bulkWriter,
+                    routeMeta,
+                );
+            }
+            if (!persisted) {
+                return QueueResult.Processed;
+            }
         }
 
         if (duringDestinationUpload && isProviderOperationError(error) && error.disposition === 'auth_required') {

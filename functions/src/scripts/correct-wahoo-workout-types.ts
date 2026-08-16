@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 
 import { getWahooWorkoutTypeById } from '../../../shared/wahoo-activity-types';
+import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { getTokenData } from '../tokens';
 import { requestWahooAPI } from '../wahoo/auth/api';
@@ -56,7 +57,14 @@ function parseOptions(): ScriptOptions {
   return { uid, workoutIds, expectedWorkoutTypeId, apply, confirmation };
 }
 
-function safeWorkoutSummary(payload: WahooWorkoutPayload): Record<string, unknown> {
+interface SafeWorkoutSummary {
+  id: string | null;
+  name: string | null;
+  workoutTypeId: number | null;
+  workoutTypeName: string | null;
+}
+
+function safeWorkoutSummary(payload: WahooWorkoutPayload): SafeWorkoutSummary {
   const rawWorkoutTypeId = payload.workout_type_id ?? payload.workout_type?.id;
   const normalizedWorkoutTypeId = `${rawWorkoutTypeId ?? ''}`.trim();
   const workoutTypeId = normalizedWorkoutTypeId ? Number(normalizedWorkoutTypeId) : Number.NaN;
@@ -66,6 +74,31 @@ function safeWorkoutSummary(payload: WahooWorkoutPayload): Record<string, unknow
     workoutTypeId: Number.isFinite(workoutTypeId) ? workoutTypeId : null,
     workoutTypeName: `${payload.workout_type?.name ?? ''}` || null,
   };
+}
+
+export async function assertWahooCorrectionMutationAllowed(uid: string): Promise<void> {
+  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+  if (deletionGuard.shouldSkip) {
+    throw new Error(`Cannot update Wahoo workouts for deleted or deleting user ${uid}.`);
+  }
+  if (await isServiceDisconnectPendingForUser(uid, ServiceNames.WahooAPI)) {
+    throw new Error(`Cannot update Wahoo workouts while Wahoo disconnect is pending for user ${uid}.`);
+  }
+}
+
+export function assertWahooCorrectionApplied(
+  workoutId: string,
+  summary: SafeWorkoutSummary,
+  expectedWorkoutType: { id: number; name: string },
+): void {
+  if (
+    summary.workoutTypeId !== expectedWorkoutType.id
+    || summary.name !== expectedWorkoutType.name
+  ) {
+    throw new Error(
+      `Wahoo workout ${workoutId} did not retain the requested type/name after update.`,
+    );
+  }
 }
 
 async function getAccessToken(uid: string): Promise<string> {
@@ -90,7 +123,7 @@ async function getAccessToken(uid: string): Promise<string> {
   return token.accessToken;
 }
 
-async function main(): Promise<void> {
+export async function runWahooWorkoutTypeCorrectionScript(): Promise<void> {
   const options = parseOptions();
   if (admin.apps.length === 0) admin.initializeApp();
   const accessToken = await getAccessToken(options.uid);
@@ -111,6 +144,7 @@ async function main(): Promise<void> {
     }));
 
     if (!options.apply) continue;
+    await assertWahooCorrectionMutationAllowed(options.uid);
     const form = new URLSearchParams();
     form.set('workout[workout_type_id]', `${expectedWorkoutType.id}`);
     form.set('workout[name]', expectedWorkoutType.name);
@@ -123,16 +157,20 @@ async function main(): Promise<void> {
       accessToken,
       `/v1/workouts/${encodeURIComponent(workoutId)}`,
     );
+    const afterSummary = safeWorkoutSummary(after.data || {});
     console.info(JSON.stringify({
       mode: 'verified_after_apply',
       workoutId,
-      after: safeWorkoutSummary(after.data || {}),
+      after: afterSummary,
       expected: expectedWorkoutType,
     }));
+    assertWahooCorrectionApplied(workoutId, afterSummary, expectedWorkoutType);
   }
 }
 
-void main().catch(error => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  void runWahooWorkoutTypeCorrectionScript().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
