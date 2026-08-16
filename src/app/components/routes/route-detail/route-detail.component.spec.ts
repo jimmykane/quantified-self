@@ -25,8 +25,8 @@ import { RouteNameDialogComponent } from '../route-name-dialog/route-name-dialog
 import { RouteDetailComponent } from './route-detail.component';
 
 vi.mock('@shared/coros-rollout', () => ({
-  COROS_ROUTE_UPLOAD_ALLOWED_UIDS: ['user-1'],
-  isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid === 'user-1',
+  COROS_ROUTE_UPLOAD_ALLOWED_UIDS: [],
+  isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid.length > 0,
 }));
 
 describe('RouteDetailComponent', () => {
@@ -664,7 +664,7 @@ describe('RouteDetailComponent', () => {
     expect(component.sendingToService()).toBe(false);
   });
 
-  it('keeps COROS route actions outside the rollout hidden', () => {
+  it('keeps COROS route actions available for another eligible user', () => {
     component.user.set(new User('user-2'));
     component.routeDocument.set({ ...routeDocument, userID: 'user-2' });
     activityServiceConnectionState$.next({
@@ -673,8 +673,8 @@ describe('RouteDetailComponent', () => {
     });
 
     expect(component.canSendRouteToCOROS()).toBe(true);
-    expect(component.isCOROSRouteUploadAvailableForUser()).toBe(false);
-    expect(component.canSendRoutesToCOROS()).toBe(false);
+    expect(component.isCOROSRouteUploadAvailableForUser()).toBe(true);
+    expect(component.canSendRoutesToCOROS()).toBe(true);
   });
 
   it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {

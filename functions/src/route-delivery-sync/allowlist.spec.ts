@@ -4,7 +4,6 @@ import {
   getRouteDeliverySyncRouteAllowlistConfigError,
   isRouteDeliverySyncRouteUserAllowlisted,
 } from './allowlist';
-import { COROS_ROUTE_UPLOAD_ALLOWED_UIDS } from '../../../shared/coros-rollout';
 
 describe('route-delivery-sync/allowlist', () => {
   it('registers the Suunto route-delivery destinations', () => {
@@ -37,16 +36,18 @@ describe('route-delivery-sync/allowlist', () => {
     expect(isRouteDeliverySyncRouteUserAllowlisted(routeId, '')).toBe(false);
   });
 
-  it('keeps Suunto-to-COROS route delivery on the shared COROS route pilot', () => {
-    const pilotUID = COROS_ROUTE_UPLOAD_ALLOWED_UIDS[0];
-    expect(pilotUID).toBeTruthy();
+  it('allows Suunto-to-COROS route delivery for every non-empty uid', () => {
     expect(isRouteDeliverySyncRouteUserAllowlisted(
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
-      pilotUID,
+      'user-1',
     )).toBe(true);
     expect(isRouteDeliverySyncRouteUserAllowlisted(
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
-      'not-in-coros-route-pilot',
+      'someone-else',
+    )).toBe(true);
+    expect(isRouteDeliverySyncRouteUserAllowlisted(
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      '',
     )).toBe(false);
   });
 });

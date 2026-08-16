@@ -172,7 +172,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self and connected services')).toBe(true);
     const wahooCorosRouteItem = PUBLIC_SEO_PAGES.routeFiles.sections
       .flatMap(section => section.items || [])
-      .find(item => item.title === 'Send saved routes to Wahoo or pilot COROS accounts');
+      .find(item => item.title === 'Send saved routes to Wahoo or COROS');
     expect(wahooCorosRouteItem?.copy).toContain('Routes table or bulk actions');
     expect(wahooCorosRouteItem?.copy).toContain('COROS in the table, bulk actions, and route detail menu');
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Suunto?')).toBe(true);

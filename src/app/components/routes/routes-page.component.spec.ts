@@ -15,8 +15,8 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 vi.mock('@shared/coros-rollout', () => ({
-    COROS_ROUTE_UPLOAD_ALLOWED_UIDS: ['user-1'],
-    isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid === 'user-1',
+    COROS_ROUTE_UPLOAD_ALLOWED_UIDS: [],
+    isCOROSRouteUploadUIDAllowlisted: (uid: string) => uid.length > 0,
 }));
 import { AppFileService } from '../../services/app.file.service';
 import { AppHapticsService } from '../../services/app.haptics.service';

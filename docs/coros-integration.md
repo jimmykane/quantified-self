@@ -1,6 +1,6 @@
 # COROS Integration
 
-COROS is a Pro-only activity, sleep-summary, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported sleep summaries, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and implements direct or saved GPX/FIT route delivery to COROS. Activity upload and activity-sync routes are production-wide; route delivery remains pilot-gated until the production partner route-push entitlement is verified.
+COROS is a Pro-only activity, sleep-summary, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported sleep summaries, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and implements direct or saved GPX/FIT route delivery to COROS. Activity upload, activity-sync routes, and route delivery are available production-wide to eligible connected users.
 
 This is the COROS-specific architecture and release record. For shared provider requirements, see the [provider integration implementation guide](provider-integration-guide.md).
 
@@ -18,7 +18,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 - Saved-route delivery from the Routes row action, selected-row bulk toolbar, and route detail.
 - Opt-in automatic and backfill delivery of Suunto routes already saved in Quantified Self to COROS through the shared route-delivery queue.
 
-Every automatic activity and saved-route direction is off by default. Empty activity rollout allowlists make activity routes available to all eligible Pro users; a user must still connect both services and explicitly enable each direction. COROS route upload uses the separate shared pilot allowlist in `shared/coros-rollout.ts`, and Suunto-to-COROS route delivery reuses that exact allowlist. A date-range or saved-route backfill does not turn on future delivery.
+Every automatic activity and saved-route direction is off by default. Empty rollout allowlists make the corresponding routes available to all eligible Pro users; a user must still connect the required services and explicitly enable each direction. COROS direct/saved route upload and Suunto-to-COROS route delivery reuse the same empty production allowlist in `shared/coros-rollout.ts`; populating it provides a narrow emergency rollback. A date-range or saved-route backfill does not turn on future delivery.
 
 ## Account identity
 
@@ -103,7 +103,7 @@ Inbound COROS FIT URLs are treated as untrusted provider input. The worker accep
 
 ## Route delivery
 
-Route controls, the direct callable, saved-route sends, and Suunto route automatic/backfill delivery all enforce the same server-backed pilot gate. Removing the final UID from that shared allowlist opens route delivery production-wide only after the entitlement checks below pass; frontend visibility is not the authorization boundary.
+Route controls, the direct callable, saved-route sends, and Suunto route automatic/backfill delivery all enforce the same shared server-backed rollout gate. Its empty allowlist makes route delivery production-wide while preserving a narrow operational rollback; frontend visibility is not the authorization boundary. Authentication, App Check, Pro entitlement, active connection, account deletion, and pending-disconnect checks remain mandatory.
 
 All COROS route entry points share `functions/src/coros/routes.ts` through the common route-send and route-delivery adapters:
 
@@ -149,9 +149,9 @@ The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history
 
 ## Release checklist
 
-1. Confirm the production COROS partner application has activity-file upload and route-push entitlement. A controlled non-destructive activity probe on 2026-08-13 reached COROS application-level validation (`5096`, unsupported file) rather than permission denial (`30009`), confirming activity-upload access at that time. Route entitlement has not yet been validated, so route delivery remains restricted by `COROS_ROUTE_UPLOAD_ALLOWED_UIDS` while activity delivery is open to all eligible users.
+1. Confirm the production COROS partner application has activity-file upload and route-push entitlement. A controlled non-destructive activity probe on 2026-08-13 reached COROS application-level validation (`5096`, unsupported file) rather than permission denial (`30009`), confirming activity-upload access at that time. The shared route rollout is configured for general availability; stop the release if the route smoke test below returns HTTP 403 or result `30009`.
 2. With a dedicated test account, send one valid FIT activity and poll the same upload ID to terminal success; repeat it and verify duplicate-as-success without a second event.
-3. From an allowlisted test account, send one small valid GPX route to production only after confirming the route test is authorized. Stop the release if COROS returns HTTP 403 or result `30009`; do not empty the route allowlist until the partner enables that permission.
+3. From a dedicated test account, send one small valid GPX route and verify it appears in COROS. Repeat the same saved-route revision and verify duplicate-safe success. Stop the release if COROS returns HTTP 403 or result `30009`.
 4. Deploy Firestore indexes/TTL and Rules, then Functions, then Hosting through the normal release workflow. Do not use implementation work as deployment approval.
 5. Exercise webhook GET health and POST acknowledgement, missing/expired FIT URL recovery, regular and multisport metadata, direct FIT activity upload/status, each source-to-COROS automatic route, inclusive 1/30/31-day history windows, all date-range backfills, COROS-to-Suunto/Wahoo routes, direct GPX/FIT route upload, saved-route row/bulk/detail sends, Suunto route automatic/backfill delivery, duplicate handling, reconnect, disconnect-pending, expired-Pro, deletion races, and a history replacement while its prior Cloud Task is live.
 6. Revoke the dedicated COROS account at the provider, open the Services connection grid, and verify the card becomes reconnect-required while every COROS activity and saved-route automatic setting turns off. Repeat with a simulated provider outage and verify it shows Retry without changing connection state. Verify repeated grid requests reuse the five-minute server cache, overlapping uncached requests make only one provider call, and the shared request budget rejects excess calls before the COROS API.
@@ -160,4 +160,4 @@ The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history
 
 ## Rollback
 
-Automatic routes remain user-opt-in. If provider errors rise after release, disable new route settings in the shared rollout configuration and deploy that narrow rollback while preserving disconnect and status reconciliation for already accepted uploads. A route-entitlement failure should roll back the COROS route UI/callable and Suunto-to-COROS route availability without disabling COROS activity import, sleep, or confirmed activity delivery. Never delete accepted upload IDs or live queue state as a rollback mechanism.
+Automatic routes remain user-opt-in. If provider errors rise after release, populate the shared COROS route allowlist with approved internal accounts and deploy that narrow rollback while preserving disconnect and status reconciliation for already accepted uploads. A route-entitlement failure should roll back the COROS route UI/callable and Suunto-to-COROS route availability without disabling COROS activity import, sleep, or confirmed activity delivery. Never delete accepted upload IDs or live queue state as a rollback mechanism.

@@ -468,7 +468,7 @@ describe('ServicesCorosComponent', () => {
 
     it('offers reconnect and blocks COROS tools when the preserved token requires reconnect', () => {
         component.hasProAccess = true;
-        component.user = { uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2', settings: {} } as any;
+        component.user = { uid: 'test-user-uid', settings: {} } as any;
         component.serviceMeta = { connectionState: 'reconnect_required' } as any;
         component.serviceTokens = [{
             accessToken: 'token',
@@ -579,7 +579,7 @@ describe('ServicesCorosComponent', () => {
     describe('Upload Card', () => {
         it('shows direct activity and route uploads when COROS is connected', () => {
             component.hasProAccess = true;
-            component.user = { uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2', settings: {} } as any;
+            component.user = { uid: 'coros-tools-user', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
             fixture.detectChanges();
 
@@ -592,15 +592,15 @@ describe('ServicesCorosComponent', () => {
             expect(content).toContain('Upload GPX or FIT Route');
         });
 
-        it('keeps activity upload visible while hiding route upload outside the COROS route pilot', () => {
+        it('shows activity and route upload for another connected Pro user', () => {
             component.hasProAccess = true;
-            component.user = { uid: 'not-in-coros-route-pilot', settings: {} } as any;
+            component.user = { uid: 'another-coros-tools-user', settings: {} } as any;
             component.serviceTokens = [{ accessToken: 'coros-token', openId: 'coros-user' } as any];
             fixture.detectChanges();
 
             expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
-            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
-            expect(fixture.nativeElement.textContent).not.toContain('Upload GPX or FIT Route');
+            expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.textContent).toContain('Upload GPX or FIT Route');
         });
     });
 

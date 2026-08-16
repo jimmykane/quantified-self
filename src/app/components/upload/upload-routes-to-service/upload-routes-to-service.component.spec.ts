@@ -92,7 +92,7 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockAnalytics = { logEvent: vi.fn() };
     const mockAuth = {
         currentUser: {
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'route-upload-user',
             getIdToken: () => Promise.resolve('token'),
         },
     };
@@ -297,11 +297,13 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(component.fileAccept).toBe('.fit,.gpx');
     });
 
-    it('blocks COROS route parsing outside the route-upload pilot', async () => {
+    it('uploads a COROS route for any authenticated user', async () => {
         component.serviceName = ServiceNames.COROSAPI;
-        mockAuth.currentUser.uid = 'not-in-coros-route-pilot';
+        mockAuth.currentUser.uid = 'general-availability-user';
         const file = {
-            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            file: Object.assign(new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([60, 103, 112, 120, 47, 62]).buffer),
+            }),
             filename: 'route',
             extension: 'gpx',
             data: null,
@@ -310,10 +312,11 @@ describe('UploadRoutesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
         };
 
-        await expect(component.processAndUploadFile(file)).rejects.toThrow(
-            'COROS route uploads are not available for this account.',
-        );
-        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        await expect(component.processAndUploadFile(file)).resolves.toBe(true);
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToCOROSAPI', {
+            file: 'PGdweC8+',
+            filename: 'route.gpx',
+        });
     });
 
     it('uploads a FIT route to Wahoo without applying Suunto GPX compression', async () => {

@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => ({
     batchDelete: vi.fn(),
     batchCommit: vi.fn(),
     disabledProviders: ['GarminAPI', 'COROSAPI'] as string[],
-    allowedUserIDs: ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'] as string[],
+    allowedUserIDs: ['test-user-uid'] as string[],
     tokenRootWhere: vi.fn(),
     tokenRootLimit: vi.fn(),
     tokenRootGet: vi.fn(),
@@ -146,7 +146,7 @@ vi.mock('../tokens', () => {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
 
         constructor(
-            public readonly firebaseUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            public readonly firebaseUserID = 'test-user-uid',
             public readonly serviceName = ServiceNames.SuuntoApp,
             public readonly tokenDocumentID = 'token-1',
             public readonly phase = 'before_refresh',
@@ -216,7 +216,7 @@ describe('sleep queue', () => {
         vi.clearAllMocks();
         hoisted.docIdValues.length = 0;
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI', 'COROSAPI');
-        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+        hoisted.allowedUserIDs.splice(0, hoisted.allowedUserIDs.length, 'test-user-uid');
         hoisted.docGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.docSet.mockResolvedValue(undefined);
         hoisted.batchCommit.mockResolvedValue(undefined);
@@ -255,7 +255,7 @@ describe('sleep queue', () => {
         const input = {
             type: 'suunto_webhook' as const,
             provider: 'SuuntoApp' as const,
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -284,7 +284,7 @@ describe('sleep queue', () => {
             await addSleepSyncQueueItem({
                 type: 'suunto_webhook',
                 provider: 'SuuntoApp',
-                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
                 dedupeKey: 'suunto-user-1:123',
@@ -313,7 +313,7 @@ describe('sleep queue', () => {
             data: () => ({
                 type: 'suunto_webhook',
                 provider: 'SuuntoApp',
-                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
                 processed: true,
@@ -324,7 +324,7 @@ describe('sleep queue', () => {
         await addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -342,7 +342,7 @@ describe('sleep queue', () => {
             data: () => ({
                 type: 'suunto_webhook',
                 provider: 'SuuntoApp',
-                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
                 processed: false,
@@ -353,7 +353,7 @@ describe('sleep queue', () => {
         await addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -375,7 +375,7 @@ describe('sleep queue', () => {
                     data: () => ({
                         type: 'suunto_webhook',
                         provider: 'SuuntoApp',
-                        userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        userID: 'test-user-uid',
                         providerUserId: 'suunto-user-1',
                         payload: { samples: [{ SleepId: 123, Duration: 1200 }] },
                         processed: true,
@@ -387,7 +387,7 @@ describe('sleep queue', () => {
             await addSleepSyncQueueItem({
                 type: 'suunto_webhook',
                 provider: 'SuuntoApp',
-                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
                 dedupeKey: 'suunto-user-1:123',
@@ -421,7 +421,7 @@ describe('sleep queue', () => {
                 data: () => ({
                     type: 'suunto_webhook',
                     provider: 'SuuntoApp',
-                    userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                    userID: 'test-user-uid',
                     providerUserId: 'suunto-user-1',
                     payload: { samples: [{ SleepId: 123, Duration: 1200 }] },
                     processed: true,
@@ -433,7 +433,7 @@ describe('sleep queue', () => {
                 data: () => ({
                     type: 'suunto_webhook',
                     provider: 'SuuntoApp',
-                    userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                    userID: 'test-user-uid',
                     providerUserId: 'suunto-user-1',
                     payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
                     processed: true,
@@ -444,7 +444,7 @@ describe('sleep queue', () => {
         await addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -461,7 +461,7 @@ describe('sleep queue', () => {
         await addSleepSyncQueueItem({
             type: 'suunto_poll',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             rangeStartMs: 1_777_392_000_000,
             rangeEndMs: 1_777_478_400_000,
@@ -558,7 +558,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -585,7 +585,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -617,7 +617,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -652,7 +652,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -686,7 +686,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_poll',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             rangeStartMs: 1_777_392_000_000,
             rangeEndMs: 1_777_478_400_000,
@@ -707,7 +707,7 @@ describe('sleep queue', () => {
         await expect(addSleepSyncQueueItem({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123 }] },
             dedupeKey: 'suunto-user-1:123',
@@ -774,7 +774,7 @@ describe('sleep queue', () => {
                     ref: {
                         parent: {
                             parent: {
-                                id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                                id: 'test-user-uid',
                             },
                         },
                     },
@@ -790,7 +790,7 @@ describe('sleep queue', () => {
                 dispatchedToCloudTask: 1_700_000_000_500,
                 processed: false,
                 provider: 'GarminAPI',
-                userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                userID: 'test-user-uid',
                 providerUserId: 'garmin-user-1',
                 retryCount: 0,
                 type: 'garmin_ping',
@@ -808,7 +808,7 @@ describe('sleep queue', () => {
                 },
                 json: true,
             }));
-            expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'GarminAPI', {
+            expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('test-user-uid', 'GarminAPI', {
                 status: 'ready',
                 lastSyncedAtMs: Date.now(),
                 lastPollAtMs: undefined,
@@ -841,7 +841,7 @@ describe('sleep queue', () => {
                 ref: {
                     parent: {
                         parent: {
-                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            id: 'test-user-uid',
                         },
                     },
                 },
@@ -856,7 +856,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_poll',
@@ -925,7 +925,7 @@ describe('sleep queue', () => {
                 ref: {
                     parent: {
                         parent: {
-                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            id: 'test-user-uid',
                         },
                     },
                 },
@@ -940,7 +940,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_poll',
@@ -952,7 +952,7 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.Processed);
-        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', [
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('test-user-uid', [
             expect.objectContaining({
                 sourceSessionKey: '1777402260',
                 session: expect.objectContaining({
@@ -1116,7 +1116,7 @@ describe('sleep queue', () => {
             providerUserId: undefined,
             retryCount: 0,
             type: 'suunto_webhook',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             ref: queueRef as any,
         } as any);
 
@@ -1149,7 +1149,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'not_a_sleep_type',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             ref: {
                 update,
             } as any,
@@ -1157,7 +1157,7 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.shouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'suuntoApp',
             'malformed-sleep-deleted-user',
             'before_sleep_token_resolution',
@@ -1183,7 +1183,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_webhook',
@@ -1266,7 +1266,7 @@ describe('sleep queue', () => {
                 ref: {
                     parent: {
                         parent: {
-                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            id: 'test-user-uid',
                         },
                     },
                 },
@@ -1274,7 +1274,7 @@ describe('sleep queue', () => {
             empty: false,
         });
         hoisted.getTokenData.mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             ServiceNames.SuuntoApp,
             'suunto-token-1',
             'before_refresh' as any,
@@ -1287,7 +1287,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_poll',
@@ -1317,7 +1317,7 @@ describe('sleep queue', () => {
                 ref: {
                     parent: {
                         parent: {
-                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            id: 'test-user-uid',
                         },
                     },
                 },
@@ -1335,7 +1335,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_poll',
@@ -1434,7 +1434,7 @@ describe('sleep queue', () => {
                 ref: {
                     parent: {
                         parent: {
-                            id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                            id: 'test-user-uid',
                         },
                     },
                 },
@@ -1443,7 +1443,7 @@ describe('sleep queue', () => {
         });
         hoisted.getTokenData.mockRejectedValueOnce(new TerminalServiceAuthError(
             ServiceNames.SuuntoApp,
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'suunto-user-1',
             400,
             'invalid_grant',
@@ -1461,7 +1461,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_poll',
@@ -1472,7 +1472,7 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.MovedToDLQ);
         expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'SuuntoApp',
             expect.objectContaining({
                 dlqContext: 'INVALID_GRANT',
@@ -1500,7 +1500,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'other-suunto-user',
             retryCount: 0,
             type: 'suunto_webhook',
@@ -1512,7 +1512,7 @@ describe('sleep queue', () => {
         expect(hoisted.tokenRootWhere).toHaveBeenCalledWith('userName', '==', 'other-suunto-user');
         expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
         expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'SuuntoApp',
             expect.objectContaining({
                 message: 'No SuuntoApp token found for other-suunto-user',
@@ -1541,7 +1541,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'COROSAPI',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'old-coros-user',
             retryCount: 0,
             type: 'coros_poll',
@@ -1552,7 +1552,7 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.MovedToDLQ);
         expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'old-coros-user',
         );
         expect(hoisted.getTokenData).not.toHaveBeenCalled();
@@ -1572,7 +1572,7 @@ describe('sleep queue', () => {
             ref: {
                 parent: {
                     parent: {
-                        id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        id: 'test-user-uid',
                     },
                 },
             },
@@ -1588,7 +1588,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'COROSAPI',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'coros-user-1',
             retryCount: 0,
             type: 'coros_poll',
@@ -1600,12 +1600,12 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(
             1,
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'coros-user-1',
         );
         expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(
             2,
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             'coros-user-1',
         );
         expect(hoisted.requestGet).toHaveBeenCalledWith(expect.objectContaining({
@@ -1623,7 +1623,7 @@ describe('sleep queue', () => {
             ref: {
                 parent: {
                     parent: {
-                        id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        id: 'test-user-uid',
                     },
                 },
             },
@@ -1639,7 +1639,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'COROSAPI',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'coros-user-1',
             retryCount: 0,
             type: 'coros_poll',
@@ -1667,7 +1667,7 @@ describe('sleep queue', () => {
             ref: {
                 parent: {
                     parent: {
-                        id: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                        id: 'test-user-uid',
                     },
                 },
             },
@@ -1688,7 +1688,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'COROSAPI',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'coros-user-1',
             retryCount: 0,
             type: 'coros_poll',

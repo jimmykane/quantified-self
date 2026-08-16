@@ -113,7 +113,7 @@ describe('refreshed email template catalog', () => {
         expect(render('subscription_downgrade', 'unknown-role')).not.toContain('Up to');
     });
 
-    it('renders the manual COROS campaign in founder voice with rollout-safe route copy', () => {
+    it('renders the manual COROS campaign in founder voice with general-availability route copy', () => {
         const htmlEnvironment = createHandlebarsEnvironment('html');
         const template = MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG.find(
             entry => entry.id === COROS_DELIVERY_UPDATE_TEMPLATE_ID
@@ -123,17 +123,12 @@ describe('refreshed email template catalog', () => {
             return htmlEnvironment.compile(readTemplate(template.htmlFile), { strict: true })(preview.data);
         };
 
-        const enabled = render('route-delivery-enabled');
-        expect(enabled).toContain('Upload a GPX or FIT route directly to COROS');
-        expect(enabled).toContain('I read every reply personally');
-        expect(enabled).toContain('Founder, Quantified Self');
-        expect(enabled).toContain('you opted in to marketing updates');
-        expect(enabled).not.toContain('Route delivery pilot');
-
-        const pending = render('route-pilot-pending');
-        expect(pending).toContain('Route delivery pilot');
-        expect(pending).toContain('approved pilot accounts');
-        expect(pending).not.toContain('Upload a GPX or FIT route directly to COROS');
+        const generalAvailability = render('general-availability');
+        expect(generalAvailability).toContain('Upload a GPX or FIT route directly to COROS');
+        expect(generalAvailability).toContain('I read every reply personally');
+        expect(generalAvailability).toContain('Founder, Quantified Self');
+        expect(generalAvailability).toContain('you opted in to marketing updates');
+        expect(generalAvailability).not.toMatch(/\bpilot\b/i);
     });
 
     it('uses fluid shells that do not depend on media-query support at narrow widths', () => {

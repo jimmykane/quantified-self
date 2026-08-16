@@ -343,7 +343,7 @@ function assertCOROSRouteUploadRolloutAccess(userID: string): void {
     operation: 'route_upload',
     disposition: 'permission_required',
     code: 'permission-denied',
-    message: 'COROS route uploads are currently limited to approved test accounts.',
+    message: 'COROS route uploads are temporarily unavailable for this account.',
     dlqContext: 'COROS_ROUTE_UPLOAD_ROLLOUT_REQUIRED',
   });
 }

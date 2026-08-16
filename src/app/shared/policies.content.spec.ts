@@ -82,8 +82,7 @@ describe('COROS connected-service policy', () => {
     expect(topic?.title).toBe('COROS Data');
     expect(content).toContain('active COROS connection');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
-    expect(content).toContain('Approved COROS route-pilot accounts');
-    expect(content).toContain('while production route-push permission is verified');
+    expect(content).toContain('Eligible connected Pro users can also send');
     expect(content).toContain('selected GPX/FIT route');
     expect(content).toContain('saved Suunto route delivery');
     expect(content).toContain('Selected route files are parsed and converted to GPX in memory');
@@ -179,6 +178,6 @@ describe('Garmin and Suunto manual route delivery policy', () => {
     expect(suuntoContent).toContain('saved or selected GPX/FIT route to Suunto');
     expect(suuntoContent).toContain('selected FIT routes and saved routes are converted to a compatible GPX route in memory');
     expect(suuntoContent).toContain('Direct selected-file route delivery does not create or retain a Quantified Self route');
-    expect(suuntoContent).toContain('approved COROS route-pilot accounts');
+    expect(suuntoContent).toContain('Eligible connected Pro users can also select COROS');
   });
 });

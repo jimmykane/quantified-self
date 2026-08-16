@@ -36,7 +36,7 @@ import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
 
-const ACTIVITY_SYNC_ALLOWLISTED_UID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+const ACTIVITY_SYNC_ALLOWLISTED_UID = 'test-user-uid';
 
 describe('ServicesGarminComponent', () => {
     let component: ServicesGarminComponent;

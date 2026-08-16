@@ -64,7 +64,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('centralized Garmin, Suunto, and COROS workout data');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS to Suunto activity sync');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('activity delivery from Garmin, Suunto, or Wahoo');
-    expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Pilot direct and saved route delivery to COROS');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.some(tool => tool.title === 'GPX and FIT route delivery')).toBe(true);
@@ -80,7 +80,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Automatic and existing Suunto route imports');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Garmin');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Wahoo');
-    expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Pilot Suunto route delivery to COROS');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Suunto route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Suunto route import')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'GPX and FIT route upload')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to Garmin')).toBe(true);

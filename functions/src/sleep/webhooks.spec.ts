@@ -5,7 +5,7 @@ const hoisted = vi.hoisted(() => ({
     addSleepSyncQueueItem: vi.fn(),
     garminEnabled: false,
     suuntoEnabled: true,
-    allowedUserIDs: ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'] as string[],
+    allowedUserIDs: ['test-user-uid'] as string[],
     suuntoWebhookTokenMatches: true,
     suuntoWebhookResolvedUserID: 'resolved-suunto-user-id',
 }));
@@ -109,7 +109,7 @@ describe('sleep webhooks', () => {
         vi.clearAllMocks();
         hoisted.garminEnabled = false;
         hoisted.suuntoEnabled = true;
-        hoisted.allowedUserIDs = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
+        hoisted.allowedUserIDs = ['test-user-uid'];
         hoisted.suuntoWebhookTokenMatches = true;
         hoisted.suuntoWebhookResolvedUserID = 'resolved-suunto-user-id';
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
@@ -278,7 +278,7 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123, StartTime: 1760000000000 }] },
             dedupeKey: 'suunto-user-1:123',

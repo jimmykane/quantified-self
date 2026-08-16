@@ -165,12 +165,12 @@ describe('COROS route uploads', () => {
     });
   });
 
-  it('rejects non-pilot route uploads before parsing or provider access', async () => {
+  it('rejects route uploads when the shared operational rollout gate is closed', async () => {
     mocks.isCOROSRouteUploadUIDAllowlisted.mockReturnValue(false);
 
     await expect(importRouteToCOROSAPI(callableRequest())).rejects.toMatchObject({
       code: 'permission-denied',
-      message: 'COROS route uploads are currently limited to approved test accounts.',
+      message: 'COROS route uploads are temporarily unavailable for this account.',
     });
     expect(mocks.decodeManualRouteUpload).not.toHaveBeenCalled();
     expect(mocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();

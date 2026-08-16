@@ -234,19 +234,9 @@ export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatal
         partials: [],
         previewCases: [
             {
-                name: 'route-delivery-enabled',
+                name: 'general-availability',
                 data: {
                     first_name: 'Dimitrios',
-                    route_delivery_available: true,
-                    coros_tools_url: 'https://quantified-self.io/services?serviceName=COROS%20API',
-                    settings_url: 'https://quantified-self.io/settings',
-                },
-            },
-            {
-                name: 'route-pilot-pending',
-                data: {
-                    first_name: 'Ada',
-                    route_delivery_available: false,
                     coros_tools_url: 'https://quantified-self.io/services?serviceName=COROS%20API',
                     settings_url: 'https://quantified-self.io/settings',
                 },

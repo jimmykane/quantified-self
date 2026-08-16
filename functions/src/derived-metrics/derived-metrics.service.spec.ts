@@ -4063,7 +4063,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4095,7 +4095,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
             { incrementEventMutationVersion: true },
         );
@@ -4138,7 +4138,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4158,11 +4158,11 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 22);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('test-user-uid', 22);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
             '[derived-metrics] Coordinator appears stuck; forcing requeue.',
             expect.objectContaining({
-                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                uid: 'test-user-uid',
                 status: 'queued',
                 generation: 21,
             }),
@@ -4187,7 +4187,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4207,11 +4207,11 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 31);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('test-user-uid', 31);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
             '[derived-metrics] Coordinator appears stuck; forcing requeue.',
             expect.objectContaining({
-                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                uid: 'test-user-uid',
                 status: 'processing',
                 generation: 30,
             }),
@@ -4255,7 +4255,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         hoisted.enqueueDerivedMetricsTask.mockRejectedValueOnce(new Error('transient task queue error'));
 
         await expect(markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.TrainingBuildComparison],
         )).resolves.toEqual({
             accepted: false,
@@ -4302,7 +4302,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4338,7 +4338,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 

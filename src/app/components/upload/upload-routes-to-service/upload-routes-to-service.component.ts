@@ -100,7 +100,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     }
     if (this.serviceName === ServiceNames.COROSAPI
       && !isCOROSRouteUploadUIDAllowlisted(this.auth.currentUser.uid)) {
-      throw new Error('COROS route uploads are not available for this account.');
+      throw new Error('COROS route uploads are temporarily unavailable for this account.');
     }
     if (file.file.size > MAX_ROUTE_UPLOAD_BYTES) {
       throw new Error('Cannot upload route because the size is greater than 20MB');

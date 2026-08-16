@@ -383,7 +383,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Route sync',
-        description: 'Import existing Suunto routes and send saved routes to Garmin or Wahoo. COROS route delivery is in a limited pilot.',
+        description: 'Import existing Suunto routes and send saved routes to Garmin, Wahoo, or COROS.',
         detail: 'Route import and automatic delivery',
         icon: 'route',
         actionLabel: 'Route sync settings',

@@ -763,10 +763,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
     title: 'FIT and GPX Route Files with Multi-Provider Delivery',
-    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto, Garmin Connect, or Wahoo, use pilot COROS route delivery when approved, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
     h1: 'Save FIT and GPX route files, then send them to connected services',
-    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, or Wahoo, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, Garmin also requires Course Import permission, and COROS delivery is currently limited to approved pilot accounts.`,
-    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route pilot'],
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
+    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route send'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
@@ -814,8 +814,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'near_me',
-            title: 'Send saved routes to Wahoo or pilot COROS accounts',
-            copy: 'Use the Routes table or bulk actions to send FIT- or GPX-backed routes to Wahoo. Approved COROS route-pilot accounts also see COROS in the table, bulk actions, and route detail menu.',
+            title: 'Send saved routes to Wahoo or COROS',
+            copy: 'Use the Routes table or bulk actions to send FIT- or GPX-backed routes to Wahoo or COROS. Eligible connected Pro users see COROS in the table, bulk actions, and route detail menu.',
           },
           {
             icon: 'sync',
@@ -866,7 +866,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can I send saved routes to Wahoo or COROS?',
-        answer: 'Wahoo route delivery is available with Pro and a connected account. COROS route delivery is currently limited to approved pilot accounts while production route-push permission is verified.',
+        answer: 'Wahoo and COROS route delivery are available with Pro and a connected destination account.',
       },
       {
         question: 'Can Quantified Self import routes from Suunto?',
