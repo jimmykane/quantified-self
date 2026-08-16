@@ -271,7 +271,7 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Scheduled Cancels');
         expect(text).toContain('Service Connected');
         expect(text).toContain('MCP Connected');
-        expect(text).toContain('Services + MCP');
+        expect(text).toContain('Any Connection');
         expect(text).toContain('Garmin 35');
         expect(text).toContain('Workout');
         expect(text).toContain('Event Reparse');

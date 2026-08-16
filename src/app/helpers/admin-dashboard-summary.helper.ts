@@ -108,6 +108,9 @@ export function buildAdminDashboardUserKpiCards(
     const canceled = finiteNumber(stats.canceled);
     const cancelScheduled = finiteNumber(stats.cancelScheduled);
     const connectionStats = stats.connections;
+    const anyConnectionUsers = connectionStats
+        ? distinctConnectedUserCount(connectionStats.serviceUsers, connectionStats.mcpUsers, connectionStats.both)
+        : null;
 
     return [
         numberCard('total-users', 'Total Users', 'people', stats.total),
@@ -135,12 +138,12 @@ export function buildAdminDashboardUserKpiCards(
                 connectedUserShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
             ),
             numberCard(
-                'service-and-mcp-users',
-                'Services + MCP',
+                'any-connected-users',
+                'Any Connection',
                 'account_tree',
-                connectionStats.both,
-                connectionCountSeverity(connectionStats.both),
-                connectedUserShareSubtitle(connectionStats.both, stats.total, 'Connected to both')
+                anyConnectionUsers,
+                connectionCountSeverity(anyConnectionUsers),
+                connectedUserShareSubtitle(anyConnectionUsers, stats.total, 'Service or MCP')
             ),
         ] : []),
         compactCard('events', 'Events', 'fitness_center', stats.events.total, countUpdatedSubtitle(stats.events.computedAt)),
@@ -493,6 +496,25 @@ function connectedUserShareSubtitle(
 
     const share = Math.round((connectedUsers / normalizedTotalUsers) * 100);
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
+}
+
+function distinctConnectedUserCount(
+    serviceUsers: number | null,
+    mcpUsers: number | null,
+    both: number | null,
+): number | null {
+    if (serviceUsers === null || mcpUsers === null || both === null) {
+        return null;
+    }
+
+    const normalizedServiceUsers = normalizeCount(serviceUsers);
+    const normalizedMcpUsers = normalizeCount(mcpUsers);
+    const normalizedBoth = Math.min(
+        normalizeCount(both),
+        normalizedServiceUsers,
+        normalizedMcpUsers,
+    );
+    return normalizedServiceUsers + normalizedMcpUsers - normalizedBoth;
 }
 
 function connectionCountSeverity(value: number | null): AdminDashboardSeverity | undefined {

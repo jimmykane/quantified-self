@@ -71,9 +71,10 @@ describe('admin-dashboard-summary helper', () => {
             value: 12,
             subtitle: 'Active authorization · 10% of users',
         });
-        expect(cards.find(card => card.id === 'service-and-mcp-users')).toMatchObject({
-            value: 9,
-            subtitle: 'Connected to both · 8% of users',
+        expect(cards.find(card => card.id === 'any-connected-users')).toMatchObject({
+            label: 'Any Connection',
+            value: 51,
+            subtitle: 'Service or MCP · 43% of users',
         });
     });
 
@@ -136,7 +137,7 @@ describe('admin-dashboard-summary helper', () => {
             severity: undefined,
             subtitle: 'Unavailable',
         });
-        expect(cards.find(card => card.id === 'service-and-mcp-users')).toMatchObject({
+        expect(cards.find(card => card.id === 'any-connected-users')).toMatchObject({
             value: null,
             severity: undefined,
             subtitle: 'Unavailable',
