@@ -218,7 +218,9 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     try {
       const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
       if (this.isDestroyed) return;
-      this.clearCOROSBindingStateRetryCooldown();
+      if (this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.clearCOROSBindingStateRetryCooldown();
+      }
       if (result.status === 'stale' && this.lastCOROSBindingStateCheckKey === checkKey) {
         this.lastCOROSBindingStateCheckKey = null;
         shouldRetryStaleResult = true;

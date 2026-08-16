@@ -308,6 +308,51 @@ describe('ServicesCorosComponent', () => {
         }
     });
 
+    it('keeps the active account cooldown when an earlier account check resolves late', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-16T10:00:00Z'));
+        try {
+            let resolveFirstCheck!: (value: { status: 'bound'; bound: true }) => void;
+            let rejectSecondCheck!: (reason: unknown) => void;
+            mockUserService.checkCurrentUserCOROSBindingState
+                .mockReturnValueOnce(new Promise(resolve => {
+                    resolveFirstCheck = resolve;
+                }))
+                .mockReturnValueOnce(new Promise((_resolve, reject) => {
+                    rejectSecondCheck = reject;
+                }));
+            component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+            component.serviceTokens = [{ accessToken: 'token-a', openId: 'coros-a' }] as Auth2ServiceTokenInterface[];
+            const testComponent = component as unknown as { onServiceDataChanged(): void };
+
+            testComponent.onServiceDataChanged();
+            component.serviceTokens = [{ accessToken: 'token-b', openId: 'coros-b' }] as Auth2ServiceTokenInterface[];
+            testComponent.onServiceDataChanged();
+
+            rejectSecondCheck({ details: { retryAt: Date.now() + 15_000 } });
+            await Promise.resolve();
+            await Promise.resolve();
+            fixture.detectChanges();
+
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenNthCalledWith(1, 'user-1', 'coros-a');
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenNthCalledWith(2, 'user-1', 'coros-b');
+            expect(component.isCOROSBindingStateRetryDisabled).toBe(true);
+
+            resolveFirstCheck({ status: 'bound', bound: true });
+            await Promise.resolve();
+            await Promise.resolve();
+            fixture.detectChanges();
+
+            const retryButton = fixture.nativeElement.querySelector('.coros-binding-check--error button');
+            expect(retryButton?.disabled).toBe(true);
+            component.retryCOROSBindingStateCheck();
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
     it('does not update the view after an in-flight binding check outlives the component', async () => {
         let resolveBindingState!: (value: { status: 'bound'; bound: true }) => void;
         mockUserService.checkCurrentUserCOROSBindingState.mockReturnValueOnce(new Promise(resolve => {
