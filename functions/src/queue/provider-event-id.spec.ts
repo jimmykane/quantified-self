@@ -294,6 +294,50 @@ describe('resolveProviderImportEventID', () => {
     );
   });
 
+  it('prefers matching primary metadata over a conflicting legacy reservation', async () => {
+    mockMetadataGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        serviceWorkoutID: 'workout-1',
+        serviceFITFileURI: 'https://coros.example/workout-1.fit',
+      }),
+    });
+    mockReservationGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceFITFileURI|https://coros.example/workout-1.fit': {
+            eventID: 'legacy-collision-event-id',
+          },
+        },
+      }),
+    });
+
+    const eventID = await resolveProviderImportEventID({
+      ...corosRequest,
+      providerEventSecondaryID: 'root',
+      providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+      legacyProviderEventSecondaryIdentities: [{
+        field: 'serviceFITFileURI',
+        value: 'https://coros.example/workout-1.fit',
+      }],
+    });
+
+    expect(eventID).toBe('primary-event-id');
+    expect(mockTransactionSet).toHaveBeenCalledWith(
+      mockReservationRef,
+      expect.objectContaining({
+        providerIdentities: {
+          'uid-1|corosAPI|serviceWorkoutID|workout-1|serviceWorkoutComponentKey|root': expect.objectContaining({
+            eventID: 'primary-event-id',
+          }),
+        },
+      }),
+      { merge: true },
+    );
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
   it('migrates a root event after its ephemeral legacy FIT URL has rotated', async () => {
     mockMetadataGet.mockResolvedValue({
       exists: true,

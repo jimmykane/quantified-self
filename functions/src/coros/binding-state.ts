@@ -35,6 +35,8 @@ interface COROSBindingStateResponse {
 const COROS_BINDING_STATE_CACHE_MS = 5 * 60 * 1000;
 const COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS = 15 * 60 * 1000;
 const COROS_BINDING_STATE_LEASE_MS = 45 * 1000;
+const COROS_BINDING_STATE_FAILURE_COOLDOWN_MS = 15 * 1000;
+const COROS_BINDING_STATE_MAX_RESPONSE_BYTES = 16 * 1024;
 const COROS_BINDING_STATE_GLOBAL_WINDOW_MS = 60 * 1000;
 const COROS_BINDING_STATE_GLOBAL_REQUESTS_PER_WINDOW = 60;
 const PROVIDER_OPERATION_LIMITS_COLLECTION = 'providerOperationLimits';
@@ -49,7 +51,10 @@ export interface COROSBindingStateResult {
 export class COROSBindingStateUnavailableError extends Error {
   readonly name = 'COROSBindingStateUnavailableError';
 
-  constructor(public readonly reason: string) {
+  constructor(
+    public readonly reason: string,
+    public readonly retryAt?: number,
+  ) {
     super('COROS binding state is temporarily unavailable.');
   }
 }
@@ -86,6 +91,7 @@ async function fetchCOROSBindingState(accessToken: string, openId: string): Prom
       url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/coros/bindState?${query.toString()}`,
       headers: { token: accessToken },
       timeout: COROS_API_REQUEST_TIMEOUT_MS,
+      maxResponseBytes: COROS_BINDING_STATE_MAX_RESPONSE_BYTES,
     }));
   } catch (error) {
     if (error instanceof COROSBindingStateUnavailableError) throw error;
@@ -184,6 +190,23 @@ async function claimCOROSBindingStateCheck(params: {
       return { status: 'cached' as const, result: cachedResult };
     }
 
+    const nextRetryAt = Number(metaData?.providerBindingCheckNextRetryAt);
+    if (Number.isFinite(nextRetryAt) && nextRetryAt > params.checkedAt) {
+      const staleResult = getCachedBindingState(
+        metaData,
+        params.checkedAt,
+        COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS,
+      );
+      if (staleResult) {
+        return { status: 'cached' as const, result: staleResult };
+      }
+      throw new HttpsError(
+        'resource-exhausted',
+        'COROS connection checks are cooling down after a provider failure. Please retry shortly.',
+        { retryAt: nextRetryAt },
+      );
+    }
+
     const leaseExpiresAt = Number(metaData?.providerBindingCheckLeaseExpiresAt);
     if (Number.isFinite(leaseExpiresAt) && leaseExpiresAt > params.checkedAt) {
       const staleResult = getCachedBindingState(
@@ -197,6 +220,7 @@ async function claimCOROSBindingStateCheck(params: {
       throw new HttpsError(
         'resource-exhausted',
         'A COROS connection check is already in progress. Please retry shortly.',
+        { retryAt: leaseExpiresAt },
       );
     }
 
@@ -219,6 +243,7 @@ async function claimCOROSBindingStateCheck(params: {
       throw new HttpsError(
         'resource-exhausted',
         'COROS connection checks are temporarily busy. Please retry shortly.',
+        { retryAt: windowStartMs + COROS_BINDING_STATE_GLOBAL_WINDOW_MS },
       );
     }
 
@@ -232,6 +257,7 @@ async function claimCOROSBindingStateCheck(params: {
     transaction.set(metaRef, {
       providerBindingCheckLeaseId: params.leaseId,
       providerBindingCheckLeaseExpiresAt: params.checkedAt + COROS_BINDING_STATE_LEASE_MS,
+      providerBindingCheckNextRetryAt: 0,
     }, { merge: true });
     return { status: 'claimed' as const, leaseId: params.leaseId };
   });
@@ -285,6 +311,7 @@ async function persistBindingStateIfCurrent(params: {
         providerBindingCheckedAt: params.checkedAt,
         providerBindingCheckLeaseId: null,
         providerBindingCheckLeaseExpiresAt: 0,
+        providerBindingCheckNextRetryAt: 0,
       }, { merge: true });
       return 'updated';
     }
@@ -295,6 +322,7 @@ async function persistBindingStateIfCurrent(params: {
       providerBindingCheckedAt: params.checkedAt,
       providerBindingCheckLeaseId: null,
       providerBindingCheckLeaseExpiresAt: 0,
+      providerBindingCheckNextRetryAt: 0,
       lastAuthFailureCode: 'coros_unbound',
       lastAuthFailureMessage: 'The COROS account is no longer bound. Reconnect COROS.',
       lastDisconnectedAt: params.checkedAt,
@@ -307,44 +335,50 @@ async function persistBindingStateIfCurrent(params: {
   });
 }
 
-async function releaseCOROSBindingStateCheckLeaseIfCurrent(params: {
+async function recordCOROSBindingStateFailureCooldownIfCurrent(params: {
   userID: string;
   leaseId: string;
-}): Promise<void> {
+  failedAt: number;
+}): Promise<number | null> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
 
-  await db.runTransaction(async transaction => {
+  return db.runTransaction(async transaction => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
     } catch (error) {
-      throw new UserDeletionGuardReadError(params.userID, 'coros_binding_state_release', error);
+      throw new UserDeletionGuardReadError(params.userID, 'coros_binding_state_failure_cooldown', error);
     }
-    if (deletionGuard.shouldSkip) return;
+    if (deletionGuard.shouldSkip) return null;
 
     const metaSnapshot = await transaction.get(metaRef);
     const metaData = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
-    if (metaData?.providerBindingCheckLeaseId !== params.leaseId) return;
+    if (metaData?.providerBindingCheckLeaseId !== params.leaseId) return null;
 
+    const retryAt = params.failedAt + COROS_BINDING_STATE_FAILURE_COOLDOWN_MS;
     transaction.set(metaRef, {
       providerBindingCheckLeaseId: null,
       providerBindingCheckLeaseExpiresAt: 0,
+      providerBindingCheckNextRetryAt: retryAt,
     }, { merge: true });
+    return retryAt;
   });
 }
 
-async function releaseCOROSBindingStateCheckLeaseAfterFailure(
+async function recordCOROSBindingStateFailureCooldownAfterFailure(
   userID: string,
   leaseId: string,
-): Promise<void> {
+  failedAt: number,
+): Promise<number | null> {
   try {
-    await releaseCOROSBindingStateCheckLeaseIfCurrent({ userID, leaseId });
+    return await recordCOROSBindingStateFailureCooldownIfCurrent({ userID, leaseId, failedAt });
   } catch (error) {
-    logger.warn('[COROSBindingState] Could not release the failed provider-check lease.', {
+    logger.warn('[COROSBindingState] Could not record the failed provider-check cooldown.', {
       userID,
       errorName: error instanceof Error ? error.name : typeof error,
     });
+    return null;
   }
 }
 
@@ -392,7 +426,14 @@ export async function checkCOROSBindingStateForUser(
     if (writeResult === 'stale') return { status: 'stale', bound: null };
     return { status: bound ? 'bound' : 'unbound', bound, checkedAt };
   } catch (error) {
-    await releaseCOROSBindingStateCheckLeaseAfterFailure(userID, claim.leaseId);
+    const retryAt = await recordCOROSBindingStateFailureCooldownAfterFailure(
+      userID,
+      claim.leaseId,
+      Date.now(),
+    );
+    if (error instanceof COROSBindingStateUnavailableError && retryAt !== null) {
+      throw new COROSBindingStateUnavailableError(error.reason, retryAt);
+    }
     throw error;
   }
 }
@@ -413,7 +454,13 @@ export async function handleCOROSBindingStateRequest(request: {
         userID,
         reason: error instanceof COROSBindingStateUnavailableError ? error.reason : 'deletion_guard_read_failed',
       });
-      throw new HttpsError('unavailable', 'Could not verify the COROS connection. Please retry.');
+      throw new HttpsError(
+        'unavailable',
+        'Could not verify the COROS connection. Please retry.',
+        error instanceof COROSBindingStateUnavailableError && error.retryAt
+          ? { retryAt: error.retryAt }
+          : undefined,
+      );
     }
     logger.warn('[COROSBindingState] Unexpected connection check failure.', {
       userID,

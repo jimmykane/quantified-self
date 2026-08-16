@@ -45,10 +45,12 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
   public isCheckingCOROSBindingState = false;
   public corosBindingStateCheckError = false;
+  public isCOROSBindingStateRetryDisabled = false;
   @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
   private lastCOROSBindingStateCheckKey: string | null = null;
+  private corosBindingStateRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private isDestroyed = false;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
     hasToken: false,
@@ -93,6 +95,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     this.isDestroyed = true;
     this.lastCOROSBindingStateCheckKey = null;
     this.isCheckingCOROSBindingState = false;
+    this.clearCOROSBindingStateRetryCooldown();
     super.ngOnDestroy();
     this.suuntoConnectionSubscription?.unsubscribe();
     this.suuntoConnectionSubscription = null;
@@ -103,6 +106,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   public retryCOROSBindingStateCheck(): void {
+    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState) return;
     this.corosBindingStateCheckError = false;
     void this.checkCOROSBindingStateIfEligible(true);
   }
@@ -200,6 +204,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     if (!isEligible) {
       this.lastCOROSBindingStateCheckKey = null;
       this.isCheckingCOROSBindingState = false;
+      this.clearCOROSBindingStateRetryCooldown();
       return;
     }
 
@@ -213,6 +218,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     try {
       const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
       if (this.isDestroyed) return;
+      this.clearCOROSBindingStateRetryCooldown();
       if (result.status === 'stale' && this.lastCOROSBindingStateCheckKey === checkKey) {
         this.lastCOROSBindingStateCheckKey = null;
         shouldRetryStaleResult = true;
@@ -221,6 +227,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       if (this.isDestroyed) return;
       if (this.lastCOROSBindingStateCheckKey === checkKey) {
         this.corosBindingStateCheckError = true;
+        this.setCOROSBindingStateRetryCooldown(this.getCOROSBindingStateRetryAt(error));
       }
       this.logger.error(error);
     } finally {
@@ -233,6 +240,41 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
         void this.checkCOROSBindingStateIfEligible(true);
       }
     }
+  }
+
+  private getCOROSBindingStateRetryAt(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null;
+    const details = (error as { details?: unknown }).details;
+    if (!details || typeof details !== 'object') return null;
+    const retryAt = Number((details as { retryAt?: unknown }).retryAt);
+    return Number.isFinite(retryAt) && retryAt > Date.now() ? retryAt : null;
+  }
+
+  private setCOROSBindingStateRetryCooldown(retryAt: number | null): void {
+    this.clearCOROSBindingStateRetryCooldown();
+    if (retryAt === null) return;
+
+    const remainingMs = retryAt - Date.now();
+    if (remainingMs <= 0) return;
+    this.isCOROSBindingStateRetryDisabled = true;
+    this.corosBindingStateRetryTimer = globalThis.setTimeout(() => {
+      this.corosBindingStateRetryTimer = null;
+      if (this.isDestroyed) return;
+      if (retryAt > Date.now()) {
+        this.setCOROSBindingStateRetryCooldown(retryAt);
+        return;
+      }
+      this.isCOROSBindingStateRetryDisabled = false;
+      this.changeDetectorRef.markForCheck();
+    }, Math.min(remainingMs, 2_147_483_647));
+  }
+
+  private clearCOROSBindingStateRetryCooldown(): void {
+    if (this.corosBindingStateRetryTimer !== null) {
+      globalThis.clearTimeout(this.corosBindingStateRetryTimer);
+      this.corosBindingStateRetryTimer = null;
+    }
+    this.isCOROSBindingStateRetryDisabled = false;
   }
 
   private watchSuuntoConnectionState(): void {

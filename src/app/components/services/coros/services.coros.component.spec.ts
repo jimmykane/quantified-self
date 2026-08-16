@@ -273,6 +273,41 @@ describe('ServicesCorosComponent', () => {
         expect(component.corosBindingStateCheckError).toBe(false);
     });
 
+    it('keeps Retry disabled until the server-provided binding cooldown expires', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-16T10:00:00Z'));
+        try {
+            const retryAt = Date.now() + 15_000;
+            mockUserService.checkCurrentUserCOROSBindingState
+                .mockRejectedValueOnce({ details: { retryAt } })
+                .mockResolvedValueOnce({ status: 'bound', bound: true });
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as any;
+
+            (component as any).onServiceDataChanged();
+            await Promise.resolve();
+            fixture.detectChanges();
+
+            const retryButton = fixture.nativeElement.querySelector('.coros-binding-check--error button');
+            expect(retryButton?.disabled).toBe(true);
+            component.retryCOROSBindingStateCheck();
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+
+            vi.advanceTimersByTime(15_000);
+            fixture.detectChanges();
+            expect(retryButton?.disabled).toBe(false);
+
+            component.retryCOROSBindingStateCheck();
+            await Promise.resolve();
+            fixture.detectChanges();
+
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+            expect(component.corosBindingStateCheckError).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('does not update the view after an in-flight binding check outlives the component', async () => {
         let resolveBindingState!: (value: { status: 'bound'; bound: true }) => void;
         mockUserService.checkCurrentUserCOROSBindingState.mockReturnValueOnce(new Promise(resolve => {

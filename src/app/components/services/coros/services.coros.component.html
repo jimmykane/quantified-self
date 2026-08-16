@@ -74,7 +74,9 @@
     <div class="coros-binding-check coros-binding-check--error" role="status">
       <mat-icon>cloud_off</mat-icon>
       <span>Could not verify the COROS connection.</span>
-      <button mat-button type="button" (click)="retryCOROSBindingStateCheck()">Retry</button>
+      <button mat-button type="button"
+        [disabled]="isCOROSBindingStateRetryDisabled"
+        (click)="retryCOROSBindingStateCheck()">Retry</button>
     </div>
     }
     </div>

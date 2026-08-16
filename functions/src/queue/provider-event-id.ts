@@ -244,6 +244,17 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
       return existingReservation.eventID;
     }
 
+    if (metadataSnapshot.exists
+      && !request.preferProviderIdentityEventID
+      && metadataMatchesProviderIdentity(metadataSnapshot.data(), request)) {
+      transaction.set(
+        reservationRef,
+        reservationPayload(request, primaryEventID, providerIdentityKey, primaryEventID),
+        { merge: true },
+      );
+      return primaryEventID;
+    }
+
     const exactLegacyReservation = legacyProviderIdentityKeys
       .map(identityKey => providerIdentities[identityKey])
       .find(reservation => typeof reservation?.eventID === 'string' && reservation.eventID.length > 0);
@@ -259,17 +270,12 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
     }
 
     if (metadataSnapshot.exists) {
-      const eventID = request.preferProviderIdentityEventID
-        ? providerIdentityEventID
-        : metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
-          ? primaryEventID
-          : providerIdentityEventID;
       transaction.set(
         reservationRef,
-        reservationPayload(request, primaryEventID, providerIdentityKey, eventID),
+        reservationPayload(request, primaryEventID, providerIdentityKey, providerIdentityEventID),
         { merge: true },
       );
-      return eventID;
+      return providerIdentityEventID;
     }
 
     const eventID = request.preferProviderIdentityEventID || hasReservedProviderIdentity(providerIdentities)

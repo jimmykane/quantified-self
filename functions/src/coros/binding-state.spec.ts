@@ -151,12 +151,14 @@ describe('COROS binding state', () => {
       url: 'https://open.coros.com/coros/bindState?token=stored-access-token&openId=open-id',
       headers: { token: 'stored-access-token' },
       timeout: 30_000,
+      maxResponseBytes: 16 * 1024,
     }));
     expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.metaRef, {
       providerBindingState: 'bound',
       providerBindingCheckedAt: 1234,
       providerBindingCheckLeaseId: null,
       providerBindingCheckLeaseExpiresAt: 0,
+      providerBindingCheckNextRetryAt: 0,
     }, { merge: true });
     expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.rateLimitRef, expect.objectContaining({
       provider: 'COROS',
@@ -183,6 +185,7 @@ describe('COROS binding state', () => {
       providerBindingCheckedAt: 5678,
       providerBindingCheckLeaseId: null,
       providerBindingCheckLeaseExpiresAt: 0,
+      providerBindingCheckNextRetryAt: 0,
       lastAuthFailureCode: 'coros_unbound',
       lastDisconnectedAt: 5678,
     }), { merge: true });
@@ -348,26 +351,45 @@ describe('COROS binding state', () => {
     expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
-  it('releases a failed provider-check lease so an immediate retry can succeed', async () => {
-    mocks.requestGet
-      .mockRejectedValueOnce(Object.assign(new Error('network failed'), { statusCode: 503 }))
-      .mockResolvedValueOnce('{"result":"0000","data":{"bindState":1}}');
+  it('records a per-account failure cooldown before allowing another global budget debit', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(2_000);
+    try {
+      mocks.requestGet
+        .mockRejectedValueOnce(Object.assign(new Error('network failed'), { statusCode: 503 }))
+        .mockResolvedValueOnce('{"result":"0000","data":{"bindState":1}}');
 
-    await expect(checkCOROSBindingStateForUser('user-1', 1_000)).rejects.toMatchObject({
-      name: 'COROSBindingStateUnavailableError',
-    });
-    expect(currentMetaData).toMatchObject({
-      providerBindingCheckLeaseId: null,
-      providerBindingCheckLeaseExpiresAt: 0,
-    });
+      await expect(handleCOROSBindingStateRequest({ app: {}, auth: { uid: 'user-1' } }))
+        .rejects.toMatchObject({
+          code: 'unavailable',
+          details: { retryAt: 17_000 },
+        });
+      expect(currentMetaData).toMatchObject({
+        providerBindingCheckLeaseId: null,
+        providerBindingCheckLeaseExpiresAt: 0,
+        providerBindingCheckNextRetryAt: 17_000,
+      });
 
-    await expect(checkCOROSBindingStateForUser('user-1', 1_001)).resolves.toEqual({
-      status: 'bound',
-      bound: true,
-      checkedAt: 1_001,
-    });
-    expect(mocks.requestGet).toHaveBeenCalledTimes(2);
-    expect(currentRateLimitData).toMatchObject({ count: 2 });
+      await expect(handleCOROSBindingStateRequest({ app: {}, auth: { uid: 'user-1' } }))
+        .rejects.toMatchObject({
+          code: 'resource-exhausted',
+          details: { retryAt: 17_000 },
+        });
+      expect(mocks.requestGet).toHaveBeenCalledTimes(1);
+      expect(currentRateLimitData).toMatchObject({ count: 1 });
+      expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.rateLimitRef);
+      expect(mocks.transactionGet.mock.calls.filter(([ref]) => ref === mocks.rateLimitRef)).toHaveLength(1);
+
+      await expect(checkCOROSBindingStateForUser('user-1', 17_000)).resolves.toEqual({
+        status: 'bound',
+        bound: true,
+        checkedAt: 17_000,
+      });
+      expect(mocks.requestGet).toHaveBeenCalledTimes(2);
+      expect(currentRateLimitData).toMatchObject({ count: 2 });
+      expect(currentMetaData).toMatchObject({ providerBindingCheckNextRetryAt: 0 });
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it('does not clear a newer provider-check lease when an older request fails', async () => {
@@ -387,6 +409,7 @@ describe('COROS binding state', () => {
       providerBindingCheckLeaseId: 'newer-request',
       providerBindingCheckLeaseExpiresAt: 50_000,
     });
+    expect(currentMetaData).toMatchObject({ providerBindingCheckNextRetryAt: 0 });
   });
 
   it('maps provider and malformed responses to retryable callable failures without binding-state changes', async () => {

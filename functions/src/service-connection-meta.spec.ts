@@ -175,6 +175,7 @@ describe('service-connection-meta', () => {
       providerBindingCheckedAt: 'delete-sentinel',
       providerBindingCheckLeaseId: 'delete-sentinel',
       providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
+      providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
   });
 
@@ -240,6 +241,7 @@ describe('service-connection-meta', () => {
       providerBindingCheckedAt: 'delete-sentinel',
       providerBindingCheckLeaseId: 'delete-sentinel',
       providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
+      providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
   });
 
