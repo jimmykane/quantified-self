@@ -279,6 +279,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('compact line above the **Training** title');
     expect(trainingSection?.content).toContain('content does not shift');
     expect(trainingSection?.content).toContain('failed update adds **Retry**');
+    expect(trainingSection?.content).toContain('**Largest sport load change**');
+    expect(trainingSection?.content).toContain('do not mean that the workspace is filtered');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');
@@ -304,17 +306,24 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
-    expect(trainingSection?.content).toContain('**Sports shown**');
-    expect(trainingSection?.content).toContain('activities in the latest 28 days and saved sport benchmarks');
-    expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling');
-    expect(trainingSection?.content).toContain('sport cards stay hidden while the global Training sections remain available');
+    expect(trainingSection?.content).toContain('**All sports**');
+    expect(trainingSection?.content).toContain('compact swipeable sport buttons');
+    expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every sport');
+    expect(trainingSection?.content).toContain('**Manage sport shortcuts**');
+    expect(trainingSection?.content).toContain('training duration and workouts in the latest 28 days');
+    expect(trainingSection?.content).toContain('selected shortcut does not jump');
+    expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, or Paddling');
+    expect(trainingSection?.content).toContain('Shortcuts change navigation only');
     expect(trainingSection?.content).toContain('**Use automatic selection**');
-    expect(trainingSection?.content).toContain('does not filter the overall comparison, **What drove this**, or **Power systems**');
+    expect(trainingSection?.content).toContain('unmatched types appear under **Other power activities**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
     expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
     expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
     expect(trainingSection?.content).toContain('Rowing does not have a durability adapter');
+    expect(trainingSection?.content).toContain('fixed Cycling power context remains visible');
+    expect(trainingSection?.content).toContain('power unknown rather than confirmed no power');
+    expect(trainingSection?.content).toContain('Unsupported Enduro and Downhill evidence is not counted as confirmed power');
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');
@@ -351,7 +360,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('zero-session result');
     expect(trainingSection?.content).toContain('Imported VO₂ max');
     expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
-    expect(trainingSection?.content).toContain('The selector has no all-sports value');
+    expect(trainingSection?.content).toContain('There is no pooled all-sports value');
     expect(trainingSection?.content).toContain('partial, insufficient, poor-fit, unstable, and invalid evidence');
     expect(trainingSection?.content).not.toContain('aggregate best 3–20 minute power curve');
     expect(trainingSection?.content).toContain('never a readiness score');
@@ -582,6 +591,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('Dashboard **Today** header');
+    expect(gettingStartedSection?.content).toContain('browser-local morning, afternoon, or evening time');
+    expect(gettingStartedSection?.content).toContain('generic copy otherwise');
+    expect(gettingStartedSection?.content).toContain('hidden on shared dashboards');
     expect(gettingStartedSection?.content).toContain('**Show Today summary**');
     expect(gettingStartedSection?.content).toContain('hides the Today summary');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
@@ -609,7 +621,7 @@ describe('help.content', () => {
   it('should document how to send saved routes to Garmin', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('saved-route row and bulk sends');
     expect(serviceConnectionsSection?.content).toContain('available to every signed-in account');
     expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
@@ -636,12 +648,12 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('**Automatically send new and updated routes**');
-    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect, syncing past activities');
+    expect(serviceConnectionsSection?.content).toContain('direct GPX/FIT and saved-route delivery to Garmin, Suunto, Wahoo, and COROS');
     expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page prompt');
-    expect(serviceConnectionsSection?.content).toContain('already saved in Quantified Self to Garmin as courses');
-    expect(serviceConnectionsSection?.content).toContain('Garmin must be connected with **Course Import** permission');
+    expect(serviceConnectionsSection?.content).toContain('newly imported or updated Suunto routes already saved in Quantified Self');
+    expect(serviceConnectionsSection?.content).toContain('requires **Course Import** permission');
     expect(serviceConnectionsSection?.content).toContain('**Send routes** uses Suunto routes already saved in Quantified Self');
-    expect(serviceConnectionsSection?.content).toContain('does not fetch routes from Suunto or Garmin');
+    expect(serviceConnectionsSection?.content).toContain('does not fetch routes from Suunto or any destination');
     expect(serviceConnectionsSection?.content).toContain('[Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses)');
     expect(serviceConnectionsSection?.links?.some(link => link.target === '/guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
   });
@@ -649,7 +661,7 @@ describe('help.content', () => {
   it('should document opt-in Suunto saved-route delivery to Wahoo', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('Suunto Services for Garmin or Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Suunto Services for Garmin, Wahoo, or COROS');
     expect(serviceConnectionsSection?.content).toContain('Wahoo receives a FIT course');
     expect(serviceConnectionsSection?.content).toContain('updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate');
     expect(serviceConnectionsSection?.content).toContain('automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo');
@@ -687,7 +699,7 @@ describe('help.content', () => {
     });
   });
 
-  it('should document Garmin, COROS, and Wahoo activity sync to Suunto in plain language', () => {
+  it('should document shared activity and route delivery with COROS in plain language', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
@@ -721,8 +733,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
-    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job first instead of immediately uploading the FIT again');
-    expect(serviceConnectionsSection?.content).toContain('only when Suunto explicitly reports that the earlier job is still empty');
+    expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job instead of uploading the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('retry never replaces an issued job automatically');
+    expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
@@ -737,7 +750,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('uses the original files already saved with those activities');
     expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
-    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync');
+    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
     expect(serviceConnectionsSection?.content).toContain('automatically importing daily sleep summaries from a rolling recent window');
     expect(serviceConnectionsSection?.content).toContain('importing available COROS sleep history from the last three months');
@@ -760,18 +773,43 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
     expect(serviceConnectionsSection?.content).toContain('Garmin sleep history import is separate from activity history import');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
-    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file status');
+    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
+    expect(serviceConnectionsSection?.content).toContain('checks that same upload first instead of posting the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('### Activity types COROS accepts');
+    expect(serviceConnectionsSection?.content).toContain('Run, Indoor Run, Trail Run, Track Run, and Hike');
+    expect(serviceConnectionsSection?.content).toContain('Pool Swim and Open Water Swim');
+    expect(serviceConnectionsSection?.content).toContain('Stand Up Paddling may appear as **Other**');
+    expect(serviceConnectionsSection?.content).toContain("Sailing and Snorkeling are not in COROS's documented import list");
+    expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
+    expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
+    expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');
+    expect(serviceConnectionsSection?.content).toContain('sending saved routes to COROS individually or in selected-row bulk batches');
+    expect(serviceConnectionsSection?.content).toContain('Garmin, Suunto, and Wahoo Services each offer COROS as an activity destination');
+    expect(serviceConnectionsSection?.content).toContain('Automatic delivery is off by default');
+    expect(serviceConnectionsSection?.content).toContain('one active connected account');
+    expect(serviceConnectionsSection?.content).toContain('asks COROS whether that account is still bound');
+    expect(serviceConnectionsSection?.content).toContain('related automatic activity and saved-route settings turn off');
+    expect(serviceConnectionsSection?.content).toContain('temporary check failure shows **Retry**');
+    expect(serviceConnectionsSection?.content).toContain('recover a missing or expired COROS FIT download link');
+    expect(serviceConnectionsSection?.content).toContain('mode, submode, device, source timezones, training-plan workout ID, and multisport component');
+    expect(serviceConnectionsSection?.content).toContain('cycling-family routes use bike');
+    expect(serviceConnectionsSection?.content).toContain('exact-file and semantic FIT fingerprints');
+    expect(serviceConnectionsSection?.content).toContain('expire after about 120 days');
     expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync');
-    expect(serviceConnectionsSection?.content).toContain('Wahoo to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo to Suunto or COROS activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in Wahoo Services');
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
+    expect(serviceConnectionsSection?.content).toContain('COROS activity upload, activity delivery, and route delivery are available to all eligible connected Pro users');
+    expect(serviceConnectionsSection?.content).not.toMatch(/COROS[^.]*\bpilot\b|\bpilot\b[^.]*COROS/i);
+    expect(serviceConnectionsSection?.content).toContain('Every destination is opt-in and off by default');
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Integrations',
       icon: 'hub',
@@ -918,7 +956,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('not the ELEMNT App');
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
     expect(serviceConnectionsSection?.content).toContain('automatically send new Wahoo activities to Suunto');
-    expect(serviceConnectionsSection?.content).toContain('Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/guides/sync-wahoo-to-suunto',
     }));

@@ -7,6 +7,15 @@ import type {
 } from '@shared/derived-metrics';
 import { formatSleepDuration } from './dashboard-sleep-chart.helper';
 
+const CYCLING_POWER_DURABILITY_CONTEXT: DerivedTrainingDurabilityContext = {
+  contextKey: 'cycling|power|W|-|-',
+  scope: 'cycling',
+  outputSource: 'power',
+  outputUnit: 'W',
+  poolLengthMeters: null,
+  stroke: null,
+};
+
 export type TrainingDurabilityDeltaTone = 'positive' | 'negative' | 'neutral';
 export interface TrainingDurabilityMetricViewModel {
   label: string;
@@ -22,6 +31,7 @@ export interface TrainingDurabilityTrajectoryPointViewModel {
   value: number | null;
   candidateActivityCount: number;
   sourceActivityCount: number;
+  missingEvidenceActivityCount: number;
   eligibleSampleCount: number;
   exclusionReasons: TrainingDurabilityExclusionViewModel[];
   hasEligibleSamples: boolean;
@@ -83,6 +93,12 @@ export function buildTrainingDurabilityScopeViewModels(
       ...item.usual.summaries,
       ...item.weeks.flatMap(week => week.summaries),
     ].forEach(summary => contextsByKey.set(summary.context.contextKey, summary.context));
+    if (item.scope === 'cycling' && contextsByKey.size === 0) {
+      contextsByKey.set(
+        CYCLING_POWER_DURABILITY_CONTEXT.contextKey,
+        CYCLING_POWER_DURABILITY_CONTEXT,
+      );
+    }
     const contexts = [...contextsByKey.values()]
       .sort((left, right) => left.contextKey.localeCompare(right.contextKey))
       .map(context => buildContextViewModel(
@@ -101,19 +117,21 @@ export function buildTrainingDurabilityScopeViewModels(
       : null;
     const candidateCount = item.current.coverage.candidateActivityCount;
     const eligibleCount = item.current.coverage.eligibleActivityCount;
+    const missingEvidenceCount = item.current.coverage.missingEvidenceActivityCount;
     return {
       scope: item.scope,
       label: formatScopeLabel(item.scope),
-      conclusionText: buildScopeConclusion(candidateCount, eligibleCount),
-      evidenceQualityText: buildEvidenceQualityText(candidateCount, eligibleCount),
-      nextStepText: eligibleCount === 0 && exclusions.length
-        ? 'Look at the primary exclusions to see which data or comparability condition prevented a reading.'
-        : eligibleCount > 0 && eligibleWeeks < 2
-          ? 'Use the twelve-week trail to see how often comparable evidence is available.'
-          : null,
+      conclusionText: buildScopeConclusion(item.current.coverage),
+      evidenceQualityText: buildEvidenceQualityText(item.current.coverage),
+      nextStepText: buildScopeNextStepText(
+        eligibleCount,
+        eligibleWeeks,
+        exclusions.length > 0,
+        missingEvidenceCount,
+      ),
       evidenceText: currentPowerActivityCount === null
-        ? `${eligibleCount} eligible of ${candidateCount} candidate workouts`
-        : `${eligibleCount} eligible · ${currentPowerActivityCount} with power · ${candidateCount} candidates`,
+        ? `${eligibleCount} eligible of ${candidateCount} candidate workouts${formatMissingEvidenceSuffix(missingEvidenceCount)}`
+        : `${eligibleCount} eligible · ${currentPowerActivityCount} with power · ${candidateCount} candidates${formatMissingEvidenceSuffix(missingEvidenceCount)}`,
       coverageText: item.current.coverage.eligibilityRatio === null
         ? 'Eligibility ratio unavailable'
         : `${formatPercent(item.current.coverage.eligibilityRatio * 100)} eligible`,
@@ -127,9 +145,18 @@ export function buildTrainingDurabilityScopeViewModels(
   });
 }
 
-function buildScopeConclusion(candidateCount: number, eligibleCount: number): string {
+function buildScopeConclusion(
+  coverage: DerivedTrainingDurabilityMetricPayload['scopes'][number]['current']['coverage'],
+): string {
+  const { candidateActivityCount: candidateCount, eligibleActivityCount: eligibleCount } = coverage;
   if (candidateCount === 0) {
     return 'No recent workouts can be checked for durability in this sport yet.';
+  }
+  if (coverage.evidenceActivityCount === 0 && coverage.missingEvidenceActivityCount > 0) {
+    return 'Recent workouts are present, but their processed durability evidence is not available yet.';
+  }
+  if (eligibleCount === 0 && coverage.missingEvidenceActivityCount > 0) {
+    return `No processed current workout met the steady-effort comparison rules; ${formatMissingEvidenceClause(coverage.missingEvidenceActivityCount)}.`;
   }
   if (eligibleCount === 0) {
     return 'No current workout met the steady-effort comparison rules, so durability is not being judged.';
@@ -137,12 +164,42 @@ function buildScopeConclusion(candidateCount: number, eligibleCount: number): st
   return `Durability is based on ${eligibleCount} comparable current ${eligibleCount === 1 ? 'workout' : 'workouts'}; read it as a directional signal rather than a verdict.`;
 }
 
-function buildEvidenceQualityText(candidateCount: number, eligibleCount: number): string {
+function buildScopeNextStepText(
+  eligibleCount: number,
+  eligibleWeeks: number,
+  hasExclusions: boolean,
+  missingEvidenceCount: number,
+): string | null {
+  if (eligibleCount === 0 && hasExclusions && missingEvidenceCount > 0) {
+    return 'Review the primary exclusions for processed workouts; workouts without processed durability evidence cannot produce a trend point yet.';
+  }
+  if (eligibleCount === 0 && hasExclusions) {
+    return 'Look at the primary exclusions to see which data or comparability condition prevented a reading.';
+  }
+  if (eligibleCount === 0 && missingEvidenceCount > 0) {
+    return 'Workouts without processed durability evidence cannot produce a trend point.';
+  }
+  if (eligibleCount > 0 && eligibleWeeks < 2) {
+    return 'Use the twelve-week trail to see how often comparable evidence is available.';
+  }
+  return null;
+}
+
+function buildEvidenceQualityText(
+  coverage: DerivedTrainingDurabilityMetricPayload['scopes'][number]['current']['coverage'],
+): string {
+  const { candidateActivityCount: candidateCount, eligibleActivityCount: eligibleCount } = coverage;
   if (candidateCount === 0) {
     return 'Evidence quality: unavailable — no candidate workouts in the current window.';
   }
+  if (coverage.evidenceActivityCount === 0 && coverage.missingEvidenceActivityCount > 0) {
+    return `Evidence quality: unavailable — processed durability evidence is missing for ${coverage.missingEvidenceActivityCount} candidate ${coverage.missingEvidenceActivityCount === 1 ? 'workout' : 'workouts'}.`;
+  }
   const ratio = eligibleCount / candidateCount;
   const quality = ratio >= 0.5 ? 'usable' : 'limited';
+  if (coverage.missingEvidenceActivityCount > 0) {
+    return `Evidence quality: ${quality} — ${eligibleCount} of ${coverage.evidenceActivityCount} processed candidate ${coverage.evidenceActivityCount === 1 ? 'workout supplied' : 'workouts supplied'} eligible evidence; ${formatMissingEvidenceClause(coverage.missingEvidenceActivityCount)}.`;
+  }
   return `Evidence quality: ${quality} — ${eligibleCount} of ${candidateCount} candidate ${candidateCount === 1 ? 'workout met' : 'workouts met'} the comparison rules.`;
 }
 
@@ -226,6 +283,7 @@ function buildTrajectoryViewModel(
         sourceActivityCount: isPower
           ? resolvePowerActivityCount(week.coverage)
           : week.coverage.candidateActivityCount,
+        missingEvidenceActivityCount: week.coverage.missingEvidenceActivityCount,
         eligibleSampleCount: summary?.sampleCount ?? 0,
         exclusionReasons,
         hasEligibleSamples: !!summary && summary.sampleCount > 0,
@@ -233,6 +291,7 @@ function buildTrajectoryViewModel(
     });
   const totalCandidates = sumPointCount(points, point => point.candidateActivityCount);
   const totalSourceActivities = sumPointCount(points, point => point.sourceActivityCount);
+  const totalMissingEvidence = sumPointCount(points, point => point.missingEvidenceActivityCount);
   const totalEligible = sumPointCount(points, point => point.eligibleSampleCount);
   const exclusionSummary = summarizeTrajectoryExclusions(points);
   return {
@@ -251,8 +310,8 @@ function buildTrajectoryViewModel(
       ? 'Bar height shows power-recorded workouts; labels show eligible / power-recorded.'
       : 'Bar height shows candidate workouts; labels show eligible / candidates.',
     activityCountSummary: isPower
-      ? `Across 12 weeks: ${totalCandidates} candidates · ${totalSourceActivities} with power · ${totalEligible} eligible`
-      : `Across 12 weeks: ${totalCandidates} candidates · ${totalEligible} eligible`,
+      ? `Across 12 weeks: ${totalCandidates} candidates · ${totalSourceActivities} with power · ${totalEligible} eligible${formatMissingEvidenceSuffix(totalMissingEvidence)}`
+      : `Across 12 weeks: ${totalCandidates} candidates · ${totalEligible} eligible${formatMissingEvidenceSuffix(totalMissingEvidence)}`,
     exclusionSummary,
     unitLabel: '%',
     noEligibleWeekCount: points.filter(point => !point.hasEligibleSamples).length,
@@ -264,10 +323,10 @@ function buildTrajectoryViewModel(
 function resolvePowerActivityCount(
   coverage: DerivedTrainingDurabilityMetricPayload['scopes'][number]['current']['coverage'],
 ): number {
-  const missingPowerCount = coverage.exclusions
-    .filter(exclusion => exclusion.reason === 'missing-output')
+  const unconfirmedPowerCount = coverage.exclusions
+    .filter(exclusion => exclusion.reason === 'missing-output' || exclusion.reason === 'unsupported-context')
     .reduce((sum, exclusion) => sum + exclusion.activityCount, 0);
-  return Math.max(0, coverage.evidenceActivityCount - missingPowerCount);
+  return Math.max(0, coverage.evidenceActivityCount - unconfirmedPowerCount);
 }
 
 function sumPointCount(
@@ -291,9 +350,22 @@ function summarizeTrajectoryExclusions(
   const exclusions = [...counts.values()]
     .filter(exclusion => exclusion.activityCount > 0)
     .sort((left, right) => right.activityCount - left.activityCount || left.label.localeCompare(right.label));
-  return exclusions.length
+  const exclusionText = exclusions.length
     ? `Primary exclusions: ${exclusions.map(exclusion => `${exclusion.label} ${exclusion.activityCount}`).join(' · ')}`
     : null;
+  const missingEvidenceCount = sumPointCount(points, point => point.missingEvidenceActivityCount);
+  const missingEvidenceText = missingEvidenceCount > 0
+    ? `Processed evidence missing ${missingEvidenceCount}`
+    : null;
+  return [missingEvidenceText, exclusionText].filter(Boolean).join(' · ') || null;
+}
+
+function formatMissingEvidenceSuffix(count: number): string {
+  return count > 0 ? ` · ${count} without processed evidence` : '';
+}
+
+function formatMissingEvidenceClause(count: number): string {
+  return `${count} candidate ${count === 1 ? 'workout still lacks' : 'workouts still lack'} processed durability evidence`;
 }
 
 function resolveVisibleScopes(disciplines: readonly TrainingVisibleDiscipline[]): Set<DerivedTrainingDurabilityScope> {

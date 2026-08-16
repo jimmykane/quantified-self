@@ -1,5 +1,7 @@
 import { ElementRef, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
@@ -19,8 +21,8 @@ function trajectory(): TrainingDurabilityTrajectoryViewModel {
     eligibilityDescription: 'Only comparable steady power-and-heart-rate sessions produce a trend point.',
     sourceActivityLabel: 'Power recorded',
     barExplanation: 'Bar height shows power-recorded activities; labels show eligible / power-recorded.',
-    activityCountSummary: 'Across 12 weeks: 36 candidates · 32 with power · 32 eligible',
-    exclusionSummary: 'Primary exclusions: No recorded power 1 · Too variable 1',
+    activityCountSummary: 'Across 12 weeks: 35 candidates · 33 with power · 32 eligible · 1 without processed evidence',
+    exclusionSummary: 'Processed evidence missing 1 · Primary exclusions: No recorded power 1 · Too variable 1',
     unitLabel: '%',
     noEligibleWeekCount: 1,
     unavailableMetricWeekCount: 1,
@@ -28,8 +30,9 @@ function trajectory(): TrainingDurabilityTrajectoryViewModel {
       weekStartDayMs: Date.UTC(2026, 3, 20) + (index * weekMs),
       weekEndDayMs: Date.UTC(2026, 3, 26) + (index * weekMs),
       value: index === 1 || index === 2 ? null : 4 - (index * 0.1),
-      candidateActivityCount: 3,
-      sourceActivityCount: index === 1 ? 0 : index === 2 ? 2 : 3,
+      candidateActivityCount: index === 1 ? 2 : 3,
+      sourceActivityCount: index === 1 ? 0 : 3,
+      missingEvidenceActivityCount: index === 1 ? 1 : 0,
       eligibleSampleCount: index === 1 ? 0 : index === 2 ? 2 : 3,
       exclusionReasons: index === 1
         ? [{ reason: 'missing-output', label: 'No recorded power', activityCount: 1 }]
@@ -171,8 +174,8 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.yAxis).toHaveLength(2);
     expect(option.series.map((series: any) => series.name)).toEqual(['Power recorded', 'Aerobic decoupling']);
     expect(option.series[0].data[1]).toBe(0);
-    expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('No power');
-    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/2');
+    expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('Power unknown');
+    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/3');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
     expect(option.tooltip).toEqual(expect.objectContaining({
@@ -188,7 +191,39 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(emptyTooltip).toContain('No comparable sample');
     expect(emptyTooltip).toContain('Power recorded');
     expect(emptyTooltip).toContain('0 workouts');
+    expect(emptyTooltip).toContain('Processed evidence missing');
     expect(emptyTooltip).toContain('No recorded power');
+  });
+
+  it('labels an unsupported Cycling context without claiming that power was absent', () => {
+    const component = createComponent();
+    const view = trajectory();
+    view.points[1] = {
+      ...view.points[1],
+      candidateActivityCount: 1,
+      sourceActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      exclusionReasons: [{ reason: 'unsupported-context', label: 'Unsupported context', activityCount: 1 }],
+    };
+    component.trajectory = view;
+    component.status = 'ready';
+    component.chartDiv = new ElementRef(document.createElement('div'));
+
+    const option = (component as any).buildOption();
+
+    expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('Unsupported');
+    expect(option.tooltip.formatter([{ dataIndex: 1 }])).toContain('Unsupported context');
+  });
+
+  it('keeps the twelve-week evidence chart horizontally readable on narrow screens', () => {
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/training/training-durability-trajectory-chart.component.scss',
+    ), 'utf8');
+
+    expect(styles).toContain('.durability-trajectory-scroll { width: 100%; overflow-x: auto;');
+    expect(styles).toContain('.durability-trajectory-chart { width: 100%; min-width: 720px; height: 270px; }');
+    expect(styles).toContain('@media (max-width: 640px)');
   });
 
   it('keeps mobile tooltips tap-triggered and visible outside the horizontal chart scroller', () => {

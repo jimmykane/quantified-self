@@ -1,45 +1,119 @@
 'use strict';
 
-import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
-import * as requestPromise from '../request-helper';
-import { hasProAccess, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, PRODUCTION_URL, SERVICE_NAME, STAGING_URL, USE_STAGING } from './constants';
-import { getTokenData } from '../tokens';
+import * as crypto from 'crypto';
+import * as logger from 'firebase-functions/logger';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
-import { getCOROSUserId } from './auth/api';
-import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
-import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
-const COROS_UPLOAD_SUCCESS_CODE = '0000';
-const COROS_UPLOAD_DUPLICATE_CODE = '5082';
-const COROS_AUTH_ERROR_CODES = new Set(['5006', '5010', '30009']);
-const COROS_INVALID_ARGUMENT_CODES = new Set(['1008', '1031', '5096']);
+import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import * as requestPromise from '../request-helper';
+import { recordSuccessfulActivityUpload } from '../activity-sync/upload-count';
+import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
+import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
+import {
+  isProviderOperationError,
+  isTerminalServiceAuthError,
+  isTransientProviderTransportError,
+  ProviderOperation,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
+import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getTokenData } from '../tokens';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
+import { getActiveCOROSTokenSnapshot, normalizeCOROSOpenId } from './account';
+import { COROS_API_REQUEST_TIMEOUT_MS, PRODUCTION_URL, SERVICE_NAME, STAGING_URL, USE_STAGING } from './constants';
+import {
+  ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
+  recordActivitySyncOutboundFingerprint,
+} from '../activity-sync/outbound-fingerprint';
+import { parseCOROSJSON } from './json';
+import { normalizeCOROSInt64Identifier } from './identifier';
+
+const COROS_SUCCESS_CODE = '0000';
+const COROS_DUPLICATE_CODE = '5082';
+const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
+
+export interface COROSActivityUploadResult {
+  status: 'success' | 'duplicate' | 'pending';
+  code?: 'ALREADY_EXISTS';
+  message: string;
+  uploadId?: string;
+  providerUserId?: string;
+}
+
+interface COROSUploadResponseData {
+  uploadId?: unknown;
+  status?: unknown;
+}
+
+interface COROSUploadResponse {
+  result?: unknown;
+  message?: unknown;
+  data?: COROSUploadResponseData | COROSUploadResponseData[];
+}
+
+export interface COROSActivityUploadCountOptions {
+  queueItemRef?: admin.firestore.DocumentReference;
+}
+
+export interface COROSActivityUploadOptions {
+  beforeProviderRequest?: () => Promise<void>;
+}
+
+export class COROSActivityUploadSkippedForDeletedUserError extends Error {
+  readonly name = 'COROSActivityUploadSkippedForDeletedUserError';
+  readonly code = 'user_deleted_or_deleting';
+
+  constructor(public readonly userID: string, public readonly phase: string) {
+    super(`Skipping COROS activity upload for user ${userID} during ${phase} because the user is missing or being deleted.`);
+  }
+}
 
 function getCOROSBaseUrl(): string {
   return USE_STAGING ? STAGING_URL : PRODUCTION_URL;
 }
 
-export interface COROSActivityUploadResult {
-  status: 'success' | 'info';
-  code?: string;
-  message: string;
-  labelId?: string;
+function normalizeUploadId(value: unknown): string | undefined {
+  return normalizeCOROSInt64Identifier(value) || undefined;
 }
 
-interface COROSUploadResponse {
-  result?: string;
-  message?: string;
-  data?: Array<{
-    labelId?: string | number;
-  }>;
+function parseCOROSResponse(rawResponse: unknown, operation: ProviderOperation): COROSUploadResponse {
+  if (typeof rawResponse === 'string') {
+    try {
+      return parseCOROSJSON<COROSUploadResponse>(rawResponse);
+    } catch {
+      throw new ProviderOperationError({
+        serviceName: ServiceNames.COROSAPI,
+        operation,
+        disposition: 'permanent',
+        code: 'invalid-provider-response',
+        message: 'COROS returned an invalid activity upload response.',
+        dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+      });
+    }
+  }
+  if (rawResponse && typeof rawResponse === 'object') {
+    return rawResponse as COROSUploadResponse;
+  }
+  throw new ProviderOperationError({
+    serviceName: ServiceNames.COROSAPI,
+    operation,
+    disposition: 'permanent',
+    code: 'invalid-provider-response',
+    message: 'COROS returned an invalid activity upload response.',
+    dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+  });
+}
+
+function responseData(response: COROSUploadResponse): COROSUploadResponseData {
+  return Array.isArray(response.data) ? response.data[0] || {} : response.data || {};
 }
 
 function buildCOROSActivityMultipartBody(openId: string, fileBuffer: Buffer): { body: Buffer; contentType: string } {
-  const boundary = `----qsCorosBoundary${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  const boundary = `----qsCorosBoundary${crypto.randomUUID().replace(/-/g, '')}`;
   const parts: Buffer[] = [
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="openId"\r\n\r\n${openId}\r\n`),
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="fileType"\r\n\r\n4\r\n`),
@@ -47,236 +121,452 @@ function buildCOROSActivityMultipartBody(openId: string, fileBuffer: Buffer): { 
     fileBuffer,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ];
-
-  return {
-    body: Buffer.concat(parts),
-    contentType: `multipart/form-data; boundary=${boundary}`,
-  };
+  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-function parseCOROSUploadResponse(rawResponse: unknown): COROSUploadResponse {
-  if (typeof rawResponse === 'string') {
-    try {
-      return JSON.parse(rawResponse) as COROSUploadResponse;
-    } catch {
-      throw new HttpsError('internal', 'Invalid response from COROS upload API.');
-    }
+async function assertCOROSActivityUploadAllowed(userID: string, phase: string): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, `coros_activity_upload:${phase}`, error);
   }
-
-  if (rawResponse && typeof rawResponse === 'object') {
-    return rawResponse as COROSUploadResponse;
+  if (deletionGuard.shouldSkip) {
+    throw new COROSActivityUploadSkippedForDeletedUserError(userID, phase);
   }
-
-  throw new HttpsError('internal', 'Invalid response from COROS upload API.');
+  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+    throw new ProviderPendingDisconnectError(userID, ServiceNames.COROSAPI, phase);
+  }
 }
 
-function getUploadLabelId(response: COROSUploadResponse): string | undefined {
-  const labelId = response.data?.[0]?.labelId;
-  if (labelId === undefined || labelId === null) {
-    return undefined;
+function providerMessageForCode(code: string): string {
+  switch (code) {
+    case '1008': return `COROS rejected the activity because it exceeds the provider's size limit.`;
+    case '1031': return 'COROS rejected the activity upload parameters.';
+    case '5096': return 'COROS does not support this activity file.';
+    case '5098': return 'COROS could not process this activity file.';
+    case '30009': return 'COROS has not enabled this upload permission for the connected application.';
+    case '5006':
+    case '5010': return 'Reconnect COROS before sending activities.';
+    default: return 'COROS rejected the activity upload.';
   }
-
-  return `${labelId}`;
 }
 
-async function executeWithCOROSTokenRetry<T>(
-  tokenDoc: admin.firestore.QueryDocumentSnapshot,
-  operation: (serviceToken: COROSAPIAuth2ServiceTokenInterface) => Promise<T>,
-  contextDescription: string,
+function toCOROSResultError(
+  operation: ProviderOperation,
+  response: COROSUploadResponse,
+  providerUserId: string,
+  providerOperationId?: string,
+): ProviderOperationError {
+  const providerCode = `${response.result || ''}`.trim() || 'unknown';
+  const common = { serviceName: ServiceNames.COROSAPI, operation, providerCode, providerUserId, providerOperationId };
+  if (providerCode === '30009') {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permission_required',
+      code: 'permission-denied',
+      message: providerMessageForCode(providerCode),
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_PERMISSION_REQUIRED',
+    });
+  }
+  if (providerCode === '5006' || providerCode === '5010') {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'auth_required',
+      code: 'unauthenticated',
+      message: providerMessageForCode(providerCode),
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_AUTH_REQUIRED',
+    });
+  }
+  return new ProviderOperationError({
+    ...common,
+    disposition: 'permanent',
+    code: providerCode === '1008' || providerCode === '1031' || providerCode === '5096'
+      ? 'invalid-argument'
+      : 'failed-precondition',
+    message: providerMessageForCode(providerCode),
+    dlqContext: 'COROS_ACTIVITY_UPLOAD_REJECTED',
+  });
+}
+
+function statusCodeFromError(error: unknown): number | undefined {
+  const value = Number((error as { statusCode?: unknown } | null)?.statusCode);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function toCOROSRequestError(
+  operation: 'activity_upload_init' | 'activity_upload_status',
+  error: unknown,
+  providerUserId: string,
+  providerOperationId?: string,
+): ProviderOperationError {
+  if (isProviderOperationError(error)) return error;
+  if (error instanceof Error && (
+    error.name === 'TokenRefreshSkippedForDeletedUserError'
+    || error.name === 'TokenUseSkippedForPendingDisconnectError'
+    || error.name === 'UserDeletionGuardReadError'
+    || error.name === 'COROSActivityUploadSkippedForDeletedUserError'
+    || error.name === 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError'
+  )) {
+    throw error;
+  }
+  const statusCode = statusCodeFromError(error);
+  const retryMode = operation === 'activity_upload_status' ? 'resume' : 'restart';
+  const common = { serviceName: ServiceNames.COROSAPI, operation, providerUserId, providerOperationId, statusCode };
+  const callableCode = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+  if (isTerminalServiceAuthError(error) || statusCode === 401 || callableCode === 'unauthenticated') {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'auth_required',
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending activities.',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_AUTH_REQUIRED',
+    });
+  }
+  if (statusCode === 403 || callableCode === 'permission-denied') {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permission_required',
+      code: 'permission-denied',
+      message: 'COROS has not enabled this upload permission for the connected application.',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_PERMISSION_REQUIRED',
+    });
+  }
+  if (callableCode === 'invalid-argument' || callableCode === 'failed-precondition') {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permanent',
+      code: callableCode,
+      message: error instanceof Error ? error.message : 'COROS activity upload cannot continue.',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_REJECTED',
+    });
+  }
+  if (statusCode === 429 || statusCode === 408 || (statusCode !== undefined && statusCode >= 500)
+    || isTransientProviderTransportError(error)) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'retryable',
+      retryMode,
+      code: statusCode === 429 ? 'resource-exhausted' : 'unavailable',
+      message: statusCode === 429
+        ? 'COROS is rate-limiting uploads. Please retry shortly.'
+        : 'COROS activity uploads are temporarily unavailable. Please retry.',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    });
+  }
+  return new ProviderOperationError({
+    ...common,
+    disposition: 'permanent',
+    code: 'failed-precondition',
+    message: 'COROS rejected the activity upload.',
+    dlqContext: 'COROS_ACTIVITY_UPLOAD_REJECTED',
+  });
+}
+
+async function withActiveCOROSToken<T>(
+  userID: string,
+  expectedProviderUserId: string | undefined,
+  operation: (token: COROSAPIAuth2ServiceTokenInterface, providerUserId: string) => Promise<T>,
+  beforeProviderRequest?: () => Promise<void>,
 ): Promise<T> {
-  let serviceToken: COROSAPIAuth2ServiceTokenInterface;
+  await assertCOROSActivityUploadAllowed(userID, 'before_token_lookup');
+  const selectedSnapshot = await getActiveCOROSTokenSnapshot(userID, expectedProviderUserId);
+  const providerUserId = selectedSnapshot.id;
+  if (expectedProviderUserId && providerUserId !== expectedProviderUserId) {
+    throw new HttpsError('unauthenticated', 'The selected COROS account changed before the activity could be sent.');
+  }
+
+  const execute = async (forceRefresh: boolean): Promise<T> => {
+    const currentSnapshot = await getActiveCOROSTokenSnapshot(userID, providerUserId);
+    if (currentSnapshot.id !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'The selected COROS account changed before the activity could be sent.');
+    }
+    const token = await getTokenData(currentSnapshot, ServiceNames.COROSAPI, forceRefresh) as COROSAPIAuth2ServiceTokenInterface;
+    await assertCOROSActivityUploadAllowed(userID, 'before_provider_request');
+    const finalSnapshot = await getActiveCOROSTokenSnapshot(userID, providerUserId);
+    if (finalSnapshot.id !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'The selected COROS account changed before the activity could be sent.');
+    }
+    if (beforeProviderRequest) {
+      await beforeProviderRequest();
+      await assertCOROSActivityUploadAllowed(userID, 'after_pre_request_write');
+      const postWriteSnapshot = await getActiveCOROSTokenSnapshot(userID, providerUserId);
+      if (postWriteSnapshot.id !== providerUserId) {
+        throw new HttpsError('unauthenticated', 'The selected COROS account changed before the activity could be sent.');
+      }
+    }
+    return operation(token, providerUserId);
+  };
 
   try {
-    serviceToken = (await getTokenData(tokenDoc, ServiceNames.COROSAPI, false)) as COROSAPIAuth2ServiceTokenInterface;
+    return await execute(false);
   } catch (error) {
-    logger.warn(`Initial token fetch failed for ${contextDescription} (Token ID: ${tokenDoc.id})`, error as Error);
+    const statusCode = statusCodeFromError(error);
+    if (statusCode === 401 || (isProviderOperationError(error) && error.providerCode === '5006')) {
+      return execute(true);
+    }
     throw error;
   }
+}
 
+function getOpenId(
+  token: COROSAPIAuth2ServiceTokenInterface,
+  providerUserId: string,
+  operation: 'activity_upload_init' | 'activity_upload_status',
+  providerOperationId?: string,
+): string {
+  const openId = normalizeCOROSOpenId(token.openId || providerUserId);
+  if (!openId || openId !== providerUserId) {
+    throw new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
+      operation,
+      disposition: 'auth_required',
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending activities.',
+      providerUserId,
+      providerOperationId,
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_AUTH_REQUIRED',
+    });
+  }
+  return openId;
+}
+
+export async function uploadActivityFileToCOROS(
+  userID: string,
+  fileBuffer: Buffer,
+  options: COROSActivityUploadOptions = {},
+): Promise<COROSActivityUploadResult> {
+  if (fileBuffer.length === 0) throw new HttpsError('invalid-argument', 'File content is empty.');
+  if (fileBuffer.length > MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}.`);
+  }
+
+  let providerUserId = '';
   try {
-    return await operation(serviceToken);
-  } catch (error: any) {
-    const statusCode = error?.statusCode;
-    if (statusCode === 401) {
-      logger.warn(`Unauthorized (${statusCode}) during ${contextDescription} for token ${tokenDoc.id}. Attempting force refresh and retry...`);
-      const refreshedToken = (await getTokenData(tokenDoc, ServiceNames.COROSAPI, true)) as COROSAPIAuth2ServiceTokenInterface;
-      return operation(refreshedToken);
-    }
-
-    throw error;
-  }
-}
-
-function mapCOROSUploadError(resultCode: string, message: string): HttpsError {
-  if (COROS_AUTH_ERROR_CODES.has(resultCode)) {
-    return new HttpsError('unauthenticated', message || 'Authentication failed. Please reconnect your COROS account.');
-  }
-
-  if (COROS_INVALID_ARGUMENT_CODES.has(resultCode)) {
-    return new HttpsError('invalid-argument', message || 'Invalid COROS activity upload payload.');
-  }
-
-  return new HttpsError('internal', message || `COROS upload failed with code ${resultCode}.`);
-}
-
-function getCOROSErrorMessage(error: unknown): string | undefined {
-  const errorPayload = (error as any)?.error;
-  if (typeof errorPayload === 'string') {
-    return errorPayload;
-  }
-
-  if (typeof errorPayload?.message === 'string') {
-    return errorPayload.message;
-  }
-
-  if (typeof errorPayload?.error === 'string') {
-    return errorPayload.error;
-  }
-
-  if (typeof errorPayload?.error_description === 'string') {
-    return errorPayload.error_description;
-  }
-
-  return undefined;
-}
-
-async function resolveOpenId(serviceToken: COROSAPIAuth2ServiceTokenInterface, corosBaseUrl: string): Promise<string> {
-  if (serviceToken.openId && `${serviceToken.openId}`.trim().length > 0) {
-    return `${serviceToken.openId}`.trim();
-  }
-
-  try {
-    const userId = await getCOROSUserId(serviceToken.accessToken, corosBaseUrl);
-    if (!userId || !`${userId}`.trim()) {
-      throw new HttpsError('unauthenticated', 'Missing COROS openId for upload. Please reconnect your COROS account.');
-    }
-
-    return `${userId}`.trim();
+    return await withActiveCOROSToken<COROSActivityUploadResult>(userID, undefined, async (token, selectedProviderUserId) => {
+      providerUserId = selectedProviderUserId;
+      const openId = getOpenId(token, selectedProviderUserId, 'activity_upload_init');
+      const { body, contentType } = buildCOROSActivityMultipartBody(openId, fileBuffer);
+      const rawResponse = await requestPromise.post({
+        url: `${getCOROSBaseUrl()}/coros/file/upload`,
+        headers: { token: token.accessToken, 'Content-Type': contentType },
+        json: false,
+        body,
+        timeout: COROS_API_REQUEST_TIMEOUT_MS,
+      });
+      const response = parseCOROSResponse(rawResponse, 'activity_upload_init');
+      const resultCode = `${response.result || ''}`.trim();
+      if (resultCode === COROS_DUPLICATE_CODE) {
+        return { status: 'duplicate', code: 'ALREADY_EXISTS', message: 'Activity already exists in COROS.', providerUserId };
+      }
+      if (resultCode !== COROS_SUCCESS_CODE) {
+        throw toCOROSResultError('activity_upload_init', response, providerUserId);
+      }
+      const uploadId = normalizeUploadId(responseData(response).uploadId);
+      if (!uploadId) {
+        throw new ProviderOperationError({
+          serviceName: ServiceNames.COROSAPI,
+          operation: 'activity_upload_init',
+          disposition: 'permanent',
+          code: 'invalid-provider-response',
+          message: 'COROS accepted the activity without returning the identifier required to reconcile it safely.',
+          providerUserId,
+          dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
+      }
+      return { status: 'pending', message: 'COROS is processing the activity.', uploadId, providerUserId };
+    }, options.beforeProviderRequest);
   } catch (error) {
-    if (error instanceof HttpsError) {
-      throw error;
-    }
-
-    throw new HttpsError('unauthenticated', 'Missing COROS openId for upload. Please reconnect your COROS account.');
+    throw toCOROSRequestError('activity_upload_init', error, providerUserId);
   }
 }
 
-export async function uploadActivityFileToCOROS(userID: string, fileBuffer: Buffer): Promise<COROSActivityUploadResult> {
-  const tokenQuerySnapshots = await admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
-  logger.info(`Found ${tokenQuerySnapshots.size} COROS token(s) for user ${userID}`);
-  const corosBaseUrl = getCOROSBaseUrl();
-
-  if (tokenQuerySnapshots.empty) {
-    throw new HttpsError('unauthenticated', 'No connected COROS account found.');
+export async function getCOROSActivityUploadStatus(
+  userID: string,
+  uploadIdValue: unknown,
+  providerUserIdValue: unknown,
+  countOptions: COROSActivityUploadCountOptions = {},
+): Promise<COROSActivityUploadResult> {
+  const uploadId = normalizeUploadId(uploadIdValue);
+  const expectedProviderUserId = normalizeCOROSOpenId(providerUserIdValue);
+  if (!uploadId || !expectedProviderUserId) {
+    throw new HttpsError('invalid-argument', 'Invalid COROS upload resume identifiers.');
   }
 
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    try {
-      const result = await executeWithCOROSTokenRetry(
-        tokenQueryDocumentSnapshot,
-        async (serviceToken) => {
-          const openId = await resolveOpenId(serviceToken, corosBaseUrl);
-          const { body, contentType } = buildCOROSActivityMultipartBody(openId, fileBuffer);
-
-          const rawResponse = await requestPromise.post({
-            url: `${corosBaseUrl}/coros/file/synchronous`,
-            headers: {
-              token: serviceToken.accessToken,
-              'Content-Type': contentType,
-            },
-            json: false,
-            body,
-          });
-
-          const response = parseCOROSUploadResponse(rawResponse);
-          const resultCode = `${response.result || ''}`.trim();
-          const message = `${response.message || ''}`.trim();
-
-          if (resultCode === COROS_UPLOAD_SUCCESS_CODE) {
-            return {
-              status: 'success',
-              message: message || 'Activity uploaded to COROS',
-              labelId: getUploadLabelId(response),
-            } satisfies COROSActivityUploadResult;
-          }
-
-          if (resultCode === COROS_UPLOAD_DUPLICATE_CODE) {
-            return {
-              status: 'info',
-              code: 'ALREADY_EXISTS',
-              message: message || 'Activity already exists in COROS',
-            } satisfies COROSActivityUploadResult;
-          }
-
-          throw mapCOROSUploadError(resultCode, message);
-        },
-        `Upload activity to COROS for user ${userID}`,
-      );
-
-      if (result.status === 'success') {
-        try {
-          const userServiceMetaDocument = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
-          await userServiceMetaDocument.set({
-            uploadedActivitiesCount: FieldValue.increment(1),
-          }, { merge: true });
-        } catch (error) {
-          logger.error('Could not update COROS uploadedActivitiesCount', error as Error);
-        }
+  try {
+    const result = await withActiveCOROSToken<COROSActivityUploadResult>(userID, expectedProviderUserId, async (token, providerUserId) => {
+      const openId = getOpenId(token, providerUserId, 'activity_upload_status', uploadId);
+      const rawResponse = await requestPromise.get({
+        url: `${getCOROSBaseUrl()}/coros/file/upload/get?openId=${encodeURIComponent(openId)}&uploadId=${encodeURIComponent(uploadId)}`,
+        headers: { token: token.accessToken },
+        json: false,
+        timeout: COROS_API_REQUEST_TIMEOUT_MS,
+      });
+      const response = parseCOROSResponse(rawResponse, 'activity_upload_status');
+      const resultCode = `${response.result || ''}`.trim();
+      if (resultCode === COROS_DUPLICATE_CODE) {
+        return { status: 'duplicate', code: 'ALREADY_EXISTS', message: 'Activity already exists in COROS.', uploadId, providerUserId };
       }
-
-      return result;
-    } catch (error: unknown) {
-      if (error instanceof HttpsError) {
-        throw error;
+      if (resultCode !== COROS_SUCCESS_CODE) {
+        throw toCOROSResultError('activity_upload_status', response, providerUserId, uploadId);
       }
-
-      const statusCode = (error as any)?.statusCode;
-      if (statusCode === 401) {
-        throw new HttpsError('unauthenticated', 'Authentication failed. Please reconnect your COROS account.');
+      const data = responseData(response);
+      const responseUploadId = normalizeUploadId(data.uploadId);
+      if (responseUploadId !== uploadId) {
+        throw new ProviderOperationError({
+          serviceName: ServiceNames.COROSAPI,
+          operation: 'activity_upload_status',
+          disposition: 'permanent',
+          code: 'invalid-provider-response',
+          message: 'COROS returned an activity upload status for a different operation.',
+          providerUserId,
+          providerOperationId: uploadId,
+          dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+        });
       }
+      const status = Number(data.status);
+      if (status === 1) {
+        return { status: 'pending', message: 'COROS is processing the activity.', uploadId, providerUserId };
+      }
+      if (status === 2) {
+        return { status: 'success', message: 'Activity uploaded to COROS.', uploadId, providerUserId };
+      }
+      if (status === -1) {
+        throw new ProviderOperationError({
+          serviceName: ServiceNames.COROSAPI,
+          operation: 'activity_upload_status',
+          disposition: 'permanent',
+          code: 'provider-processing-failed',
+          message: 'COROS could not process this activity file.',
+          providerStatus: status,
+          providerUserId,
+          providerOperationId: uploadId,
+          dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+        });
+      }
+      throw new ProviderOperationError({
+        serviceName: ServiceNames.COROSAPI,
+        operation: 'activity_upload_status',
+        disposition: 'permanent',
+        code: 'unexpected-provider-status',
+        message: 'COROS returned an unknown activity upload status.',
+        providerStatus: status,
+        providerUserId,
+        providerOperationId: uploadId,
+        dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+      });
+    });
 
-      const providerMessage = getCOROSErrorMessage(error);
-      const fallbackMessage = error instanceof Error ? error.message : `${error}`;
-      throw new HttpsError('internal', providerMessage || fallbackMessage || 'COROS upload failed.');
+    if (result.status === 'success') {
+      try {
+        await recordSuccessfulActivityUpload({
+          userID,
+          serviceName: ServiceNames.COROSAPI,
+          uploadId,
+          queueItemRef: countOptions.queueItemRef,
+        });
+      } catch (error) {
+        logger.error('[COROSActivityUpload] Could not idempotently update the successful upload count.', {
+          userID,
+          uploadId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        });
+      }
     }
+    return result;
+  } catch (error) {
+    throw toCOROSRequestError('activity_upload_status', error, expectedProviderUserId, uploadId);
   }
+}
 
-  throw new HttpsError('internal', 'COROS upload failed for all connected tokens.');
+function decodeActivityUpload(value: unknown): Buffer {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HttpsError('invalid-argument', 'File content missing.');
+  }
+  if (value.length > MAX_BASE64_ACTIVITY_UPLOAD_LENGTH || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
+    throw new HttpsError('invalid-argument', 'File content is not valid base64.');
+  }
+  const fileBuffer = Buffer.from(value, 'base64');
+  if (fileBuffer.length === 0) throw new HttpsError('invalid-argument', 'File content is empty.');
+  if (fileBuffer.length > MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}.`);
+  }
+  return fileBuffer;
+}
+
+async function requireCOROSActivityUploadAccess(request: { auth?: { uid: string } | null }): Promise<string> {
+  enforceAppCheck(request as Parameters<typeof enforceAppCheck>[0]);
+  if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+  if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+  return request.auth.uid;
+}
+
+function toCallableError(error: unknown): never {
+  if (error instanceof HttpsError) throw error;
+  if (error instanceof UserDeletionGuardReadError) {
+    throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
+  }
+  if (error instanceof ActivitySyncOutboundFingerprintSkippedForDeletedUserError) {
+    throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+  }
+  if (error instanceof COROSActivityUploadSkippedForDeletedUserError) {
+    throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+  }
+  if (!isProviderOperationError(error)) {
+    logger.warn('[COROSActivityUpload] Unexpected upload failure', { errorName: error instanceof Error ? error.name : typeof error });
+    throw new HttpsError('unavailable', 'COROS activity uploads are temporarily unavailable. Please retry.');
+  }
+  const details = {
+    retryMode: error.operation === 'activity_upload_status' && error.code === 'provider-processing-failed'
+      ? 'restart'
+      : error.retryMode,
+    providerOperation: error.operation,
+    ...(error.providerOperationId ? { resumeUploadId: error.providerOperationId } : {}),
+    ...(error.providerUserId ? { resumeProviderUserId: error.providerUserId } : {}),
+  };
+  if (error.disposition === 'auth_required') throw new HttpsError('unauthenticated', error.message, details);
+  if (error.disposition === 'permission_required') throw new HttpsError('permission-denied', error.message, details);
+  if (error.disposition === 'retryable') {
+    throw new HttpsError(error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable', error.message, details);
+  }
+  throw new HttpsError(error.code === 'invalid-argument' ? 'invalid-argument' : 'failed-precondition', error.message, details);
 }
 
 export const importActivityToCOROSAPI = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToCOROSAPI.region,
   secrets: FUNCTION_SECRET_BINDINGS.importActivityToCOROSAPI,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 300,
+  timeoutSeconds: 120,
   maxInstances: 10,
 }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+  const userID = await requireCOROSActivityUploadAccess(request);
+  try {
+    const fileBuffer = decodeActivityUpload(request.data?.file);
+    return await uploadActivityFileToCOROS(userID, fileBuffer, {
+      beforeProviderRequest: async () => {
+        await recordActivitySyncOutboundFingerprint({
+          userID,
+          destinationServiceName: ServiceNames.COROSAPI,
+          fileBuffer,
+        });
+      },
+    });
+  } catch (error) {
+    return toCallableError(error);
   }
+});
 
-  enforceAppCheck(request);
-
-  const userID = request.auth.uid;
-
-  if (!(await hasProAccess(userID))) {
-    logger.warn(`Blocking COROS activity upload for non-pro user ${userID}`);
-    throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+export const getCOROSAPIWorkoutFileUploadStatus = onCall({
+  region: FUNCTIONS_MANIFEST.getCOROSAPIWorkoutFileUploadStatus.region,
+  secrets: FUNCTION_SECRET_BINDINGS.getCOROSAPIWorkoutFileUploadStatus,
+  cors: ALLOWED_CORS_ORIGINS,
+  timeoutSeconds: 60,
+  maxInstances: 10,
+}, async (request) => {
+  const userID = await requireCOROSActivityUploadAccess(request);
+  try {
+    return await getCOROSActivityUploadStatus(userID, request.data?.uploadId, request.data?.providerUserId);
+  } catch (error) {
+    return toCallableError(error);
   }
-
-  const base64File = request.data.file;
-  if (!base64File) {
-    throw new HttpsError('invalid-argument', 'File content missing');
-  }
-
-  const fileBuffer = Buffer.from(base64File, 'base64');
-  if (fileBuffer.length === 0) {
-    throw new HttpsError('invalid-argument', 'File content is empty');
-  }
-
-  if (fileBuffer.length > MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES) {
-    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}`);
-  }
-
-  return uploadActivityFileToCOROS(userID, fileBuffer);
 });

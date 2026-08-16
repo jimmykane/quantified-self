@@ -1,6 +1,7 @@
 export const SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME = 'processSportsLibReparseHeavyTask';
 export const RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME = 'retrySportsLibReparseHeavyJob';
 export const MERGE_EVENTS_CLIENT_TIMEOUT_MS = 61 * 60 * 1000;
+export const COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS = 310_000;
 
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
@@ -26,9 +27,16 @@ export const FUNCTIONS_MANIFEST = {
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetCOROSAPIAccessToken: { name: 'requestAndSetCOROSAPIAccessToken', region: 'europe-west2' },
     deauthorizeCOROSAPI: { name: 'deauthorizeCOROSAPI', region: 'europe-west2' },
-    addCOROSAPIHistoryToQueue: { name: 'addCOROSAPIHistoryToQueue', region: 'europe-west2' },
+    getCOROSAPIBindingState: { name: 'getCOROSAPIBindingState', region: 'europe-west2' },
+    addCOROSAPIHistoryToQueue: {
+        name: 'addCOROSAPIHistoryToQueue',
+        region: 'europe-west2',
+        clientTimeoutMs: COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS,
+    },
     backfillCorosAPISleep: { name: 'backfillCorosAPISleep', region: 'europe-west2' },
     importActivityToCOROSAPI: { name: 'importActivityToCOROSAPI', region: 'europe-west2' },
+    getCOROSAPIWorkoutFileUploadStatus: { name: 'getCOROSAPIWorkoutFileUploadStatus', region: 'europe-west2' },
+    importRouteToCOROSAPI: { name: 'importRouteToCOROSAPI', region: 'europe-west2' },
 
     // Wahoo Functions
     getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -105,7 +113,6 @@ export const FUNCTIONS_MANIFEST = {
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     setTrainingBuildBenchmark: { name: 'setTrainingBuildBenchmark', region: 'europe-west2' },
-    setTrainingVisibleDisciplines: { name: 'setTrainingVisibleDisciplines', region: 'europe-west2' },
     processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 

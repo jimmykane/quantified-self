@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS, ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
 
 const {
@@ -1027,6 +1028,7 @@ describe('route-delivery-sync/process-queue-item', () => {
       disposition: 'permanent',
       code: 'failed-precondition',
       message: 'Garmin rejected the route.',
+      providerStatus: -1,
       statusCode: 400,
       dlqContext: 'GARMIN_ROUTE_CREATE_REJECTED',
     });
@@ -1042,6 +1044,18 @@ describe('route-delivery-sync/process-queue-item', () => {
       'GARMIN_ROUTE_CREATE_REJECTED',
     );
     expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[RouteDeliverySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        code: 'failed-precondition',
+        providerStatus: -1,
+        providerMessage: 'Garmin rejected the route.',
+      }),
+    );
+    const providerFailureLog = vi.mocked(logger.error).mock.calls.find(
+      ([summary]) => summary === '[RouteDeliverySync] Destination provider failure moved to DLQ.',
+    );
+    expect(providerFailureLog?.[1]).not.toHaveProperty('message');
   });
 
   it('retains the Garmin account identity for an ambiguous route create reconciliation', async () => {

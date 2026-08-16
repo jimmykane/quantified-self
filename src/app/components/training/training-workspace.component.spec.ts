@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
-import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { readFileSync } from 'node:fs';
@@ -13,7 +12,10 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
-import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
+import type {
+  DerivedTrainingDurabilityMetricPayload,
+  TrainingBuildBenchmarkSelection,
+} from '@shared/derived-metrics';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   DashboardDerivedMetricsService,
@@ -30,6 +32,16 @@ function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
     watchForDashboard: vi.fn(() => of([...sessions])),
   };
+}
+
+function createDeferredVoidPromise() {
+  let resolve!: () => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 function createRouteReadyDerivedState(
@@ -57,6 +69,46 @@ function createRouteReadyDerivedState(
     trainingSwimPerformanceStatus: 'ready',
     trainingPowerSystemsStatus: 'ready',
     ...overrides,
+  };
+}
+
+function createExcludedCyclingDurabilityPayload(): DerivedTrainingDurabilityMetricPayload {
+  const coverage = {
+    candidateActivityCount: 2,
+    evidenceActivityCount: 2,
+    eligibleActivityCount: 0,
+    missingEvidenceActivityCount: 0,
+    excludedActivityCount: 2,
+    eligibilityRatio: 0,
+    exclusions: [
+      { reason: 'missing-output', activityCount: 1 },
+      { reason: 'insufficient-duration', activityCount: 1 },
+    ],
+  };
+  const window = (periodDays: 28 | 7) => ({
+    periodDays,
+    windowStartDayMs: 1,
+    windowEndDayMs: 2,
+    coverage,
+    summaries: [],
+  });
+  return {
+    dayBoundary: 'UTC',
+    asOfDayMs: 2,
+    currentWindowDays: 28,
+    baselineBlockCount: 3,
+    weeklyPointCount: 12,
+    excludesMergedEvents: true,
+    excludesFutureEvents: true,
+    evidenceSource: 'persisted-activity-stat',
+    scopes: [{
+      scope: 'cycling',
+      current: window(28),
+      baselineBlocks: Array.from({ length: 3 }, () => window(28)),
+      usual: { coverage, summaries: [] },
+      weeks: Array.from({ length: 12 }, () => window(7)),
+      recentSupportingEvents: [],
+    }],
   };
 }
 
@@ -128,10 +180,22 @@ describe('TrainingWorkspaceComponent', () => {
     expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
-    expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
-    expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('No sports');
-    expect(element.textContent).toContain('No sport-specific details · Overall comparison uses all training');
-    expect(element.textContent).toContain('No sport-specific benchmark cards qualify yet');
+    expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sport shortcuts.');
+    expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
+    const mobileDestination = element.querySelector('.training-destination-mobile');
+    expect(mobileDestination?.querySelector('mat-select')).toBeNull();
+    const mobileShortcuts = mobileDestination?.querySelector('.training-mobile-shortcuts');
+    expect(mobileShortcuts?.textContent).toContain('All');
+    expect(mobileShortcuts?.querySelectorAll('button.training-mobile-shortcut').length).toBeGreaterThan(0);
+    expect(mobileDestination?.querySelector('mat-button-toggle-group')).toBeNull();
+    expect(mobileDestination?.querySelector('mat-chip-listbox')).toBeNull();
+    const mobileMoreAction = mobileDestination?.querySelector('.training-mobile-more-action');
+    expect(mobileMoreAction?.textContent).not.toContain('More');
+    expect(mobileMoreAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('expand_more');
+    expect(mobileMoreAction?.getAttribute('aria-label')).toBe('Choose from all training sports');
+    expect(mobileMoreAction?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(element.textContent).toContain('Viewing All training · All recorded training');
+    expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
     for (const actionClass of [
       'training-sport-visibility-action',
@@ -181,10 +245,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible sport workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength or paddling workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
-    expect(element.textContent).toContain('Preparing rolling power capacity');
-    expect(element.querySelector('.training-power-systems-section')).not.toBeNull();
+    expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -257,6 +320,33 @@ describe('TrainingWorkspaceComponent', () => {
     const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
 
     expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
+  });
+
+  it('uses compact swipeable Material buttons while the all-sports icon remains fixed', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).toMatch(/\.training-mobile-shortcut-scroller\s*\{[^}]*overflow-x:\s*auto/s);
+    expect(styles).toMatch(/\.training-mobile-shortcuts\s*\{[^}]*display:\s*inline-flex[^}]*width:\s*max-content[^}]*min-height:\s*48px/s);
+    expect(styles).toMatch(/\.training-mobile-shortcut\s*\{[^}]*min-width:\s*48px[^}]*height:\s*40px[^}]*padding-inline:\s*6px/s);
+    expect(styles).toContain('border-radius: var(--mat-sys-corner-full, 999px);');
+    expect(styles).toMatch(/\.training-mobile-shortcut-selected\s*\{[^}]*background:\s*var\(--mat-sys-secondary-container\)/s);
+    expect(styles).toMatch(/\.training-mobile-shortcut-label\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*4px/s);
+    expect(styles).toMatch(/\.training-mobile-more-action\s*\{[^}]*width:\s*48px[^}]*height:\s*48px/s);
+    expect(styles).toMatch(/\.training-destination-mobile\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 48px/s);
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+    expect(template).toMatch(/<div\s+class="training-mobile-shortcuts"[\s\S]*?role="group"/);
+    expect(template).toMatch(/<button\s+mat-button[\s\S]*?class="training-mobile-shortcut"/);
+    expect(template).toContain('[attr.aria-current]');
+    expect(template).not.toContain('<mat-chip-listbox');
+    expect(template).not.toMatch(/<mat-button-toggle-group\s+class="training-mobile-shortcuts"/);
+    expect(template).toMatch(/<button\s+mat-icon-button[\s\S]*?class="training-mobile-more-action"/);
+    expect(template).toContain('matTooltip="All sports"');
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
@@ -379,7 +469,9 @@ describe('TrainingWorkspaceComponent', () => {
     const cards = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.training-insight-panel'),
     );
-    const sportCards = cards.filter(card => /Cycling load|Running rhythm/u.test(card.textContent || ''));
+    const sportCards = cards.filter(card => (
+      /Largest sport load change · Cycling|Largest rhythm change · Running/u.test(card.textContent || '')
+    ));
     const globalCards = cards.filter(card => /Overall load|Top contributors/u.test(card.textContent || ''));
     const icons = sportCards.map(card => card.querySelector<HTMLElement>('app-activity-type-icon'));
 
@@ -778,8 +870,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).not.toContain('Preparing cycling power profile');
     expect(fixture.nativeElement.querySelector('.training-performance-grid')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -817,7 +908,10 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         {
           provide: AppAuthService,
-          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
+          useValue: { user$: of({ uid: 'user-1', settings: {
+            appSettings: { trainingWorkspace: { preferredDestination: 'cycling' } },
+            trainingSettings: { visibleDisciplines: ['cycling'] },
+          } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -838,7 +932,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).not.toContain('186 W');
   });
 
-  it('renders exact-type rolling power systems for every account independently of Training sport visibility', async () => {
+  it('groups exact-type rolling power systems under the selected registered sport', async () => {
     const asOfDayMs = Date.UTC(2026, 6, 20);
     const powerSystemsEntry = (
       activityType: string,
@@ -943,13 +1037,17 @@ describe('TrainingWorkspaceComponent', () => {
         activityTypes: [
           powerSystemsEntry('Cycling', 260, true),
           powerSystemsEntry('Rowing', 280),
+          powerSystemsEntry('Elliptical Trainer', 210),
         ],
       },
     };
     const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
     const authUser$ = new BehaviorSubject({
       uid: 'user-1',
-      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+      settings: {
+        appSettings: { trainingWorkspace: { preferredDestination: 'cycling', sportShortcuts: ['swimming'] } },
+        trainingSettings: { visibleDisciplines: ['swimming'] },
+      },
     });
     const derivedMetrics = {
       watch: vi.fn(() => derivedStateSubject.asObservable()),
@@ -976,7 +1074,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
 
     const component = fixture.componentInstance;
-    expect(component.trainingPowerSystemsActivityTypes.map(item => item.activityType)).toEqual(['Cycling', 'Rowing']);
+    expect(component.trainingPowerSystemsActivityTypes.map(item => item.activityType)).toEqual(['Cycling']);
     expect(component.selectedTrainingPowerSystemsActivityType).toBe('Cycling');
     expect(fixture.nativeElement.querySelectorAll('.training-power-systems-trend')).toHaveLength(3);
     expect(fixture.nativeElement.textContent).toContain('260 W');
@@ -986,9 +1084,21 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('from 10.0 to 14.4 kJ');
     expect(fixture.nativeElement.textContent).toContain('Pmax is intentionally unavailable');
     expect(fixture.nativeElement.textContent).toContain('Unavailable');
-    expect(fixture.nativeElement.textContent).not.toContain('All sports');
+    expect(fixture.nativeElement.querySelector('.training-power-systems-selector')).toBeNull();
 
-    fixture.debugElement.query(By.css('mat-select')).triggerEventHandler('selectionChange', { value: 'Rowing' });
+    component.selectTrainingDestination('other-power', 'desktop_selector');
+    fixture.detectChanges();
+
+    expect(component.trainingPowerSystemsActivityTypes.map(item => item.activityType))
+      .toEqual(['Elliptical Trainer']);
+    expect(fixture.nativeElement.textContent).toContain('Other power activities');
+    expect(fixture.nativeElement.textContent).toContain('210 W');
+
+    component.selectTrainingDestination('overview', 'shortcut');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
+
+    component.selectTrainingDestination('rowing', 'desktop_selector');
     fixture.detectChanges();
 
     expect(component.selectedTrainingPowerSystems?.activityType).toBe('Rowing');
@@ -1004,22 +1114,24 @@ describe('TrainingWorkspaceComponent', () => {
       },
     });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-power-systems-selector')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Modeled sustained-power boundary');
     expect(fixture.nativeElement.querySelectorAll('.training-power-systems-evidence li').length)
       .toBeGreaterThan(3);
 
     authUser$.next({
       uid: 'user-2',
-      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+      settings: {
+        appSettings: { trainingWorkspace: { preferredDestination: 'cycling', sportShortcuts: ['swimming'] } },
+        trainingSettings: { visibleDisciplines: ['swimming'] },
+      },
     });
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Preparing rolling power capacity');
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
   });
 
-  it('filters every sport-specific module while leaving global training sections visible', async () => {
+  it('renders only the selected sport modules and omits global Overview sections', async () => {
     const window = (activityCount: number) => ({
       periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount,
       durationSeconds: 3600, easySeconds: 1800, moderateSeconds: 900, hardSeconds: 900,
@@ -1057,7 +1169,10 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         {
           provide: AppAuthService,
-          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
+          useValue: { user$: of({ uid: 'user-1', settings: {
+            appSettings: { trainingWorkspace: { preferredDestination: 'cycling' } },
+            trainingSettings: { visibleDisciplines: ['cycling'] },
+          } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -1085,9 +1200,104 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
     expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
-    expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
-    expect(element.textContent).toContain('TSS-backed workouts only');
-    expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
+    expect(element.textContent).toContain('Viewing Cycling · Cycling/MTB only');
+    expect(element.textContent).not.toContain('How your load is changing');
+    expect(element.querySelector('app-intensity-distribution-chart')).toBeNull();
+    expect(element.textContent).not.toContain('Readiness today');
+  });
+
+  it('renders Cycling exclusion evidence and its trajectory in fixed sport mode', async () => {
+    const trainingDurability = createExcludedCyclingDurabilityPayload();
+    const derivedState = createRouteReadyDerivedState({
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+      trainingDurability,
+    });
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: {
+            appSettings: { trainingWorkspace: { preferredDestination: 'cycling' } },
+            trainingSettings: { visibleDisciplines: ['cycling'] },
+          } }) },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(fixture.componentInstance.trainingDurabilityScopes[0].contexts).toHaveLength(1);
+    expect(element.querySelector('app-training-durability-trajectory-chart')).not.toBeNull();
+    expect(element.textContent).toContain('Cycling · Power');
+    expect(element.textContent).toContain('No recorded power 1');
+    expect(element.textContent).toContain('Too short 1');
+    expect(element.textContent).not.toContain('Preparing durability evidence');
+  });
+
+  it('keeps selected Cycling durability visible while retained snapshots refresh', async () => {
+    const window = (activityCount: number) => ({
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      activityCount,
+      durationSeconds: activityCount ? 3_600 : 0,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+    });
+    const trainingSummary = {
+      asOfDayMs: 2,
+      currentWindowDays: 28,
+      baselineWindowDays: 84,
+      disciplines: [{ discipline: 'cycling' as const, current28d: window(2), baseline28d: window(2) }],
+    };
+    const trainingDurability = createExcludedCyclingDurabilityPayload();
+    const derivedState = new BehaviorSubject(createRouteReadyDerivedState({ trainingSummary, trainingDurability }));
+    const derivedMetrics = { watch: vi.fn(() => derivedState.asObservable()), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({
+          uid: 'user-1',
+          settings: { appSettings: { trainingWorkspace: { preferredDestination: 'cycling' } } },
+        }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.visibleDisciplines).toEqual(['cycling']);
+
+    derivedState.next(createRouteReadyDerivedState({
+      trainingSummary,
+      trainingSummaryStatus: 'building',
+      trainingDurability,
+      trainingDurabilityStatus: 'building',
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.visibleDisciplines).toEqual(['cycling']);
+    expect(fixture.nativeElement.querySelector('app-training-durability-trajectory-chart')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Updating durability evidence');
   });
 
   it('renders Swimming-only detail cards without capacity or power placeholders', async () => {
@@ -1115,7 +1325,10 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         {
           provide: AppAuthService,
-          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
+          useValue: { user$: of({ uid: 'user-1', settings: {
+            appSettings: { trainingWorkspace: { preferredDestination: 'swimming' } },
+            trainingSettings: { visibleDisciplines: ['swimming'] },
+          } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -1134,10 +1347,11 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-power-curve-chart')).toBeNull();
     expect(element.textContent).not.toContain('Preparing capacity evidence');
     expect(element.textContent).not.toContain('capacity evidence');
-    expect(element.textContent).toContain('Swimming details · Overall comparison uses all training');
+    expect(element.textContent).toContain('Viewing Swimming · Swimming only');
+    expect(element.textContent).not.toContain('Readiness today');
   });
 
-  it('applies a saved visibility result immediately while settings propagation catches up', () => {
+  it('applies saved shortcuts immediately while settings propagation catches up', () => {
     const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
     const dialogRef = { afterClosed: () => afterClosed };
     const dialog = { open: vi.fn(() => dialogRef) };
@@ -1169,21 +1383,413 @@ describe('TrainingWorkspaceComponent', () => {
         }],
       },
     };
+    (component as any).currentUserUID = 'user-1';
     (component as any).refreshSportSpecificViewModels();
-    expect(component.visibleDisciplines).toEqual(['running']);
+    expect(component.sportShortcuts).toEqual(['running']);
+    expect(component.visibleDisciplines).toEqual([
+      'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength', 'paddling',
+    ]);
 
     component.openTrainingSportVisibilityDialog();
     expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: { visibleDisciplines: ['running'], isAutomatic: true },
+      data: { userUID: 'user-1', visibleDisciplines: ['running'], isAutomatic: true },
     }));
     afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
 
-    expect(component.visibleDisciplines).toEqual(['cycling']);
+    expect(component.sportShortcuts).toEqual(['cycling']);
+    expect(component.selectedTrainingDestination).toBe('overview');
     expect(component.isAutomaticSportVisibility).toBe(false);
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_sport_visibility_saved', {
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_sport_shortcuts_saved', {
       selection_mode: 'fixed',
-      selection_count: 1,
+      shortcut_count: 1,
     });
+  });
+
+  it('coalesces rapid destination changes while persisting the latest account default', async () => {
+    const firstWrite = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn()
+        .mockImplementationOnce(() => firstWrite.promise)
+        .mockResolvedValue(undefined),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    (component as any).currentUserUID = 'user-1';
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    component.selectTrainingDestination('rowing', 'desktop_selector');
+    component.selectTrainingDestination('swimming', 'mobile_selector');
+
+    expect(component.selectedTrainingDestination).toBe('swimming');
+    expect(component.isSavingDestination).toBe(true);
+    expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledTimes(1);
+    expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledWith('user-1', {
+      preferredDestination: 'cycling',
+    });
+
+    firstWrite.resolve();
+    await vi.waitFor(() => {
+      expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledTimes(2);
+      expect(component.isSavingDestination).toBe(false);
+    });
+    expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      preferredDestination: 'swimming',
+    });
+    expect(preferenceWriter.updateTrainingWorkspacePreferences).not.toHaveBeenCalledWith('user-1', {
+      preferredDestination: 'rowing',
+    });
+    expect(analyticsService.logEvent).toHaveBeenLastCalledWith('training_destination_saved', {
+      destination_type: 'sport',
+      sport_family: 'swimming',
+      selection_source: 'mobile_selector',
+    });
+  });
+
+  it('clears the desktop selector after placing an off-shortcut sport in the toggle row', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const select = { value: 'walking-hiking' };
+
+    component.selectDesktopTrainingDestination('walking-hiking', select as any);
+
+    expect(component.selectedTrainingDestination).toBe('walking-hiking');
+    expect(component.visibleSportShortcuts[0]).toBe('walking-hiking');
+    expect(component.desktopAllSportsSelectorValue).toBeNull();
+    expect(select.value).toBeNull();
+  });
+
+  it('keeps the selected shortcut in a stable slot while automatic sport evidence hydrates', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const disciplineSummary = (discipline: string, durationSeconds: number) => ({
+      discipline,
+      current28d: {
+        periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+        durationSeconds, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+      },
+      baseline28d: {
+        periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+        durationSeconds, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+      },
+    });
+
+    component.selectedTrainingDestination = 'strength';
+    (component as any).refreshTrainingSportVisibility();
+    expect(component.visibleSportShortcuts).toEqual(['strength']);
+
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          disciplineSummary('cycling', 4_000),
+          disciplineSummary('strength', 3_000),
+          disciplineSummary('swimming', 2_000),
+          disciplineSummary('running', 1_000),
+        ],
+      } as any,
+    };
+    (component as any).refreshTrainingSportVisibility();
+
+    expect(component.sportShortcuts).toEqual(['cycling', 'strength', 'swimming', 'running']);
+    expect(component.visibleSportShortcuts).toEqual(['strength', 'cycling', 'swimming', 'running']);
+
+    component.derivedState = {
+      ...component.derivedState,
+      trainingSummary: {
+        asOfDayMs: 3,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          disciplineSummary('rowing', 5_000),
+          disciplineSummary('cycling', 4_000),
+          disciplineSummary('swimming', 3_000),
+          disciplineSummary('strength', 2_000),
+        ],
+      } as any,
+    };
+    (component as any).refreshTrainingSportVisibility();
+
+    expect(component.sportShortcuts).toEqual(['rowing', 'cycling', 'swimming', 'strength']);
+    expect(component.visibleSportShortcuts).toEqual(['strength', 'cycling', 'swimming', 'rowing']);
+  });
+
+  it('opens the complete mobile sport picker and applies its destination result', () => {
+    const ngZone = { run: vi.fn((callback: () => void) => callback()) };
+    const bottomSheetRef = {
+      dismiss: vi.fn(),
+      afterDismissed: () => of({ kind: 'destination' as const, destination: 'cycling' as const }),
+    };
+    const bottomSheet = { open: vi.fn(() => bottomSheetRef) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      ngZone as any,
+      analyticsService as any,
+      null,
+      'en-US',
+      null,
+      null,
+      bottomSheet as any,
+    );
+    component.sportShortcuts = ['cycling', 'swimming'];
+    component.isAutomaticSportVisibility = true;
+    component.trainingDestinationOptions = [
+      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring' },
+      {
+        id: 'cycling',
+        label: 'Cycling',
+        details: 'Cycling',
+        sport: { id: 'cycling', iconActivityType: 'Cycling' } as any,
+        materialIcon: null,
+      },
+    ];
+
+    component.openTrainingMobileDestinationSheet();
+
+    expect(bottomSheet.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      ariaLabel: 'Choose training view',
+      data: expect.objectContaining({
+        shortcutIds: ['cycling', 'swimming'],
+        selectedDestination: 'overview',
+        isAutomatic: true,
+        options: expect.arrayContaining([
+          expect.objectContaining({ id: 'cycling', iconActivityType: 'Cycling' }),
+        ]),
+      }),
+    }));
+    expect(ngZone.run).toHaveBeenCalledOnce();
+    expect(component.selectedTrainingDestination).toBe('cycling');
+  });
+
+  it('opens shortcut management after the mobile picker dismisses', () => {
+    const dialogRef = { afterClosed: () => NEVER };
+    const dialog = { open: vi.fn(() => dialogRef) };
+    const bottomSheet = {
+      open: vi.fn(() => ({
+        dismiss: vi.fn(),
+        afterDismissed: () => of({ kind: 'manage_shortcuts' as const }),
+      })),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      null,
+      null,
+      bottomSheet as any,
+    );
+    (component as any).currentUserUID = 'user-1';
+    component.sportShortcuts = ['cycling'];
+
+    component.openTrainingMobileDestinationSheet();
+
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: {
+        userUID: 'user-1',
+        visibleDisciplines: ['cycling'],
+        isAutomatic: true,
+      },
+    }));
+  });
+
+  it('keeps the selected destination open and reports a failed account-default write', async () => {
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn().mockRejectedValue(new Error('offline')),
+    };
+    const snackBar = { open: vi.fn() };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      snackBar as any,
+    );
+    (component as any).currentUserUID = 'user-1';
+
+    component.selectTrainingDestination('cycling', 'desktop_selector');
+
+    await vi.waitFor(() => expect(component.isSavingDestination).toBe(false));
+    expect(component.selectedTrainingDestination).toBe('cycling');
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'This view is open, but its account default was not saved.',
+      'Dismiss',
+      { duration: 6000 },
+    );
+    expect(analyticsService.logEvent).not.toHaveBeenCalledWith(
+      'training_destination_saved',
+      expect.anything(),
+    );
+  });
+
+  it('does not accept a local Firestore echo until the destination write is acknowledged', async () => {
+    const write = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn(() => write.promise),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    (component as any).currentUserUID = 'user-1';
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'cycling' };
+    (component as any).reconcilePreferredTrainingDestination();
+
+    expect((component as any).preferredDestinationOverride).toBe('cycling');
+    write.reject(new Error('permission-denied'));
+    await vi.waitFor(() => expect(component.isSavingDestination).toBe(false));
+
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('cycling');
+  });
+
+  it('ignores an acknowledged intermediate echo during rapid destination changes', async () => {
+    const firstWrite = createDeferredVoidPromise();
+    const finalWrite = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn()
+        .mockImplementationOnce(() => firstWrite.promise)
+        .mockImplementationOnce(() => finalWrite.promise),
+    };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    (component as any).currentUserUID = 'user-1';
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'overview' };
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    component.selectTrainingDestination('swimming', 'mobile_selector');
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'cycling' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('swimming');
+
+    firstWrite.resolve();
+    await vi.waitFor(() => expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledTimes(2));
+    (component as any).reconcilePreferredTrainingDestination();
+    expect(component.selectedTrainingDestination).toBe('swimming');
+
+    (component as any).trainingWorkspacePreferences = { preferredDestination: 'swimming' };
+    (component as any).reconcilePreferredTrainingDestination();
+    expect((component as any).preferredDestinationOverride).toBe('swimming');
+    finalWrite.resolve();
+    await vi.waitFor(() => expect(component.isSavingDestination).toBe(false));
+
+    expect(component.selectedTrainingDestination).toBe('swimming');
+    expect((component as any).preferredDestinationOverride).toBeNull();
+  });
+
+  it('drops queued destination writes and optimistic state when the account changes', async () => {
+    const firstWrite = createDeferredVoidPromise();
+    const preferenceWriter = {
+      updateTrainingWorkspacePreferences: vi.fn(() => firstWrite.promise),
+    };
+    const authUser$ = new BehaviorSubject<any>({ uid: 'user-1' });
+    const component = new TrainingWorkspaceComponent(
+      { user$: authUser$ } as any,
+      { watch: vi.fn(() => NEVER), ensureForDashboard: vi.fn() } as any,
+      createSleepService() as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+      null,
+      'en-US',
+      preferenceWriter,
+      null,
+    );
+    component.ngOnInit();
+
+    component.selectTrainingDestination('cycling', 'shortcut');
+    component.selectTrainingDestination('swimming', 'mobile_selector');
+    authUser$.next({
+      uid: 'user-2',
+      settings: { appSettings: { trainingWorkspace: { preferredDestination: 'rowing' } } },
+    });
+
+    expect(component.selectedTrainingDestination).toBe('rowing');
+    firstWrite.resolve();
+    await vi.waitFor(() => expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledTimes(1));
+    expect(preferenceWriter.updateTrainingWorkspacePreferences).toHaveBeenCalledWith('user-1', {
+      preferredDestination: 'cycling',
+    });
+    expect(analyticsService.logEvent).not.toHaveBeenCalledWith(
+      'training_destination_saved',
+      expect.anything(),
+    );
+
+    component.ngOnDestroy();
+    authUser$.complete();
   });
 
   it('opens the benchmark picker as a wide dialog bounded by the viewport', () => {
@@ -1282,16 +1888,18 @@ describe('TrainingWorkspaceComponent', () => {
       dialog as any,
       { markForCheck: vi.fn() } as any,
     );
-    (component as any).trainingSettings = { visibleDisciplines: ['cycling'] };
+    (component as any).currentUserUID = 'user-1';
+    (component as any).trainingWorkspacePreferences = { sportShortcuts: ['cycling'] };
+    (component as any).refreshSportSpecificViewModels();
 
     component.openTrainingSportVisibilityDialog();
     afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
 
     expect((component as any).pendingTrainingVisibleDisciplines).toBeUndefined();
-    (component as any).trainingSettings = { visibleDisciplines: ['running'] };
+    (component as any).trainingWorkspacePreferences = { sportShortcuts: ['running'] };
     (component as any).reconcilePendingTrainingSportVisibility();
     (component as any).refreshSportSpecificViewModels();
-    expect(component.visibleDisciplines).toEqual(['running']);
+    expect(component.sportShortcuts).toEqual(['running']);
   });
 
   it('releases a pending override when a newer persisted choice arrives from another tab', () => {
@@ -1306,16 +1914,19 @@ describe('TrainingWorkspaceComponent', () => {
       { markForCheck: vi.fn() } as any,
     );
 
+    (component as any).currentUserUID = 'user-1';
+    (component as any).refreshSportSpecificViewModels();
+
     component.openTrainingSportVisibilityDialog();
     afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
-    expect(component.visibleDisciplines).toEqual(['cycling']);
+    expect(component.sportShortcuts).toEqual(['cycling']);
 
-    (component as any).trainingSettings = { visibleDisciplines: ['running'] };
+    (component as any).trainingWorkspacePreferences = { sportShortcuts: ['running'] };
     (component as any).reconcilePendingTrainingSportVisibility();
     (component as any).refreshSportSpecificViewModels();
 
     expect((component as any).pendingTrainingVisibleDisciplines).toBeUndefined();
-    expect(component.visibleDisciplines).toEqual(['running']);
+    expect(component.sportShortcuts).toEqual(['running']);
   });
 
   it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {
@@ -1714,7 +2325,10 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
-          settings: { trainingSettings: { visibleDisciplines: ['cycling'], buildBenchmarks: { cycling: selection } } },
+          settings: {
+            appSettings: { trainingWorkspace: { preferredDestination: 'cycling' } },
+            trainingSettings: { visibleDisciplines: ['cycling'], buildBenchmarks: { cycling: selection } },
+          },
         }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -1819,7 +2433,8 @@ describe('TrainingWorkspaceComponent', () => {
         ],
       },
     } as any;
-    component.visibleDisciplines = ['cycling'];
+    component.selectedTrainingDestination = 'cycling';
+    (component as any).refreshTrainingSportVisibility();
     (component as any).trainingBuildBenchmarkDialogRef = { componentInstance: { updateEventSuggestions } };
     (component as any).trainingBuildBenchmarkDialogDiscipline = 'cycling';
 
@@ -1900,7 +2515,8 @@ describe('TrainingWorkspaceComponent', () => {
     const firstSection = fixture.nativeElement.querySelector('.training-section');
     expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
     expect(routeStatus?.textContent).toContain('Available last completed values');
-    expect(pageHeader?.nextElementSibling).toBe(firstSection);
+    expect(pageHeader?.nextElementSibling?.classList).toContain('training-destination-navigation');
+    expect(pageHeader?.nextElementSibling?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
     derivedState$.next({
@@ -1953,6 +2569,24 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });
 
+  it('includes the visible sleep-history snapshot in the overview route status', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({
+      trainingBuildComparisonStatus: 'failed',
+    });
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
   it('ignores durability failures unless a visible sport supports durability', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
@@ -1963,6 +2597,8 @@ describe('TrainingWorkspaceComponent', () => {
       { markForCheck: vi.fn() } as any,
     );
     component.derivedState = createRouteReadyDerivedState({ trainingDurabilityStatus: 'failed' });
+    component.isOverviewDestination = false;
+    component.isSportDestination = true;
     component.visibleTrainingCapabilities = new Set(['best-build']);
 
     (component as any).refreshDerivedMetricsRouteStatus();

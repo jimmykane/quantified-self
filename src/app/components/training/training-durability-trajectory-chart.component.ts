@@ -182,6 +182,12 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
                 value: formatActivityCount(point.sourceActivityCount),
                 markerColor: style.axisColor,
               }]),
+            ...(point.missingEvidenceActivityCount > 0
+              ? [{
+                label: 'Processed evidence missing',
+                value: formatActivityCount(point.missingEvidenceActivityCount),
+              }]
+              : []),
             { label: 'Eligible', value: formatActivityCount(point.eligibleSampleCount) },
           ];
           return renderDashboardEChartsTooltipCard(style, {
@@ -252,6 +258,18 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
               return `${point.eligibleSampleCount}/${point.sourceActivityCount}`;
             }
             if (point.candidateActivityCount > 0) {
+              if (
+                trajectory.sourceActivityLabel === 'Power recorded'
+                && point.missingEvidenceActivityCount > 0
+              ) {
+                return 'Power unknown';
+              }
+              if (
+                trajectory.sourceActivityLabel === 'Power recorded'
+                && point.exclusionReasons.some(exclusion => exclusion.reason === 'unsupported-context')
+              ) {
+                return 'Unsupported';
+              }
               return trajectory.sourceActivityLabel === 'Power recorded' ? 'No power' : '0 eligible';
             }
             return 'No activity';

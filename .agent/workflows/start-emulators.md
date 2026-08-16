@@ -13,8 +13,10 @@ cd functions && npm run build
 
 ## 2. Start Emulators
 ```bash
-firebase emulators:start
+firebase emulators:start --only auth,functions,firestore,storage
 ```
+
+No service-account JSON or Google Application Default Credentials are required while Admin SDK traffic stays on these emulators. Provider secrets, when needed, come from `functions/.secret.local`; never add a Firebase Admin private key to the Functions source tree.
 
 ## Emulator Ports
 - Auth: http://localhost:9099

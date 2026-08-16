@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New COROS delivery options</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .letter { width:100% !important; table-layout:fixed !important; }
+      .letter-body { padding:32px 22px !important; overflow-wrap:break-word !important; word-wrap:break-word !important; }
+      .letter-footer { padding:0 22px 30px !important; overflow-wrap:break-word !important; word-wrap:break-word !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#ffffff; color:#172033; font-family:Georgia,'Times New Roman',serif;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">
+    Upload activities and routes manually, or automate delivery from your other connected services.
+  </div>
+  <div role="article" aria-roledescription="email" aria-label="A COROS product update from Dimitrios at Quantified Self">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; table-layout:fixed; background-color:#ffffff;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" class="letter" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; max-width:600px; table-layout:fixed;">
+            <tr>
+              <td class="letter-body" style="padding:44px 42px; font-size:18px; line-height:30px; color:#27334a;">
+                <p style="margin:0 0 24px;">Hi {{#if first_name}}{{first_name}}{{else}}there{{/if}},</p>
+
+                <p style="margin:0 0 24px;">Your COROS connection in Quantified Self can now do more.</p>
+
+                <p style="margin:0 0 24px;">You can send activities and routes from Quantified Self to your COROS account—manually when you choose, or automatically from supported connected services.</p>
+
+                <p style="margin:0 0 24px;">These changes are available in Quantified Self v10.11.0.</p>
+
+                <p style="margin:0 0 10px;"><strong>Activities</strong></p>
+                <ul style="margin:0 0 24px; padding-left:24px;">
+                  <li style="margin:0 0 8px;">Upload a FIT activity file directly to COROS.</li>
+                  <li style="margin:0 0 8px;">Automatically send new FIT activities from Garmin, Suunto, or Wahoo.</li>
+                  <li style="margin:0 0 8px;">Use <strong>Sync past activities</strong> to send a selected date range already stored in Quantified Self without enabling automatic delivery for future activities.</li>
+                </ul>
+
+                <p style="margin:0 0 10px;"><strong>Routes</strong></p>
+                <ul style="margin:0 0 24px; padding-left:24px;">
+                  <li style="margin:0 0 8px;">Upload a GPX or FIT route directly to COROS.</li>
+                  <li style="margin:0 0 8px;">Send saved routes from Quantified Self individually or in bulk.</li>
+                  <li style="margin:0 0 8px;">If you use Suunto, automatically send new and updated Suunto routes saved in Quantified Self—or send your existing routes once without enabling future delivery.</li>
+                </ul>
+
+                <p style="margin:0 0 10px;"><strong>You remain in control</strong></p>
+                <p style="margin:0 0 24px;">All automatic delivery options are off by default. Nothing is forwarded until you explicitly enable a direction or start an upload. These tools require Pro and active service connections.</p>
+
+                <p style="margin:0 0 28px;"><a href="{{coros_tools_url}}" style="color:#174ea6; font-family:Arial,Helvetica,sans-serif; font-weight:700; text-decoration:none;">Open your COROS tools →</a></p>
+
+                <p style="margin:0 0 24px;">If you have a question, feature request, or notice anything confusing, simply reply to this email. I read every reply personally.</p>
+
+                <p style="margin:0 0 28px;">Best regards,<br>Dimitrios<br><span style="font-size:16px; color:#5d687c;">Founder, Quantified Self</span><br><a href="https://quantified-self.io" style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#5d687c; text-decoration:none;">quantified-self.io</a></p>
+              </td>
+            </tr>
+            <tr>
+              <td class="letter-footer" style="padding:0 42px 36px; font-family:Arial,Helvetica,sans-serif; font-size:12px; line-height:18px; color:#6b7485;">
+                You received this product update because COROS is connected to your Quantified Self account and you opted in to marketing updates. You can change this preference in <a href="{{settings_url}}" style="color:#5d687c;">account settings</a>.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

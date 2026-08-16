@@ -155,7 +155,19 @@
   }
 
   @if (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync') {
-  <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'auto-sync'">
+  <section class="provider-tool-panel" [class.provider-tool-panel--focused]="showOnlyActiveProviderTool"
+    [hidden]="activeProviderTool !== 'auto-sync'">
+    @if (showOnlyActiveProviderTool) {
+    <mat-button-toggle-group
+      class="activity-sync-destination-selector"
+      aria-label="Activity sync destination"
+      [value]="activeActivitySyncDestination"
+      (change)="activeActivitySyncDestination = $event.value">
+      <mat-button-toggle value="suunto">To Suunto</mat-button-toggle>
+      <mat-button-toggle value="coros">To COROS</mat-button-toggle>
+    </mat-button-toggle-group>
+    }
+    @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'suunto') {
     <app-activity-sync-route-control
       [user]="user"
       [hasProAccess]="hasProAccess"
@@ -163,6 +175,17 @@
       [destinationServiceName]="serviceNames.SuuntoApp"
       [sourceConnected]="isConnectedToService()">
     </app-activity-sync-route-control>
+    }
+    @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'coros') {
+    <app-activity-sync-route-control
+      [user]="user"
+      [hasProAccess]="hasProAccess"
+      [sourceServiceName]="serviceName"
+      [destinationServiceName]="serviceNames.COROSAPI"
+      [sourceConnected]="isConnectedToService()"
+      [showTopDivider]="!showOnlyActiveProviderTool">
+    </app-activity-sync-route-control>
+    }
   </section>
   }
   }

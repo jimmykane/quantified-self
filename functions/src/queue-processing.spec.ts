@@ -110,6 +110,10 @@ vi.mock('./queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('event-id'),
 }));
 
+vi.mock('./activity-sync/outbound-fingerprint', () => ({
+    isActivitySyncOutboundEcho: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
     TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {

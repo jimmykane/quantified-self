@@ -34,16 +34,6 @@
           <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
       }
-      <button
-        mat-button
-        type="button"
-        class="training-sport-visibility-action"
-        (click)="openTrainingSportVisibilityDialog()"
-        [attr.aria-label]="visibleDisciplinesAccessibleLabel"
-      >
-        <mat-icon aria-hidden="true">tune</mat-icon>
-        <span class="training-sport-visibility-action-label">{{ visibleDisciplinesCompactLabel }}</span>
-      </button>
       <a
         mat-button
         class="training-feedback-action"
@@ -76,16 +66,146 @@
     </div>
   </app-page-header>
 
+  <nav class="training-destination-navigation" aria-label="Training analysis destination">
+    <div class="training-destination-desktop">
+      <mat-button-toggle-group
+        class="training-destination-shortcuts"
+        [value]="selectedTrainingDestination"
+        aria-label="Training destinations"
+        hideSingleSelectionIndicator
+        (change)="selectTrainingDestination($event.value, 'shortcut')">
+        <mat-button-toggle value="overview">
+          <mat-icon aria-hidden="true">monitoring</mat-icon>
+          <span>All training</span>
+        </mat-button-toggle>
+        @for (option of visibleSportShortcutOptions; track option.id) {
+          <mat-button-toggle [value]="option.id">
+            @if (option.sport; as sport) {
+              <app-activity-type-icon
+                [activityType]="sport.iconActivityType"
+                size="18px"
+                aria-hidden="true">
+              </app-activity-type-icon>
+            }
+            <span>{{ option.label }}</span>
+          </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-all-sports-selector">
+        <mat-label>All sports</mat-label>
+        <mat-select
+          #desktopAllSportsSelect
+          [value]="desktopAllSportsSelectorValue"
+          (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
+          @for (option of trainingDestinationOptions; track option.id) {
+            @if (option.id !== 'overview') {
+              <mat-option [value]="option.id">
+                <span class="training-destination-option">
+                  @if (option.sport; as sport) {
+                    <app-activity-type-icon
+                      [activityType]="sport.iconActivityType"
+                      size="18px"
+                      aria-hidden="true">
+                    </app-activity-type-icon>
+                  } @else if (option.materialIcon) {
+                    <mat-icon aria-hidden="true">{{ option.materialIcon }}</mat-icon>
+                  }
+                  <span>{{ option.label }}</span>
+                </span>
+              </mat-option>
+            }
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <button
+        mat-button
+        type="button"
+        class="training-sport-visibility-action"
+        (click)="openTrainingSportVisibilityDialog()"
+        [matTooltip]="sportShortcutsCompactLabel"
+        [attr.aria-label]="sportShortcutsAccessibleLabel">
+        <mat-icon aria-hidden="true">tune</mat-icon>
+        <span>Shortcuts</span>
+      </button>
+    </div>
+
+    <div class="training-destination-mobile">
+      <div #mobileDestinationScroller class="training-mobile-shortcut-scroller">
+        <div
+          class="training-mobile-shortcuts"
+          role="group"
+          aria-label="Training shortcuts">
+          <button
+            mat-button
+            type="button"
+            class="training-mobile-shortcut"
+            [class.training-mobile-shortcut-selected]="selectedTrainingDestination === 'overview'"
+            [attr.aria-current]="selectedTrainingDestination === 'overview' ? 'page' : null"
+            aria-label="View all training"
+            (click)="selectTrainingDestination('overview', 'mobile_selector')">
+            <span class="training-mobile-shortcut-label">
+              <mat-icon aria-hidden="true">monitoring</mat-icon>
+              <span>All</span>
+            </span>
+          </button>
+          @for (option of visibleSportShortcutOptions; track option.id) {
+            <button
+              mat-button
+              type="button"
+              class="training-mobile-shortcut"
+              [class.training-mobile-shortcut-selected]="selectedTrainingDestination === option.id"
+              [attr.aria-current]="selectedTrainingDestination === option.id ? 'page' : null"
+              (click)="selectTrainingDestination(option.id, 'mobile_selector')">
+              <span class="training-mobile-shortcut-label">
+                @if (option.sport; as sport) {
+                  <app-activity-type-icon
+                    [activityType]="sport.iconActivityType"
+                    size="16px"
+                    aria-hidden="true">
+                  </app-activity-type-icon>
+                }
+                <span>{{ option.label }}</span>
+              </span>
+            </button>
+          }
+        </div>
+      </div>
+      <button
+        mat-icon-button
+        type="button"
+        class="training-mobile-more-action"
+        aria-haspopup="dialog"
+        aria-label="Choose from all training sports"
+        matTooltip="All sports"
+        (click)="openTrainingMobileDestinationSheet()">
+        <mat-icon aria-hidden="true">expand_more</mat-icon>
+      </button>
+    </div>
+
+    <div class="training-destination-scope" aria-live="polite">
+      <span>Viewing <strong>{{ trainingDestinationLabel }}</strong> · {{ trainingDestinationScopeLabel }}</span>
+      @if (isSavingDestination) {
+        <span class="training-destination-saving" role="status">
+          <mat-spinner diameter="16"></mat-spinner>
+          Saving account default
+        </span>
+      }
+    </div>
+  </nav>
+
   @if (isLoading) {
     <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>
   } @else {
+    @if (isOverviewDestination) {
     <section class="training-section training-status" aria-labelledby="training-status-title">
       <div class="training-section-heading">
         <div>
           <p>Your training, in context</p>
           <h2 id="training-status-title">Compared with your usual 28 days</h2>
         </div>
-        <span class="training-section-note">{{ visibleDisciplinesScopeLabel }} details · Overall comparison uses all training</span>
+        <span class="training-section-note">All training</span>
       </div>
       <div class="training-status-grid">
         <article class="training-state-panel qs-glass-card-panel">
@@ -323,14 +443,16 @@
         </article>
       </div>
     </section>
+    }
 
+    @if (isSportDestination) {
     <section class="training-section" aria-labelledby="training-build-title">
       <div class="training-section-heading">
         <div>
           <p>Historical reference</p>
           <h2 id="training-build-title">Best build vs now</h2>
         </div>
-        <span class="training-section-note">Choose one benchmark per sport</span>
+        <span class="training-section-note">{{ trainingDestinationScopeLabel }} · Sleep follows the same date windows and is not sport-filtered</span>
       </div>
       <div class="training-build-grid">
         @for (card of trainingBuildCards; track card.discipline) {
@@ -457,11 +579,13 @@
             }
           </article>
         } @empty {
-          <p class="training-empty-state">No sport-specific benchmark cards qualify yet. Choose sports shown to set one manually.</p>
+          <p class="training-empty-state">No benchmark card is available for {{ trainingDestinationLabel }} yet.</p>
         }
       </div>
     </section>
+    }
 
+    @if (isOverviewDestination) {
     <section class="training-section training-explanation-section" aria-labelledby="training-insights-title">
       <div class="training-section-heading">
         <div>
@@ -573,17 +697,20 @@
         </dl>
       </div>
     </section>
+    }
 
+    @if (!isOtherPowerDestination) {
     <section class="training-section" aria-labelledby="training-mix-title">
       <div class="training-section-heading">
         <div>
-          <p>Training mix</p>
-          <h2 id="training-mix-title">Where your effort is going</h2>
+          <p>{{ isOverviewDestination ? 'Training mix' : trainingDestinationLabel + ' analysis' }}</p>
+          <h2 id="training-mix-title">{{ isOverviewDestination ? 'Where your effort is going' : 'Current 28 days vs usual' }}</h2>
         </div>
-        <span class="training-section-note">Intensity chart uses all eligible zone data</span>
+        <span class="training-section-note">{{ isOverviewDestination ? 'All training · intensity uses all eligible zone data' : trainingDestinationScopeLabel }}</span>
       </div>
       <div
         class="training-mix-grid"
+        [class.training-mix-grid--overview]="isOverviewDestination"
         [class.training-mix-grid--single]="trainingMixDisciplines.length === 1"
         [class.training-mix-grid--two]="trainingMixDisciplines.length === 2"
         [class.training-mix-grid--three]="trainingMixDisciplines.length === 3">
@@ -591,9 +718,28 @@
           <p class="training-empty-state">Training mix comparison is unavailable right now.</p>
         } @else if (trainingComparisonState !== 'preparing') {
           @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
+            @if (isOverviewDestination) {
+              <article class="training-overview-sport-panel qs-glass-card-panel">
+                <header>
+                  <div>
+                    <app-activity-type-icon
+                      [activityType]="discipline.iconActivityType"
+                      size="20px"
+                      aria-hidden="true">
+                    </app-activity-type-icon>
+                    <h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3>
+                  </div>
+                  <span>Last 28 days</span>
+                </header>
+                <dl>
+                  <div><dt>Workouts</dt><dd><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text><small>usual {{ discipline.baselineActivityCountText }}</small></dd></div>
+                  <div><dt>Time</dt><dd><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text><small>usual {{ discipline.baselineDurationText }}</small></dd></div>
+                </dl>
+              </article>
+            } @else {
             <article class="training-mix-panel qs-glass-card-panel" [class.training-mix-panel--single]="trainingMixDisciplines.length === 1">
               <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
-              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>workouts</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time</span></div>
+              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>workouts · usual {{ discipline.baselineActivityCountText }}</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time · usual {{ discipline.baselineDurationText }}</span></div>
               <div class="training-card-guidance training-card-guidance--compact">
                 <p><strong>What this means:</strong>&nbsp;{{ discipline.guidance.conclusionText }}</p>
                 <small>{{ discipline.guidance.evidenceText }}</small>
@@ -646,15 +792,16 @@
                 </div>
               }
             </article>
+            }
           } @empty {
             <p class="training-empty-state">No eligible {{ visibleDisciplinesActivityLabel }} in the last 28 days.</p>
           }
         }
-        @if (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length) {
+        @if (isOverviewDestination && (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length)) {
           <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
             <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
           </article>
-        } @else {
+        } @else if (isOverviewDestination) {
           <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
             @if (derivedState.intensityDistributionStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
             @else { <mat-spinner diameter="24"></mat-spinner> }
@@ -666,13 +813,16 @@
         }
       </div>
     </section>
+    }
 
+    @if (isPowerSystemsSectionVisible) {
     <section class="training-section training-power-systems-section" aria-labelledby="training-power-systems-title">
       <div class="training-section-heading training-power-systems-heading">
         <div>
           <p>Power systems</p>
           <h2 id="training-power-systems-title">42-day rolling capacity</h2>
         </div>
+        <span class="training-section-note">{{ isOtherPowerDestination ? 'Other power activities' : trainingDestinationScopeLabel }}</span>
         @if (trainingPowerSystemsActivityTypes.length > 1) {
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-power-systems-selector">
             <mat-label>Activity type</mat-label>
@@ -759,7 +909,7 @@
           <p class="training-power-systems-boundary">Capacity is isolated by exact activity type and calculated from workout power curves. It is not TSS, FTP, fitness, fatigue, or readiness.</p>
         </article>
       } @else if (derivedState.trainingPowerSystemsStatus === 'ready') {
-        <p class="training-empty-state">No canonical activity type has a usable power curve in the latest 12 weeks.</p>
+        <p class="training-empty-state">{{ isOtherPowerDestination ? 'No unmatched exact power activity currently has usable evidence. This saved view stays open until you choose another destination.' : 'No matching exact activity type has a usable power curve in the latest 12 weeks.' }}</p>
       } @else {
         <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
           <mat-spinner diameter="24"></mat-spinner>
@@ -770,6 +920,7 @@
         </article>
       }
     </section>
+    }
 
     @if (isPerformanceSectionVisible) {
     <section class="training-section" aria-labelledby="performance-title">
@@ -778,7 +929,7 @@
           <p>Performance markers</p>
           <h2 id="performance-title">Settings vs recent evidence</h2>
         </div>
-        <span class="training-section-note">Imported source and observation timing stay visible</span>
+        <span class="training-section-note">{{ trainingDestinationScopeLabel }} · imported source and observation timing stay visible</span>
       </div>
       <div class="training-performance-grid">
         @if (isCapacityVisible) {
@@ -817,7 +968,7 @@
 
             </article>
             } @empty {
-              <p class="training-empty-state">No capacity snapshot is available for the sports shown.</p>
+              <p class="training-empty-state">No capacity snapshot is available for {{ trainingDestinationLabel }}.</p>
             }
           } @else {
             <div class="training-capacity-loading qs-glass-card-panel" role="status">
@@ -917,7 +1068,7 @@
           } @else {
             <div class="training-capacity-loading" role="status">
               <mat-spinner diameter="24"></mat-spinner>
-              <div><strong>Preparing durability evidence</strong><p>Reading comparable workout evidence for the sports shown.</p></div>
+              <div><strong>Preparing durability evidence</strong><p>Reading comparable {{ trainingDestinationLabel }} workout evidence.</p></div>
             </div>
           }
         </article>
@@ -994,6 +1145,7 @@
     </section>
     }
 
+    @if (isOverviewDestination) {
     <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
       <div class="training-section-heading">
         <div>
@@ -1055,6 +1207,7 @@
         }
       </article>
     </section>
+    }
   }
 </main>
 

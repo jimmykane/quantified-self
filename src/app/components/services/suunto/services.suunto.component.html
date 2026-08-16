@@ -376,6 +376,15 @@
         }
       </section>
       }
+      <app-route-delivery-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.COROSAPI"
+        [sourceConnected]="isServiceConnected"
+        [sourceReconnectRequired]="isReconnectRequired"
+        [showTopDivider]="true">
+      </app-route-delivery-sync-route-control>
       } @else {
       <app-status-info type="info" title="Connect Account First">
         You need to connect your Suunto account before importing routes.
@@ -438,7 +447,19 @@
     }
 
     @if (!showOnlyActiveProviderTool || activeProviderTool === 'activity-sync') {
-    <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'activity-sync'">
+    <section class="provider-tool-panel" [class.provider-tool-panel--focused]="showOnlyActiveProviderTool"
+      [hidden]="activeProviderTool !== 'activity-sync'">
+      @if (showOnlyActiveProviderTool) {
+      <mat-button-toggle-group
+        class="activity-sync-destination-selector"
+        aria-label="Activity sync destination"
+        [value]="activeActivitySyncDestination"
+        (change)="activeActivitySyncDestination = $event.value">
+        <mat-button-toggle value="wahoo">To Wahoo</mat-button-toggle>
+        <mat-button-toggle value="coros">To COROS</mat-button-toggle>
+      </mat-button-toggle-group>
+      }
+      @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'wahoo') {
       <app-activity-sync-route-control
         [user]="user"
         [hasProAccess]="hasProAccess"
@@ -447,6 +468,18 @@
         [sourceConnected]="isServiceConnected"
         [sourceReconnectRequired]="isReconnectRequired">
       </app-activity-sync-route-control>
+      }
+      @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'coros') {
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.COROSAPI"
+        [sourceConnected]="isServiceConnected"
+        [sourceReconnectRequired]="isReconnectRequired"
+        [showTopDivider]="!showOnlyActiveProviderTool">
+      </app-activity-sync-route-control>
+      }
     </section>
     }
   </ng-template>

@@ -32,9 +32,9 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
   it('compares current durability with the prior-block median', () => {
     const views = buildTrainingDurabilityScopeViewModels(payload, ['running']);
     expect(views[0]).toEqual(expect.objectContaining({
-      label: 'Running', evidenceText: '3 eligible of 5 candidate workouts', coverageText: '60% eligible',
+      label: 'Running', evidenceText: '3 eligible of 5 candidate workouts · 1 without processed evidence', coverageText: '60% eligible',
       conclusionText: 'Durability is based on 3 comparable current workouts; read it as a directional signal rather than a verdict.',
-      evidenceQualityText: 'Evidence quality: usable — 3 of 5 candidate workouts met the comparison rules.',
+      evidenceQualityText: 'Evidence quality: usable — 3 of 4 processed candidate workouts supplied eligible evidence; 1 candidate workout still lacks processed durability evidence.',
       exclusionText: 'Primary exclusions: Too variable 1', trendText: '12 of 12 recent weeks produced comparable workout evidence',
       supportingEventsText: 'Recent supporting workouts: Long run',
     }));
@@ -47,8 +47,8 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
       title: 'Running durability trend',
       metricLabel: 'Aerobic decoupling',
       sourceActivityLabel: 'Candidates',
-      activityCountSummary: 'Across 12 weeks: 60 candidates · 36 eligible',
-      exclusionSummary: 'Primary exclusions: Too variable 12',
+      activityCountSummary: 'Across 12 weeks: 60 candidates · 36 eligible · 12 without processed evidence',
+      exclusionSummary: 'Processed evidence missing 12 · Primary exclusions: Too variable 12',
       noEligibleWeekCount: 0,
       unavailableMetricWeekCount: 0,
     }));
@@ -109,7 +109,7 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
       title: 'Pool durability trend',
       metricLabel: 'Pace retained',
       sourceActivityLabel: 'Candidates',
-      activityCountSummary: 'Across 12 weeks: 5 candidates · 3 eligible',
+      activityCountSummary: 'Across 12 weeks: 5 candidates · 3 eligible · 1 without processed evidence',
       noEligibleWeekCount: 11,
     }));
     expect(trajectory.points[0]).toEqual(expect.objectContaining({ value: 98, eligibleSampleCount: 3, hasEligibleSamples: true }));
@@ -160,6 +160,192 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
     expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
       activityCountSummary: 'Across 12 weeks: 72 candidates · 24 with power · 12 eligible',
       exclusionSummary: 'Primary exclusions: No recorded power 48 · Too intense 12',
+    }));
+  });
+
+  it('does not count unsupported gravity contexts as confirmed Cycling power', () => {
+    const cyclingContext = {
+      ...context,
+      contextKey: 'cycling|power|W|-|-',
+      scope: 'cycling' as const,
+      outputSource: 'power',
+      outputUnit: 'W',
+    };
+    const poweredSummary = { ...currentSummary, context: cyclingContext, sampleCount: 4 };
+    const cyclingCoverage = {
+      candidateActivityCount: 6,
+      evidenceActivityCount: 6,
+      eligibleActivityCount: 4,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 2,
+      eligibilityRatio: 4 / 6,
+      exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+    };
+    const cyclingWeek = { ...makeWindow(7, [poweredSummary]), coverage: cyclingCoverage };
+    const cyclingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage })),
+        usual: { coverage: cyclingCoverage, summaries: [poweredSummary] },
+        weeks: Array.from({ length: 12 }, () => cyclingWeek),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(cyclingPayload, ['cycling'])[0];
+
+    expect(view).toEqual(expect.objectContaining({
+      evidenceText: '4 eligible · 4 with power · 6 candidates',
+      exclusionText: 'Primary exclusions: Unsupported context 2',
+    }));
+    expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
+      activityCountSummary: 'Across 12 weeks: 72 candidates · 48 with power · 48 eligible',
+      exclusionSummary: 'Primary exclusions: Unsupported context 24',
+    }));
+  });
+
+  it('keeps a Cycling trajectory when every recent week contains only exclusions', () => {
+    const excludedCoverage = {
+      candidateActivityCount: 3,
+      evidenceActivityCount: 3,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 3,
+      eligibilityRatio: 0,
+      exclusions: [
+        { reason: 'missing-output', activityCount: 2 },
+        { reason: 'insufficient-duration', activityCount: 1 },
+      ],
+    };
+    const excludedWindow = {
+      periodDays: 7 as const,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      coverage: excludedCoverage,
+      summaries: [],
+    };
+    const cyclingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...excludedWindow, periodDays: 28 },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...excludedWindow, periodDays: 28 as const })),
+        usual: { coverage: excludedCoverage, summaries: [] },
+        weeks: Array.from({ length: 12 }, () => excludedWindow),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(cyclingPayload, ['cycling'])[0];
+
+    expect(view.contexts).toHaveLength(1);
+    expect(view.contexts[0]).toEqual(expect.objectContaining({
+      contextKey: 'cycling|power|W|-|-',
+      label: 'Cycling · Power',
+      sampleText: 'No current comparable workouts',
+    }));
+    expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
+      title: 'Cycling durability trend',
+      activityCountSummary: 'Across 12 weeks: 36 candidates · 12 with power · 0 eligible',
+      noEligibleWeekCount: 12,
+      exclusionSummary: 'Primary exclusions: No recorded power 24 · Too short 12',
+    }));
+    expect(view.contexts[0].trajectory.points[0]).toEqual(expect.objectContaining({
+      value: null,
+      candidateActivityCount: 3,
+      sourceActivityCount: 1,
+      eligibleSampleCount: 0,
+      hasEligibleSamples: false,
+    }));
+  });
+
+  it('distinguishes missing processed Cycling evidence from confirmed no-power exclusions', () => {
+    const missingCoverage = {
+      candidateActivityCount: 2,
+      evidenceActivityCount: 0,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 2,
+      excludedActivityCount: 0,
+      eligibilityRatio: 0,
+      exclusions: [],
+    };
+    const missingWindow = {
+      periodDays: 7 as const,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      coverage: missingCoverage,
+      summaries: [],
+    };
+    const missingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...missingWindow, periodDays: 28 },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...missingWindow, periodDays: 28 as const })),
+        usual: { coverage: missingCoverage, summaries: [] },
+        weeks: Array.from({ length: 12 }, () => missingWindow),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(missingPayload, ['cycling'])[0];
+
+    expect(view).toEqual(expect.objectContaining({
+      conclusionText: 'Recent workouts are present, but their processed durability evidence is not available yet.',
+      evidenceQualityText: 'Evidence quality: unavailable — processed durability evidence is missing for 2 candidate workouts.',
+      evidenceText: '0 eligible · 0 with power · 2 candidates · 2 without processed evidence',
+      nextStepText: 'Workouts without processed durability evidence cannot produce a trend point.',
+    }));
+    expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
+      activityCountSummary: 'Across 12 weeks: 24 candidates · 0 with power · 0 eligible · 24 without processed evidence',
+      exclusionSummary: 'Processed evidence missing 24',
+    }));
+    expect(view.contexts[0].trajectory.points[0]).toEqual(expect.objectContaining({
+      missingEvidenceActivityCount: 2,
+    }));
+  });
+
+  it('does not describe unprocessed Cycling candidates as failed comparisons', () => {
+    const mixedCoverage = {
+      candidateActivityCount: 3,
+      evidenceActivityCount: 2,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 1,
+      excludedActivityCount: 2,
+      eligibilityRatio: 0,
+      exclusions: [
+        { reason: 'missing-output', activityCount: 1 },
+        { reason: 'insufficient-duration', activityCount: 1 },
+      ],
+    };
+    const mixedWindow = {
+      periodDays: 7 as const,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      coverage: mixedCoverage,
+      summaries: [],
+    };
+    const mixedPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...mixedWindow, periodDays: 28 },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...mixedWindow, periodDays: 28 as const })),
+        usual: { coverage: mixedCoverage, summaries: [] },
+        weeks: Array.from({ length: 12 }, () => mixedWindow),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(mixedPayload, ['cycling'])[0];
+
+    expect(view).toEqual(expect.objectContaining({
+      conclusionText: 'No processed current workout met the steady-effort comparison rules; 1 candidate workout still lacks processed durability evidence.',
+      evidenceQualityText: 'Evidence quality: limited — 0 of 2 processed candidate workouts supplied eligible evidence; 1 candidate workout still lacks processed durability evidence.',
+      evidenceText: '0 eligible · 1 with power · 3 candidates · 1 without processed evidence',
+      nextStepText: 'Review the primary exclusions for processed workouts; workouts without processed durability evidence cannot produce a trend point yet.',
     }));
   });
 

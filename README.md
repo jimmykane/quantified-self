@@ -85,6 +85,8 @@ Do not copy a maintainer token or commit this file. A valid token is required fo
 
 Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials placed in `functions/.secret.local` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
 
+The Functions emulator does not require a service-account JSON or Google Application Default Credentials when Admin SDK traffic stays on the Auth, Firestore, and Storage emulators. The shared Admin bootstrap uses the emulator hosts locally and the assigned runtime identity in Cloud Functions. Do not add a service-account key to the Functions source tree.
+
 ### 4. Build Functions and start the emulators
 
 In the first terminal:
@@ -127,6 +129,8 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 ## Optional backend and provider configuration
 
 Copy `functions/.secret.local.example` to the ignored `functions/.secret.local` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
+
+Operational scripts that intentionally access managed Google Cloud or Firebase resources use Application Default Credentials. Authenticate your local user with `gcloud auth application-default login`, or use an approved least-privilege service-account impersonation flow, and pass the target project explicitly to any write-capable script. Emulator-only development does not require this login.
 
 | Feature | Configuration names |
 | --- | --- |
@@ -204,12 +208,14 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
 | `users/*/assistantConversations` | 7 days after the latest completed turn or reset; an active turn is protected for at most 4 extra minutes | `expireAt` | One bounded server-owned active Assistant conversation plus private, unindexed replay fingerprints per user |
 | `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
+| `users/*/activitySyncOutboundFingerprints` | About 120 days | `expireAt` | Server-only exact/semantic FIT receipts that suppress provider-returned activity echoes |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
 ## Architecture documentation
 
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)

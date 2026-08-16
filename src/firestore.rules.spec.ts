@@ -172,6 +172,36 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('COROS server-owned token credentials', () => {
+        const userId = 'coros_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('preserves owner reads while denying client credential and identity mutations', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`).set({
+                    accessToken: 'stored-access-token',
+                    refreshToken: 'stored-refresh-token',
+                    openId: 'open-id',
+                    dateCreated: 1_000,
+                });
+            });
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const tokenRef = db.doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`);
+
+            await assertSucceeds(tokenRef.get());
+            await assertFails(tokenRef.update({ accessToken: 'forged-access-token' }));
+            await assertFails(tokenRef.update({ refreshToken: 'forged-refresh-token' }));
+            await assertFails(tokenRef.update({ openId: 'forged-open-id' }));
+            await assertFails(tokenRef.update({ dateCreated: 2_000 }));
+            await assertFails(tokenRef.delete());
+            await assertFails(db.doc(`COROSAPIAccessTokens/${userId}/tokens/other-id`).set({
+                accessToken: 'forged-access-token',
+                openId: 'other-id',
+                dateCreated: 2_000,
+            }));
+        });
+    });
+
     describe('Wahoo server-owned integration state', () => {
         const userId = 'wahoo_user';
 
@@ -340,6 +370,34 @@ describe('Firestore Security Rules', () => {
                 await assertFails(ownerDb
                     .doc(`users/${userId}/eventMergeOperations/forged-operation`)
                     .set({ status: 'completed' }));
+            });
+        });
+
+        describe('Activity sync outbound fingerprints', () => {
+            const fingerprintPath = `users/${userId}/activitySyncOutboundFingerprints/exact-v1-private`;
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(fingerprintPath).set({
+                        version: 1,
+                        destinationServiceName: 'COROS API',
+                        fingerprintKind: 'exact',
+                        recordedAt: Date.now(),
+                        expireAt: new Date('2026-12-01T00:00:00.000Z'),
+                    });
+                });
+            });
+
+            it('should deny all browser reads of server-owned echo receipts', async () => {
+                await assertFails(testEnv.authenticatedContext(userId).firestore().doc(fingerprintPath).get());
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(fingerprintPath).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(fingerprintPath).get());
+            });
+
+            it('should deny all browser writes to server-owned echo receipts', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(ownerDb.doc(fingerprintPath).set({ version: 1 }));
+                await assertFails(ownerDb.doc(fingerprintPath).delete());
             });
         });
 
@@ -1109,6 +1167,21 @@ describe('Firestore Security Rules', () => {
                     trainingSettings: { buildBenchmarks: { cycling: { mode: 'period', durationWeeks: 8, endDayMs: 1_746_403_200_000 } } },
                 }));
                 await assertSucceeds(settingsRef.update({ theme: 'light' }));
+                await assertSucceeds(settingsRef.set({
+                    appSettings: {
+                        trainingWorkspace: {
+                            preferredDestination: 'cycling',
+                            sportShortcuts: ['running', 'cycling'],
+                        },
+                    },
+                }, { merge: true }));
+
+                const savedSettings = (await settingsRef.get()).data();
+                expect(savedSettings?.trainingSettings).toEqual(trainingSettings);
+                expect(savedSettings?.appSettings?.trainingWorkspace).toEqual({
+                    preferredDestination: 'cycling',
+                    sportShortcuts: ['running', 'cycling'],
+                });
             });
 
             it('should deny user reading other user settings', async () => {

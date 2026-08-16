@@ -5,6 +5,7 @@ import {
   isTerminalServiceAuthError,
   isTransientProviderTransportError,
   ProviderOperationError,
+  toProviderOperationLogDetails,
 } from './provider-operation-error';
 
 describe('ProviderOperationError', () => {
@@ -17,6 +18,7 @@ describe('ProviderOperationError', () => {
       code: 'provider_internal_error',
       message: 'Suunto processing failed: Internal error',
       statusCode: 500,
+      providerStatus: -1,
       providerUserId: 'suunto-user-1',
       providerOperationId: 'upload-1',
       dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
@@ -30,10 +32,25 @@ describe('ProviderOperationError', () => {
       retryMode: 'restart',
       code: 'provider_internal_error',
       statusCode: 500,
+      providerStatus: -1,
       providerUserId: 'suunto-user-1',
       providerOperationId: 'upload-1',
       dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     });
+    expect(toProviderOperationLogDetails(error)).toEqual({
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'provider_internal_error',
+      providerCode: undefined,
+      providerStatus: -1,
+      statusCode: 500,
+      providerUserId: 'suunto-user-1',
+      providerOperationId: 'upload-1',
+      providerMessage: 'Suunto processing failed: Internal error',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    });
+    expect(toProviderOperationLogDetails(error)).not.toHaveProperty('message');
   });
 
   it('defaults retryable failures to restarting and terminal failures to no retry', () => {

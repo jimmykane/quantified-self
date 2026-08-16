@@ -5,6 +5,7 @@ export const SERVICE_CONNECTION_STATES = {
 } as const;
 
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
+export type ProviderBindingState = 'bound' | 'unbound';
 
 export interface ServiceConnectionMetaFields {
   connectionState?: ServiceConnectionState | null;
@@ -13,6 +14,11 @@ export interface ServiceConnectionMetaFields {
    * Never use this field for OAuth credentials, access tokens, or refresh tokens.
    */
   providerUserId?: string | null;
+  providerBindingState?: ProviderBindingState | null;
+  providerBindingCheckedAt?: number | null;
+  providerBindingCheckLeaseId?: string | null;
+  providerBindingCheckLeaseExpiresAt?: number | null;
+  providerBindingCheckNextRetryAt?: number | null;
   lastAuthFailureCode?: string | null;
   lastAuthFailureMessage?: string | null;
   lastDisconnectedAt?: number | null;

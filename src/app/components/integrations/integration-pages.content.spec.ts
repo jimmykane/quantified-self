@@ -29,7 +29,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Wahoo-to-Suunto activity sync');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts direct FIT activity and GPX/FIT course/route delivery');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not the ELEMNT App');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('sleep sync and plans are not forwarded');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Direct GPX/FIT course/route delivery')?.copy)
       .toContain('send flow offers a reconnect action');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT activity delivery')).toBe(true);
@@ -63,6 +63,12 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('centralized Garmin, Suunto, and COROS workout data');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('COROS to Suunto activity sync');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros.description).toContain('activity delivery from Garmin, Suunto, or Wahoo');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.highlights).toContain('Direct and saved route delivery to COROS');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send activities to COROS')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.coros.syncFlows.some(flow => flow.title === 'Send routes to COROS')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.coros.tools.some(tool => tool.title === 'GPX and FIT route delivery')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.coros.faqItems.some(item => item.question === 'Can I send routes to COROS?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.coros).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('import Suunto routes');
@@ -74,10 +80,12 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Automatic and existing Suunto route imports');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Garmin');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Send Suunto routes to Wahoo');
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.highlights).toContain('Suunto route delivery to COROS');
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Suunto route import')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'GPX and FIT route upload')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to Garmin')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to Wahoo')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to COROS')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.relatedGuideActions).toContainEqual({
       label: 'Import Activities to Suunto',
       routerLink: '/guides/import-activities-to-suunto',
@@ -85,6 +93,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Quantified Self sync routes with Suunto?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Garmin courses?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Wahoo?')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to COROS?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
       .toContain('every 24 hours');

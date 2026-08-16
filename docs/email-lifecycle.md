@@ -1,6 +1,6 @@
 # Email lifecycle
 
-This document is the source of truth for Quantified Self transactional email ownership, copy, template rollout, and verification. Marketing campaigns are outside this lifecycle. The existing `development_update` template is intentionally excluded from this refresh and from the seeding allowlist.
+This document is the source of truth for Quantified Self transactional email ownership, copy, template rollout, and verification. Marketing campaigns are outside the automatic transactional lifecycle. The existing `development_update` template remains intentionally excluded from every seed path. Explicitly reviewed manual campaigns, such as `coros_delivery_update`, are excluded from the default seed and smoke-test flows and can be selected only by exact template ID.
 
 ## Lifecycle and ownership
 
@@ -16,13 +16,21 @@ This document is the source of truth for Quantified Self transactional email own
 | Passwordless sign-in | Firebase Authentication | Firebase email-link template | `Quantified Self <noreply@quantified-self.io>` | `support@quantified-self.io` |
 | Password reset | Firebase Authentication | Firebase password-reset template | Firebase Auth sender above | `support@quantified-self.io` |
 
-The founder welcome is sent once, only when `users/{uid}.onboardingCompleted` first changes to `true`. It combines a formal welcome to the Quantified Self platform with Dimitrios's personal introduction and invitation to reply with support needs, feature requests, or product feedback. The copy deliberately avoids assuming why someone joined or how they intend to use the platform. Its recipient and greeting come from Firebase Auth, not profile email data supplied by the client. The TTL-managed mail document is `registration_welcome_{uid}`; durable deduplication is stored in the server-owned `users/{uid}/system/emailLifecycle` document and is created atomically with the mail item. There is no existing-user backfill, generic registration email, delayed follow-up, or marketing-consent dependency.
+The founder welcome is sent once, only when `users/{uid}.onboardingCompleted` first changes to `true`. It combines a formal welcome to the Quantified Self platform with Dimitrios's personal introduction and asks which one question the recipient would ask their training history. The hypothetical wording does not claim that connected data is complete, and the invitation to reply also covers support needs, feature requests, and other product feedback. The copy deliberately avoids assuming why someone joined or how they intend to use the platform. Its recipient and greeting come from Firebase Auth, not profile email data supplied by the client. The TTL-managed mail document is `registration_welcome_{uid}`; durable deduplication is stored in the server-owned `users/{uid}/system/emailLifecycle` document and is created atomically with the mail item. There is no existing-user backfill, generic registration email, delayed follow-up, or marketing-consent dependency.
 
 ## Firestore template source of truth
 
 The allowlisted template and partial catalog is in `functions/src/email/template-catalog.ts`. HTML and plaintext sources are under `functions/templates/`. Standard sender addresses, URLs, date formatting, grace-period calculation, and plan descriptions are centralized in `functions/src/email/config.ts`; numeric limits and device-sync entitlement come from `shared/limits.ts`.
 
 The templates use escaped Handlebars expressions, responsive table layouts, plaintext alternatives, and environment-specific partials supported by the [Firebase Trigger Email extension](https://firebase.google.com/docs/extensions/official/firestore-send-email/templates). Unknown plan roles intentionally render without a benefits list.
+
+Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` without `--templates` never selects a manual campaign, and `test-emails` never queues one. Seed a reviewed campaign only by its exact ID, for example:
+
+```bash
+npm --prefix functions run seed-emails -- --templates=coros_delivery_update
+```
+
+The COROS product update presents activity and route delivery as generally available and has no per-recipient rollout variable. A broad campaign must require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent.
 
 Cancellation emails and the subscription trigger share one grace deadline. `onSubscriptionUpdated` transactionally re-reads the current active subscriptions plus the user-deletion guard before changing grace state. When every active subscription is scheduled to end, it stores the latest `current_period_end + 30 days` as `scheduledGracePeriodUntil`; any continuing subscription clears that scheduled deadline. Subscription mail creation performs the same current-state and deletion-guard reads in its own transaction, preserves existing deterministic mail documents, and queues cancellation copy only for the canonical latest end when every active entitlement is ending. The expiring-reminder job uses the same aggregate rule, so it skips earlier-ending subscriptions and any user with a continuing entitlement. When paid access ends, `onSubscriptionUpdated` promotes the exact timestamp to `gracePeriodUntil`. The existing enforcement job remains a conservative fallback if subscription-event processing exhausts its retry window; changing its account-level entitlement selection is tracked separately from this email refresh.
 
@@ -39,10 +47,10 @@ The template spec compiles every approved subject, HTML body, plaintext body, an
 To send the local, unseeded template sources through the already-installed Trigger Email extension, use the explicit inline smoke-test mode with a controlled inbox:
 
 ```bash
-npm --prefix functions run test-emails -- controlled-inbox@example.com --inline
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline
 ```
 
-Inline mode compiles the local subjects, HTML, plaintext, and partials before writing each message to the `mail` collection. It does not read or modify `email_templates`, and `development_update` remains excluded. In an isolated worktree where the ignored `.env` and `service-account.json` files are not present, set `QS_EMAIL_TEST_CONFIG_DIR` to the trusted Functions directory that contains those local files. Because inline mode bypasses the extension's Firestore template lookup and Handlebars rendering, run at least one template-based smoke test after seeding as part of the final rollout.
+Inline mode compiles the local subjects, HTML, plaintext, and partials before writing each message to the `mail` collection. It does not read or modify `email_templates`, and `development_update` remains excluded. The command uses Application Default Credentials and requires `--project` so the write target is explicit; authenticate with `gcloud auth application-default login` or an approved service-account impersonation flow before running it. Because inline mode bypasses the extension's Firestore template lookup and Handlebars rendering, run at least one template-based smoke test after seeding as part of the final rollout.
 
 ## Firebase Authentication templates
 
@@ -112,7 +120,7 @@ All steps below require separate operational approval.
 
 1. Confirm `dimitrios@quantified-self.io` receives external replies.
 2. Apply and smoke-test the Firebase Authentication templates and verified sender domain as described above.
-3. Seed only the refreshed Firestore templates and required partials. The default command selects the full refreshed allowlist and cannot select `development_update`:
+3. Seed only the refreshed Firestore templates and required partials. The default command selects the full refreshed transactional allowlist and cannot select `development_update` or any manual campaign:
 
    ```bash
    npm --prefix functions run seed-emails
@@ -133,7 +141,7 @@ All steps below require separate operational approval.
 5. Queue all refreshed plan/trial variants to a controlled inbox:
 
    ```bash
-   npm --prefix functions run test-emails -- controlled-inbox@example.com
+   npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io
    ```
 
 6. Verify From, Reply-To, subject, plaintext alternative, links, 390px mobile layout, desktop layout, trial copy, Free/Basic/Pro limits, grace dates, and device-sync conditions.

@@ -18,11 +18,14 @@ import {
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
 
 interface PollWindow {
     startMs: number;
     endMs: number;
 }
+
+const COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY = 20;
 
 function chunkRecentWindow(nowMs: number, recentWindowDays: number, maxWindowDays: number): PollWindow[] {
     const maxWindowMs = maxWindowDays * 24 * 60 * 60 * 1000;
@@ -48,8 +51,41 @@ function getTokenRoot(provider: SleepProvider, userID: string): admin.firestore.
     }
 }
 
-async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: ServiceNames): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+type PollingTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
+
+async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly string[]): Promise<PollingTokenSnapshot[]> {
+    const activeTokens: Array<PollingTokenSnapshot | null> = [];
+    for (let index = 0; index < candidateUserIDs.length; index += COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY) {
+        const userIDChunk = candidateUserIDs.slice(index, index + COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY);
+        activeTokens.push(...await Promise.all(userIDChunk.map(async userID => {
+            try {
+                return await getActiveCOROSTokenSnapshot(userID);
+            } catch (error) {
+                logger.warn(`[SleepSync][${SLEEP_PROVIDERS.COROSAPI}] Could not resolve the active COROS account for user ${userID}; skipping polling.`, error);
+                return null;
+            }
+        })));
+    }
+    return activeTokens.filter((token): token is PollingTokenSnapshot => token !== null);
+}
+
+async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: ServiceNames): Promise<PollingTokenSnapshot[]> {
     const allowedUserIDs = getAllowedSleepSyncUserIds();
+    if (provider === SLEEP_PROVIDERS.COROSAPI) {
+        let candidateUserIDs = allowedUserIDs;
+        if (candidateUserIDs.length === 0) {
+            const snapshot = await admin.firestore()
+                .collectionGroup('tokens')
+                .where('serviceName', '==', serviceName)
+                .get();
+            candidateUserIDs = Array.from(new Set(snapshot.docs
+                .map(token => getFirebaseUserID(token))
+                .filter((userID): userID is string => !!userID)));
+        }
+
+        return resolveActiveCOROSTokenSnapshots(candidateUserIDs);
+    }
+
     if (allowedUserIDs.length > 0) {
         const snapshots = await Promise.all(allowedUserIDs.map(async (userID) => {
             const tokenRoot = getTokenRoot(provider, userID);
@@ -69,16 +105,19 @@ async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: S
     return snapshot.docs;
 }
 
-function getFirebaseUserID(tokenSnapshot: admin.firestore.QueryDocumentSnapshot): string | null {
+function getFirebaseUserID(tokenSnapshot: PollingTokenSnapshot): string | null {
     return tokenSnapshot.ref.parent.parent?.id || null;
 }
 
-function getProviderUserId(provider: SleepProvider, tokenData: admin.firestore.DocumentData): string | null {
+function getProviderUserId(provider: SleepProvider, tokenSnapshot: PollingTokenSnapshot): string | null {
+    const tokenData = tokenSnapshot.data();
     switch (provider) {
         case SLEEP_PROVIDERS.SuuntoApp:
-            return typeof tokenData.userName === 'string' ? tokenData.userName : null;
+            return typeof tokenData?.userName === 'string' ? tokenData.userName : null;
         case SLEEP_PROVIDERS.COROSAPI:
-            return typeof tokenData.openId === 'string' ? tokenData.openId : null;
+            return typeof tokenData?.openId === 'string' && tokenData.openId.trim()
+                ? tokenData.openId.trim()
+                : tokenSnapshot.id;
         default:
             return null;
     }
@@ -136,7 +175,7 @@ async function enqueueProviderPolls(
     let queued = 0;
     for (const tokenSnapshot of tokenSnapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
-        const providerUserId = getProviderUserId(provider, tokenSnapshot.data());
+        const providerUserId = getProviderUserId(provider, tokenSnapshot);
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
             continue;
         }
@@ -213,4 +252,6 @@ export const scheduleCOROSSleepSync = onSchedule({
 export const sleepPollingTestInternals = {
     chunkRecentWindow,
     enqueueProviderPolls,
+    resolveActiveCOROSTokenSnapshots,
+    COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY,
 };

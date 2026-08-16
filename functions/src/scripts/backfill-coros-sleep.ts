@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { getCorosSleepBackfillStartMs } from '../../../shared/sleep-backfill';
 import { COROS_DAILY_MAX_WINDOW_DAYS } from '../sleep/constants';
-import { chunkSleepBackfillRange } from '../sleep/backfill';
+import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
 import { addSleepSyncQueueItem } from '../sleep/queue';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
@@ -193,7 +193,7 @@ export async function runCorosSleepBackfillScript(argv: string[]): Promise<Coros
     }
 
     const range = resolveCorosSleepBackfillRange(options);
-    const windows = chunkSleepBackfillRange(range.startMs, range.endMs, COROS_DAILY_MAX_WINDOW_DAYS);
+    const windows = chunkCOROSInclusiveTimestampRange(range.startMs, range.endMs, COROS_DAILY_MAX_WINDOW_DAYS);
     const summary: CorosSleepBackfillSummary = {
         dryRun: !options.execute,
         start: new Date(range.startMs).toISOString(),

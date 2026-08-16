@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     EMAIL_PARTIAL_CATALOG,
-    selectRefreshedTemplates,
+    selectSeedableTemplates,
 } from './template-catalog';
 
 export interface EmailTemplateSeedDocument {
@@ -23,7 +23,7 @@ export function loadEmailTemplateSeedDocuments(
     templateRoot: string,
     requestedTemplateIds?: readonly string[],
 ): readonly EmailTemplateSeedDocument[] {
-    const templates = selectRefreshedTemplates(requestedTemplateIds);
+    const templates = selectSeedableTemplates(requestedTemplateIds);
     const requiredPartialIds = new Set(templates.flatMap(template => template.partials));
 
     const partialDocuments = EMAIL_PARTIAL_CATALOG

@@ -1,7 +1,21 @@
+import type { TrainingSportId } from './training-disciplines';
+
 export interface AssistantPromptWorkflow {
   id: string;
   toolWorkflow: readonly string[];
   routingHint: string;
+  /** Server-owned fixed inputs that override model-selected values. */
+  toolInputOverrides?: Readonly<Record<
+    string,
+    Readonly<Record<string, unknown>>
+  >>;
+  /** App-owned activity family expanded by the backend for the named tools. */
+  activityDisciplineOverrides?: Readonly<Record<string, TrainingSportId>>;
+  /** Server-owned lookback applied to the named range tools. */
+  dateRange?: {
+    lookbackDays: number;
+    toolNames: readonly string[];
+  };
   /**
    * When a supported jump workflow reads subrecords, constrain the opaque
    * activity reference to an activity discovered by its preceding step.
@@ -91,6 +105,102 @@ export const ASSISTANT_RECENT_JUMP_DETAILS_WORKFLOW = {
   mapSourceToolName: 'list_activity_jumps',
 } as const satisfies AssistantPromptWorkflow;
 
+export interface AssistantAnalyticalPromptWorkflow
+  extends AssistantPromptWorkflow {
+  examplePrompt: string;
+}
+
+/**
+ * High-value analytical intents that need a bounded, deterministic path but
+ * are deliberately not part of the public starter-prompt catalog.
+ */
+export const ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS = [
+  {
+    id: 'cycling-load-sleep-hrv-comparison',
+    examplePrompt: 'Compare my cycling load, sleep and HRV over the last six weeks.',
+    toolWorkflow: ['query_metric', 'get_sleep_trend'],
+    routingHint: 'Query weekly total cycling load and weekly main-sleep duration plus recorded HRV over the same exact six-week range. Compare aligned weeks, report coverage, and never treat missing sleep or HRV as zero. The server owns the canonical Cycling-family activity types and Training Stress Score selector.',
+    toolInputOverrides: {
+      query_metric: {
+        metric: 'Training Stress Score',
+        aggregation: 'total',
+        groupBy: 'date',
+        interval: 'weekly',
+      },
+      get_sleep_trend: {
+        includeNaps: false,
+        groupBy: 'week',
+      },
+    },
+    dateRange: {
+      lookbackDays: 42,
+      toolNames: ['query_metric', 'get_sleep_trend'],
+    },
+    activityDisciplineOverrides: {
+      query_metric: 'cycling',
+    },
+  },
+  {
+    id: 'late-session-cycling-power-decline',
+    examplePrompt: 'Which long rides showed the greatest late-session power decline?',
+    toolWorkflow: ['get_training_metric'],
+    routingHint: 'Read the ready Aerobic durability snapshot using the server-owned training_durability metric kind. Use only the Cycling scope and its recent supporting eligible activities. Rank late-session fade by the persisted output-retention and decoupling evidence, identify rides by their recorded UTC day, state the snapshot window and coverage, and do not substitute a sample of raw power charts or claim an all-time result.',
+    toolInputOverrides: {
+      get_training_metric: {
+        metricKind: 'training_durability',
+      },
+    },
+  },
+  {
+    id: 'strongest-training-build-comparison',
+    examplePrompt: 'What changed between my strongest training build and what I’m doing now?',
+    toolWorkflow: ['get_training_metric'],
+    routingHint: 'Read Best build comparison using the server-owned training_build_comparison metric kind. Compare the configured historical build with the equal-length current build, including workload, intensity, durability, and recovery evidence that is actually available. If no valid benchmark is configured, say so; never replace the requested build comparison with current-versus-usual or a daily report.',
+    toolInputOverrides: {
+      get_training_metric: {
+        metricKind: 'training_build_comparison',
+      },
+    },
+  },
+  {
+    id: 'body-weight-training-volume-comparison',
+    examplePrompt: 'How has my body weight moved alongside training volume?',
+    toolWorkflow: ['query_measurements', 'get_training_metric'],
+    routingHint: 'Use weekly median body-weight measurements for the latest 28 days, then read the ready Training summary using the server-owned selectors for its aligned current 28-day volume and equivalent usual 28-day comparison. Describe the two recorded movements side by side without claiming causation or treating missing weigh-ins as zero.',
+    toolInputOverrides: {
+      query_measurements: {
+        measurementType: 'body_weight',
+        aggregation: 'median',
+        interval: 'week',
+      },
+      get_training_metric: {
+        metricKind: 'training_summary',
+      },
+    },
+    dateRange: {
+      lookbackDays: 28,
+      toolNames: ['query_measurements'],
+    },
+  },
+  {
+    id: 'two-hour-endurance-route-suitability',
+    examplePrompt: 'Which saved routes would suit a two-hour endurance ride?',
+    toolWorkflow: ['list_routes'],
+    routingHint: 'List saved routes once using the server-owned complete Cycling-family filter. Compare the available route distance and ascent summaries. Recommend only plausible options, explain when none fit, and state that exact ride time depends on the rider and conditions rather than inventing a duration.',
+    toolInputOverrides: {
+      list_routes: {
+        limit: 100,
+      },
+    },
+    activityDisciplineOverrides: {
+      list_routes: 'cycling',
+    },
+  },
+] as const satisfies readonly AssistantAnalyticalPromptWorkflow[];
+
+type AssistantAnalyticalPromptWorkflowId =
+  typeof ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS[number]['id'];
+
 export const ASSISTANT_STARTER_PROMPTS: readonly string[] =
   ASSISTANT_PROMPT_EXAMPLES.map(example => example.prompt);
 
@@ -114,6 +224,62 @@ function isJumpDetailOrLocationPrompt(value: string): boolean {
 function isRecentJumpPrompt(value: string): boolean {
   return /\b(?:last|latest|recent|newest|most recent)\b/u.test(value)
     && /\bjumps?\b/u.test(value);
+}
+
+function isCyclingLoadSleepHrvComparisonPrompt(value: string): boolean {
+  return /\bcycl(?:ing|e|ist)\b/u.test(value)
+    && /\b(?:load|training stress|tss)\b/u.test(value)
+    && /\bsleep\b/u.test(value)
+    && /\bhrv\b/u.test(value)
+    && /\b(?:six|6)[ -]?weeks?\b/u.test(value);
+}
+
+function isLateSessionCyclingPowerDeclinePrompt(value: string): boolean {
+  return /\b(?:ride|rides|cycling)\b/u.test(value)
+    && /\bpower\b/u.test(value)
+    && /\b(?:decline|drop|fade|retention|decoupling)\b/u.test(value)
+    && /\b(?:late[- ]session|later|second[- ]half)\b/u.test(value);
+}
+
+function isStrongestTrainingBuildPrompt(value: string): boolean {
+  return /\b(?:strongest|best)\b/u.test(value)
+    && /\b(?:training )?build\b/u.test(value)
+    && /\b(?:now|current|currently|doing)\b/u.test(value);
+}
+
+function isBodyWeightTrainingVolumePrompt(value: string): boolean {
+  return /\b(?:body[- ]?weight|weight)\b/u.test(value)
+    && /\b(?:training|workout) volume\b/u.test(value)
+    && /\b(?:alongside|compare|compared|moved|movement|trend)\b/u.test(value);
+}
+
+function isTwoHourEnduranceRoutePrompt(value: string): boolean {
+  return /\bsaved routes?\b/u.test(value)
+    && /\b(?:two|2)[ -]?hours?\b/u.test(value)
+    && /\bendurance\b/u.test(value);
+}
+
+function findAssistantAnalyticalPromptWorkflow(
+  prompt: string,
+): AssistantAnalyticalPromptWorkflow | null {
+  const normalizedPrompt = normalizeExamplePrompt(prompt);
+  let workflowId: AssistantAnalyticalPromptWorkflowId | null = null;
+  if (isCyclingLoadSleepHrvComparisonPrompt(normalizedPrompt)) {
+    workflowId = 'cycling-load-sleep-hrv-comparison';
+  } else if (isLateSessionCyclingPowerDeclinePrompt(normalizedPrompt)) {
+    workflowId = 'late-session-cycling-power-decline';
+  } else if (isStrongestTrainingBuildPrompt(normalizedPrompt)) {
+    workflowId = 'strongest-training-build-comparison';
+  } else if (isBodyWeightTrainingVolumePrompt(normalizedPrompt)) {
+    workflowId = 'body-weight-training-volume-comparison';
+  } else if (isTwoHourEnduranceRoutePrompt(normalizedPrompt)) {
+    workflowId = 'two-hour-endurance-route-suitability';
+  }
+  return workflowId
+    ? ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS.find(
+        workflow => workflow.id === workflowId,
+      ) || null
+    : null;
 }
 
 export function findAssistantPromptExample(
@@ -149,5 +315,6 @@ export function findAssistantPromptWorkflow(
   if (isRecentJumpPrompt(normalizedPrompt)) {
     return ASSISTANT_RECENT_JUMP_DETAILS_WORKFLOW;
   }
-  return findAssistantPromptExample(prompt);
+  return findAssistantAnalyticalPromptWorkflow(prompt)
+    || findAssistantPromptExample(prompt);
 }

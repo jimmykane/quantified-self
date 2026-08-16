@@ -24,7 +24,7 @@ describe('sleep provider flags', () => {
     it('enables sleep sync for all users when the source-controlled allowlist is empty', () => {
         expect(SLEEP_SYNC_ALLOWED_USER_IDS).toEqual([]);
         expect(getAllowedSleepSyncUserIds()).toBe(SLEEP_SYNC_ALLOWED_USER_IDS);
-        expect(isSleepSyncUserAllowed('xcsAolLDDTWTgtRN9eYF3lW2YKL2')).toBe(true);
+        expect(isSleepSyncUserAllowed('test-user-uid')).toBe(true);
         expect(isSleepSyncUserAllowed('other-user')).toBe(true);
         expect(isSleepSyncUserAllowed(null)).toBe(true);
     });

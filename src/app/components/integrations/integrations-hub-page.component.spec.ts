@@ -43,10 +43,10 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('importing activities to Suunto or Wahoo');
     expect(text).toContain('syncing Garmin, COROS, or Wahoo activity data to Suunto');
     expect(text).toContain('Private dashboard, history import, and Suunto sync');
-    expect(text).toContain('Activity sync, route imports, and sending routes to Garmin');
+    expect(text).toContain('Activity sync, route imports, and multi-provider route delivery');
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('sending Suunto routes to Garmin');
-    expect(text).toContain('Recent history import and Suunto sync');
+    expect(text).toContain('Activity sync, FIT uploads, and route delivery');
   });
 
   it('should link to each provider integration page', () => {

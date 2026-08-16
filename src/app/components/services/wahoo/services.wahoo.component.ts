@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, Input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -26,6 +26,8 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
   public serviceName = ServiceNames.WahooAPI;
   public readonly wahooAccountId = signal<string | null>(null);
   public readonly isLoadingWahooAccountId = signal(false);
+  public activeActivitySyncDestination: 'suunto' | 'coros' = 'suunto';
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
   private readonly functionsService = inject(AppFunctionsService);
   private wahooAccountIdHydrationAttempted = false;
@@ -41,6 +43,13 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
     protected snackBar: MatSnackBar,
   ) {
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
+  }
+
+  override async ngOnChanges(): Promise<void> {
+    if (this.initialActivitySyncDestination === 'suunto' || this.initialActivitySyncDestination === 'coros') {
+      this.activeActivitySyncDestination = this.initialActivitySyncDestination;
+    }
+    await super.ngOnChanges();
   }
 
   isConnectedToService(): boolean {

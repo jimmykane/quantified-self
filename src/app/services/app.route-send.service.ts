@@ -53,6 +53,7 @@ const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
   'Could not send routes to Suunto.',
   'Could not send routes to Garmin.',
   'Could not send routes to Wahoo.',
+  'Could not send routes to COROS.',
   'Could not send routes to the selected service.',
 ]);
 

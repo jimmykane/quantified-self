@@ -114,6 +114,13 @@ describe('UploadActivitiesToServiceComponent', () => {
 
     it('should call COROS callable when serviceName is COROSAPI', async () => {
         component.serviceName = ServiceNames.COROSAPI;
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: {
+                status: 'pending',
+                uploadId: '9223372036854775806',
+                providerUserId: 'coros-user-1',
+            },
+        });
 
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
@@ -135,6 +142,181 @@ describe('UploadActivitiesToServiceComponent', () => {
         );
 
         await promise;
+    });
+
+    it('rejects an unknown asynchronous provider response instead of reporting success', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        mockFunctionsService.call.mockResolvedValueOnce({ data: {} });
+        const file = {
+            file: new File(['fit'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1',
+        };
+
+        await expect(component.processAndUploadFile(file))
+            .rejects.toThrow('COROS returned an invalid upload status.');
+    });
+
+    it('rejects a pending COROS response without both resume identifiers', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'pending', uploadId: '9223372036854775806' },
+        });
+        const file = {
+            file: new File(['fit'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1',
+        };
+
+        await expect(component.processAndUploadFile(file))
+            .rejects.toThrow('COROS returned an incomplete upload status.');
+    });
+
+    it('polls COROS with both async resume identifiers until processing completes', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.COROSAPI;
+        component.wahooStatusPollDelayMs = 2000;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+        mockProcessingService.addJob.mockReturnValueOnce('coros-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: '9223372036854775806',
+            providerUserId: 'coros-user-1',
+            message: 'COROS is processing the activity.',
+        } as any);
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'success', message: 'Activity uploaded to COROS.' },
+        });
+
+        await component.getFiles(event);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing',
+            uploadId: '9223372036854775806',
+            providerUserId: 'coros-user-1',
+        });
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'getCOROSAPIWorkoutFileUploadStatus',
+            { uploadId: '9223372036854775806', providerUserId: 'coros-user-1' },
+        );
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'success',
+            message: 'Activity uploaded to COROS.',
+        });
+    });
+
+    it('uses the active provider name when a COROS pending status omits its message', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.COROSAPI;
+        const row = {
+            id: 'coros-pending-upload',
+            file: new File(['fit'], 'activity.fit', { type: 'application/octet-stream' }),
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'COROS is processing the activity.',
+            jobId: 'coros-job',
+            uploadId: '9223372036854775806',
+            providerUserId: 'coros-user-1',
+        };
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockResolvedValueOnce({ data: { status: 'pending' } });
+
+        await component.refreshUpload(row);
+
+        expect(component.uploadRows()[0].message).toContain('COROS is still processing the activity.');
+        expect(component.uploadRows()[0].message).not.toContain('Wahoo');
+        component.ngOnDestroy();
+    });
+
+    it('clears COROS resume identifiers after a confirmed processing failure', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const row = {
+            id: 'coros-pending-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'COROS is processing the activity.',
+            jobId: 'coros-job',
+            uploadId: 'coros-upload-1',
+            providerUserId: 'coros-user-1',
+        };
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/failed-precondition',
+            message: 'COROS could not process this activity file.',
+            details: { retryMode: 'restart', providerOperation: 'activity_upload_status' },
+        });
+
+        await component.refreshUpload(row);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: undefined,
+            providerUserId: undefined,
+        });
+    });
+
+    it('retains COROS resume identifiers for ambiguous status failures', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const row = {
+            id: 'coros-pending-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'COROS is processing the activity.',
+            jobId: 'coros-job',
+            uploadId: 'coros-upload-1',
+            providerUserId: 'coros-user-1',
+        };
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/failed-precondition',
+            message: 'COROS returned an unknown activity upload status.',
+            details: { retryMode: 'none', providerOperation: 'activity_upload_status' },
+        });
+
+        await component.refreshUpload(row);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: 'coros-upload-1',
+            providerUserId: 'coros-user-1',
+        });
     });
 
     it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
@@ -832,7 +1014,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         );
     });
 
-    it('should send the FIT with Suunto resume identifiers so a confirmed empty job can recover', async () => {
+    it('should resume a Suunto status check without reading or resending the FIT', async () => {
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
             filename: 'activity',
@@ -843,16 +1025,19 @@ describe('UploadActivitiesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
             jobId: '1'
         };
+        const fileReadSpy = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+
         await component.processAndUploadFile(file, {
             uploadId: 'suunto-upload-1',
             providerUserId: 'suunto-user-1',
         });
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importActivityToSuuntoApp', {
-            file: expect.any(String),
             resumeUploadId: 'suunto-upload-1',
             resumeProviderUserId: 'suunto-user-1',
         });
+        expect(fileReadSpy).not.toHaveBeenCalled();
+        fileReadSpy.mockRestore();
     });
 
     it('retryFailedUploads should retry only failed rows', async () => {

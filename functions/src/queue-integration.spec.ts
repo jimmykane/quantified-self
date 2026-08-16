@@ -120,6 +120,10 @@ vi.mock('./queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('event-123'),
 }));
 
+vi.mock('./activity-sync/outbound-fingerprint', () => ({
+    isActivitySyncOutboundEcho: vi.fn().mockResolvedValue(false),
+}));
+
 import { parseWorkoutQueueItemForServiceName } from './queue';
 import { getTokenData } from './tokens';
 import * as requestHelper from './request-helper';

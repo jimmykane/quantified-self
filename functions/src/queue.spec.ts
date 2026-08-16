@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -100,6 +100,10 @@ const { mockDocRef, mockBatch, mockDocSnapshot, mockCollection, mockRecursiveDel
             update: (ref, data) => ref.update?.(data),
         })),
         mockMarkQueueItemDeletedForUserCleanup: vi.fn().mockResolvedValue(true),
+        mockIsActivitySyncOutboundEcho: vi.fn().mockResolvedValue(false),
+        mockGetActiveCOROSTokenSnapshot: vi.fn().mockResolvedValue({ id: 'corosOpenId' }),
+        mockDownloadCOROSFITFile: vi.fn().mockResolvedValue(Buffer.from('test-fit-data')),
+        mockRecoverCOROSFITFileURL: vi.fn().mockResolvedValue('https://oss.coros.com/fit/recovered.fit'),
     };
 });
 
@@ -234,6 +238,51 @@ vi.mock('./queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
+vi.mock('./activity-sync/outbound-fingerprint', () => ({
+    isActivitySyncOutboundEcho: mockIsActivitySyncOutboundEcho,
+}));
+
+vi.mock('./coros/account', () => ({
+    getActiveCOROSTokenSnapshot: mockGetActiveCOROSTokenSnapshot,
+}));
+
+vi.mock('./coros/file-download', () => ({
+    downloadCOROSFITFile: (...args: unknown[]) => mockDownloadCOROSFITFile(...args),
+    PermanentCOROSFITDownloadError: class PermanentCOROSFITDownloadError extends Error {
+        constructor(message: string) {
+            super(message);
+            this.name = 'PermanentCOROSFITDownloadError';
+        }
+    },
+}));
+
+vi.mock('./coros/workout-detail', () => {
+    class RetryableCOROSFITDetailError extends Error {
+        readonly name = 'RetryableCOROSFITDetailError';
+        constructor(public readonly providerCode?: string) {
+            super('COROS FIT detail is temporarily unavailable.');
+        }
+    }
+    class COROSFITDetailAuthError extends Error {
+        readonly name = 'COROSFITDetailAuthError';
+        constructor(public readonly providerCode?: string) {
+            super('COROS authorization is required to recover the FIT detail.');
+        }
+    }
+    class PermanentCOROSFITDetailError extends Error {
+        readonly name = 'PermanentCOROSFITDetailError';
+        constructor(public readonly reason: string, public readonly providerCode?: string) {
+            super('COROS FIT detail response cannot be used.');
+        }
+    }
+    return {
+        recoverCOROSFITFileURL: (...args: unknown[]) => mockRecoverCOROSFITFileURL(...args),
+        RetryableCOROSFITDetailError,
+        COROSFITDetailAuthError,
+        PermanentCOROSFITDetailError,
+    };
+});
+
 vi.mock('./shared/user-deletion-guard', () => {
     class MockUserDeletionGuardReadError extends Error {
         readonly name = 'UserDeletionGuardReadError';
@@ -309,6 +358,12 @@ import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkout
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
+import { PermanentCOROSFITDownloadError } from './coros/file-download';
+import {
+    COROSFITDetailAuthError,
+    PermanentCOROSFITDetailError,
+} from './coros/workout-detail';
+import { claimCOROSEventWriteRevision } from './coros/queue-processing';
 
 describe('queue', () => {
     beforeEach(async () => {
@@ -329,6 +384,14 @@ describe('queue', () => {
         });
         vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(true);
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockIsActivitySyncOutboundEcho.mockReset();
+        mockIsActivitySyncOutboundEcho.mockResolvedValue(false);
+        mockGetActiveCOROSTokenSnapshot.mockReset();
+        mockGetActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'corosOpenId' });
+        mockDownloadCOROSFITFile.mockReset();
+        mockDownloadCOROSFITFile.mockResolvedValue(Buffer.from('test-fit-data'));
+        mockRecoverCOROSFITFileURL.mockReset();
+        mockRecoverCOROSFITFileURL.mockResolvedValue('https://oss.coros.com/fit/recovered.fit');
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -1291,6 +1354,175 @@ describe('queue', () => {
             expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: expect.any(Number) });
             expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
+
+        it('does not mark a replacement COROS revision dispatched for an older task enqueue', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(true);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const update = vi.fn();
+            const mockDoc = {
+                id: 'stable-coros-id',
+                ref: {
+                    get: vi.fn(async () => ({
+                        exists: true,
+                        data: () => ({
+                            dateCreated: 1_777_000_000_003,
+                            queueRevision: 'revision-2',
+                            dispatchedToCloudTask: null,
+                            firebaseUserID: 'firebase-coros',
+                            openId: 'open-id',
+                            retryCount: 0,
+                            processed: false,
+                        }),
+                    })),
+                    update,
+                    parent: { id: 'corosAPIWorkoutQueue' },
+                    id: 'stable-coros-id',
+                },
+                data: () => ({
+                    dateCreated: 1_777_000_000_003,
+                    queueRevision: 'revision-1',
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'firebase-coros',
+                    openId: 'open-id',
+                    retryCount: 0,
+                    processed: false,
+                }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.COROSAPI);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(
+                ServiceNames.COROSAPI,
+                'stable-coros-id',
+                1_777_000_000_003,
+                0,
+                { recoveryTaskKey: 0, queueRevision: 'revision-1' },
+            );
+            expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('does not advance dispatch recovery for a superseded COROS revision', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const update = vi.fn();
+            const mockDoc = {
+                id: 'stable-coros-recovery-id',
+                ref: {
+                    get: vi.fn(async () => ({
+                        exists: true,
+                        data: () => ({
+                            dateCreated: 200,
+                            queueRevision: 'revision-2',
+                            dispatchedToCloudTask: null,
+                            firebaseUserID: 'firebase-coros',
+                            openId: 'open-id',
+                            retryCount: 0,
+                            processed: false,
+                        }),
+                    })),
+                    update,
+                    parent: { id: 'corosAPIWorkoutQueue' },
+                    id: 'stable-coros-recovery-id',
+                },
+                data: () => ({
+                    dateCreated: 100,
+                    queueRevision: 'revision-1',
+                    dispatchRecoveryGeneration: 0,
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'firebase-coros',
+                    openId: 'open-id',
+                    retryCount: 0,
+                    processed: false,
+                }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.COROSAPI);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: expect.any(Number) });
+            expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('does not let a legacy COROS dispatch mark a revisioned history replacement', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(true);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const update = vi.fn();
+            const mockDoc = {
+                id: 'legacy-coros-id',
+                ref: {
+                    get: vi.fn(async () => ({
+                        exists: true,
+                        data: () => ({
+                            dateCreated: 200,
+                            queueRevision: 'revision-2',
+                            dispatchedToCloudTask: null,
+                            firebaseUserID: 'firebase-coros',
+                            openId: 'open-id',
+                            retryCount: 0,
+                            processed: false,
+                        }),
+                    })),
+                    update,
+                    parent: { id: 'corosAPIWorkoutQueue' },
+                    id: 'legacy-coros-id',
+                },
+                data: () => ({
+                    dateCreated: 100,
+                    dispatchedToCloudTask: null,
+                    firebaseUserID: 'firebase-coros',
+                    openId: 'open-id',
+                    retryCount: 0,
+                    processed: false,
+                }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [mockDoc] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.COROSAPI);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(
+                ServiceNames.COROSAPI,
+                'legacy-coros-id',
+                100,
+                0,
+                { recoveryTaskKey: 0 },
+            );
+            expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
     });
 
     describe('addToQueue deferred dispatch', () => {
@@ -1970,7 +2202,16 @@ describe('queue', () => {
         });
 
         it('addToQueueForCOROS should insert item', async () => {
-            const queueItem: any = { id: 'coros1', openId: 'oid1', workoutID: 'wid1', FITFileURI: 'https://coros.test/old.fit' };
+            const queueItem: any = {
+                id: 'coros1',
+                openId: 'oid1',
+                workoutID: 'wid1',
+                FITFileURI: 'https://coros.test/old.fit',
+                dateCreated: 123456,
+                retryCount: 0,
+                processed: false,
+                dispatchedToCloudTask: null,
+            };
             const result = await addToQueueForCOROS(queueItem);
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
@@ -2241,6 +2482,16 @@ describe('queue', () => {
                 openId: 'oid1',
                 workoutID: 'wid1',
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
                 retryCount: 0,
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -2275,6 +2526,16 @@ describe('queue', () => {
                 openId: 'oid1',
                 workoutID: 'wid1',
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
                 retryCount: 0,
                 processed: false,
                 dispatchedToCloudTask: null,
@@ -2283,6 +2544,16 @@ describe('queue', () => {
             expect(result.id).toBe('mock-doc-id');
             expect(mockDocRef.update).toHaveBeenCalledWith({
                 FITFileURI: 'https://coros.test/new.fit',
+                mode: 9,
+                subMode: 6,
+                detailMode: 13,
+                detailSubMode: 2,
+                deviceName: 'COROS VERTIX',
+                startTimezone: 8,
+                endTimezone: 12,
+                planWorkoutId: '443847671331979261',
+                componentIndex: 1,
+                componentKey: 'component:1:9:6',
             });
             expect(mockDocRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 retryCount: 0,
@@ -2297,11 +2568,40 @@ describe('queue', () => {
         let mockRef: any;
         let suuntoQueueItem: SuuntoAppWorkoutQueueItemInterface;
 
+        function prepareCOROSRevisionBlockedByOlderLease(id: string): COROSAPIWorkoutQueueItemInterface {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id,
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-2',
+                openId: 'corosOpenId',
+                workoutID: `workout-${id}`,
+                FITFileURI: `https://coros.com/${id}.fit`,
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 123,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    ...corosItem,
+                    ref: undefined,
+                    processingOwner: 'worker-r1',
+                    processingRevision: 'revision:revision-1',
+                    processingLeaseExpiresAt: Date.now() + 60_000,
+                }),
+            });
+            return corosItem;
+        }
+
         beforeEach(() => {
             mockRef = {
                 parent: { id: 'suuntoAppWorkoutQueue' },
                 update: vi.fn(),
                 delete: vi.fn(),
+                get: vi.fn(),
                 id: 'test-suunto-item'
             };
 
@@ -2728,6 +3028,7 @@ describe('queue', () => {
         });
 
         it('should handle COROSAPI item successfully', async () => {
+            const dateCreated = Date.now();
             const corosItem: COROSAPIWorkoutQueueItemInterface = {
                 id: 'test-coros-item',
                 ref: mockRef,
@@ -2736,10 +3037,17 @@ describe('queue', () => {
                 FITFileURI: 'https://coros.com/fit',
                 retryCount: 0,
                 processed: false,
-                dateCreated: Date.now(),
+                dateCreated,
                 dispatchedToCloudTask: null,
             };
             mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    ...corosItem,
+                    ref: undefined,
+                }),
+            });
 
             vi.mocked(getTokenData).mockResolvedValue({
                 accessToken: 'fresh-token',
@@ -2748,6 +3056,9 @@ describe('queue', () => {
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem);
             expect(result).toBe(QueueResult.Processed);
+            expect(mockGetActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(1, 'mock-user-id', 'corosOpenId');
+            expect(mockGetActiveCOROSTokenSnapshot).toHaveBeenNthCalledWith(2, 'mock-user-id', 'corosOpenId');
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://coros.com/fit');
             expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
                 'mock-user-id',
                 'standardized-event-id',
@@ -2767,6 +3078,646 @@ describe('queue', () => {
                 providerEventSecondaryID: 'https://coros.com/fit',
                 providerEventSecondaryIDField: 'serviceFITFileURI',
             });
+        });
+
+        it('does not persist an event after the COROS queue revision advances mid-task', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    queueRevision: 'revision-2',
+                }),
+            });
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'stale-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-stale',
+                FITFileURI: 'https://coros.com/stale.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as any);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+            }));
+        });
+
+        it('keeps a revisioned COROS task retryable when its Firebase owner is missing', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens');
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'ownerless-coros-revision',
+                ref: mockRef,
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-ownerless',
+                FITFileURI: 'https://coros.com/ownerless.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 123,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+
+            expect(tokenCollection.get).not.toHaveBeenCalled();
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalled();
+        });
+
+        it('runs queue cleanup when an early COROS claim finds a deleting user', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens');
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'deleting-user-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-deleting-user',
+                FITFileURI: 'https://coros.com/deleting-user.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 123,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+                userExists: true,
+                deletionInProgress: true,
+                shouldSkip: true,
+            });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(tokenCollection.get).not.toHaveBeenCalled();
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+                'COROSAPIWorkoutQueue',
+                corosItem.id,
+                'user_deletion_guard',
+            );
+            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockRef);
+        });
+
+        it('keeps a duplicate COROS task retryable while another event-write lease is active', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'busy-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-busy',
+                FITFileURI: 'https://coros.com/busy.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 123,
+            };
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    ...corosItem,
+                    ref: undefined,
+                    processingOwner: 'other-worker',
+                    processingRevision: 'revision:revision-1',
+                    processingLeaseExpiresAt: Date.now() + 60_000,
+                }),
+            });
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as any);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(utils.setEvent).not.toHaveBeenCalled();
+        });
+
+        it('does not run a failing COROS download or retry transition while an older revision owns the lease', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens');
+            const corosItem = prepareCOROSRevisionBlockedByOlderLease('blocked-download');
+            mockDownloadCOROSFITFile.mockRejectedValueOnce(new Error('download failed'));
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+
+            expect(tokenCollection.get).not.toHaveBeenCalled();
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+        });
+
+        it('does not defer a COROS revision while an older revision owns the lease', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens');
+            const corosItem = prepareCOROSRevisionBlockedByOlderLease('blocked-disconnect');
+            const pendingDisconnectError = new Error('service disconnect is pending');
+            pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+            mockGetActiveCOROSTokenSnapshot.mockRejectedValueOnce(pendingDisconnectError);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+
+            expect(tokenCollection.get).not.toHaveBeenCalled();
+            expect(mockGetActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalled();
+        });
+
+        it('does not complete a COROS outbound echo while an older revision owns the lease', async () => {
+            const admin = await import('firebase-admin');
+            const tokenCollection = admin.firestore().collectionGroup('tokens');
+            const corosItem = prepareCOROSRevisionBlockedByOlderLease('blocked-echo');
+            mockIsActivitySyncOutboundEcho.mockResolvedValueOnce(true);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Failed);
+
+            expect(tokenCollection.get).not.toHaveBeenCalled();
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(mockIsActivitySyncOutboundEcho).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalled();
+        });
+
+        it('serializes a COROS revision that advances after the claim but before setEvent begins', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            const firstRevision: COROSAPIWorkoutQueueItemInterface = {
+                id: 'mid-flight-coros-revision',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                queueRevision: 'revision-1',
+                openId: 'corosOpenId',
+                workoutID: 'cw-mid-flight',
+                FITFileURI: 'https://coros.com/mid-flight.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: 123,
+            };
+            const secondRevision: COROSAPIWorkoutQueueItemInterface = {
+                ...firstRevision,
+                queueRevision: 'revision-2',
+                FITFileURI: 'https://coros.com/newer.fit',
+                dispatchedToCloudTask: null,
+            };
+            let liveQueueState: Record<string, unknown> = { ...firstRevision };
+            delete liveQueueState.ref;
+            mockRef.get.mockImplementation(async () => ({
+                exists: true,
+                data: () => ({ ...liveQueueState }),
+            }));
+            mockRunTransaction.mockImplementation(async (runner: (transaction: {
+                get: () => Promise<unknown>;
+                update: (_ref: unknown, update: Record<string, unknown>) => void;
+            }) => unknown) => runner({
+                get: async () => ({
+                    exists: true,
+                    data: () => ({ ...liveQueueState }),
+                }),
+                update: (_ref, update) => {
+                    for (const [field, value] of Object.entries(update)) {
+                        if (field === 'processingOwner'
+                            || field === 'processingRevision'
+                            || field === 'processingLeaseExpiresAt') {
+                            if (typeof value === 'object') {
+                                delete liveQueueState[field];
+                                continue;
+                            }
+                        }
+                        liveQueueState[field] = value;
+                    }
+                },
+            }));
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as any);
+
+            vi.mocked(resolveProviderImportEventID).mockImplementationOnce(async () => {
+                // History wins after R1's transactional claim and preserves its
+                // lease while installing R2 as the durable queue payload.
+                liveQueueState = {
+                    ...secondRevision,
+                    processingOwner: liveQueueState.processingOwner,
+                    processingRevision: liveQueueState.processingRevision,
+                    processingLeaseExpiresAt: liveQueueState.processingLeaseExpiresAt,
+                };
+                delete liveQueueState.ref;
+                return 'standardized-event-id';
+            });
+            let competingClaimResult: string | undefined;
+            vi.mocked(utils.setEvent).mockImplementationOnce(async () => {
+                expect(liveQueueState.queueRevision).toBe('revision-2');
+                expect(liveQueueState.processingRevision).toBe('revision:revision-1');
+                competingClaimResult = await claimCOROSEventWriteRevision(
+                    secondRevision,
+                    'mock-user-id',
+                    'worker-r2',
+                );
+                return undefined as any;
+            });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, firstRevision))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(competingClaimResult).toBe('busy');
+            expect(utils.setEvent).toHaveBeenCalledTimes(1);
+            expect(liveQueueState).toEqual(expect.objectContaining({
+                queueRevision: 'revision-2',
+                processed: false,
+                dispatchedToCloudTask: null,
+            }));
+            expect(liveQueueState).not.toHaveProperty('processingOwner');
+            expect(liveQueueState).not.toHaveProperty('processingRevision');
+            expect(liveQueueState).not.toHaveProperty('processingLeaseExpiresAt');
+        });
+
+        it('recovers and deletion-guards a missing COROS FIT URL before import', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    dateCreated,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'missing-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                detailMode: 8,
+                detailSubMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockRecoverCOROSFITFileURL).toHaveBeenCalledWith(
+                expect.objectContaining({ accessToken: 'fresh-token' }),
+                expect.objectContaining({ id: 'missing-fit-url', componentKey: 'root' }),
+            );
+            expect(mockRef.update).toHaveBeenCalledWith({
+                FITFileURI: 'https://oss.coros.com/fit/recovered.fit',
+            });
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/recovered.fit');
+            expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith(expect.objectContaining({
+                providerEventSecondaryID: 'root',
+                providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+                legacyProviderEventSecondaryIdentities: [{
+                    field: 'serviceFITFileURI',
+                    value: 'https://oss.coros.com/fit/recovered.fit',
+                }],
+                allowLegacySecondaryFieldPresenceMatch: true,
+            }));
+            expect(mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
+        });
+
+        it('recovers an expired signed COROS URL without refreshing OAuth', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    dateCreated,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            mockDownloadCOROSFITFile
+                .mockRejectedValueOnce(Object.assign(new Error('expired signed URL'), { statusCode: 403 }))
+                .mockResolvedValueOnce(Buffer.from('test-fit-data'));
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'expired-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                FITFileURI: 'https://oss.coros.com/fit/expired.fit',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockDownloadCOROSFITFile).toHaveBeenNthCalledWith(1, 'https://oss.coros.com/fit/expired.fit');
+            expect(mockDownloadCOROSFITFile).toHaveBeenNthCalledWith(2, 'https://oss.coros.com/fit/recovered.fit');
+            expect(getTokenData).toHaveBeenCalledTimes(1);
+        });
+
+        it('refreshes OAuth once only when the COROS detail endpoint rejects authorization', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    dateCreated,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                }),
+            });
+            mockRecoverCOROSFITFileURL
+                .mockRejectedValueOnce(new COROSFITDetailAuthError('5006'))
+                .mockResolvedValueOnce('https://oss.coros.com/fit/after-refresh.fit');
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'detail-auth-fit-url',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(getTokenData).toHaveBeenLastCalledWith(expect.anything(), ServiceNames.COROSAPI, true);
+            expect(mockRecoverCOROSFITFileURL).toHaveBeenCalledTimes(2);
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/after-refresh.fit');
+        });
+
+        it('moves permanently invalid COROS detail responses to the DLQ', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRecoverCOROSFITFileURL.mockRejectedValueOnce(
+                new PermanentCOROSFITDetailError('workout_id_mismatch'),
+            );
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'invalid-fit-detail',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'COROS_FIT_DETAIL_REJECTED',
+            }));
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+        });
+
+        it('does not process a recovered URL when the guarded queue identity is stale', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockRef.get = vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'component:1:9:1',
+                }),
+            });
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'stale-fit-detail',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.RetryIncremented);
+
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalledWith({
+                FITFileURI: 'https://oss.coros.com/fit/recovered.fit',
+            });
+        });
+
+        it('should acknowledge an inbound COROS item from an inactive legacy account without writing an event', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'inactive-coros-item',
+                ref: mockRef,
+                openId: 'legacyCorosOpenId',
+                workoutID: 'cw-old',
+                FITFileURI: 'https://coros.com/old.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockGetActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+                new Error('The COROS account is no longer active.'),
+                { code: 'unauthenticated' },
+            ));
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: 'inactive_provider_account',
+                skippedContext: 'INACTIVE_PROVIDER_ACCOUNT',
+            }));
+        });
+
+        it('acknowledges a COROS item when the connected account changes after token refresh', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'switched-coros-item',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: 'cw-switched',
+                FITFileURI: 'https://coros.com/switched.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockGetActiveCOROSTokenSnapshot
+                .mockResolvedValueOnce({ id: 'corosOpenId' })
+                .mockRejectedValueOnce(Object.assign(
+                    new Error('The COROS account changed.'),
+                    { code: 'unauthenticated' },
+                ));
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as unknown as Awaited<ReturnType<typeof getTokenData>>);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(getTokenData).toHaveBeenCalledTimes(1);
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: 'inactive_provider_account',
+                skippedContext: 'INACTIVE_PROVIDER_ACCOUNT',
+            }));
+        });
+
+        it('does not persist a COROS activity when the account changes during FIT download', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'download-race-coros-item',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: 'cw-download-race',
+                FITFileURI: 'https://coros.com/download-race.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockGetActiveCOROSTokenSnapshot
+                .mockResolvedValueOnce({ id: 'corosOpenId' })
+                .mockResolvedValueOnce({ id: 'corosOpenId' })
+                .mockRejectedValueOnce(Object.assign(
+                    new Error('The COROS account changed during download.'),
+                    { code: 'unauthenticated' },
+                ));
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as unknown as Awaited<ReturnType<typeof getTokenData>>);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockDownloadCOROSFITFile).toHaveBeenCalledTimes(1);
+            expect(mockGetActiveCOROSTokenSnapshot).toHaveBeenCalledTimes(3);
+            expect(mockIsActivitySyncOutboundEcho).not.toHaveBeenCalled();
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: 'inactive_provider_account',
+            }));
+        });
+
+        it('moves a permanently rejected COROS FIT download directly to the DLQ', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'invalid-coros-fit-item',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: 'cw-invalid',
+                FITFileURI: 'https://coros.com/not-fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockDownloadCOROSFITFile.mockRejectedValueOnce(
+                new PermanentCOROSFITDownloadError('COROS file is not a valid FIT payload.'),
+            );
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'COROS_FIT_DOWNLOAD_REJECTED',
+            }));
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+        });
+
+        it('should suppress a COROS upload echo before writing a duplicate event', async () => {
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'test-coros-echo',
+                ref: mockRef,
+                openId: 'corosOpenId',
+                workoutID: 'cw-echo',
+                FITFileURI: 'https://coros.com/echo.fit',
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            mockIsActivitySyncOutboundEcho.mockResolvedValueOnce(true);
+            vi.mocked(getTokenData).mockResolvedValue({
+                accessToken: 'fresh-token',
+                openId: 'corosOpenId',
+            } as unknown as Awaited<ReturnType<typeof getTokenData>>);
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(mockIsActivitySyncOutboundEcho).toHaveBeenCalledWith({
+                userID: 'mock-user-id',
+                sourceServiceName: ServiceNames.COROSAPI,
+                fileBuffer: expect.any(Buffer),
+            });
+            expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
+            expect(vi.mocked(resolveProviderImportEventID)).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'skipped',
+                skippedReason: 'outbound_provider_echo',
+            }));
         });
 
         it('should handle 401 Unauthorized with token refresh and retry', async () => {

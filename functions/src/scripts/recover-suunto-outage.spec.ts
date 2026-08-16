@@ -578,20 +578,28 @@ describe('recover-suunto-outage script helpers', () => {
             serviceSyncSettings: {
                 activitySyncRoutes: {
                     [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: true },
                     [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+                    [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: true },
+                    [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
                     [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: { enabled: true },
                 },
                 routeDeliverySyncRoutes: {
                     [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
                 },
             },
         });
 
         expect(patch.activitySyncRoutes).toEqual({
             [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: true },
+            [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: true },
+            [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
         });
         expect(patch.routeDeliverySyncRoutes).toEqual({
             [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
         });
     });
 

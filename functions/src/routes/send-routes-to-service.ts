@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
@@ -10,6 +11,7 @@ import {
 } from '../../../shared/saved-route-send';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
+import { isProviderOperationError, toProviderOperationLogDetails } from '../shared/provider-operation-error';
 import {
   assertRouteSendUserActive,
   buildRouteSendFailureResult,
@@ -59,6 +61,12 @@ export const sendRoutesToService = onCall({
     try {
       context = await adapter.createContext(userID);
     } catch (error) {
+      logInBandProviderFailure({
+        userID,
+        destinationServiceName: adapter.destinationServiceName,
+        affectedRouteCount: payload.routeIds.length,
+        error,
+      });
       return buildSendRoutesResponse(
         adapter.destinationServiceName,
         buildTerminalRouteSendResults(payload.routeIds, adapter.destinationServiceName, error),
@@ -107,6 +115,15 @@ export const sendRoutesToService = onCall({
           providerRouteId: providerResult.providerRouteId,
         });
       } catch (error) {
+        logInBandProviderFailure({
+          userID,
+          destinationServiceName: adapter.destinationServiceName,
+          routeId,
+          affectedRouteCount: isDestinationAuthRequiredError(error) || isDestinationPermissionRequiredError(error)
+            ? payload.routeIds.length - index
+            : 1,
+          error,
+        });
         if (isAccountDeletionSkipError(error) || isUserDeletionGuardReadError(error)) {
           results.push(...buildTerminalRouteSendResults(
             payload.routeIds.slice(index),
@@ -169,6 +186,28 @@ export const sendRoutesToService = onCall({
     throw new HttpsError('internal', 'Could not send routes to the selected service.');
   }
 });
+
+function logInBandProviderFailure(params: {
+  userID: string;
+  destinationServiceName: ServiceNames;
+  routeId?: string;
+  affectedRouteCount: number;
+  error: unknown;
+}): void {
+  if (!isProviderOperationError(params.error)) {
+    return;
+  }
+
+  const error = params.error;
+  logger.warn('[sendRoutesToService] Destination provider failure returned in-band.', {
+    userID: params.userID,
+    destinationServiceName: params.destinationServiceName,
+    routeId: params.routeId,
+    affectedRouteCount: params.affectedRouteCount,
+    ...toProviderOperationLogDetails(error),
+    outcome: 'returned_in_band',
+  });
+}
 
 function normalizeSendRoutesRequest(payload: Partial<SendRoutesToServiceRequest> | undefined): SendRoutesToServiceRequest {
   const destinationServiceName = payload?.destinationServiceName;

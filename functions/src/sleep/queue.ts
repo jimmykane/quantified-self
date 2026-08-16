@@ -50,8 +50,11 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
+import { COROS_API_REQUEST_TIMEOUT_MS } from '../coros/constants';
+import { formatCOROSCalendarDate } from '../coros/date-range';
 
-type TokenSnapshot = admin.firestore.QueryDocumentSnapshot;
+type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
 interface AddSleepSyncQueueItemInput {
     type: SleepSyncQueueItemType;
@@ -384,6 +387,18 @@ export async function findSleepTokenByProviderUserId(provider: SleepProvider, pr
 
 async function findTokenForQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<TokenSnapshot | null> {
     if (queueItem.userID) {
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
+            try {
+                return await getActiveCOROSTokenSnapshot(queueItem.userID, queueItem.providerUserId);
+            } catch (error) {
+                if (isTokenUseSkippedForPendingDisconnectError(error)) throw error;
+                const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+                if (code === 'unauthenticated' || code === 'failed-precondition') {
+                    return null;
+                }
+                throw error;
+            }
+        }
         const tokenRoot = getTokenRoot(queueItem.provider, queueItem.userID);
         const tokenField = providerUserIdTokenField(queueItem.provider);
         if (!tokenRoot || !tokenField) {
@@ -582,29 +597,54 @@ async function processSuuntoQueueItem(queueItem: SleepSyncQueueItemInterface, to
         .filter((result): result is SleepMapperResult => result !== null));
 }
 
-async function processCorosQueueItem(queueItem: SleepSyncQueueItemInterface, tokenSnapshot: TokenSnapshot): Promise<SleepMapperResult[]> {
+async function processCorosQueueItem(
+    queueItem: SleepSyncQueueItemInterface,
+    tokenSnapshot: TokenSnapshot,
+    firebaseUserID: string,
+): Promise<SleepMapperResult[]> {
     if (!Number.isFinite(queueItem.rangeStartMs) || !Number.isFinite(queueItem.rangeEndMs)) {
         throw new Error(`COROS poll queue item ${queueItem.id} has invalid range`);
     }
     const tokenData = await getTokenData(tokenSnapshot, ServiceNames.COROSAPI);
-    const startDate = formatCorosDate(queueItem.rangeStartMs || 0);
-    const endDate = formatCorosDate(queueItem.rangeEndMs || 0);
+    if (await shouldSkipQueueWorkForDeletedUser(
+        firebaseUserID,
+        ServiceNames.COROSAPI,
+        queueItem.id,
+        'before_sleep_provider_sync',
+    )) {
+        throw new TokenRefreshSkippedForDeletedUserError(
+            firebaseUserID,
+            ServiceNames.COROSAPI,
+            tokenSnapshot.id,
+            'before_return',
+        );
+    }
+    try {
+        await getActiveCOROSTokenSnapshot(firebaseUserID, queueItem.providerUserId);
+    } catch (error) {
+        if (isTokenUseSkippedForPendingDisconnectError(error)) throw error;
+        const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+        if (code === 'unauthenticated' || code === 'failed-precondition') {
+            throw new MissingSleepProviderTokenError(queueItem.provider, queueItem.providerUserId);
+        }
+        throw error;
+    }
+    const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
+    const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
     const payload = await requestPromise.get({
         url: `https://open.coros.com/coros/daily/query?token=${encodeURIComponent(tokenData.accessToken)}&openId=${encodeURIComponent(queueItem.providerUserId)}&startDate=${startDate}&endDate=${endDate}`,
         json: true,
+        timeout: COROS_API_REQUEST_TIMEOUT_MS,
     });
+    const resultCode = `${(payload as { result?: unknown } | null)?.result ?? ''}`.trim();
+    const message = `${(payload as { message?: unknown } | null)?.message ?? ''}`.trim();
+    if ((resultCode && !/^0+$/.test(resultCode)) || (message && message !== 'OK')) {
+        throw new Error(`COROS daily data request failed with result ${resultCode || 'unknown'}.`);
+    }
     const dailyList = normalizePayloadArray((payload as { data?: { dailyList?: unknown[] } })?.data?.dailyList);
     return dailyList
         .map((daily) => mapCorosDailySleep(daily, queueItem.providerUserId, Date.now()))
         .filter((result): result is SleepMapperResult => result !== null);
-}
-
-function formatCorosDate(timestampMs: number): string {
-    const date = new Date(timestampMs);
-    const year = date.getUTCFullYear();
-    const month = `${date.getUTCMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getUTCDate()}`.padStart(2, '0');
-    return `${year}${month}${day}`;
 }
 
 function assertNeverQueueItemType(type: never): never {
@@ -723,7 +763,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 mapperResults = await processSuuntoQueueItem(queueItem, tokenSnapshot);
                 break;
             case SLEEP_PROVIDERS.COROSAPI:
-                mapperResults = await processCorosQueueItem(queueItem, tokenSnapshot);
+                mapperResults = await processCorosQueueItem(queueItem, tokenSnapshot, firebaseUserID);
                 break;
             default:
                 throw new Error(`Unsupported sleep provider ${queueItem.provider}`);

@@ -16,13 +16,19 @@ import {
     AppMyTracksSettings,
     AppEventDetailsSettingsInterface,
     AppEventLapSportFamily,
-    AppUserInterface
+    AppUserInterface,
+    TrainingWorkspacePreferences,
 } from '../models/app-user.interface';
 import {
     isEventLapSportFamily,
     normalizeEventDetailsSettings,
     normalizeEventLapMetricTypes,
 } from '../helpers/event-lap-table-columns.helper';
+import {
+    normalizeTrainingSportShortcuts,
+    TRAINING_SPORT_SHORTCUT_LIMIT,
+} from '../helpers/training-sport-visibility.helper';
+import { isTrainingDestinationId } from '@shared/training-disciplines';
 
 import { LoggerService } from './logger.service';
 
@@ -130,6 +136,85 @@ export class AppUserSettingsQueryService {
         ),
         { initialValue: undefined }
     );
+
+    /**
+     * Persists non-metric Training workspace preferences directly to the
+     * account-owned settings document. The expected UID prevents a queued UI
+     * write from crossing an account switch.
+     */
+    public async updateTrainingWorkspacePreferences(
+        expectedUserUID: string,
+        preferences: Partial<TrainingWorkspacePreferences>,
+    ): Promise<void> {
+        if (!expectedUserUID) {
+            throw new Error('A signed-in account and Training preference are required.');
+        }
+        const normalizedPreferences = this.normalizeTrainingWorkspacePreferences(preferences);
+        const user = await this.getCurrentUser();
+        if (!user?.uid || user.uid !== expectedUserUID) {
+            throw new Error('The signed-in account changed before the Training preference could be saved.');
+        }
+
+        this.logger.info('[AppUserSettingsQueryService] Updating Training workspace preferences.', {
+            preferredDestination: normalizedPreferences.preferredDestination ?? null,
+            shortcutMode: normalizedPreferences.sportShortcuts === null
+                ? 'automatic'
+                : Array.isArray(normalizedPreferences.sportShortcuts) ? 'fixed' : null,
+            shortcutCount: Array.isArray(normalizedPreferences.sportShortcuts)
+                ? normalizedPreferences.sportShortcuts.length
+                : 0,
+        });
+        return this.userService.updateUserProperties(user, {
+            settings: {
+                appSettings: {
+                    trainingWorkspace: normalizedPreferences,
+                },
+            },
+        }).catch(err => {
+            this.logger.error('[AppUserSettingsQueryService] Failed to update Training workspace preferences.', err);
+            throw err;
+        });
+    }
+
+    private normalizeTrainingWorkspacePreferences(
+        preferences: Partial<TrainingWorkspacePreferences>,
+    ): Partial<TrainingWorkspacePreferences> {
+        if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+            throw new Error('A Training workspace preference map is required.');
+        }
+        const supportedKeys = new Set<keyof TrainingWorkspacePreferences>([
+            'preferredDestination',
+            'sportShortcuts',
+        ]);
+        if (Object.keys(preferences).some(key => !supportedKeys.has(key as keyof TrainingWorkspacePreferences))) {
+            throw new Error('The Training workspace preference is not supported.');
+        }
+
+        const normalized: Partial<TrainingWorkspacePreferences> = {};
+        if (Object.prototype.hasOwnProperty.call(preferences, 'preferredDestination')) {
+            if (!isTrainingDestinationId(preferences.preferredDestination)) {
+                throw new Error('The Training destination is not supported.');
+            }
+            normalized.preferredDestination = preferences.preferredDestination;
+        }
+        if (Object.prototype.hasOwnProperty.call(preferences, 'sportShortcuts')) {
+            if (
+                Array.isArray(preferences.sportShortcuts)
+                && preferences.sportShortcuts.length > TRAINING_SPORT_SHORTCUT_LIMIT
+            ) {
+                throw new Error(`Choose no more than ${TRAINING_SPORT_SHORTCUT_LIMIT} Training sport shortcuts.`);
+            }
+            const sportShortcuts = normalizeTrainingSportShortcuts(preferences.sportShortcuts);
+            if (sportShortcuts === undefined) {
+                throw new Error('Training sport shortcuts must be automatic or a non-empty unique supported list.');
+            }
+            normalized.sportShortcuts = sportShortcuts;
+        }
+        if (Object.keys(normalized).length === 0) {
+            throw new Error('A signed-in account and Training preference are required.');
+        }
+        return normalized;
+    }
 
     /**
      * Updates My Tracks settings by merging the provided partial settings.

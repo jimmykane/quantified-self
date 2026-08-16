@@ -377,7 +377,7 @@ describe('AppRoutingModule routes', () => {
       {
         path: PUBLIC_FEATURE_PATHS.assistant,
         title: 'AI Training Assistant Grounded in Your Fitness Data',
-        h1: 'A fitness-data Assistant grounded in your own history',
+        h1: 'If you could ask your training history one question, what would it be?',
         descriptionText: 'grounded in read-only Quantified Self tools',
       },
       {
@@ -394,8 +394,8 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.routeFiles,
-        title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
-        h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
+        title: 'FIT and GPX Route Files with Multi-Provider Delivery',
+        h1: 'Save FIT and GPX route files, then send them to connected services',
         descriptionText: 'Save FIT course files and GPX route or track files',
       },
       {

@@ -468,6 +468,64 @@ describe('queue-utils', () => {
     });
 
     describe('increaseRetryCountForQueueItem', () => {
+        it('does not let a legacy COROS task reset a newly revisioned replacement', async () => {
+            const queueItem: any = {
+                id: 'legacy-coros-retry',
+                ref: { parent: { id: 'corosAPIWorkoutQueue' }, id: 'legacy-coros-retry' },
+                firebaseUserID: 'user-1',
+                openId: 'open-id',
+                dateCreated: 100,
+                retryCount: 2,
+                dispatchedToCloudTask: 123,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    openId: 'open-id',
+                    dateCreated: 200,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('stale failure')))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+            expect(hoisted.transaction.set).not.toHaveBeenCalled();
+            expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+        });
+
+        it('does not let an older queue revision reset retry state on its replacement', async () => {
+            const queueItem: any = {
+                id: 'revisioned-retry',
+                ref: { parent: { id: 'corosAPIWorkoutQueue' }, id: 'revisioned-retry' },
+                firebaseUserID: 'user-1',
+                queueRevision: 'revision-1',
+                retryCount: 2,
+                dispatchedToCloudTask: 123,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('stale failure')))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+            expect(hoisted.transaction.set).not.toHaveBeenCalled();
+            expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+            expect(queueItem.dispatchedToCloudTask).toBe(123);
+        });
+
         it('uses bulkWriter and resets dispatchedToCloudTask', async () => {
             const queueItem: any = {
                 id: 'q3',
@@ -488,6 +546,74 @@ describe('queue-utils', () => {
     });
 
     describe('updateToProcessed', () => {
+        it('does not let a legacy COROS task complete a newly revisioned replacement', async () => {
+            const queueItem: any = {
+                id: 'legacy-coros-completion',
+                ref: { parent: { id: 'corosAPIWorkoutQueue' }, id: 'legacy-coros-completion' },
+                firebaseUserID: 'user-1',
+                openId: 'open-id',
+                dateCreated: 100,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    openId: 'open-id',
+                    dateCreated: 200,
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+
+        it('does not let an older queue revision mark its replacement processed', async () => {
+            const queueItem: any = {
+                id: 'revisioned-completion',
+                ref: { parent: { id: 'corosAPIWorkoutQueue' }, id: 'revisioned-completion' },
+                firebaseUserID: 'user-1',
+                queueRevision: 'revision-1',
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+
+        it('marks only the matching unprocessed queue revision complete', async () => {
+            const queueItem: any = {
+                id: 'revisioned-completion',
+                ref: { parent: { id: 'corosAPIWorkoutQueue' }, id: 'revisioned-completion' },
+                firebaseUserID: 'user-1',
+                queueRevision: 'revision-2',
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem, undefined, { resultStatus: 'success' }))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: true,
+                processedAt: expect.any(Number),
+                resultStatus: 'success',
+            }));
+        });
+
         it('updates via bulkWriter when supplied', async () => {
             const queueItem: any = {
                 id: 'q4',

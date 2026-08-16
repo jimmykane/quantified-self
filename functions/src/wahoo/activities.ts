@@ -32,6 +32,10 @@ import {
 } from '../shared/provider-operation-error';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import {
+  ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
+  recordActivitySyncOutboundFingerprint,
+} from '../activity-sync/outbound-fingerprint';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -50,6 +54,13 @@ export interface WahooActivityUploadResult {
   message: string;
   uploadId?: string;
   workoutKey?: string;
+}
+
+export interface WahooActivityUploadOptions {
+  filename?: unknown;
+  timeZone?: unknown;
+  /** Runs after account validation and immediately before the provider request. */
+  beforeProviderRequest?: () => Promise<void>;
 }
 
 export class WahooActivityUploadSkippedForDeletedUserError extends Error {
@@ -259,6 +270,7 @@ function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperation
 async function withWahooWorkoutWriteToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
+  beforeProviderRequest?: () => Promise<void>,
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
@@ -287,6 +299,10 @@ async function withWahooWorkoutWriteToken<T>(
       throw new WahooWorkoutWriteScopeRequiredError();
     }
     await assertWahooActivityUploadProviderActionAllowed(userID, 'before_provider_request');
+    if (beforeProviderRequest) {
+      await beforeProviderRequest();
+      await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
+    }
     return operation(token.accessToken);
   };
 
@@ -313,7 +329,7 @@ function logWahooActivityUploadRequestError(error: unknown, operation: 'upload' 
 export async function uploadActivityFileToWahoo(
   userID: string,
   fileBuffer: Buffer,
-  options: { filename?: unknown; timeZone?: unknown } = {},
+  options: WahooActivityUploadOptions = {},
 ): Promise<WahooActivityUploadResult> {
   if (fileBuffer.length === 0) {
     throw new HttpsError('invalid-argument', 'File content is empty.');
@@ -336,7 +352,7 @@ export async function uploadActivityFileToWahoo(
         { method: 'POST', form },
       );
       return toWahooActivityUploadResult(data || {}, 'upload');
-    });
+    }, options.beforeProviderRequest);
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'upload');
     if (isWahooDuplicateError(error)) {
@@ -411,8 +427,24 @@ export const importActivityToWahooAPI = onCall({
     return await uploadActivityFileToWahoo(userID, fileBuffer, {
       filename: request.data?.filename,
       timeZone: request.data?.timeZone,
+      beforeProviderRequest: async () => {
+        await recordActivitySyncOutboundFingerprint({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          fileBuffer,
+        });
+      },
     });
   } catch (error) {
+    if (error instanceof UserDeletionGuardReadError) {
+      throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
+    }
+    if (
+      error instanceof ActivitySyncOutboundFingerprintSkippedForDeletedUserError
+      || error instanceof WahooActivityUploadSkippedForDeletedUserError
+    ) {
+      throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+    }
     if (!isProviderOperationError(error)) {
       throw error;
     }

@@ -1,31 +1,31 @@
-<h2 mat-dialog-title>Sports shown</h2>
+<h2 mat-dialog-title>Sport shortcuts</h2>
 
 <mat-dialog-content>
-  <p class="dialog-intro">Choose the sport-specific Training cards you want to see.</p>
+  <p class="dialog-intro">Pin up to {{ shortcutLimit }} sports for faster switching. Every sport remains available from the selector.</p>
 
   @if (data.isAutomatic) {
     <div class="automatic-note">
       <mat-icon aria-hidden="true">auto_awesome</mat-icon>
       <div>
         <strong>Automatic selection</strong>
-        <span>Based on your last 28 days and saved benchmarks. Keep these sports to make this selection fixed.</span>
+        <span>Based on your last 28 days and saved benchmarks. Save these shortcuts to make the selection fixed.</span>
       </div>
     </div>
   }
 
-  <div class="sport-options" role="group" aria-label="Sports shown on Training">
+  <div class="sport-options" role="group" aria-label="Sport shortcuts on Training">
     @for (option of disciplineOptions; track option.discipline) {
       <mat-checkbox
         [checked]="selectedDisciplines[option.discipline]"
         (change)="setDisciplineSelected(option.discipline, $event.checked)"
-        [disabled]="isSaving"
+        [disabled]="isDisciplineDisabled(option.discipline)"
       >
         <span class="sport-option-copy"><strong>{{ option.label }}</strong><small>{{ option.details }}</small></span>
       </mat-checkbox>
     }
   </div>
 
-  <p class="scope-note">This changes detailed cards only. Overall comparison, global load and intensity, explanation, readiness, and sleep remain unfiltered.</p>
+  <p class="scope-note">Shortcuts change navigation only. They never hide a sport from Training totals or the All sports selector.</p>
 
   @if (errorMessage) {
     <p class="dialog-error" role="alert">{{ errorMessage }}</p>

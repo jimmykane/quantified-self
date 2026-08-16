@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatSelect } from '@angular/material/select';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -36,7 +39,6 @@ import {
   getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
   isTrainingVisibleDiscipline,
-  normalizeTrainingVisibleDisciplines,
   TRAINING_VISIBLE_DISCIPLINES,
   type DerivedTrainingDiscipline,
   type TrainingBuildBenchmarkSelection,
@@ -49,10 +51,16 @@ import {
   getTrainingSportContextDefinition,
   getTrainingSportDefinition,
   hasTrainingSportCapability,
+  isTrainingDiscipline,
+  normalizeTrainingDestinationId,
+  TRAINING_DISCIPLINES,
+  TRAINING_SPORT_DEFINITIONS,
+  type TrainingDestinationId,
   type TrainingProfileMetricId,
   type TrainingSportCapability,
   type TrainingSportContextDefinition,
   type TrainingSportContextId,
+  type TrainingSportDefinition,
 } from '@shared/training-disciplines';
 import {
   buildDashboardPowerCurveContextFromSnapshot,
@@ -109,6 +117,7 @@ import {
 } from '../../helpers/training-power-profile.helper';
 import {
   buildTrainingPowerSystemsActivityTypeViewModels,
+  groupTrainingPowerSystemsActivityTypeViewModels,
   type TrainingPowerSystemsActivityTypeViewModel,
 } from '../../helpers/training-power-systems.helper';
 import {
@@ -120,6 +129,7 @@ import {
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import type { TrainingWorkspacePreferences } from '../../models/app-user.interface';
 import type { SleepSession } from '@shared/sleep';
 import {
   TrainingBuildBenchmarkDialogComponent,
@@ -130,12 +140,17 @@ import {
   type TrainingSportVisibilityDialogResult,
 } from './training-sport-visibility-dialog.component';
 import {
+  TrainingMobileDestinationSheetComponent,
+  type TrainingMobileDestinationSheetData,
+  type TrainingMobileDestinationSheetResult,
+} from './training-mobile-destination-sheet.component';
+import {
   formatTrainingVisibleDisciplinesActivityLabel,
-  formatTrainingVisibleDisciplinesAccessibleLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
   formatTrainingVisibleDisciplinesLabel,
-  formatTrainingVisibleDisciplinesScopeLabel,
-  resolveTrainingSportVisibility,
+  normalizeTrainingSportShortcuts,
+  resolveStableTrainingShortcutDestinations,
+  resolveTrainingSportShortcuts,
   trainingSportVisibilitySelectionKey,
 } from '../../helpers/training-sport-visibility.helper';
 import { formatTrainingSwimPace } from '../../helpers/training-swim-performance.helper';
@@ -150,13 +165,37 @@ import { environment } from '../../../environments/environment';
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
   label: string;
+  iconActivityType: TrainingSportDefinition['iconActivityType'];
   activityCountText: string;
+  baselineActivityCountText: string;
   durationText: string;
+  baselineDurationText: string;
   zones: TrainingMixZoneViewModel[];
   intensityEvidenceText: string | null;
   contexts: TrainingContextMetricsViewModel[];
   guidance: TrainingCardGuidanceViewModel;
 }
+
+interface TrainingDestinationOptionViewModel {
+  id: TrainingDestinationId;
+  label: string;
+  details: string;
+  sport: TrainingSportDefinition | null;
+  materialIcon: string | null;
+}
+
+type TrainingDestinationSelectionSource = 'shortcut' | 'desktop_selector' | 'mobile_selector';
+
+export interface TrainingWorkspacePreferenceWriter {
+  updateTrainingWorkspacePreferences(
+    expectedUserUID: string,
+    preferences: Partial<TrainingWorkspacePreferences>,
+  ): Promise<void>;
+}
+
+export const TRAINING_WORKSPACE_PREFERENCE_WRITER = new InjectionToken<TrainingWorkspacePreferenceWriter>(
+  'TRAINING_WORKSPACE_PREFERENCE_WRITER',
+);
 
 interface TrainingContextMetricViewModel {
   metric: TrainingProfileMetricId;
@@ -343,11 +382,25 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
   public trainingBuildCards: TrainingBuildCardViewModel[] = [];
+  public selectedTrainingDestination: TrainingDestinationId = 'overview';
+  public selectedTrainingSport: TrainingSportDefinition | null = null;
+  public trainingDestinationLabel = 'All training';
+  public trainingDestinationScopeLabel = 'All recorded training';
+  public trainingDestinationOptions: TrainingDestinationOptionViewModel[] = [];
+  public sportShortcuts: TrainingVisibleDiscipline[] = [];
+  public visibleSportShortcuts: TrainingVisibleDiscipline[] = [];
+  public visibleSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
+  public desktopAllSportsSelectorValue: TrainingDestinationId | null = null;
+  public sportShortcutsCompactLabel = 'Automatic shortcuts';
+  public sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
+  public isOverviewDestination = true;
+  public isSportDestination = false;
+  public isOtherPowerDestination = false;
+  public hasOtherPowerActivities = false;
+  public isPowerSystemsSectionVisible = false;
+  public isSavingDestination = false;
   public visibleDisciplines: TrainingVisibleDiscipline[] = [];
-  public visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
-  public visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
   public visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
-  public visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
   public isAutomaticSportVisibility = true;
   public visibleTrainingCapabilities = new Set<TrainingSportCapability>();
   public isPerformanceSectionVisible = false;
@@ -371,6 +424,20 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private readinessSleepRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private readinessDayRolloverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private trainingSettings: TrainingSettings = {};
+  private trainingWorkspacePreferences: TrainingWorkspacePreferences = {};
+  private allTrainingPowerSystemsActivityTypes: TrainingPowerSystemsActivityTypeViewModel[] = [];
+  private preferredDestinationOverride: TrainingDestinationId | null = null;
+  private preferredDestinationOverrideBaseline: TrainingDestinationId | null = null;
+  private acknowledgedDestinationWrites = new Set<TrainingDestinationId>();
+  private preferredDestinationSaveFailed = false;
+  private queuedDestinationWrite: {
+    uid: string;
+    destination: TrainingDestinationId;
+    source: TrainingDestinationSelectionSource;
+    generation: number;
+  } | null = null;
+  private destinationWriteInFlight = false;
+  private preferenceWriteGeneration = 0;
   public unitSettings: UserUnitSettingsInterface | null = null;
   private pendingTrainingBuildSelections = new Map<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection | null>();
   private pendingTrainingVisibleDisciplines: TrainingVisibleDiscipline[] | null | undefined;
@@ -378,9 +445,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private trainingBuildBenchmarkDialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent> | null = null;
   private trainingBuildBenchmarkDialogDiscipline: DerivedTrainingDiscipline | null = null;
   private trainingSportVisibilityDialogRef: MatDialogRef<TrainingSportVisibilityDialogComponent> | null = null;
+  private trainingMobileDestinationSheetRef: MatBottomSheetRef<
+    TrainingMobileDestinationSheetComponent,
+    TrainingMobileDestinationSheetResult
+  > | null = null;
   private trainingStateDetailsDialogRef: MatDialogRef<unknown> | null = null;
 
   @ViewChild('trainingStateDetailsDialogTemplate') private trainingStateDetailsDialogTemplate?: TemplateRef<unknown>;
+  @ViewChild('mobileDestinationScroller') private mobileDestinationScroller?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly authService: AppAuthService,
@@ -393,6 +465,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     @Optional() private readonly analyticsService: AppAnalyticsService | null = null,
     @Optional() breakpointObserver: BreakpointObserver | null = null,
     @Inject(LOCALE_ID) private readonly locale: string,
+    @Optional() @Inject(TRAINING_WORKSPACE_PREFERENCE_WRITER)
+    private readonly userSettingsService: TrainingWorkspacePreferenceWriter | null = null,
+    @Optional() private readonly snackBar: MatSnackBar | null = null,
+    @Optional() private readonly bottomSheet: MatBottomSheet | null = null,
   ) {
     this.useTrainingStateDetailsDialog = breakpointObserver
       ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
@@ -414,7 +490,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const uid = `${user?.uid || ''}`.trim();
       if (uid === this.currentUserUID) {
         this.trainingSettings = user?.settings?.trainingSettings || {};
+        this.trainingWorkspacePreferences = user?.settings?.appSettings?.trainingWorkspace || {};
         this.reconcilePendingTrainingSportVisibility();
+        this.reconcilePreferredTrainingDestination();
         this.unitSettings = user?.settings?.unitSettings || null;
         this.refreshSportSpecificViewModels();
         this.refreshDerivedViewModels();
@@ -427,6 +505,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.dataSubscriptions = new Subscription();
       this.resetWorkspace();
       this.trainingSettings = user?.settings?.trainingSettings || {};
+      this.trainingWorkspacePreferences = user?.settings?.appSettings?.trainingWorkspace || {};
+      this.reconcilePreferredTrainingDestination();
       this.unitSettings = user?.settings?.unitSettings || null;
       this.refreshSportSpecificViewModels();
       if (!user || !uid) {
@@ -461,7 +541,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.preferenceWriteGeneration += 1;
+    this.queuedDestinationWrite = null;
+    this.acknowledgedDestinationWrites.clear();
     this.trainingStateDetailsDialogRef?.close();
+    this.trainingMobileDestinationSheetRef?.dismiss();
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
     this.dataSubscriptions.unsubscribe();
@@ -691,15 +775,25 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resetWorkspace(): void {
+    this.preferenceWriteGeneration += 1;
+    this.queuedDestinationWrite = null;
+    this.isSavingDestination = false;
+    this.preferredDestinationOverride = null;
+    this.preferredDestinationOverrideBaseline = null;
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
     const activeVisibilityDialogRef = this.trainingSportVisibilityDialogRef;
+    const activeMobileDestinationSheetRef = this.trainingMobileDestinationSheetRef;
     this.trainingBuildBenchmarkDialogRef = null;
     this.trainingBuildBenchmarkDialogDiscipline = null;
     this.trainingSportVisibilityDialogRef = null;
+    this.trainingMobileDestinationSheetRef = null;
     activeDialogRef?.close();
     activeVisibilityDialogRef?.close();
+    activeMobileDestinationSheetRef?.dismiss();
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
@@ -712,6 +806,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.runningPowerCurve = null;
     this.cyclingPowerProfile = null;
     this.runningPowerProfile = null;
+    this.allTrainingPowerSystemsActivityTypes = [];
     this.trainingPowerSystemsActivityTypes = [];
     this.selectedTrainingPowerSystemsActivityType = null;
     this.selectedTrainingPowerSystems = null;
@@ -733,15 +828,29 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.readinessSleepLoading = true;
     this.readinessSleepFailed = false;
     this.trainingSettings = {};
+    this.trainingWorkspacePreferences = {};
     this.unitSettings = null;
     this.pendingTrainingBuildSelections.clear();
     this.pendingTrainingVisibleDisciplines = undefined;
     this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
-    this.visibleDisciplines = [];
-    this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
-    this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
+    this.selectedTrainingDestination = 'overview';
+    this.selectedTrainingSport = null;
+    this.trainingDestinationLabel = 'All training';
+    this.trainingDestinationScopeLabel = 'All recorded training';
+    this.trainingDestinationOptions = [];
+    this.sportShortcuts = [];
+    this.visibleSportShortcuts = [];
+    this.visibleSportShortcutOptions = [];
+    this.desktopAllSportsSelectorValue = null;
+    this.sportShortcutsCompactLabel = 'Automatic shortcuts';
+    this.sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
+    this.isOverviewDestination = true;
+    this.isSportDestination = false;
+    this.isOtherPowerDestination = false;
+    this.hasOtherPowerActivities = false;
+    this.isPowerSystemsSectionVisible = false;
+    this.visibleDisciplines = [...TRAINING_DISCIPLINES];
     this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
-    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
     this.isAutomaticSportVisibility = true;
     this.visibleTrainingCapabilities = new Set<TrainingSportCapability>();
     this.isPerformanceSectionVisible = false;
@@ -785,15 +894,32 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private refreshTrainingPowerSystemsViewModels(): void {
-    this.trainingPowerSystemsActivityTypes = buildTrainingPowerSystemsActivityTypeViewModels(
+    this.allTrainingPowerSystemsActivityTypes = buildTrainingPowerSystemsActivityTypeViewModels(
       this.derivedState.trainingPowerSystems,
     );
+    this.refreshTrainingPowerSystemsDestination();
+  }
+
+  private refreshTrainingPowerSystemsDestination(): void {
+    const groups = groupTrainingPowerSystemsActivityTypeViewModels(
+      this.allTrainingPowerSystemsActivityTypes,
+    );
+    this.hasOtherPowerActivities = groups.other.length > 0;
+    this.trainingPowerSystemsActivityTypes = this.isOtherPowerDestination
+      ? groups.other
+      : this.selectedTrainingSport
+        ? groups.bySport[this.selectedTrainingSport.id]
+        : [];
     const selectedActivityType = this.trainingPowerSystemsActivityTypes.some(
       item => item.activityType === this.selectedTrainingPowerSystemsActivityType,
     )
       ? this.selectedTrainingPowerSystemsActivityType
       : this.trainingPowerSystemsActivityTypes[0]?.activityType ?? null;
     this.selectTrainingPowerSystemsActivityType(selectedActivityType);
+    this.isPowerSystemsSectionVisible = !this.isOverviewDestination && (
+      this.trainingPowerSystemsActivityTypes.length > 0 || this.isOtherPowerDestination
+    );
+    this.refreshTrainingDestinationOptions();
   }
 
   public selectTrainingPowerSystemsActivityType(activityType: string | null): void {
@@ -809,8 +935,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.trainingBuildBenchmarkDialogRef
       && this.trainingBuildBenchmarkDialogDiscipline
       && (
-        !isTrainingVisibleDiscipline(this.trainingBuildBenchmarkDialogDiscipline)
-        || !this.visibleDisciplines.includes(this.trainingBuildBenchmarkDialogDiscipline)
+        !this.isSportDestination
+        || this.selectedTrainingSport?.id !== this.trainingBuildBenchmarkDialogDiscipline
       )
     ) {
       const dialogRef = this.trainingBuildBenchmarkDialogRef;
@@ -837,8 +963,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         return {
           summary,
           label,
+          iconActivityType: getTrainingSportDefinition(summary.discipline)?.iconActivityType
+            || TRAINING_SPORT_DEFINITIONS[0].iconActivityType,
           activityCountText: this.formatNumber(summary.current28d.activityCount, 0),
+          baselineActivityCountText: this.formatNumber(summary.baseline28d.activityCount, 0),
           durationText: formatSleepDuration(summary.current28d.durationSeconds),
+          baselineDurationText: formatSleepDuration(summary.baseline28d.durationSeconds),
           guidance: buildTrainingMixGuidance(summary, label, isVolumeOnly ? 'volume-only' : 'zones'),
           intensityEvidenceText: hasZoneEvidence
             ? null
@@ -866,57 +996,68 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.derivedState.trainingDurability,
       this.visibleDisciplines,
     );
+    this.refreshTrainingPowerSystemsDestination();
     this.refreshTrainingBuildCards();
     this.refreshDerivedMetricsRouteStatus();
   }
 
   private refreshDerivedMetricsRouteStatus(): void {
-    const nowMs = Date.now();
-    const currentTrainingState = buildCurrentTrainingStateContext({
-      formPoints: this.derivedState.formPoints,
-      fallbackFormNow: this.derivedState.formNow,
-      fallbackRampRate: this.derivedState.rampRate,
-      nowMs,
-    });
-    const hasForecastFreshness = this.derivedState.freshnessForecast?.points
-      ?.some(point => point.isForecast) === true;
-    const statuses = [
-      this.derivedState.formStatus,
-      this.derivedState.acwrStatus,
-      this.derivedState.monotonyStrainStatus,
-      this.derivedState.freshnessForecastStatus,
-      this.derivedState.intensityDistributionStatus,
-      this.derivedState.trainingSummaryStatus,
-      this.derivedState.trainingBuildComparisonStatus,
-      this.derivedState.trainingExplanationStatus,
-      this.derivedState.trainingReadinessStatus,
-      this.derivedState.bodyWeightTrendStatus,
-    ];
-    if (!currentTrainingState.formNowFromSeries) {
-      statuses.push(this.derivedState.formNowStatus);
-    }
-    if (!currentTrainingState.rampRateFromSeries) {
-      statuses.push(this.derivedState.rampRateStatus);
-    }
-    if (!hasForecastFreshness) {
-      statuses.push(this.derivedState.formPlus7dStatus);
-    }
-    if (this.trainingRecoveryEstimate) {
-      statuses.push(this.derivedState.recoveryNowStatus);
-    }
-    if (this.hasVisibleTrainingCapability('capacity')) {
+    const statuses = [];
+    if (this.isOverviewDestination) {
+      const nowMs = Date.now();
+      const currentTrainingState = buildCurrentTrainingStateContext({
+        formPoints: this.derivedState.formPoints,
+        fallbackFormNow: this.derivedState.formNow,
+        fallbackRampRate: this.derivedState.rampRate,
+        nowMs,
+      });
+      const hasForecastFreshness = this.derivedState.freshnessForecast?.points
+        ?.some(point => point.isForecast) === true;
       statuses.push(
-        this.derivedState.trainingCapacityStatus,
-        this.derivedState.powerCurveStatus,
+        this.derivedState.formStatus,
+        this.derivedState.acwrStatus,
+        this.derivedState.monotonyStrainStatus,
+        this.derivedState.freshnessForecastStatus,
+        this.derivedState.intensityDistributionStatus,
+        this.derivedState.trainingSummaryStatus,
+        this.derivedState.trainingExplanationStatus,
+        this.derivedState.trainingReadinessStatus,
+        this.derivedState.trainingBuildComparisonStatus,
+        this.derivedState.bodyWeightTrendStatus,
       );
+      if (!currentTrainingState.formNowFromSeries) {
+        statuses.push(this.derivedState.formNowStatus);
+      }
+      if (!currentTrainingState.rampRateFromSeries) {
+        statuses.push(this.derivedState.rampRateStatus);
+      }
+      if (!hasForecastFreshness) {
+        statuses.push(this.derivedState.formPlus7dStatus);
+      }
+      if (this.trainingRecoveryEstimate) {
+        statuses.push(this.derivedState.recoveryNowStatus);
+      }
+    } else if (this.isSportDestination) {
+      statuses.push(
+        this.derivedState.trainingSummaryStatus,
+        this.derivedState.trainingBuildComparisonStatus,
+      );
+      if (this.hasVisibleTrainingCapability('capacity')) {
+        statuses.push(this.derivedState.trainingCapacityStatus);
+      }
+      if (this.isCyclingPowerProfileVisible || this.isRunningPowerProfileVisible) {
+        statuses.push(this.derivedState.powerCurveStatus);
+      }
+      if (this.hasVisibleTrainingCapability('swim-performance')) {
+        statuses.push(this.derivedState.trainingSwimPerformanceStatus);
+      }
+      if (this.hasVisibleTrainingCapability('durability')) {
+        statuses.push(this.derivedState.trainingDurabilityStatus);
+      }
     }
-    if (this.hasVisibleTrainingCapability('swim-performance')) {
-      statuses.push(this.derivedState.trainingSwimPerformanceStatus);
+    if (this.isPowerSystemsSectionVisible) {
+      statuses.push(this.derivedState.trainingPowerSystemsStatus);
     }
-    if (this.hasVisibleTrainingCapability('durability')) {
-      statuses.push(this.derivedState.trainingDurabilityStatus);
-    }
-    statuses.push(this.derivedState.trainingPowerSystemsStatus);
 
     const refreshPhase = resolveDerivedMetricsRefreshPhase(statuses);
     if (refreshPhase === 'failed') {
@@ -945,37 +1086,292 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private refreshTrainingSportVisibility(): void {
     const preference = this.pendingTrainingVisibleDisciplines !== undefined
       ? this.pendingTrainingVisibleDisciplines
-      : this.trainingSettings.visibleDisciplines;
-    const resolution = resolveTrainingSportVisibility(
+      : this.trainingWorkspacePreferences.sportShortcuts;
+    const shortcutResolution = resolveTrainingSportShortcuts(
       preference,
+      this.trainingSettings.visibleDisciplines,
       this.derivedState.trainingSummary,
-      this.derivedState.trainingSummaryStatus === 'ready',
+      this.derivedState.trainingSummary !== null,
       this.trainingSettings.buildBenchmarks,
     );
-    this.visibleDisciplines = resolution.disciplines;
-    this.isAutomaticSportVisibility = resolution.isAutomatic;
-    this.visibleTrainingCapabilities = new Set(
-      resolution.disciplines.flatMap(discipline => getTrainingSportDefinition(discipline)?.capabilities || []),
+    this.sportShortcuts = shortcutResolution.disciplines;
+    this.isAutomaticSportVisibility = shortcutResolution.isAutomatic;
+    this.selectedTrainingSport = isTrainingDiscipline(this.selectedTrainingDestination)
+      ? getTrainingSportDefinition(this.selectedTrainingDestination)
+      : null;
+    this.isOverviewDestination = this.selectedTrainingDestination === 'overview';
+    this.isOtherPowerDestination = this.selectedTrainingDestination === 'other-power';
+    this.isSportDestination = this.selectedTrainingSport !== null;
+    this.visibleDisciplines = this.isOverviewDestination
+      ? [...TRAINING_DISCIPLINES]
+      : this.selectedTrainingSport ? [this.selectedTrainingSport.id] : [];
+    this.visibleTrainingCapabilities = new Set<TrainingSportCapability>(
+      this.selectedTrainingSport?.capabilities || [],
     );
     this.isCapacityVisible = this.visibleTrainingCapabilities.has('capacity');
     this.isSwimPerformanceVisible = this.visibleTrainingCapabilities.has('swim-performance');
     this.isDurabilityVisible = this.visibleTrainingCapabilities.has('durability');
-    this.isCyclingPowerProfileVisible = resolution.disciplines.includes('cycling')
+    this.isCyclingPowerProfileVisible = this.selectedTrainingSport?.id === 'cycling'
       && this.visibleTrainingCapabilities.has('power-profile');
-    this.isRunningPowerProfileVisible = resolution.disciplines.includes('running')
+    this.isRunningPowerProfileVisible = this.selectedTrainingSport?.id === 'running'
       && this.visibleTrainingCapabilities.has('power-profile');
     this.isPerformanceSectionVisible = this.isCapacityVisible
       || this.isSwimPerformanceVisible
       || this.isDurabilityVisible
       || this.isCyclingPowerProfileVisible
       || this.isRunningPowerProfileVisible;
-    this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(resolution.disciplines);
-    this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(
-      resolution.disciplines,
-      resolution.isAutomatic,
+    this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+    const compactShortcuts = formatTrainingVisibleDisciplinesCompactLabel(this.sportShortcuts);
+    this.sportShortcutsCompactLabel = shortcutResolution.isAutomatic
+      ? (this.sportShortcuts.length ? `Automatic · ${compactShortcuts}` : 'Automatic shortcuts')
+      : compactShortcuts;
+    const shortcutLabels = this.sportShortcuts.length
+      ? formatTrainingVisibleDisciplinesLabel(this.sportShortcuts)
+      : 'no current shortcuts';
+    this.sportShortcutsAccessibleLabel = `Choose sport shortcuts. ${shortcutResolution.isAutomatic ? 'Automatic' : 'Fixed'} selection: ${shortcutLabels}.`;
+    this.visibleSportShortcuts = resolveStableTrainingShortcutDestinations(
+      this.visibleSportShortcuts,
+      this.sportShortcuts,
+      this.selectedTrainingDestination,
     );
-    this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(resolution.disciplines);
-    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(resolution.disciplines);
+    this.trainingDestinationLabel = this.selectedTrainingSport?.label
+      || (this.isOtherPowerDestination ? 'Other power activities' : 'All training');
+    this.trainingDestinationScopeLabel = this.selectedTrainingSport
+      ? `${this.selectedTrainingSport.scopeLabel} only`
+      : this.isOtherPowerDestination ? 'Unmatched exact power activity types' : 'All recorded training';
+    this.refreshTrainingDestinationOptions();
+  }
+
+  private refreshTrainingDestinationOptions(): void {
+    this.trainingDestinationOptions = [
+      {
+        id: 'overview',
+        label: 'All training',
+        details: 'Global readiness, load, sleep, intensity, and sport mix',
+        sport: null,
+        materialIcon: 'monitoring',
+      },
+      ...TRAINING_SPORT_DEFINITIONS.map(sport => ({
+        id: sport.id,
+        label: sport.label,
+        details: sport.details,
+        sport,
+        materialIcon: null,
+      })),
+      ...(this.hasOtherPowerActivities || this.isOtherPowerDestination ? [{
+        id: 'other-power' as const,
+        label: 'Other power activities',
+        details: 'Exact power activity types outside the Training sport registry',
+        sport: null,
+        materialIcon: 'bolt',
+      }] : []),
+    ];
+    this.visibleSportShortcutOptions = this.visibleSportShortcuts
+      .map(id => this.trainingDestinationOptions.find(option => option.id === id))
+      .filter((option): option is TrainingDestinationOptionViewModel => option !== undefined);
+    this.desktopAllSportsSelectorValue = this.isOtherPowerDestination
+      ? this.selectedTrainingDestination
+      : null;
+  }
+
+  private reconcilePreferredTrainingDestination(): void {
+    const persisted = normalizeTrainingDestinationId(
+      this.trainingWorkspacePreferences.preferredDestination,
+    );
+    const override = this.preferredDestinationOverride;
+    if (override === null) {
+      this.selectedTrainingDestination = persisted;
+      return;
+    }
+    const hasAcknowledgedPersistedValue = this.acknowledgedDestinationWrites.has(persisted);
+    if (override === persisted && hasAcknowledgedPersistedValue) {
+      this.clearPreferredTrainingDestinationOverride();
+      this.selectedTrainingDestination = persisted;
+      return;
+    }
+    if (
+      this.destinationWriteInFlight
+      || this.queuedDestinationWrite !== null
+      || this.preferredDestinationSaveFailed
+      || this.acknowledgedDestinationWrites.has(override)
+      || hasAcknowledgedPersistedValue
+      || persisted === this.preferredDestinationOverrideBaseline
+    ) {
+      this.selectedTrainingDestination = override;
+      return;
+    }
+    this.clearPreferredTrainingDestinationOverride();
+    this.selectedTrainingDestination = persisted;
+  }
+
+  private clearPreferredTrainingDestinationOverride(): void {
+    this.preferredDestinationOverride = null;
+    this.preferredDestinationOverrideBaseline = null;
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
+  }
+
+  public selectTrainingDestination(
+    value: unknown,
+    source: TrainingDestinationSelectionSource,
+  ): void {
+    const destination = normalizeTrainingDestinationId(value);
+    if (destination === this.selectedTrainingDestination) {
+      return;
+    }
+    this.preferredDestinationOverrideBaseline = normalizeTrainingDestinationId(
+      this.trainingWorkspacePreferences.preferredDestination,
+    );
+    this.acknowledgedDestinationWrites.clear();
+    this.preferredDestinationSaveFailed = false;
+    this.selectedTrainingDestination = destination;
+    this.preferredDestinationOverride = destination;
+    if (isTrainingDiscipline(destination) && !this.sportShortcuts.includes(destination)) {
+      // An explicit off-shortcut choice should still be brought to the leading
+      // edge. Snapshot hydration uses stable reconciliation instead.
+      this.visibleSportShortcuts = [];
+    }
+    this.refreshSportSpecificViewModels();
+    this.changeDetector.markForCheck();
+    this.queuePreferredTrainingDestinationWrite(destination, source);
+  }
+
+  public selectDesktopTrainingDestination(value: unknown, select: MatSelect): void {
+    this.selectTrainingDestination(value, 'desktop_selector');
+    // MatSelect updates its own value before selectionChange. When a selected
+    // sport is then injected into the shortcut row, the bound value remains
+    // null and Angular has no changed input to write back, so clear it through
+    // the component's public value API to avoid showing the destination twice.
+    select.value = this.desktopAllSportsSelectorValue;
+  }
+
+  public openTrainingMobileDestinationSheet(): void {
+    if (
+      !this.bottomSheet
+      || this.trainingMobileDestinationSheetRef
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingBuildBenchmarkDialogRef
+    ) {
+      return;
+    }
+    const data: TrainingMobileDestinationSheetData = {
+      options: this.trainingDestinationOptions.map(option => ({
+        id: option.id,
+        label: option.label,
+        iconActivityType: option.sport?.iconActivityType || null,
+        materialIcon: option.materialIcon,
+      })),
+      shortcutIds: [...this.sportShortcuts],
+      selectedDestination: this.selectedTrainingDestination,
+      isAutomatic: this.isAutomaticSportVisibility,
+    };
+    const sheetRef = this.bottomSheet.open(TrainingMobileDestinationSheetComponent, {
+      ariaLabel: 'Choose training view',
+      data,
+    });
+    this.trainingMobileDestinationSheetRef = sheetRef;
+    this.subscriptions.add(sheetRef.afterDismissed().subscribe((result) => {
+      const applyResult = (): void => {
+        if (this.trainingMobileDestinationSheetRef === sheetRef) {
+          this.trainingMobileDestinationSheetRef = null;
+        }
+        if (result?.kind === 'destination') {
+          this.selectTrainingDestination(result.destination, 'mobile_selector');
+          if (this.mobileDestinationScroller) {
+            this.mobileDestinationScroller.nativeElement.scrollLeft = 0;
+          }
+          return;
+        }
+        if (result?.kind === 'manage_shortcuts') {
+          this.openTrainingSportVisibilityDialog();
+        }
+      };
+      if (this.ngZone) {
+        this.ngZone.run(applyResult);
+      } else {
+        applyResult();
+      }
+    }));
+  }
+
+  private queuePreferredTrainingDestinationWrite(
+    destination: TrainingDestinationId,
+    source: TrainingDestinationSelectionSource,
+  ): void {
+    const uid = this.currentUserUID;
+    if (!uid || !this.userSettingsService) {
+      return;
+    }
+    this.queuedDestinationWrite = {
+      uid,
+      destination,
+      source,
+      generation: this.preferenceWriteGeneration,
+    };
+    this.isSavingDestination = true;
+    this.changeDetector.markForCheck();
+    void this.flushPreferredTrainingDestinationWrites();
+  }
+
+  private async flushPreferredTrainingDestinationWrites(): Promise<void> {
+    const userSettingsService = this.userSettingsService;
+    if (this.destinationWriteInFlight || !userSettingsService) {
+      return;
+    }
+    this.destinationWriteInFlight = true;
+    this.isSavingDestination = true;
+    this.changeDetector.markForCheck();
+    while (this.queuedDestinationWrite) {
+      const write = this.queuedDestinationWrite;
+      this.queuedDestinationWrite = null;
+      if (
+        write.generation !== this.preferenceWriteGeneration
+        || write.uid !== this.currentUserUID
+      ) {
+        continue;
+      }
+      try {
+        await userSettingsService.updateTrainingWorkspacePreferences(write.uid, {
+          preferredDestination: write.destination,
+        });
+        if (
+          write.generation === this.preferenceWriteGeneration
+          && write.uid === this.currentUserUID
+        ) {
+          this.acknowledgedDestinationWrites.add(write.destination);
+          const isSportDestination = isTrainingDiscipline(write.destination);
+          this.analyticsService?.logEvent('training_destination_saved', {
+            destination_type: isSportDestination
+              ? 'sport'
+              : write.destination === 'other-power' ? 'other_power' : 'overview',
+            selection_source: write.source,
+            ...(isSportDestination ? { sport_family: write.destination } : {}),
+          });
+        }
+      } catch {
+        if (
+          write.generation === this.preferenceWriteGeneration
+          && write.uid === this.currentUserUID
+          && this.queuedDestinationWrite === null
+        ) {
+          this.acknowledgedDestinationWrites.clear();
+          this.preferredDestinationSaveFailed = true;
+          this.snackBar?.open(
+            'This view is open, but its account default was not saved.',
+            'Dismiss',
+            { duration: 6000 },
+          );
+        }
+      }
+    }
+    this.destinationWriteInFlight = false;
+    this.isSavingDestination = false;
+    const destinationBeforeReconciliation = this.selectedTrainingDestination;
+    this.reconcilePreferredTrainingDestination();
+    if (this.selectedTrainingDestination !== destinationBeforeReconciliation) {
+      this.refreshSportSpecificViewModels();
+    }
+    this.changeDetector.markForCheck();
   }
 
   private reconcilePendingTrainingSportVisibility(): void {
@@ -1000,24 +1396,42 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     preference: readonly TrainingVisibleDiscipline[] | null,
   ): boolean {
     return this.resolvePersistedTrainingSportVisibilityKey()
-      === trainingSportVisibilitySelectionKey(preference);
+      === this.resolveTrainingSportShortcutPreferenceKey(preference);
   }
 
   private resolvePersistedTrainingSportVisibilityKey(): string {
-    return trainingSportVisibilitySelectionKey(
-      normalizeTrainingVisibleDisciplines(this.trainingSettings.visibleDisciplines),
+    return this.resolveTrainingSportShortcutPreferenceKey(
+      normalizeTrainingSportShortcuts(this.trainingWorkspacePreferences.sportShortcuts),
     );
   }
 
+  private resolveTrainingSportShortcutPreferenceKey(
+    preference: readonly TrainingVisibleDiscipline[] | null | undefined,
+  ): string {
+    if (preference === undefined) {
+      return 'missing';
+    }
+    return preference === null
+      ? 'automatic'
+      : `fixed:${trainingSportVisibilitySelectionKey(preference)}`;
+  }
+
   public openTrainingSportVisibilityDialog(): void {
-    if (this.trainingSportVisibilityDialogRef || this.trainingBuildBenchmarkDialogRef) {
+    const userUID = this.currentUserUID;
+    if (
+      !userUID
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingBuildBenchmarkDialogRef
+      || this.trainingMobileDestinationSheetRef
+    ) {
       return;
     }
     const dialogRef = this.dialog.open(TrainingSportVisibilityDialogComponent, {
       width: 'min(100vw - 32px, 480px)',
       maxWidth: '480px',
       data: {
-        visibleDisciplines: [...this.visibleDisciplines],
+        userUID,
+        visibleDisciplines: [...this.sportShortcuts],
         isAutomatic: this.isAutomaticSportVisibility,
       },
     });
@@ -1029,9 +1443,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       if (!result?.saved) {
         return;
       }
-      this.analyticsService?.logEvent('training_sport_visibility_saved', {
+      this.analyticsService?.logEvent('training_sport_shortcuts_saved', {
         selection_mode: result.visibleDisciplines === null ? 'automatic' : 'fixed',
-        selection_count: result.visibleDisciplines?.length ?? 0,
+        shortcut_count: result.visibleDisciplines?.length ?? 0,
       });
       if (this.isPersistedTrainingSportVisibility(result.visibleDisciplines)) {
         this.pendingTrainingVisibleDisciplines = undefined;
@@ -1040,13 +1454,18 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.pendingTrainingVisibleDisciplinesBaselineKey = this.resolvePersistedTrainingSportVisibilityKey();
         this.pendingTrainingVisibleDisciplines = result.visibleDisciplines;
       }
+      this.visibleSportShortcuts = [];
       this.refreshSportSpecificViewModels();
       this.changeDetector.markForCheck();
     }));
   }
 
   public openTrainingBuildBenchmarkDialog(discipline: DerivedTrainingDiscipline): void {
-    if (this.trainingBuildBenchmarkDialogRef || this.trainingSportVisibilityDialogRef) {
+    if (
+      this.trainingBuildBenchmarkDialogRef
+      || this.trainingSportVisibilityDialogRef
+      || this.trainingMobileDestinationSheetRef
+    ) {
       return;
     }
     const card = this.trainingBuildCards.find(item => item.discipline === discipline);
@@ -1519,7 +1938,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private buildTrainingBuildCards(): TrainingBuildCardViewModel[] {
     const contexts = this.derivedState.trainingBuildComparison?.disciplines || [];
     return TRAINING_VISIBLE_DISCIPLINES.filter(discipline => (
-      this.visibleDisciplines.includes(discipline)
+      this.selectedTrainingSport?.id === discipline
       && hasTrainingSportCapability(discipline, 'best-build')
     )).map((discipline) => {
       const source = contexts.find(item => item.discipline === discipline) || null;

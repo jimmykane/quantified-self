@@ -162,6 +162,9 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI]: {
+            enabled: false,
+          },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
@@ -189,6 +192,9 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
+            enabled: false,
+          },
           [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: {
             enabled: false,
           },
@@ -198,6 +204,9 @@ describe('activity-sync/disconnect-routes', () => {
             enabled: false,
           },
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: {
+            enabled: false,
+          },
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
             enabled: false,
           },
         },
@@ -219,6 +228,20 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI]: {
+            enabled: false,
+          },
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
+            enabled: false,
+          },
+          [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI]: {
+            enabled: false,
+          },
+        },
+        routeDeliverySyncRoutes: {
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
+            enabled: false,
+          },
         },
       },
     }, { merge: true });
@@ -236,6 +259,7 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI]: { enabled: false },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
@@ -274,6 +298,9 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI]: {
+            enabled: false,
+          },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
@@ -289,6 +316,9 @@ describe('activity-sync/disconnect-routes', () => {
             enabled: false,
           },
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: {
+            enabled: false,
+          },
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI]: {
             enabled: false,
           },
         },
@@ -326,11 +356,13 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: false },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: false },
         },
         pendingDisconnectRouteRestore: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
@@ -365,6 +397,61 @@ describe('activity-sync/disconnect-routes', () => {
         },
       }),
     }), { merge: true });
+  });
+
+  it('reconstructs pending restore state when Firestore retries the disable transaction', async () => {
+    mockRunTransaction.mockImplementationOnce(async (runner: (transaction: {
+      get: (ref: { __mockType?: string; serviceName?: string }) => unknown;
+      set: typeof mockSettingsSet;
+    }) => unknown) => {
+      const transaction = {
+        get: vi.fn((ref: { __mockType?: string; serviceName?: string }) => (
+          ref?.__mockType === 'meta'
+            ? mockMetaGet(ref.serviceName)
+            : mockSettingsGet(ref)
+        )),
+        set: mockSettingsSet,
+      };
+      await runner(transaction);
+      return runner(transaction);
+    });
+    mockSettingsGet
+      .mockResolvedValueOnce({
+        data: () => ({
+          serviceSyncSettings: {
+            activitySyncRoutes: {
+              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: () => ({
+          serviceSyncSettings: {
+            activitySyncRoutes: {
+              [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
+            },
+          },
+        }),
+      });
+
+    await disableActivitySyncRoutesForDisconnectedService('user-1', ServiceNames.SuuntoApp, {
+      trackPendingDisconnectRestore: true,
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledTimes(2);
+    expect(mockSettingsSet.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      serviceSyncSettings: expect.objectContaining({
+        pendingDisconnectRouteRestore: {
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+        },
+      }),
+    }));
+    expect(mockSettingsSet.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      serviceSyncSettings: expect.not.objectContaining({
+        pendingDisconnectRouteRestore: expect.anything(),
+      }),
+    }));
   });
 
   it('restores only routes tracked by pending disconnect recovery', async () => {

@@ -2,6 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
   createTrainingSportRecord,
   getTrainingSportDefinition,
+  normalizeTrainingDestinationId,
   resolveTrainingDisciplineFromActivityType,
   resolveTrainingSportContextFromActivityType,
   TRAINING_DISCIPLINES,
@@ -31,6 +32,14 @@ describe('shared Training sport registry', () => {
       { id: 'strength', label: 'Strength' },
       { id: 'paddling', label: 'Paddling' },
     ]);
+  });
+
+  it('normalizes account-saved Training destinations to a safe overview fallback', () => {
+    expect(normalizeTrainingDestinationId('overview')).toBe('overview');
+    expect(normalizeTrainingDestinationId('cycling')).toBe('cycling');
+    expect(normalizeTrainingDestinationId('other-power')).toBe('other-power');
+    expect(normalizeTrainingDestinationId('unknown')).toBe('overview');
+    expect(normalizeTrainingDestinationId(null)).toBe('overview');
   });
 
   it('classifies every declared canonical activity type exactly once', () => {

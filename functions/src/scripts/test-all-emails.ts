@@ -1,6 +1,5 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 import {
     FOUNDER_EMAIL_FROM,
@@ -25,6 +24,7 @@ const TEMPLATES_ROOT = resolve(__dirname, '../../templates');
 
 export interface TestEmailArguments {
     targetEmail: string;
+    projectId: string;
     inline: boolean;
 }
 
@@ -40,14 +40,26 @@ export interface TestMailDocument {
 }
 
 export function parseTestEmailArguments(args: readonly string[]): TestEmailArguments {
-    const unsupportedFlags = args.filter(value => value.startsWith('--') && value !== '--inline');
+    const projectArguments = args.filter(value => value.startsWith('--project='));
+    const unsupportedFlags = args.filter(value =>
+        value.startsWith('--') && value !== '--inline' && !value.startsWith('--project=')
+    );
     const positionalArguments = args.filter(value => !value.startsWith('--'));
-    if (unsupportedFlags.length > 0 || positionalArguments.length !== 1) {
-        throw new Error('Usage: npm run test-emails -- target@example.com [--inline]');
+    const projectId = projectArguments[0]?.slice('--project='.length).trim();
+    if (
+        unsupportedFlags.length > 0
+        || positionalArguments.length !== 1
+        || projectArguments.length !== 1
+        || !projectId
+    ) {
+        throw new Error(
+            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline]'
+        );
     }
 
     return {
         targetEmail: positionalArguments[0],
+        projectId,
         inline: args.includes('--inline'),
     };
 }
@@ -82,32 +94,33 @@ export function buildTestMailDocument(
     };
 }
 
-function initializeAdmin(): void {
+export function buildEmailTestAdminOptions(projectId: string): admin.AppOptions {
+    return {
+        projectId,
+        databaseURL: `https://${projectId}.firebaseio.com`,
+    };
+}
+
+function initializeAdmin(projectId: string): void {
     if (admin.apps.length > 0) {
         return;
     }
 
-    const configDirectory = process.env.QS_EMAIL_TEST_CONFIG_DIR || resolve(__dirname, '../..');
-    dotenv.config({ path: resolve(configDirectory, '.env') });
-    // This credential remains local and is never written to a mail document or log output.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const serviceAccount = require(resolve(configDirectory, 'service-account.json'));
-    const projectId = process.env.GCLOUD_PROJECT || serviceAccount.project_id;
-    if (!projectId) {
-        throw new Error('The email test configuration does not identify a Firebase project.');
-    }
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${projectId}.firebaseio.com`,
-    });
+    admin.initializeApp(buildEmailTestAdminOptions(projectId));
 }
 
-export async function sendTestEmails(targetEmail: string, inline = false): Promise<void> {
-    if (!targetEmail) {
-        throw new Error('Usage: npm run test-emails -- target@example.com [--inline]');
+export async function sendTestEmails(
+    targetEmail: string,
+    projectId: string,
+    inline = false,
+): Promise<void> {
+    if (!targetEmail || !projectId) {
+        throw new Error(
+            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline]'
+        );
     }
 
-    initializeAdmin();
+    initializeAdmin(projectId);
     const previewCases = REFRESHED_EMAIL_TEMPLATE_CATALOG.flatMap(template =>
         template.previewCases.map(preview => ({ template, preview }))
     );
@@ -135,8 +148,8 @@ export async function sendTestEmails(targetEmail: string, inline = false): Promi
 
 if (require.main === module) {
     try {
-        const { targetEmail, inline } = parseTestEmailArguments(process.argv.slice(2));
-        sendTestEmails(targetEmail, inline).catch(error => {
+        const { targetEmail, projectId, inline } = parseTestEmailArguments(process.argv.slice(2));
+        sendTestEmails(targetEmail, projectId, inline).catch(error => {
             logger.error('Failed to queue refreshed-template smoke tests.', error);
             process.exitCode = 1;
         });

@@ -12,10 +12,10 @@
     [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService() || isDisconnectPending"
-    [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : null"
-    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
-    [statusTone]="isDisconnectPending ? 'attention' : 'default'">
+    [showDetails]="isConnectedToService() || isReconnectRequired || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectManualReviewRequired ? 'Reconnect needed' : isDisconnectPending ? 'Disconnect pending' : isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isDisconnectPending || isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending || isReconnectRequired ? 'attention' : 'default'">
     <div connection-body class="connection-details">
     @if (isDisconnectPending) {
     <div class="reconnect-required-banner" [attr.role]="isDisconnectManualReviewRequired ? 'alert' : 'status'">
@@ -32,22 +32,20 @@
       </div>
     </div>
     }
-    @if (isConnectedToService()) {
+    @if (hasStoredCOROSConnection) {
     <div class="connection-account-row">
       <div class="connection-account-info">
     @if (!corosOpenId) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
-      @for (serviceToken of serviceTokens; track $index) {
       <div class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon">account_circle</mat-icon>
         <div class="connected-account-copy">
-          <div class="connected-account-title">{{ getCorosOpenId(serviceToken) }}</div>
-          <div class="connected-account-line">Connected: {{ serviceToken.dateCreated | date:'short' }}</div>
+          <div class="connected-account-title">{{ getCorosOpenId(activeCorosServiceToken!) }}</div>
+          <div class="connected-account-line">Active account · Connected: {{ activeCorosServiceToken!.dateCreated | date:'short' }}</div>
         </div>
       </div>
-      }
     </div>
     }
       </div>
@@ -65,6 +63,20 @@
         </span>
         }
       </button>
+    </div>
+    }
+    @if (isCheckingCOROSBindingState) {
+    <div class="coros-binding-check" role="status">
+      <mat-spinner diameter="18"></mat-spinner>
+      <span>Checking the COROS connection…</span>
+    </div>
+    } @else if (corosBindingStateCheckError && isConnectedToService() && !isReconnectRequired && !isDisconnectPending) {
+    <div class="coros-binding-check coros-binding-check--error" role="status">
+      <mat-icon>cloud_off</mat-icon>
+      <span>Could not verify the COROS connection.</span>
+      <button mat-button type="button"
+        [disabled]="isCOROSBindingStateRetryDisabled"
+        (click)="retryCOROSBindingStateCheck()">Retry</button>
     </div>
     }
     </div>
@@ -86,7 +98,7 @@
         </span>
         } @else {
         <span class="connection-action-content">
-          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
           {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
         </span>
         }
@@ -163,6 +175,10 @@
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
       </div>
+      } @else if (isReconnectRequired) {
+      <app-status-info type="info" title="Reconnect COROS Required">
+        Reconnect COROS before importing history.
+      </app-status-info>
       } @else if (isConnectedToService()) {
       <app-history-import-form [serviceName]="serviceName" [minDate]="minDate" [userMetaForService]="serviceMeta"
         [providerConnected]="true" [isLoadingParent]="isLoading"
@@ -188,10 +204,14 @@
           }
         </div>
         @if (!hasProAccess) {
-        <div class="pro-required-inline" (click)="triggerUpsell()">
+        <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
           <mat-icon>lock</mat-icon>
           <span>Upload activity is a Pro feature.</span>
-        </div>
+        </button>
+        } @else if (isReconnectRequired) {
+        <app-status-info type="info" title="Reconnect COROS Required">
+          Reconnect COROS before uploading activities.
+        </app-status-info>
         } @else if (isConnectedToService()) {
         <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"
           [serviceName]="serviceName"></app-upload-activity-to-service>
@@ -201,6 +221,33 @@
         </app-status-info>
         }
       </section>
+      @if (isCOROSRouteUploadAvailableForUser) {
+      <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>route</mat-icon>
+            <span>Upload GPX or FIT Route</span>
+          </div>
+        </div>
+        @if (!hasProAccess) {
+        <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+          <mat-icon>lock</mat-icon>
+          <span>Route upload is a Pro feature.</span>
+        </button>
+        } @else if (isReconnectRequired) {
+        <app-status-info type="info" title="Reconnect COROS Required">
+          Reconnect COROS before uploading routes.
+        </app-status-info>
+        } @else if (isConnectedToService()) {
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"
+          [serviceName]="serviceName"></app-upload-route-to-service>
+        } @else {
+        <app-status-info type="info" title="Connect Account First">
+          You need to connect your COROS account before uploading routes.
+        </app-status-info>
+        }
+      </section>
+      }
     </section>
     }
 
@@ -246,6 +293,10 @@
           <mat-icon>lock</mat-icon>
           <span>Sending COROS activities to Suunto is a Pro feature.</span>
         </div>
+        } @else if (isReconnectRequired) {
+        <app-status-info type="info" title="Reconnect COROS Required">
+          Reconnect COROS before syncing activities.
+        </app-status-info>
         } @else if (isSuuntoReconnectRequired) {
         <app-status-info type="info" title="Reconnect Suunto Required">
           Reconnect Suunto before syncing COROS activities.
@@ -324,6 +375,7 @@
         [sourceServiceName]="serviceName"
         [destinationServiceName]="serviceNames.WahooAPI"
         [sourceConnected]="isConnectedToService()"
+        [sourceReconnectRequired]="isReconnectRequired"
         [showTopDivider]="!showOnlyActiveProviderTool">
       </app-activity-sync-route-control>
         }

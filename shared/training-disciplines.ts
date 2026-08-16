@@ -499,6 +499,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
 export type TrainingSportDefinition = typeof TRAINING_SPORT_DEFINITIONS[number];
 export type TrainingSportId = TrainingSportDefinition['id'];
 export type TrainingDiscipline = TrainingSportId;
+export type TrainingDestinationId = 'overview' | TrainingSportId | 'other-power';
 export type TrainingSportContextDefinition = TrainingSportDefinition['contexts'][number];
 export type TrainingSportContextId = TrainingSportContextDefinition['id'];
 
@@ -649,6 +650,14 @@ export function resolveTrainingDisciplineFromActivityType(value: unknown): Train
 export function isTrainingDiscipline(value: unknown): value is TrainingDiscipline {
   return typeof value === 'string'
     && TRAINING_DISCIPLINES.includes(value as TrainingDiscipline);
+}
+
+export function isTrainingDestinationId(value: unknown): value is TrainingDestinationId {
+  return value === 'overview' || value === 'other-power' || isTrainingDiscipline(value);
+}
+
+export function normalizeTrainingDestinationId(value: unknown): TrainingDestinationId {
+  return isTrainingDestinationId(value) ? value : 'overview';
 }
 
 export function isTrainingSportContextId(value: unknown): value is TrainingSportContextId {

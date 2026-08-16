@@ -82,8 +82,10 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('keep supported activities syncing between connected services');
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
+        expect(aiSectionText).toContain('If you could ask your training history one question, what would it be?');
         expect(aiSectionText).toContain('Quantified Self Assistant');
         expect(aiSectionText).toContain('answers grounded in read-only sleep, readiness, Training, measurement, and activity tools');
+        expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).toContain('Explore the Assistant');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');

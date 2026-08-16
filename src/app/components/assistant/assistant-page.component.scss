@@ -144,6 +144,38 @@ h1 {
   margin-top: 4px;
 }
 
+.assistant-empty-state {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 24px;
+  text-align: center;
+}
+
+.assistant-empty-state > mat-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--mat-sys-primary);
+  font-size: 32px;
+}
+
+.assistant-empty-state h2 {
+  max-width: 650px;
+  margin: 0;
+  font: var(--mat-sys-headline-small);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.assistant-empty-state p {
+  max-width: 590px;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.55;
+}
+
 .conversation {
   display: flex;
   flex: 1 1 auto;
@@ -543,6 +575,15 @@ h1 {
 
   h1 {
     font: var(--mat-sys-headline-small);
+    font-weight: 600;
+  }
+
+  .assistant-empty-state {
+    padding: 18px 10px;
+  }
+
+  .assistant-empty-state h2 {
+    font: var(--mat-sys-title-large);
     font-weight: 600;
   }
 

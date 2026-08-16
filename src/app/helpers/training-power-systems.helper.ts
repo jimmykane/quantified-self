@@ -19,6 +19,11 @@ import {
   type DerivedTrainingPowerSystemsSnapshot,
   type DerivedTrainingPowerSystemsStatus,
 } from '@shared/derived-metrics';
+import {
+  createTrainingSportRecord,
+  resolveTrainingDisciplineFromActivityType,
+  type TrainingSportId,
+} from '@shared/training-disciplines';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OVERALL_STATUSES = new Set<DerivedTrainingPowerSystemsStatus>([
@@ -95,6 +100,27 @@ export interface TrainingPowerSystemsActivityTypeViewModel {
   diagnostics: string[];
   cards: TrainingPowerSystemsCardViewModel[];
   trends: TrainingPowerSystemsTrendViewModel[];
+}
+
+export interface TrainingPowerSystemsActivityTypeGroups {
+  bySport: Record<TrainingSportId, TrainingPowerSystemsActivityTypeViewModel[]>;
+  other: TrainingPowerSystemsActivityTypeViewModel[];
+}
+
+export function groupTrainingPowerSystemsActivityTypeViewModels(
+  activityTypes: readonly TrainingPowerSystemsActivityTypeViewModel[],
+): TrainingPowerSystemsActivityTypeGroups {
+  const bySport = createTrainingSportRecord<TrainingPowerSystemsActivityTypeViewModel[]>(() => []);
+  const other: TrainingPowerSystemsActivityTypeViewModel[] = [];
+  activityTypes.forEach((activityType) => {
+    const sport = resolveTrainingDisciplineFromActivityType(activityType.activityType);
+    if (sport) {
+      bySport[sport].push(activityType);
+    } else {
+      other.push(activityType);
+    }
+  });
+  return { bySport, other };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

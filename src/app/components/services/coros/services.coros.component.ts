@@ -18,8 +18,13 @@ import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../../helpers/suunto-service-connection.helper';
-import { isDisconnectPendingServiceConnection } from '@shared/service-connection';
+import {
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
+const COROS_BINDING_STATE_STALE_RETRY_FALLBACK_MS = 15_000;
 
 @Component({
   selector: 'app-services-coros',
@@ -30,7 +35,7 @@ import { isDisconnectPendingServiceConnection } from '@shared/service-connection
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   public serviceName = ServiceNames.COROSAPI;
-  public showCorosUploadActivityCard = false;
+  public showCorosUploadActivityCard = true;
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
   public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
@@ -38,10 +43,18 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
-  public activeActivitySyncDestination: 'suunto' | 'wahoo' = 'suunto';
-  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | null = null;
+  public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
+  public isCheckingCOROSBindingState = false;
+  public corosBindingStateCheckError = false;
+  public isCOROSBindingStateRetryDisabled = false;
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
+  private lastCOROSBindingStateCheckKey: string | null = null;
+  private corosBindingStateRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private corosBindingStateAutomaticStaleRetryKey: string | null = null;
+  private corosBindingStateAutomaticStaleRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private isDestroyed = false;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
     hasToken: false,
     serviceMeta: null,
@@ -66,7 +79,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
   }
 
-  get corosServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+  get corosServiceMeta(): UserServiceMetaInterface & {
+    uploadedActivitiesCount?: number;
+    providerUserId?: string;
+  } | undefined {
     return this.serviceMeta;
   }
 
@@ -79,12 +95,35 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   override ngOnDestroy(): void {
+    this.isDestroyed = true;
+    this.lastCOROSBindingStateCheckKey = null;
+    this.isCheckingCOROSBindingState = false;
+    this.clearCOROSBindingStateRetryCooldown();
+    this.clearCOROSBindingStateAutomaticStaleRetry();
     super.ngOnDestroy();
     this.suuntoConnectionSubscription?.unsubscribe();
     this.suuntoConnectionSubscription = null;
   }
 
-  isConnectedToService = () => !this.isDisconnectPending && ((!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected);
+  protected override onServiceDataChanged(): void {
+    void this.checkCOROSBindingStateIfEligible();
+  }
+
+  public retryCOROSBindingStateCheck(): void {
+    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState) return;
+    this.corosBindingStateCheckError = false;
+    void this.checkCOROSBindingStateIfEligible(true);
+  }
+
+  get hasStoredCOROSConnection(): boolean {
+    return !this.isDisconnectPending && (!!this.activeCorosServiceToken || this.forceConnected);
+  }
+
+  isConnectedToService = () => !this.isReconnectRequired && this.hasStoredCOROSConnection;
+
+  get isReconnectRequired(): boolean {
+    return isReconnectRequiredServiceConnection(this.serviceMeta);
+  }
 
   get isDisconnectPending(): boolean {
     return isDisconnectPendingServiceConnection(this.serviceMeta);
@@ -99,20 +138,25 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   get shouldShowConnectAction(): boolean {
-    return !this.isConnectedToService()
+    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
   }
 
   get connectButtonLabel(): string {
-    return this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
+    const uploadScope = this.isCOROSRouteUploadAvailableForUser
+      ? 'activity and route uploads'
+      : 'activity uploads';
     return this.isDisconnectManualReviewRequired
       ? 'COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if the old connection still appears in COROS.'
       : this.isDisconnectPending
       ? 'Disconnect is pending while COROS finishes deauthorization. Sync and imports are paused for this connection.'
-      : 'Required for history imports, uploads, and automatic activity sync from COROS to Suunto.';
+      : this.isReconnectRequired
+      ? `Reconnect COROS to resume history imports, ${uploadScope}, and automatic sync.`
+      : `Required for history imports, direct ${uploadScope}, and automatic sync involving COROS.`;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -120,11 +164,162 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   get corosOpenId(): string | undefined {
-    return (this.serviceTokens as Auth2ServiceTokenInterface[])?.[0]?.openId;
+    return this.activeCorosServiceToken?.openId;
+  }
+
+  /**
+   * COROS deliveries use exactly one account. New connections are pinned in
+   * service metadata; legacy connections use the same deterministic fallback
+   * as the backend until their first delivery persists that pin.
+   */
+  get activeCorosServiceToken(): Auth2ServiceTokenInterface | undefined {
+    const tokens = ((this.serviceTokens || []) as Auth2ServiceTokenInterface[])
+      .filter(token => `${token?.openId || ''}`.trim().length > 0);
+    const pinnedOpenId = `${this.corosServiceMeta?.providerUserId || ''}`.trim();
+    if (pinnedOpenId) {
+      return tokens.find(token => `${token.openId || ''}`.trim() === pinnedOpenId);
+    }
+
+    return [...tokens].sort((left, right) => (
+      this.getTokenTimestamp(right.dateRefreshed) - this.getTokenTimestamp(left.dateRefreshed)
+      || this.getTokenTimestamp(right.dateCreated) - this.getTokenTimestamp(left.dateCreated)
+      || `${right.openId || ''}`.localeCompare(`${left.openId || ''}`)
+    ))[0];
   }
 
   getCorosOpenId(token: Auth2ServiceTokenInterface | Auth1ServiceTokenInterface): string | undefined {
     return (token as Auth2ServiceTokenInterface).openId;
+  }
+
+  private getTokenTimestamp(value: unknown): number {
+    const timestamp = Number(value);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
+    if (this.isDestroyed) return;
+    const userID = `${this.user?.uid || ''}`.trim();
+    const providerUserId = `${this.activeCorosServiceToken?.openId || ''}`.trim();
+    const isEligible = this.showConnectionSummary
+      && !!userID
+      && !!providerUserId
+      && !this.isReconnectRequired
+      && !this.isDisconnectPending;
+    if (!isEligible) {
+      this.lastCOROSBindingStateCheckKey = null;
+      this.isCheckingCOROSBindingState = false;
+      this.clearCOROSBindingStateRetryCooldown();
+      this.clearCOROSBindingStateAutomaticStaleRetry();
+      return;
+    }
+
+    const checkKey = `${userID}:${providerUserId}`;
+    if (this.corosBindingStateAutomaticStaleRetryKey !== null
+      && this.corosBindingStateAutomaticStaleRetryKey !== checkKey) {
+      this.clearCOROSBindingStateAutomaticStaleRetry();
+    }
+    if (!force && (
+      this.lastCOROSBindingStateCheckKey === checkKey
+      || this.corosBindingStateAutomaticStaleRetryKey === checkKey
+    )) return;
+    this.lastCOROSBindingStateCheckKey = checkKey;
+    this.isCheckingCOROSBindingState = true;
+    this.corosBindingStateCheckError = false;
+    this.changeDetectorRef.markForCheck();
+    try {
+      const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
+      if (this.isDestroyed) return;
+      if (this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.clearCOROSBindingStateRetryCooldown();
+      }
+      if (result.status === 'stale' && this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.lastCOROSBindingStateCheckKey = null;
+        this.scheduleCOROSBindingStateAutomaticStaleRetry(checkKey, result.retryAt);
+      } else if (this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.clearCOROSBindingStateAutomaticStaleRetry(checkKey);
+      }
+    } catch (error) {
+      if (this.isDestroyed) return;
+      if (this.lastCOROSBindingStateCheckKey === checkKey) {
+        this.corosBindingStateCheckError = true;
+        this.setCOROSBindingStateRetryCooldown(this.getCOROSBindingStateRetryAt(error));
+        this.clearCOROSBindingStateAutomaticStaleRetry(checkKey);
+      }
+      this.logger.error(error);
+    } finally {
+      if (!this.isDestroyed
+        && (this.lastCOROSBindingStateCheckKey === checkKey || this.lastCOROSBindingStateCheckKey === null)) {
+        this.isCheckingCOROSBindingState = false;
+        this.changeDetectorRef.markForCheck();
+      }
+    }
+  }
+
+  private scheduleCOROSBindingStateAutomaticStaleRetry(checkKey: string, rawRetryAt: unknown): void {
+    if (this.corosBindingStateAutomaticStaleRetryKey === checkKey) return;
+    this.clearCOROSBindingStateAutomaticStaleRetry();
+    this.corosBindingStateAutomaticStaleRetryKey = checkKey;
+
+    const retryAt = Number(rawRetryAt);
+    const delayMs = Number.isFinite(retryAt) && retryAt > 0
+      ? Math.max(0, retryAt - Date.now())
+      : COROS_BINDING_STATE_STALE_RETRY_FALLBACK_MS;
+    this.corosBindingStateAutomaticStaleRetryTimer = globalThis.setTimeout(() => {
+      this.corosBindingStateAutomaticStaleRetryTimer = null;
+      if (this.isDestroyed || this.corosBindingStateAutomaticStaleRetryKey !== checkKey) return;
+
+      const currentUserID = `${this.user?.uid || ''}`.trim();
+      const currentProviderUserId = `${this.activeCorosServiceToken?.openId || ''}`.trim();
+      if (`${currentUserID}:${currentProviderUserId}` !== checkKey) {
+        this.corosBindingStateAutomaticStaleRetryKey = null;
+        return;
+      }
+      void this.checkCOROSBindingStateIfEligible(true);
+    }, Math.min(delayMs, 2_147_483_647));
+  }
+
+  private clearCOROSBindingStateAutomaticStaleRetry(checkKey?: string): void {
+    if (checkKey && this.corosBindingStateAutomaticStaleRetryKey !== checkKey) return;
+    if (this.corosBindingStateAutomaticStaleRetryTimer !== null) {
+      globalThis.clearTimeout(this.corosBindingStateAutomaticStaleRetryTimer);
+      this.corosBindingStateAutomaticStaleRetryTimer = null;
+    }
+    this.corosBindingStateAutomaticStaleRetryKey = null;
+  }
+
+  private getCOROSBindingStateRetryAt(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null;
+    const details = (error as { details?: unknown }).details;
+    if (!details || typeof details !== 'object') return null;
+    const retryAt = Number((details as { retryAt?: unknown }).retryAt);
+    return Number.isFinite(retryAt) && retryAt > Date.now() ? retryAt : null;
+  }
+
+  private setCOROSBindingStateRetryCooldown(retryAt: number | null): void {
+    this.clearCOROSBindingStateRetryCooldown();
+    if (retryAt === null) return;
+
+    const remainingMs = retryAt - Date.now();
+    if (remainingMs <= 0) return;
+    this.isCOROSBindingStateRetryDisabled = true;
+    this.corosBindingStateRetryTimer = globalThis.setTimeout(() => {
+      this.corosBindingStateRetryTimer = null;
+      if (this.isDestroyed) return;
+      if (retryAt > Date.now()) {
+        this.setCOROSBindingStateRetryCooldown(retryAt);
+        return;
+      }
+      this.isCOROSBindingStateRetryDisabled = false;
+      this.changeDetectorRef.markForCheck();
+    }, Math.min(remainingMs, 2_147_483_647));
+  }
+
+  private clearCOROSBindingStateRetryCooldown(): void {
+    if (this.corosBindingStateRetryTimer !== null) {
+      globalThis.clearTimeout(this.corosBindingStateRetryTimer);
+      this.corosBindingStateRetryTimer = null;
+    }
+    this.isCOROSBindingStateRetryDisabled = false;
   }
 
   private watchSuuntoConnectionState(): void {
@@ -161,6 +356,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return isActivitySyncRouteUIDAllowlisted(this.corosToSuuntoRouteID, userID);
   }
 
+  get isCOROSRouteUploadAvailableForUser(): boolean {
+    return isCOROSRouteUploadUIDAllowlisted(`${this.user?.uid || ''}`);
+  }
+
   get isBackfillDateRangeInvalid(): boolean {
     return this.backfillStartDate > this.backfillEndDate;
   }
@@ -177,6 +376,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (enabled && this.isSuuntoReconnectRequired) {
       this.snackBar.open('Reconnect Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (enabled && this.isReconnectRequired) {
+      this.snackBar.open('Reconnect COROS before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
@@ -215,6 +419,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
     if (this.isSuuntoReconnectRequired) {
       this.snackBar.open('Reconnect Suunto before syncing past COROS activities.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (this.isReconnectRequired) {
+      this.snackBar.open('Reconnect COROS before syncing past activities.', undefined, { duration: 4000 });
       return;
     }
 

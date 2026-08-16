@@ -9,6 +9,7 @@ import { AppFunctionsService } from '../../../services/app.functions.service';
 import { isWahooRouteAccessReconnectRequired } from '../../../helpers/wahoo-route-access.helper';
 import { markUploadErrorUserActionHandled } from '../../../services/upload-error';
 import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -46,6 +47,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
       ServiceNames.SuuntoApp,
       ServiceNames.GarminAPI,
       ServiceNames.WahooAPI,
+      ServiceNames.COROSAPI,
     ].includes(this.serviceName);
   }
 
@@ -75,6 +77,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     if (this.serviceName === ServiceNames.SuuntoApp) {
       return this.processAndUploadRouteForService(file, 'importRouteToSuuntoApp', 'Suunto');
     }
+    if (this.serviceName === ServiceNames.COROSAPI) {
+      return this.processAndUploadRouteForService(file, 'importRouteToCOROSAPI', 'COROS');
+    }
     throw new Error(`Manual route upload is not supported by ${this.serviceName}.`);
   }
 
@@ -84,7 +89,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
 
   private async processAndUploadRouteForService(
     file: FileInterface,
-    functionName: 'importRouteToGarminAPI' | 'importRouteToSuuntoApp' | 'importRouteToWahooAPI',
+    functionName: 'importRouteToGarminAPI' | 'importRouteToSuuntoApp' | 'importRouteToWahooAPI' | 'importRouteToCOROSAPI',
     serviceLabel: string,
   ): Promise<boolean> {
     if (!['fit', 'gpx'].includes(file.extension.toLowerCase())) {
@@ -92,6 +97,10 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     }
     if (!this.auth.currentUser) {
       throw new Error('User not logged in');
+    }
+    if (this.serviceName === ServiceNames.COROSAPI
+      && !isCOROSRouteUploadUIDAllowlisted(this.auth.currentUser.uid)) {
+      throw new Error('COROS route uploads are temporarily unavailable for this account.');
     }
     if (file.file.size > MAX_ROUTE_UPLOAD_BYTES) {
       throw new Error('Cannot upload route because the size is greater than 20MB');

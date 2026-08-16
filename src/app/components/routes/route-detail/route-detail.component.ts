@@ -36,6 +36,7 @@ import { AppUserService, GarminRouteSendContext } from '../../../services/app.us
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeRouteName } from '../../../helpers/route-name.helper';
+import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 import {
   canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
@@ -98,6 +99,7 @@ export class RouteDetailComponent {
   readonly reprocessing = signal(false);
   readonly sendingToService = signal(false);
   readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
+  readonly isCOROSRouteDeliveryConnected = signal(false);
   readonly garminRouteSendContext = signal<GarminRouteSendContext>({
     connected: false,
     reconnectRequired: false,
@@ -184,6 +186,14 @@ export class RouteDetailComponent {
       && !connectionView.reconnectRequired
       && connectionView.missingPermissions.length === 0;
   });
+  readonly isCOROSRouteUploadAvailableForUser = computed(() => (
+    isCOROSRouteUploadUIDAllowlisted(`${this.user()?.uid || ''}`)
+  ));
+  readonly canSendRoutesToCOROS = computed(() => (
+    this.userService.hasProAccessSignal()
+    && this.isCOROSRouteUploadAvailableForUser()
+    && this.isCOROSRouteDeliveryConnected()
+  ));
   readonly canSendRouteToSuunto = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -197,6 +207,12 @@ export class RouteDetailComponent {
       && this.canManageRoute()
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
       && canSendRouteToConnectedGarminAccount(routeDocument, this.garminRouteSendContext());
+  });
+  readonly canSendRouteToCOROS = computed(() => {
+    const routeDocument = this.routeDocument();
+    return !!routeDocument
+      && this.canManageRoute()
+      && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
   });
   readonly garminRouteSendDisabledReason = computed(() => {
     const routeDocument = this.routeDocument();
@@ -213,7 +229,10 @@ export class RouteDetailComponent {
     return getSuuntoRouteSendMenuLabel(this.routeDocument());
   });
   readonly hasSendableRouteDestination = computed(() => (
-    this.canSendRouteToSuunto() || this.canSendRouteToGarmin() || !!this.garminRouteSendDisabledReason()
+    this.canSendRouteToSuunto()
+    || this.canSendRouteToGarmin()
+    || (this.isCOROSRouteUploadAvailableForUser() && this.canSendRouteToCOROS())
+    || !!this.garminRouteSendDisabledReason()
   ));
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
@@ -246,6 +265,16 @@ export class RouteDetailComponent {
       )
       .subscribe(context => {
         this.garminRouteSendContext.set(context);
+      });
+
+    this.activatedRoute.data
+      .pipe(
+        map(data => (data['route'] as RouteResolverData | null)?.user ?? null),
+        switchMap(user => this.userService.watchActivityServiceConnectionState(user)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(connectionState => {
+        this.isCOROSRouteDeliveryConnected.set(connectionState[ServiceNames.COROSAPI] === true);
       });
   }
 
@@ -471,6 +500,10 @@ export class RouteDetailComponent {
 
   async sendRouteToGarmin(): Promise<void> {
     await this.sendRouteToService(ServiceNames.GarminAPI);
+  }
+
+  async sendRouteToCOROS(): Promise<void> {
+    await this.sendRouteToService(ServiceNames.COROSAPI);
   }
 
   async sendRouteToService(destinationServiceName: ServiceNames): Promise<void> {
@@ -781,6 +814,8 @@ export class RouteDetailComponent {
         return this.canSendRoutesToSuunto();
       case ServiceNames.GarminAPI:
         return this.canSendRoutesToGarmin();
+      case ServiceNames.COROSAPI:
+        return this.canSendRoutesToCOROS();
       default:
         return false;
     }
@@ -792,6 +827,8 @@ export class RouteDetailComponent {
         return this.canSendRouteToSuunto();
       case ServiceNames.GarminAPI:
         return this.canSendRouteToGarmin();
+      case ServiceNames.COROSAPI:
+        return this.canSendRouteToCOROS();
       default:
         return false;
     }

@@ -34,6 +34,8 @@ firebase emulators:start --only auth,functions,firestore,storage
 
 Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
 
+Firebase Admin uses keyless Application Default Credentials in every environment. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so local emulator startup must not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
+
 Repository operational scripts load local values in this order without overriding an existing shell variable:
 
 1. `functions/.secret.local`

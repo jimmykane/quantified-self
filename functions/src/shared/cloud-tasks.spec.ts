@@ -148,6 +148,39 @@ describe('Cloud Tasks Utils', () => {
             );
         });
 
+        it('binds a workout task name and payload to the queue revision', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+
+            await expect(enqueueWorkoutTask('corosAPI' as ServiceNames, 'stable-item', 1000, undefined, {
+                queueRevision: 'revision/2',
+            })).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                {
+                    queueItemId: 'stable-item',
+                    serviceName: 'corosAPI',
+                    queueRevision: 'revision/2',
+                },
+                { id: 'corosAPI-stable-item-1000-revision-revision-2', scheduleDelaySeconds: 1 },
+            );
+        });
+
+        it('binds a legacy COROS task payload to its original creation time', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+
+            await expect(enqueueWorkoutTask('corosAPI' as ServiceNames, 'legacy-item', 1000))
+                .resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                {
+                    queueItemId: 'legacy-item',
+                    serviceName: 'corosAPI',
+                    queueDateCreated: 1000,
+                },
+                { id: 'corosAPI-legacy-item-1000', scheduleDelaySeconds: 1 },
+            );
+        });
+
         it('preserves the workout recovery path for a stale production task-name reservation', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
             const duplicateError = Object.assign(new Error('Already exists'), {

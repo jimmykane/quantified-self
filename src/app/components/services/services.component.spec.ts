@@ -387,7 +387,7 @@ describe('ServicesComponent', () => {
     });
 
     it('shows a single-service import state before the matrix becomes useful', () => {
-        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.processUser({ uid: 'test-user-uid' } as User, true);
         component.setServiceConnectionState('garmin', true);
         fixture.detectChanges();
 
@@ -400,7 +400,7 @@ describe('ServicesComponent', () => {
 
     it('shows connected imports and flags an enabled delivery when a provider needs connection', () => {
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
@@ -425,7 +425,7 @@ describe('ServicesComponent', () => {
 
     it('shows supported matrix routes and marks enabled delivery as active', () => {
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     routeDeliverySyncRoutes: {
@@ -465,7 +465,7 @@ describe('ServicesComponent', () => {
     });
 
     it('shows a green connected status beside connected providers in the data-flow matrix', () => {
-        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.processUser({ uid: 'test-user-uid' } as User, true);
         component.setServiceConnectionState('garmin', true);
         component.setServiceConnectionState('suunto', true);
         fixture.detectChanges();
@@ -485,7 +485,7 @@ describe('ServicesComponent', () => {
 
     it('opens the matching source settings dialog from activity and route data-flow paths', () => {
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
@@ -530,7 +530,7 @@ describe('ServicesComponent', () => {
     });
 
     it('renders a compact stacked matrix for mobile layouts', () => {
-        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.processUser({ uid: 'test-user-uid' } as User, true);
         component.setServiceConnectionState('garmin', true);
         component.setServiceConnectionState('suunto', true);
         fixture.detectChanges();
@@ -680,7 +680,9 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
         expect(component.serviceOverviewCardsBySection.suunto[3].description)
             .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
-        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.coros[1].description)
+            .toBe('Send a FIT activity directly to COROS without adding it to your Quantified Self archive.');
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });
 
@@ -693,7 +695,7 @@ describe('ServicesComponent', () => {
 
     it('summarizes enabled activity and route delivery for every affected provider', () => {
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
@@ -752,7 +754,7 @@ describe('ServicesComponent', () => {
 
     it('renders enabled activity and route delivery without opening a tools dialog', () => {
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
@@ -778,9 +780,29 @@ describe('ServicesComponent', () => {
         expect(mockDialog.open).not.toHaveBeenCalled();
     });
 
+    it('summarizes enabled COROS route settings for any eligible user', () => {
+        component.processUser({
+            uid: 'general-availability-user',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+
+        const expectedRoute = {
+            id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+            label: 'Suunto → COROS',
+        };
+        expect(component.automaticSyncSummaryBySection.suunto.routes).toEqual([expectedRoute]);
+        expect(component.automaticSyncSummaryBySection.coros.routes).toEqual([expectedRoute]);
+    });
+
     it('describes non-Pro automatic sync without implying an unconfigured route exists', () => {
         fixture.detectChanges();
-        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, false);
+        component.processUser({ uid: 'test-user-uid' } as User, false);
         component.activeSection = 'garmin';
         fixture.detectChanges();
 
@@ -795,7 +817,7 @@ describe('ServicesComponent', () => {
     it('marks configured provider delivery as paused after Pro access ends', () => {
         fixture.detectChanges();
         component.processUser({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     activitySyncRoutes: {
@@ -817,11 +839,11 @@ describe('ServicesComponent', () => {
     it('refreshes the summary when sync settings change for the signed-in user', async () => {
         const userUpdates$ = new Subject<User>();
         mockAuthService.user$ = userUpdates$;
-        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.processUser({ uid: 'test-user-uid' } as User, true);
 
         await component.ngOnInit();
         userUpdates$.next({
-            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            uid: 'test-user-uid',
             settings: {
                 serviceSyncSettings: {
                     routeDeliverySyncRoutes: {
@@ -873,7 +895,7 @@ describe('ServicesComponent', () => {
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('activity-sync');
-        expect(component.managedToolTitle).toBe('Send activities to Wahoo');
+        expect(component.managedToolTitle).toBe('Send activities to connected services');
     });
 
     it('gives the service tools dialog an accessible close action', () => {

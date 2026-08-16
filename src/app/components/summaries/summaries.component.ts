@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -155,6 +156,10 @@ import {
   normalizeDashboardFormTimelineWindow,
 } from '../../helpers/dashboard-chart-display-settings.helper';
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
+import {
+  formatDashboardGreeting,
+  resolveNextDashboardGreetingBoundaryMs,
+} from '../../helpers/dashboard-greeting.helper';
 import { normalizeDashboardPowerCurveCompareMode } from '../../helpers/dashboard-power-curve.helper';
 import {
   getDashboardPowerCurveActivityTypes,
@@ -295,8 +300,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
+  public todayGreeting = '';
+  public isOwnerDashboard = false;
 
   private appThemeSubscription: Subscription | null = null;
+  private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
@@ -362,6 +370,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
 
+  private readonly onDocumentVisibilityChange = (): void => {
+    if (this.documentRef.visibilityState !== 'visible') {
+      this.clearTodayHeaderRefreshTimer();
+      return;
+    }
+    this.refreshTodayHeaderAndSchedule();
+  };
+
   constructor(
     private themeService: AppThemeService,
     private userService: AppUserService,
@@ -375,12 +391,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     changeDetector: ChangeDetectorRef,
     logger: LoggerService,
     @Inject(LOCALE_ID) private locale: string,
+    @Inject(DOCUMENT) private readonly documentRef: Document,
   ) {
     super(changeDetector);
     this.logger = logger;
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
-    this.todayDateSubtitle = this.formatTodayDateSubtitle(new Date());
+    this.refreshTodayHeader(new Date());
   }
 
   @HostListener('window:resize', ['$event'])
@@ -394,9 +411,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   ngOnInit() {
     this.updateDesktopTileDragCapability();
+    this.documentRef.addEventListener('visibilitychange', this.onDocumentVisibilityChange);
+    this.refreshTodayHeaderAndSchedule();
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    if (simpleChanges.user || simpleChanges.eventUser) {
+      this.refreshTodayHeader(new Date());
+    }
     this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
     if (
@@ -439,6 +461,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
+    this.clearTodayHeaderRefreshTimer();
     this.unsubscribeFromAll();
   }
 
@@ -474,6 +498,42 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         day: 'numeric',
       }).format(date);
     }
+  }
+
+  private refreshTodayHeader(date: Date): void {
+    this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
+    this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
+    this.todayGreeting = formatDashboardGreeting(
+      date,
+      (this.user as AppUserInterface | null | undefined)?.displayName,
+    );
+  }
+
+  private refreshTodayHeaderAndSchedule(date = new Date()): void {
+    this.refreshTodayHeader(date);
+    if (this.documentRef.visibilityState === 'visible') {
+      this.scheduleTodayHeaderRefresh(date);
+    } else {
+      this.clearTodayHeaderRefreshTimer();
+    }
+    this.changeDetector.markForCheck();
+  }
+
+  private scheduleTodayHeaderRefresh(date: Date): void {
+    this.clearTodayHeaderRefreshTimer();
+    const refreshAtMs = resolveNextDashboardGreetingBoundaryMs(date);
+    this.todayHeaderRefreshTimeoutHandle = globalThis.setTimeout(() => {
+      this.todayHeaderRefreshTimeoutHandle = null;
+      this.refreshTodayHeaderAndSchedule();
+    }, Math.max(1, refreshAtMs - date.getTime()));
+  }
+
+  private clearTodayHeaderRefreshTimer(): void {
+    if (this.todayHeaderRefreshTimeoutHandle === null) {
+      return;
+    }
+    globalThis.clearTimeout(this.todayHeaderRefreshTimeoutHandle);
+    this.todayHeaderRefreshTimeoutHandle = null;
   }
 
   public async onTilesDrop(event: CdkDragDrop<DashboardTileViewModel[]>, sectionId: DashboardTileSectionId): Promise<void> {
@@ -1010,6 +1070,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return null;
     }
 
+    return this.resolveDashboardOwnerUID();
+  }
+
+  private resolveDashboardOwnerUID(): string | null {
     const uid = `${this.user?.uid || ''}`.trim();
     if (!uid) {
       return null;

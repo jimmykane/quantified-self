@@ -143,11 +143,15 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
   });
 
-  it('renders a minimal empty chat with an optional explore control', () => {
+  it('invites an empty chat to ask one grounded training-history question', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Assistant');
     expect(text).toContain('Examples & data access');
+    expect(text).toContain('If you could ask your training history one question, what would it be?');
+    expect(text).toContain('Ask about the training, sleep, recovery, measurements, and activities you’ve connected.');
+    expect(text).toContain('Every answer is grounded in verified, read-only evidence.');
+    expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-header p')).toBeNull();
@@ -178,7 +182,7 @@ describe('AssistantPageComponent', () => {
     expect(composerFooter.children).toHaveLength(2);
     expect(composerFooter.textContent).not.toContain('AI can make mistakes');
     const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    expect(textarea.placeholder).toBe('Ask about your data…');
+    expect(textarea.placeholder).toBe('Ask your history…');
     expect(textarea.getAttribute('aria-label')).toBe('Ask about your data');
     const autosize = fixture.debugElement.query(By.directive(CdkTextareaAutosize))
       .injector.get(CdkTextareaAutosize);
@@ -205,6 +209,7 @@ describe('AssistantPageComponent', () => {
     expect(chat.contains(conversation)).toBe(true);
     expect(chat.contains(dock)).toBe(true);
     expect(dock.contains(composer)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeNull();
     expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
   });

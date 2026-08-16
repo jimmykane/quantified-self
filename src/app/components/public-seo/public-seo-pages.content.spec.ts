@@ -74,6 +74,10 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.intro).toContain('All training overview');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.some(section => (
+      section.copy.includes('account-saved sport shortcuts')
+    ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.some(section => (
       section.items.some(item => item.copy.includes('longest-jump evidence'))
     ))).toBe(true);
@@ -104,7 +108,8 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('A fitness-data Assistant grounded in your own history');
+    expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('If you could ask your training history one question, what would it be?');
+    expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('saved-route summaries');
@@ -156,15 +161,23 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to Suunto or Garmin Connect');
+    expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to connected services');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route or track files');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('send saved routes to Suunto');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Garmin Connect');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Wahoo');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('COROS');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes into Routes');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('up to 10 saved routes');
-    expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self, Suunto, and Garmin Connect')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self and connected services')).toBe(true);
+    const wahooCorosRouteItem = PUBLIC_SEO_PAGES.routeFiles.sections
+      .flatMap(section => section.items || [])
+      .find(item => item.title === 'Send saved routes to Wahoo or COROS');
+    expect(wahooCorosRouteItem?.copy).toContain('Routes table or bulk actions');
+    expect(wahooCorosRouteItem?.copy).toContain('COROS in the table, bulk actions, and route detail menu');
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Garmin Connect?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Wahoo or COROS?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can Quantified Self import routes from Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Are route files counted separately from activities?')).toBe(true);
 

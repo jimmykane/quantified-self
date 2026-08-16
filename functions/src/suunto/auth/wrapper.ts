@@ -12,6 +12,7 @@ import {
 } from '../../OAuth2';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
+import { extractRefreshFailureDetails } from '../../service-auth-lifecycle';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
@@ -102,11 +103,38 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   try {
     await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
   } catch (e: any) {
-    logger.error(e);
-    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    const failure = extractRefreshFailureDetails(e);
+    const status = failure.statusCode || 500;
+    if (failure.isInvalidGrant && failure.statusCode === 400) {
+      logger.warn('[SuuntoAuth] Authorization code exchange was rejected with a non-terminal invalid_grant.', {
+        serviceName: SERVICE_NAME,
+        phase: 'authorization_code_exchange',
+        providerStatus: failure.statusCode,
+        providerErrorCode: 'invalid_grant',
+        terminal: false,
+        outcome: 'restart_oauth',
+      });
+      throw new HttpsError(
+        'failed-precondition',
+        'Suunto authorization code expired or was already used. Start the connection again.',
+      );
+    }
     if (status === 502) {
+      logger.warn('[SuuntoAuth] Authorization code exchange failed because Suunto is temporarily unavailable.', {
+        serviceName: SERVICE_NAME,
+        phase: 'authorization_code_exchange',
+        providerStatus: status,
+        terminal: false,
+        outcome: 'retry_later',
+      });
       throw new HttpsError('unavailable', 'Suunto service is temporarily unavailable');
     }
+    logger.error('[SuuntoAuth] Authorization code exchange failed unexpectedly.', {
+      serviceName: SERVICE_NAME,
+      phase: 'authorization_code_exchange',
+      providerStatus: failure.statusCode || undefined,
+      errorName: typeof e?.name === 'string' ? e.name : 'Error',
+    });
     throw new HttpsError('internal', 'Authorization code flow error');
   }
 });

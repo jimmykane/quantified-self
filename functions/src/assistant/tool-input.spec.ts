@@ -93,6 +93,43 @@ describe('Assistant tool input boundary', () => {
     });
   });
 
+  it('uses persisted summary families when the model requests a raw stream label', () => {
+    expect(normalizeAssistantToolInput('query_metrics', {
+      metrics: [{
+        metric: 'temperature',
+        aggregation: 'average',
+      }, {
+        metric: 'Temperature',
+        aggregation: 'minimum',
+      }, {
+        metric: 'Temperature',
+        aggregation: 'maximum',
+      }],
+    }, 'UTC')).toMatchObject({
+      metrics: [{
+        metric: 'Average Temperature',
+        aggregation: 'average',
+      }, {
+        metric: 'Minimum Temperature',
+        aggregation: 'minimum',
+      }, {
+        metric: 'Maximum Temperature',
+        aggregation: 'maximum',
+      }],
+    });
+    expect(normalizeAssistantToolInput('get_activity_metrics', {
+      activityRef: 'opaque-activity-reference',
+      metrics: ['Temperature'],
+    }, 'UTC')).toEqual({
+      activityRef: 'opaque-activity-reference',
+      metrics: [
+        'Average Temperature',
+        'Minimum Temperature',
+        'Maximum Temperature',
+      ],
+    });
+  });
+
   it('canonicalizes a user-friendly Enduro context for aggregate metric queries', () => {
     expect(normalizeAssistantToolInput('query_metric', {
       metric: 'distance',

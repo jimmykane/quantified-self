@@ -33,6 +33,25 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps outbound activity echo fingerprints short-lived and unindexed', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'activitySyncOutboundFingerprints',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+        for (const fieldPath of ['version', 'destinationServiceName', 'fingerprintKind', 'recordedAt']) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'activitySyncOutboundFingerprints',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+    });
+
     it('keeps exactly the Wahoo indexes required by token lookup, disconnect retry, queue operations, and TTL', () => {
         const config = loadFirestoreIndexes();
 

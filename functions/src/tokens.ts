@@ -19,6 +19,10 @@ import {
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
 import { getWahooErrorLogDetails } from './wahoo/error-details';
+import {
+  COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
+  COROS_ACCESS_TOKEN_VALIDITY_MS,
+} from './coros/constants';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -48,6 +52,21 @@ export class TokenUseSkippedForPendingDisconnectError extends Error {
     public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
   ) {
     super(`Skipping ${serviceName} token use for ${tokenDocumentID} because service disconnect is pending for user ${firebaseUserID}.`);
+  }
+}
+
+class COROSTokenRefreshRejectedError extends Error {
+  readonly name = 'COROSTokenRefreshRejectedError';
+  readonly statusCode?: number;
+  readonly data: { error: string; error_description: string };
+
+  constructor(providerCode: string) {
+    super('COROS token refresh was rejected.');
+    if (providerCode === '5006') this.statusCode = 401;
+    this.data = {
+      error: providerCode || 'invalid_response',
+      error_description: 'COROS token refresh was rejected.',
+    };
   }
 }
 
@@ -199,17 +218,30 @@ export async function getTokenData(
   await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh', options);
   try {
     responseToken = await token.refresh();
-    // COROS Exception for response
-    if (responseToken.token.message && responseToken.token.message !== 'OK') {
-      throw new Error('Something went wrong');
+    if (serviceName === ServiceNames.COROSAPI) {
+      const resultCode = `${responseToken.token.result ?? ''}`.trim();
+      const message = `${responseToken.token.message ?? ''}`.trim();
+      if (!/^0+$/.test(resultCode) || message !== 'OK') {
+        throw new COROSTokenRefreshRejectedError(resultCode);
+      }
     }
     logger.info(`Successfully refreshed token ${doc.id}`);
   } catch (e: any) {
     const failure = extractRefreshFailureDetails(e);
     const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
     const isTerminalAuthFailure = isTerminalRefreshFailureForService(serviceName, failure);
+    const isProviderDowngradedAuthFailure = failure.isTerminalAuthFailure && !isTerminalAuthFailure;
 
-    if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
+    if (isProviderDowngradedAuthFailure) {
+      logger.warn('[ServiceAuth] Provider token refresh rejected with a known non-terminal error.', {
+        serviceName,
+        phase: 'token_refresh',
+        providerStatus: failure.statusCode || undefined,
+        providerErrorCode: failure.isInvalidGrant ? 'invalid_grant' : undefined,
+        terminal: false,
+        outcome: 'retry',
+      });
+    } else if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
       logger.warn(`Token refresh for user ${doc.id} failed`, getWahooErrorLogDetails(e));
     } else if (failure.isTransientError) {
       // Do not log the full stack trace for these known errors during cleanup
@@ -218,10 +250,6 @@ export async function getTokenData(
       logger.error(`Could not refresh token for user ${doc.id}`, getWahooErrorLogDetails(e));
     } else {
       logger.error(`Could not refresh token for user ${doc.id}`, e);
-    }
-
-    if (failure.isTerminalAuthFailure && !isTerminalAuthFailure) {
-      logger.warn(`Treating ${serviceName} invalid_grant for token ${doc.id} as retryable while waiting for the provider fix; preserving local token.`);
     }
 
     if (isTerminalAuthFailure) {
@@ -260,6 +288,7 @@ export async function getTokenData(
   }
 
   let newToken;
+  const refreshCompletedAtMs = Date.now();
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
@@ -291,9 +320,16 @@ export async function getTokenData(
       };
       break;
     case ServiceNames.COROSAPI:
-      newToken = <COROSAPIAuth2ServiceTokenInterface>serviceTokenData;
-      newToken.expiresAt = date.getTime() - 6000;
-      newToken.dateRefreshed = date.getTime();
+      newToken = <COROSAPIAuth2ServiceTokenInterface>{
+        ...serviceTokenData,
+        serviceName,
+        accessToken: serviceTokenData.accessToken,
+        refreshToken: serviceTokenData.refreshToken,
+        expiresAt: refreshCompletedAtMs
+          + COROS_ACCESS_TOKEN_VALIDITY_MS
+          - COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
+        dateRefreshed: refreshCompletedAtMs,
+      };
       break;
     case ServiceNames.WahooAPI:
       newToken = <WahooAPIAuth2ServiceTokenInterface>{

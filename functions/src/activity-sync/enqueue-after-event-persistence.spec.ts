@@ -5,10 +5,14 @@ const {
   mockEnqueueActivitySyncJobsForImportedEvent,
   mockShouldSkipQueueWorkForDeletedUser,
   mockLoggerError,
+  mockLoggerInfo,
+  mockIsActivitySyncOutboundEcho,
 } = vi.hoisted(() => ({
   mockEnqueueActivitySyncJobsForImportedEvent: vi.fn(),
   mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
   mockLoggerError: vi.fn(),
+  mockLoggerInfo: vi.fn(),
+  mockIsActivitySyncOutboundEcho: vi.fn(),
 }));
 
 vi.mock('./enqueue-imported-event', () => ({
@@ -19,8 +23,13 @@ vi.mock('../queue/user-deletion-skip', () => ({
   shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
+vi.mock('./outbound-fingerprint', () => ({
+  isActivitySyncOutboundEcho: mockIsActivitySyncOutboundEcho,
+}));
+
 vi.mock('firebase-functions/logger', () => ({
   error: mockLoggerError,
+  info: mockLoggerInfo,
 }));
 
 import { enqueueActivitySyncAfterEventPersistence } from './enqueue-after-event-persistence';
@@ -43,7 +52,30 @@ describe('enqueueActivitySyncAfterEventPersistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+    mockIsActivitySyncOutboundEcho.mockResolvedValue(false);
     mockEnqueueActivitySyncJobsForImportedEvent.mockResolvedValue({ queued: 1, skippedByReason: {} });
+  });
+
+  it('suppresses an imported provider echo before it can fan out again', async () => {
+    const sourceFileData = Buffer.from('provider-echo');
+    mockIsActivitySyncOutboundEcho.mockResolvedValueOnce(true);
+
+    await expect(enqueueActivitySyncAfterEventPersistence({
+      ...params,
+      sourceServiceName: ServiceNames.COROSAPI,
+      sourceFileData,
+    })).resolves.toBe(false);
+
+    expect(mockIsActivitySyncOutboundEcho).toHaveBeenCalledWith({
+      userID: 'user-1',
+      sourceServiceName: ServiceNames.COROSAPI,
+      fileBuffer: sourceFileData,
+    });
+    expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      expect.stringContaining('Suppressed a provider echo'),
+      expect.objectContaining({ sourceServiceName: ServiceNames.COROSAPI }),
+    );
   });
 
   it('uses the persisted event and retained original files for activity-sync delivery', async () => {

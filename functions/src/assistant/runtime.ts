@@ -12,6 +12,7 @@ import {
   findAssistantPromptWorkflow,
   type AssistantPromptWorkflow,
 } from '../../../shared/assistant.prompts';
+import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
 import { assistantGenkit } from './model';
 import {
   buildAssistantEvidenceList,
@@ -28,6 +29,10 @@ import {
   normalizeAssistantToolInput,
 } from './tool-input';
 import {
+  assistantPromptRequestsChart,
+  findAssistantMetricTrendIntent,
+} from './metric-intent';
+import {
   createAssistantVisualSource,
   resolveAssistantVisuals,
   type AssistantVisualRequest,
@@ -39,6 +44,7 @@ const ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL = ASSISTANT_MAX_TOOL_CALLS_PER_TUR
 const ASSISTANT_MAX_CUMULATIVE_TOOL_OUTPUT_BYTES = 512 * 1024;
 const ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS = 1_024;
 const ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS = 2_048;
+const ASSISTANT_WORKFLOW_DAY_MS = 24 * 60 * 60 * 1_000;
 export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   maxRetries: 2,
   statuses: ['UNAVAILABLE'],
@@ -47,18 +53,27 @@ export const ASSISTANT_MODEL_RETRY_OPTIONS = {
   backoffFactor: 2,
 } satisfies NonNullable<Parameters<typeof retry>[0]>;
 
+const AssistantAnswerTextSchema = z.string()
+  .trim()
+  .min(1)
+  .max(ASSISTANT_MAX_RESPONSE_CHARS);
+const AssistantVisualRequestSchema = z.object({
+  chart: z.object({
+    sourceId: z.string().regex(/^source_[1-6]$/),
+    seriesKeys: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
+    chartType: z.enum(['line', 'bar']),
+  }).strict().nullable(),
+  map: z.object({
+    sourceId: z.string().regex(/^source_[1-6]$/),
+  }).strict().nullable(),
+}).strict();
+const EMPTY_ASSISTANT_VISUAL_REQUEST: AssistantVisualRequest = {
+  chart: null,
+  map: null,
+};
 const AssistantModelOutputSchema = z.object({
-  answer: z.string().trim().min(1).max(ASSISTANT_MAX_RESPONSE_CHARS),
-  visuals: z.object({
-    chart: z.object({
-      sourceId: z.string().regex(/^source_[1-6]$/),
-      seriesKeys: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
-      chartType: z.enum(['line', 'bar']),
-    }).strict().nullable(),
-    map: z.object({
-      sourceId: z.string().regex(/^source_[1-6]$/),
-    }).strict().nullable(),
-  }).strict().default({ chart: null, map: null }),
+  answer: AssistantAnswerTextSchema,
+  visuals: AssistantVisualRequestSchema.default(EMPTY_ASSISTANT_VISUAL_REQUEST),
 }).strict();
 
 export interface AssistantModelGenerationResult {
@@ -100,7 +115,7 @@ export interface AssistantModelGenerationInput {
   mcpInstructions: string;
   locationAccess?: AssistantLocationAccess;
   tools: AssistantRuntimeTool[];
-  publishedExample: AssistantPromptWorkflow | null;
+  workflow: AssistantPromptWorkflow | null;
   /**
    * Marks the boundary immediately before work that can incur model or tool
    * cost. The callable supplies an idempotent implementation.
@@ -141,13 +156,15 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Use list_routes for saved-route summary questions by sport, name, or recency.',
   'Call discovery tools before guessing a metric, activity type, sleep vital, or measurement capability.',
   'For all available years, all-time, or full-history activity-metric trends, query from 2000-01-01T00:00:00.000Z through the supplied currentTime. The Assistant pages that one metric request through the public-compatible date windows and recombines every result; do not silently limit the trend to a recent year. Use yearly interval for an all-history trend unless the user asks for another resolution.',
+  'Use persisted Average, Minimum, and Maximum summary metrics for cross-activity summary trends; a raw chart stream such as Temperature is not evidence that those persisted activity summaries are missing.',
+  'Never conclude that no matching activities exist from an empty query_activities result whose scanComplete field is false. Continue with its nextCursor or use the aggregate metric tool appropriate to the question.',
   'Never invent data, calculations, dates, tool results, health claims, diagnoses, or workout prescriptions.',
   'Use explicit ISO date/time fields from tool results when stating when something happened; never substitute the current date. Fields ending in Ms that remain numeric are measurements or relative offsets, not calendar dates.',
   'If a tool returns assistantToolError, that attempt did not supply account data and cannot ground an answer. Follow its server-owned guidance, then make another supported tool call within the available tool-call budget.',
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
-  'Some tool results include a server-owned assistantVisualization descriptor. When a chart or map would materially clarify the answer, request at most one chart and one map using only a supplied sourceId and chart series key; otherwise return null for that visual. Never invent a sourceId or series key, put a sourceId in the answer, request a map without a map descriptor, or choose a visual merely for decoration.',
+  'Some tool results include a server-owned assistantVisualization descriptor. When a chart or map would materially clarify the answer, request at most one chart and one map using only a supplied sourceId and chart series key; otherwise return null for that visual. If the user explicitly asks for a plot, chart, graph, or visualization, request the relevant advertised chart. Never invent a sourceId or series key, put a sourceId in the answer, request a map without a map descriptor, or choose a visual merely for decoration.',
   'For the final model response, return exactly one JSON object and no Markdown fence or surrounding text. Use this shape: {"answer":"plain text","visuals":{"chart":null,"map":null}}. A non-null chart must contain only sourceId, seriesKeys, and chartType; a non-null map must contain only sourceId. Put only plain text, not Markdown or nested JSON, in the answer field. Populate visuals only from assistantVisualization descriptors. Do not mention tool names unless it helps explain missing data.',
   'This is fitness information, not medical advice. Recommend professional care when the user describes urgent or concerning symptoms.',
 ].join(' ');
@@ -180,6 +197,56 @@ function asToolInput(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   throw new Error('The Assistant model returned invalid tool input.');
+}
+
+function resolveAssistantWorkflowActivityTypes(
+  discipline: NonNullable<
+    AssistantPromptWorkflow['activityDisciplineOverrides']
+  >[string],
+): string[] {
+  const activityTypes = new Set<string>();
+  for (const sport of TRAINING_SPORT_DEFINITIONS) {
+    if (sport.id !== discipline) {
+      continue;
+    }
+    for (const context of sport.contexts) {
+      context.activityTypes.forEach(activityType => activityTypes.add(activityType));
+    }
+  }
+  return [...activityTypes];
+}
+
+function applyAssistantWorkflowToolPolicy(
+  workflow: AssistantPromptWorkflow | null,
+  toolName: AssistantMcpToolName,
+  toolInput: Record<string, unknown>,
+  currentTime: Date,
+): Record<string, unknown> {
+  if (!workflow) {
+    return toolInput;
+  }
+  const overriddenInput = {
+    ...toolInput,
+    ...(workflow.toolInputOverrides?.[toolName] || {}),
+  };
+  const activityDiscipline = workflow.activityDisciplineOverrides?.[toolName];
+  const activityTypes = activityDiscipline
+    ? resolveAssistantWorkflowActivityTypes(activityDiscipline)
+    : null;
+  const activityScopedInput = activityTypes
+    ? { ...overriddenInput, activityTypes }
+    : overriddenInput;
+  if (!workflow.dateRange?.toolNames.includes(toolName)) {
+    return activityScopedInput;
+  }
+  return {
+    ...activityScopedInput,
+    start: new Date(
+      currentTime.getTime()
+        - (workflow.dateRange.lookbackDays * ASSISTANT_WORKFLOW_DAY_MS),
+    ).toISOString(),
+    end: currentTime.toISOString(),
+  };
 }
 
 function buildAssistantModelInputSchema(
@@ -305,18 +372,18 @@ function assertAnswerDoesNotEchoToolSecrets(
   }
 }
 
-function assertPublishedExampleWorkflowCompleted(
-  publishedExample: AssistantPromptWorkflow | null,
+function assertSupportedWorkflowCompleted(
+  workflow: AssistantPromptWorkflow | null,
   invocations: readonly AssistantToolInvocation[],
   jumpDetailDiscoveryResolved = false,
   qualifyingJumpActivityRefs: ReadonlySet<string> = new Set(),
 ): void {
-  if (!publishedExample) {
+  if (!workflow) {
     return;
   }
-  const requiredWorkflow = publishedExample.toolWorkflow.filter(toolName => (
+  const requiredWorkflow = workflow.toolWorkflow.filter(toolName => (
     toolName !== 'list_activity_jumps'
-    || !publishedExample.jumpDetailSource
+    || !workflow.jumpDetailSource
     || qualifyingJumpActivityRefs.size > 0
   ));
   let workflowIndex = 0;
@@ -326,10 +393,25 @@ function assertPublishedExampleWorkflowCompleted(
     }
   }
   if (workflowIndex !== requiredWorkflow.length
-    || (publishedExample.jumpDetailSource && !jumpDetailDiscoveryResolved)) {
+    || (workflow.jumpDetailSource && !jumpDetailDiscoveryResolved)) {
     throw new Error(
-      `The Assistant did not complete the published ${publishedExample.id} workflow.`,
+      `The Assistant did not complete the supported ${workflow.id} workflow.`,
     );
+  }
+}
+
+function assertNoIncompleteEmptyActivityScan(
+  invocations: readonly AssistantToolInvocation[],
+): void {
+  const finalInvocation = invocations[invocations.length - 1];
+  if (finalInvocation?.name !== 'query_activities') {
+    return;
+  }
+  const activities = finalInvocation.structuredContent.activities;
+  if (Array.isArray(activities)
+    && activities.length === 0
+    && finalInvocation.structuredContent.scanComplete === false) {
+    throw new Error('The Assistant did not complete an empty activity scan.');
   }
 }
 
@@ -434,6 +516,49 @@ function assertWorkflowMapSelection(
   }
 }
 
+function applyExplicitChartRequest(
+  prompt: string,
+  request: AssistantVisualRequest,
+  visualSources: readonly AssistantVisualSource[],
+): AssistantVisualRequest {
+  if (!assistantPromptRequestsChart(prompt)) {
+    return request;
+  }
+  const requestedSource = request.chart
+    ? visualSources.find(source => (
+        source.descriptor.sourceId === request.chart?.sourceId
+      ))
+    : null;
+  const availableKeys = new Set(
+    requestedSource?.descriptor.chart?.availableSeries.map(series => series.key) || [],
+  );
+  if (request.chart
+    && requestedSource?.chart
+    && request.chart.seriesKeys.some(key => availableKeys.has(key))) {
+    return request;
+  }
+  const compatibleSources = visualSources.filter(candidate => (
+    candidate.chart && candidate.descriptor.chart?.availableSeries.length
+  ));
+  if (compatibleSources.length !== 1) {
+    return request;
+  }
+  const source = compatibleSources[0];
+  if (!source?.chart || !source.descriptor.chart) {
+    return request;
+  }
+  return {
+    ...request,
+    chart: {
+      sourceId: source.descriptor.sourceId,
+      seriesKeys: source.descriptor.chart.availableSeries
+        .slice(0, 4)
+        .map(series => series.key),
+      chartType: source.descriptor.chart.defaultChartType,
+    },
+  };
+}
+
 function parseAssistantModelText(value: string): AssistantModelGenerationResult {
   let decoded: unknown;
   try {
@@ -441,13 +566,34 @@ function parseAssistantModelText(value: string): AssistantModelGenerationResult 
   } catch {
     throw new Error('The Assistant model returned invalid JSON.');
   }
-  const parsed = AssistantModelOutputSchema.safeParse(decoded);
-  if (!parsed.success) {
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
     throw new Error('The Assistant model returned an invalid response.');
   }
+  const record = decoded as Record<string, unknown>;
+  const answer = AssistantAnswerTextSchema.safeParse(record.answer);
+  if (!answer.success) {
+    logger.warn('[Assistant] Model answer text failed validation.', {
+      issuePaths: answer.error.issues.slice(0, 8).map(issue => (
+        `${issue.code}:${issue.path.join('.') || 'answer'}`
+      )),
+    });
+    throw new Error('The Assistant model returned an invalid response.');
+  }
+  const visuals = AssistantVisualRequestSchema.safeParse(
+    record.visuals ?? EMPTY_ASSISTANT_VISUAL_REQUEST,
+  );
+  if (!visuals.success) {
+    logger.warn('[Assistant] Ignoring an invalid optional model visual request.', {
+      issuePaths: visuals.error.issues.slice(0, 8).map(issue => (
+        `${issue.code}:${issue.path.join('.') || 'visuals'}`
+      )),
+    });
+  }
   return {
-    answer: parsed.data.answer,
-    visualRequest: parsed.data.visuals,
+    answer: answer.data,
+    visualRequest: visuals.success
+      ? visuals.data
+      : EMPTY_ASSISTANT_VISUAL_REQUEST,
   };
 }
 
@@ -487,8 +633,11 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
     case 'The Assistant response included an internal visual source reference.':
       return 'internal_visual_reference';
     default:
-      if (error.message.startsWith('The Assistant did not complete the published ')) {
+      if (error.message.startsWith('The Assistant did not complete the supported ')) {
         return 'published_workflow_incomplete';
+      }
+      if (error.message === 'The Assistant did not complete an empty activity scan.') {
+        return 'incomplete_activity_scan';
       }
       if (error.message.startsWith('The Assistant did not use a qualifying activity')) {
         return 'jump_workflow_activity_mismatch';
@@ -496,7 +645,7 @@ export function getAssistantRuntimeErrorReason(error: unknown): string | null {
       if (error.message.startsWith('The Assistant selected a non-jump map')) {
         return 'jump_workflow_map_mismatch';
       }
-      if (error.message.startsWith('Assistant example tools are unavailable:')) {
+      if (error.message.startsWith('Assistant workflow tools are unavailable:')) {
         return 'example_tools_unavailable';
       }
       if (error.message.startsWith('Assistant MCP tools are unavailable:')) {
@@ -528,11 +677,11 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     role: message.role === 'assistant' ? 'model' as const : 'user' as const,
     content: [{ text: message.text }],
   }));
-  const publishedExampleInstructions = input.publishedExample
+  const workflowInstructions = input.workflow
     ? [
-      `The current question matches the supported intent of the published ${input.publishedExample.id} example.`,
-      `Follow its supported tool workflow: ${input.publishedExample.toolWorkflow.join(' then ')}.`,
-      input.publishedExample.routingHint,
+      `The current question matches the server-supported ${input.workflow.id} intent.`,
+      `Follow its supported tool workflow: ${input.workflow.toolWorkflow.join(' then ')}.`,
+      input.workflow.routingHint,
     ].join(' ')
     : '';
   const system = [
@@ -541,7 +690,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     input.locationAccess === 'precise_activity'
       ? ASSISTANT_PRECISE_ACTIVITY_LOCATION_INSTRUCTIONS
       : ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
-    publishedExampleInstructions,
+    workflowInstructions,
   ].filter(Boolean).join(' ');
   await input.onBillableAttempt();
   const initialResponse = await assistantGenkit.generate({
@@ -669,21 +818,35 @@ export function createAssistantRuntime(
       let toolCallCount = 0;
       let cumulativeToolOutputBytes = 0;
       try {
-        const publishedExample = findAssistantPromptWorkflow(input.prompt);
-        if (publishedExample) {
+        const currentTime = dependencies.now();
+        const promptWorkflow = findAssistantPromptWorkflow(input.prompt);
+        const metricTrendIntent = promptWorkflow
+          ? null
+          : findAssistantMetricTrendIntent({
+              prompt: input.prompt,
+              currentTime,
+              timeZone: input.timeZone,
+            });
+        const workflow = promptWorkflow || metricTrendIntent?.workflow || null;
+        if (workflow) {
           const availableToolNames = new Set<string>(
             session.tools.map(tool => tool.name),
           );
-          const missingToolNames = publishedExample.toolWorkflow.filter(
+          const missingToolNames = workflow.toolWorkflow.filter(
             toolName => !availableToolNames.has(toolName),
           );
           if (missingToolNames.length > 0) {
             throw new Error(
-              `Assistant example tools are unavailable: ${missingToolNames.join(', ')}`,
+              `Assistant workflow tools are unavailable: ${missingToolNames.join(', ')}`,
             );
           }
         }
-        const tools: AssistantRuntimeTool[] = session.tools.map(tool => ({
+        const modelToolDefinitions = workflow
+          ? session.tools.filter(tool => workflow.toolWorkflow.includes(tool.name))
+          : metricTrendIntent
+            ? session.tools.filter(tool => tool.name === 'query_metrics')
+            : session.tools;
+        const tools: AssistantRuntimeTool[] = modelToolDefinitions.map(tool => ({
           name: tool.name,
           description: `${tool.title}. ${tool.description}`,
           inputJsonSchema: buildAssistantModelInputSchema(
@@ -695,13 +858,25 @@ export function createAssistantRuntime(
               throw new Error('The Assistant tool-call budget was exceeded.');
             }
             toolCallCount += 1;
-            const resolvedToolInput = normalizeAssistantToolInput(
+            const workflowToolInput = applyAssistantWorkflowToolPolicy(
+              workflow,
               tool.name,
               toolInput,
+              currentTime,
+            );
+            const policyToolInput = metricTrendIntent && tool.name === 'query_metrics'
+              ? {
+                  ...workflowToolInput,
+                  ...metricTrendIntent.toolInput,
+                }
+              : workflowToolInput;
+            const resolvedToolInput = normalizeAssistantToolInput(
+              tool.name,
+              policyToolInput,
               input.timeZone,
             );
             assertJumpDetailActivityRef(
-              publishedExample,
+              workflow,
               tool.name,
               resolvedToolInput,
               qualifyingJumpActivityRefs,
@@ -733,7 +908,7 @@ export function createAssistantRuntime(
               structuredContent: result.structuredContent,
             });
             const jumpWorkflowDiscovery = discoverQualifyingJumpActivityRefs(
-              publishedExample,
+              workflow,
               tool.name,
               result.structuredContent,
             );
@@ -770,14 +945,14 @@ export function createAssistantRuntime(
           },
         }));
         const generatedResult = await dependencies.generateAnswer({
-          currentTime: dependencies.now().toISOString(),
+          currentTime: currentTime.toISOString(),
           timeZone: input.timeZone,
           prompt: input.prompt,
           history: input.history,
           mcpInstructions: session.instructions,
           locationAccess,
           tools,
-          publishedExample,
+          workflow,
           onBillableAttempt: input.onBillableAttempt ?? (async () => undefined),
         });
         const generated = typeof generatedResult === 'string'
@@ -789,12 +964,13 @@ export function createAssistantRuntime(
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
-        assertPublishedExampleWorkflowCompleted(
-          publishedExample,
+        assertSupportedWorkflowCompleted(
+          workflow,
           invocations,
           jumpDetailDiscoveryResolved,
           qualifyingJumpActivityRefs,
         );
+        assertNoIncompleteEmptyActivityScan(invocations);
         assertAnswerDoesNotEchoToolSecrets(generated.answer, invocations);
         if (visualSources.some(source => (
           generated.answer.includes(source.descriptor.sourceId)
@@ -805,15 +981,20 @@ export function createAssistantRuntime(
           answer: generated.answer,
           visuals: generated.visualRequest,
         });
-        assertWorkflowMapSelection(
-          publishedExample,
+        const resolvedVisualRequest = applyExplicitChartRequest(
+          input.prompt,
           validatedOutput.visuals,
+          visualSources,
+        );
+        assertWorkflowMapSelection(
+          workflow,
+          resolvedVisualRequest,
           visualSources,
           visualSourceToolNames,
         );
         let visuals: AssistantVisual[] = [];
         try {
-          visuals = dependencies.resolveVisuals(visualSources, validatedOutput.visuals);
+          visuals = dependencies.resolveVisuals(visualSources, resolvedVisualRequest);
         } catch (error) {
           logger.warn('[Assistant] Optional visual resolution failed.', {
             errorName: error instanceof Error ? error.name : 'unknown',

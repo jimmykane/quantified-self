@@ -67,8 +67,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
-  public activeActivitySyncDestination: 'suunto' | 'wahoo' = 'suunto';
-  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | null = null;
+  public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({

@@ -126,7 +126,7 @@ function markGarminQueueItemSkippedForDeletedUser(
 function deferGarminQueueItemForPendingDisconnect(
   queueItem: GarminAPIActivityQueueItemInterface,
   bulkWriter?: admin.firestore.BulkWriter,
-): Promise<QueueResult.Deferred | QueueResult.Failed> {
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
   return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
 }
 

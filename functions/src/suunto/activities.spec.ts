@@ -2,6 +2,7 @@
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
@@ -21,6 +22,10 @@ const callableMocks = vi.hoisted(() => ({
     options: undefined as unknown,
 }));
 
+const outboundFingerprintMocks = vi.hoisted(() => ({
+    recordActivitySyncOutboundFingerprint: vi.fn(),
+}));
+
 vi.mock('../request-helper', () => ({
     default: {
         post: (...args: any[]) => requestMocks.post(...args),
@@ -30,6 +35,13 @@ vi.mock('../request-helper', () => ({
     post: (...args: any[]) => requestMocks.post(...args),
     put: (...args: any[]) => requestMocks.put(...args),
     get: (...args: any[]) => requestMocks.get(...args),
+}));
+
+vi.mock('../activity-sync/outbound-fingerprint', () => ({
+    recordActivitySyncOutboundFingerprint: (...args: unknown[]) => outboundFingerprintMocks.recordActivitySyncOutboundFingerprint(...args),
+    ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
+        readonly name = 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError';
+    },
 }));
 
 const utilsMocks = {
@@ -195,6 +207,7 @@ import {
     resumeSuuntoActivityBlobUpload,
     uploadActivityFileToSuunto,
 } from './activities';
+import { ActivitySyncOutboundFingerprintSkippedForDeletedUserError } from '../activity-sync/outbound-fingerprint';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
 // Helper to create mock request
@@ -234,6 +247,10 @@ describe('importActivityToSuuntoApp', () => {
         // Default happy path
         utilsMocks.hasProAccess.mockResolvedValue(true);
         disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+        outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
+            exactFingerprintId: 'exact-v1-test',
+            fingerprintIds: ['exact-v1-test'],
+        });
         deletionGuardMocks.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -262,11 +279,12 @@ describe('importActivityToSuuntoApp', () => {
         );
     });
 
-    it('configures enough memory for the base64 activity upload buffer', () => {
+    it('configures a single-request circuit breaker for direct Suunto uploads', () => {
         expect(callableMocks.options).toEqual(expect.objectContaining({
             memory: '512MiB',
             timeoutSeconds: 300,
-            maxInstances: 10,
+            concurrency: 1,
+            maxInstances: 1,
         }));
     });
 
@@ -281,10 +299,7 @@ describe('importActivityToSuuntoApp', () => {
             headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
         });
 
-        // Mock status check (GET) - Polling simulation
-        requestMocks.get
-            .mockResolvedValueOnce({ status: 'NEW' })
-            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
@@ -303,6 +318,13 @@ describe('importActivityToSuuntoApp', () => {
         // Assertions
         expect(utilsMocks.hasProAccess).toHaveBeenCalledWith('test-user-id');
         expect(tokensMocks.getTokenData).toHaveBeenCalled();
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+            userID: 'test-user-id',
+            destinationServiceName: ServiceNames.SuuntoApp,
+            fileBuffer: fileContent,
+        });
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+            .toBeLessThan(requestMocks.post.mock.invocationCallOrder[0]);
 
         // 1. Check Init Upload
         expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
@@ -337,6 +359,76 @@ describe('importActivityToSuuntoApp', () => {
         expect(result).toEqual(expect.objectContaining({ status: 'success' }));
         expect(result).not.toHaveProperty('providerUserId');
     }, 30000);
+
+    it('paces transient Suunto status retries ten seconds apart', async () => {
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.post.mockResolvedValue({
+                id: 'paced-upload-id',
+                url: 'https://storage.suunto.com/paced-upload-url',
+                headers: {},
+            });
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get
+                .mockRejectedValueOnce(createStatusCodeError('Service Unavailable', 503))
+                .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'paced-workout-key' });
+
+            const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('paced-data'));
+
+            await vi.advanceTimersByTimeAsync(0);
+            expect(requestMocks.get).toHaveBeenCalledTimes(1);
+
+            await vi.advanceTimersByTimeAsync(9_999);
+            expect(requestMocks.get).toHaveBeenCalledTimes(1);
+
+            await vi.advanceTimersByTimeAsync(1);
+            await expect(uploadPromise).resolves.toMatchObject({
+                status: 'success',
+                workoutKey: 'paced-workout-key',
+            });
+            expect(requestMocks.get).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should stop before Suunto initialization when the direct-upload echo receipt cannot be written', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        outboundFingerprintMocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(
+            new ActivitySyncOutboundFingerprintSkippedForDeletedUserError('test-user-id'),
+        );
+
+        const request = createMockRequest({
+            data: { file: Buffer.from('data').toString('base64') },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'failed-precondition',
+            message: 'Account is being deleted or no longer exists.',
+        });
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+    });
+
+    it('should not write a direct-upload echo receipt without a connected Suunto account', async () => {
+        const admin = await import('firebase-admin');
+        const tokenQueryGet = admin.firestore()
+            .collection('suuntoapp-access-tokens')
+            .doc('test-user-id')
+            .collection('tokens').get as ReturnType<typeof vi.fn>;
+        tokenQueryGet.mockResolvedValueOnce({ size: 0, empty: true, docs: [] });
+
+        const request = createMockRequest({
+            data: { file: Buffer.from('data').toString('base64') },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'unauthenticated',
+        });
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
 
     it('should not double-prefix Authorization header when token already has Bearer', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'Bearer preformatted-token' });
@@ -495,59 +587,73 @@ describe('importActivityToSuuntoApp', () => {
     }, 30000);
 
     it('should continue polling after transient status 500 and then succeed', async () => {
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
-        requestMocks.post.mockResolvedValue({
-            id: 'status-retry-upload-id',
-            url: 'https://storage.suunto.com/status-retry-upload-url',
-            headers: {}
-        });
+            requestMocks.post.mockResolvedValue({
+                id: 'status-retry-upload-id',
+                url: 'https://storage.suunto.com/status-retry-upload-url',
+                headers: {}
+            });
 
-        requestMocks.put.mockResolvedValue({});
+            requestMocks.put.mockResolvedValue({});
 
-        requestMocks.get
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
-            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'status-retry-workout-key' });
+            requestMocks.get
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockRejectedValueOnce(createStatusCodeError('Internal Server Error', 500))
+                .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'status-retry-workout-key' });
 
-        const fileContent = Buffer.from('status-retry-data');
-        const request = createMockRequest({
-            data: { file: fileContent.toString('base64') }
-        });
+            const fileContent = Buffer.from('status-retry-data');
+            const request = createMockRequest({
+                data: { file: fileContent.toString('base64') }
+            });
 
-        const result = await importActivityToSuuntoApp(request as any);
+            const uploadPromise = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            const result = await uploadPromise;
 
-        expect(requestMocks.get).toHaveBeenCalledTimes(4);
-        expect(result).toEqual(expect.objectContaining({
-            status: 'success',
-            workoutKey: 'status-retry-workout-key'
-        }));
-    }, 30000);
+            expect(requestMocks.get).toHaveBeenCalledTimes(4);
+            expect(result).toEqual(expect.objectContaining({
+                status: 'success',
+                workoutKey: 'status-retry-workout-key'
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it('should cap transient status polling retries by actual request budget', async () => {
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
-        requestMocks.post.mockResolvedValue({
-            id: 'status-budget-upload-id',
-            url: 'https://storage.suunto.com/status-budget-upload-url',
-            headers: {}
-        });
+            requestMocks.post.mockResolvedValue({
+                id: 'status-budget-upload-id',
+                url: 'https://storage.suunto.com/status-budget-upload-url',
+                headers: {}
+            });
 
-        requestMocks.put.mockResolvedValue({});
-        requestMocks.get.mockRejectedValue(createStatusCodeError('Internal Server Error', 500));
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockRejectedValue(createStatusCodeError('Internal Server Error', 500));
 
-        const fileContent = Buffer.from('status-budget-data');
-        const request = createMockRequest({
-            data: { file: fileContent.toString('base64') }
-        });
+            const fileContent = Buffer.from('status-budget-data');
+            const request = createMockRequest({
+                data: { file: fileContent.toString('base64') }
+            });
 
-        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
-            code: 'unavailable',
-            message: 'Suunto activity upload is temporarily unavailable. Please retry.'
-        });
-        expect(requestMocks.get).toHaveBeenCalledTimes(10);
-    }, 30000);
+            const rejection = expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+                code: 'unavailable',
+                message: 'Suunto activity upload is temporarily unavailable. Please retry.'
+            });
+            await vi.runAllTimersAsync();
+            await rejection;
+            expect(requestMocks.get).toHaveBeenCalledTimes(5);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it('should not retry permanent-looking Suunto 500 payload errors', async () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
@@ -1078,7 +1184,7 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
-    it('should replace a resumed direct upload only after Suunto confirms the original job is still empty', async () => {
+    it('should not replace a resumed direct upload while Suunto reports NEW', async () => {
         vi.useFakeTimers();
         try {
             const admin = await import('firebase-admin');
@@ -1094,17 +1200,7 @@ describe('importActivityToSuuntoApp', () => {
                 data: () => ({}),
             });
             tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
-            requestMocks.get.mockImplementation(({ url }: { url: string }) => Promise.resolve(
-                url.endsWith('/direct-empty-upload-id')
-                    ? { status: 'NEW' }
-                    : { status: 'PROCESSED', workoutKey: 'replacement-workout-key' },
-            ));
-            requestMocks.post.mockResolvedValue({
-                id: 'replacement-upload-id',
-                url: 'https://storage.suunto.com/replacement-upload-url',
-                headers: {},
-            });
-            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockResolvedValue({ status: 'NEW' });
             const request = createMockRequest({
                 data: {
                     file: Buffer.from('direct-resume-data').toString('base64'),
@@ -1114,19 +1210,20 @@ describe('importActivityToSuuntoApp', () => {
             });
 
             const uploadPromise = importActivityToSuuntoApp(request as any);
-            await vi.runAllTimersAsync();
-            await expect(uploadPromise).resolves.toMatchObject({
-                status: 'success',
-                uploadId: 'replacement-upload-id',
-                workoutKey: 'replacement-workout-key',
+            const rejection = expect(uploadPromise).rejects.toMatchObject({
+                code: 'unavailable',
+                details: {
+                    retryMode: 'resume',
+                    resumeUploadId: 'direct-empty-upload-id',
+                    resumeProviderUserId: 'token1',
+                },
             });
+            await vi.runAllTimersAsync();
+            await rejection;
 
-            expect(requestMocks.get).toHaveBeenCalledTimes(11);
-            expect(requestMocks.post).toHaveBeenCalledTimes(1);
-            expect(requestMocks.put).toHaveBeenCalledWith(expect.objectContaining({
-                url: 'https://storage.suunto.com/replacement-upload-url',
-                body: Buffer.from('direct-resume-data'),
-            }));
+            expect(requestMocks.get).toHaveBeenCalledTimes(5);
+            expect(requestMocks.post).not.toHaveBeenCalled();
+            expect(requestMocks.put).not.toHaveBeenCalled();
         } finally {
             vi.useRealTimers();
         }
@@ -1169,7 +1266,7 @@ describe('importActivityToSuuntoApp', () => {
             await vi.runAllTimersAsync();
             await rejection;
 
-            expect(requestMocks.get).toHaveBeenCalledTimes(10);
+            expect(requestMocks.get).toHaveBeenCalledTimes(5);
             expect(requestMocks.post).not.toHaveBeenCalled();
             expect(requestMocks.put).not.toHaveBeenCalled();
         } finally {
@@ -1274,31 +1371,38 @@ describe('importActivityToSuuntoApp', () => {
     });
 
     it('should handle polling response missing status', async () => {
-        // Setup Mocks
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        vi.useFakeTimers();
+        try {
+            // Setup Mocks
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
-        requestMocks.post.mockResolvedValue({
-            id: 'valid-id',
-            url: 'https://valid-url',
-            headers: {}
-        });
-        requestMocks.put.mockResolvedValue({});
+            requestMocks.post.mockResolvedValue({
+                id: 'valid-id',
+                url: 'https://valid-url',
+                headers: {}
+            });
+            requestMocks.put.mockResolvedValue({});
 
-        // Mock status check (GET) - MISSING STATUS
-        // Then eventually succeeds to break loop or fails. 
-        // If status is missing, code logs warn and loop continues/finishes. 
-        // We simulate it missing once, then PROCESSED.
-        requestMocks.get
-            .mockResolvedValueOnce({}) // Missing status -> Status is undefined -> Loop continues or errors
-            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'key' });
+            // Mock status check (GET) - MISSING STATUS
+            // Then eventually succeeds to break loop or fails.
+            // If status is missing, code logs warn and loop continues/finishes.
+            // We simulate it missing once, then PROCESSED.
+            requestMocks.get
+                .mockResolvedValueOnce({}) // Missing status -> Status is undefined -> Loop continues or errors
+                .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'key' });
 
-        const fileContent = Buffer.from('data');
-        const base64File = fileContent.toString('base64');
-        const request = createMockRequest({ data: { file: base64File } });
+            const fileContent = Buffer.from('data');
+            const base64File = fileContent.toString('base64');
+            const request = createMockRequest({ data: { file: base64File } });
 
-        const result = await importActivityToSuuntoApp(request as any);
-        // It should recover if subsequent call works
-        expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+            const uploadPromise = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            const result = await uploadPromise;
+            // It should recover if subsequent call works
+            expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('returns a callable-safe pending-disconnect error before starting an upload', async () => {
@@ -1384,6 +1488,18 @@ describe('importActivityToSuuntoApp', () => {
                 providerOperationId: 'permanent-error-upload-id',
                 dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
             } satisfies Partial<ProviderOperationError>);
+        expect(logger.error).toHaveBeenCalledWith(
+            '[SuuntoActivityUpload] Provider operation failed permanently.',
+            expect.objectContaining({
+                code: 'failed-precondition',
+                providerCode: 'ERROR',
+                providerMessage: 'Suunto processing failed: Unsupported FIT file format',
+            }),
+        );
+        const providerFailureLog = vi.mocked(logger.error).mock.calls.find(
+            ([summary]) => summary === '[SuuntoActivityUpload] Provider operation failed permanently.',
+        );
+        expect(providerFailureLog?.[1]).not.toHaveProperty('message');
     });
 
     it('should not treat an ambiguous invalid-token processing message as a permanent FIT rejection', async () => {

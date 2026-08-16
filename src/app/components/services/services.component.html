@@ -454,6 +454,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
       </app-services-suunto>
@@ -477,6 +478,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
       </app-services-wahoo>

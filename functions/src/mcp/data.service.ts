@@ -4481,9 +4481,14 @@ function buildSleepSummaryResult(
           MCP_SLEEP_VITAL_TYPES.flatMap((type) => {
             const sum = bucket.vitalSums[type];
             const observations = bucket.vitalCounts[type];
-            return sum !== undefined && observations
-              ? [[type, sum / observations]]
-              : [];
+            if (sum === undefined || !observations) {
+              return [];
+            }
+            const average = sum / observations;
+            return [[
+              type,
+              type === 'hrvSampleCount' ? Math.round(average) : average,
+            ]];
           }),
         ) as McpSafeSleepVitals,
       })),

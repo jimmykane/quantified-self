@@ -3,10 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Unmock the global mock from test-setup.ts
 vi.unmock('./request-helper');
 
-import requestHelper from './request-helper';
+import requestHelper, { ResponseBodyTooLargeError } from './request-helper';
 
 describe('request-helper', () => {
     beforeEach(() => {
+        vi.useRealTimers();
         vi.clearAllMocks();
         // Mock global fetch
         vi.stubGlobal('fetch', vi.fn());
@@ -91,5 +92,57 @@ describe('request-helper', () => {
         const call = (global.fetch as any).mock.calls[0];
         expect(call[1].body).toBeInstanceOf(URLSearchParams);
         expect(call[1].body.get('key')).toBe('value');
+    });
+
+    it('should abort a request when its timeout expires', async () => {
+        vi.useFakeTimers();
+        (global.fetch as any).mockImplementation((_url: string, options: { signal: AbortSignal }) => (
+            new Promise((_resolve, reject) => {
+                options.signal.addEventListener('abort', () => {
+                    const error = new Error('The operation was aborted.');
+                    error.name = 'AbortError';
+                    reject(error);
+                }, { once: true });
+            })
+        ));
+
+        const request = requestHelper.get({ url: 'https://example.com', timeout: 1_000 });
+        const rejection = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+        await vi.advanceTimersByTimeAsync(1_000);
+        await rejection;
+    });
+
+    it('rejects a decoded success body that exceeds the configured byte limit', async () => {
+        vi.mocked(fetch).mockResolvedValue(new Response('decoded payload', {
+            headers: { 'content-length': '1' },
+        }));
+
+        await expect(requestHelper.get({
+            url: 'https://example.com',
+            maxResponseBytes: 8,
+        })).rejects.toBeInstanceOf(ResponseBodyTooLargeError);
+    });
+
+    it('returns a response that stays within the configured byte limit', async () => {
+        vi.mocked(fetch).mockResolvedValue(new Response('bounded payload'));
+
+        await expect(requestHelper.get({
+            url: 'https://example.com',
+            maxResponseBytes: 15,
+        })).resolves.toBe('bounded payload');
+    });
+
+    it('bounds error bodies before buffering them', async () => {
+        vi.mocked(fetch).mockResolvedValue(new Response('oversized provider error', {
+            status: 503,
+        }));
+
+        await expect(requestHelper.get({
+            url: 'https://example.com',
+            maxResponseBytes: 8,
+        })).rejects.toMatchObject({
+            name: 'ResponseBodyTooLargeError',
+            maxResponseBytes: 8,
+        });
     });
 });

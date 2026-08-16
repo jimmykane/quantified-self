@@ -4,10 +4,14 @@ import * as path from 'path';
 import Handlebars from 'handlebars';
 import { describe, expect, it } from 'vitest';
 import {
+    COROS_DELIVERY_UPDATE_TEMPLATE_ID,
     DEVELOPMENT_UPDATE_TEMPLATE_ID,
     EMAIL_PARTIAL_CATALOG,
+    LOCAL_EMAIL_TEMPLATE_CATALOG,
+    MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG,
     REFRESHED_EMAIL_TEMPLATE_CATALOG,
     selectRefreshedTemplates,
+    selectSeedableTemplates,
 } from './template-catalog';
 import { loadEmailTemplateSeedDocuments } from './template-loader';
 
@@ -61,7 +65,7 @@ describe('refreshed email template catalog', () => {
             expect(() => textEnvironment.compile(readTemplate(partial.textFile), { strict: true })({})).not.toThrow();
         }
 
-        for (const template of REFRESHED_EMAIL_TEMPLATE_CATALOG) {
+        for (const template of LOCAL_EMAIL_TEMPLATE_CATALOG) {
             const htmlSource = readTemplate(template.htmlFile);
             const textSource = readTemplate(template.textFile);
             expect(htmlSource).not.toContain('{{{');
@@ -96,6 +100,9 @@ describe('refreshed email template catalog', () => {
         const registrationWelcome = render('registration_welcome', 'named-user');
         expect(registrationWelcome).toContain('People come to the platform for different reasons');
         expect(registrationWelcome).toContain('make it useful on your own terms');
+        expect(registrationWelcome).toContain('I’d be glad to hear what would make Quantified Self most valuable to you.');
+        expect(registrationWelcome).toContain('If you could ask your training history one question, what would it be?');
+        expect(registrationWelcome).not.toContain('complete training history');
         expect(registrationWelcome).toContain('have a feature request');
         expect(registrationWelcome).toContain('I read every reply personally');
         expect(registrationWelcome).toContain('>quantified-self.io</a>');
@@ -106,6 +113,24 @@ describe('refreshed email template catalog', () => {
         expect(render('subscription_downgrade', 'unknown-role')).not.toContain('Up to');
     });
 
+    it('renders the manual COROS campaign in founder voice with general-availability route copy', () => {
+        const htmlEnvironment = createHandlebarsEnvironment('html');
+        const template = MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG.find(
+            entry => entry.id === COROS_DELIVERY_UPDATE_TEMPLATE_ID
+        )!;
+        const render = (previewName: string): string => {
+            const preview = template.previewCases.find(entry => entry.name === previewName)!;
+            return htmlEnvironment.compile(readTemplate(template.htmlFile), { strict: true })(preview.data);
+        };
+
+        const generalAvailability = render('general-availability');
+        expect(generalAvailability).toContain('Upload a GPX or FIT route directly to COROS');
+        expect(generalAvailability).toContain('I read every reply personally');
+        expect(generalAvailability).toContain('Founder, Quantified Self');
+        expect(generalAvailability).toContain('you opted in to marketing updates');
+        expect(generalAvailability).not.toMatch(/\bpilot\b/i);
+    });
+
     it('uses fluid shells that do not depend on media-query support at narrow widths', () => {
         expect(readTemplate('partials/email_transactional_header.hbs')).toContain('class="email-shell" width="100%"');
         expect(readTemplate('partials/email_founder_header.hbs')).toContain('class="letter" width="100%"');
@@ -114,9 +139,13 @@ describe('refreshed email template catalog', () => {
     it('allowlists refreshed templates and always excludes development_update from seeding', () => {
         expect(selectRefreshedTemplates().some(template => template.id === DEVELOPMENT_UPDATE_TEMPLATE_ID)).toBe(false);
         expect(() => selectRefreshedTemplates([DEVELOPMENT_UPDATE_TEMPLATE_ID])).toThrow(/intentionally excluded/);
+        expect(selectSeedableTemplates()).toEqual(REFRESHED_EMAIL_TEMPLATE_CATALOG);
+        expect(selectSeedableTemplates().some(template => template.id === COROS_DELIVERY_UPDATE_TEMPLATE_ID)).toBe(false);
+        expect(() => selectSeedableTemplates([DEVELOPMENT_UPDATE_TEMPLATE_ID])).toThrow(/intentionally excluded/);
 
         const documents = loadEmailTemplateSeedDocuments(TEMPLATE_ROOT);
         expect(documents.some(document => document.id === DEVELOPMENT_UPDATE_TEMPLATE_ID)).toBe(false);
+        expect(documents.some(document => document.id === COROS_DELIVERY_UPDATE_TEMPLATE_ID)).toBe(false);
         expect(documents.filter(document => document.data.partial)).toHaveLength(EMAIL_PARTIAL_CATALOG.length);
         expect(documents.filter(document => !document.data.partial)).toHaveLength(REFRESHED_EMAIL_TEMPLATE_CATALOG.length);
         expect(documents.every(document => document.data.html.length > 0 && document.data.text.length > 0)).toBe(true);
@@ -130,6 +159,15 @@ describe('refreshed email template catalog', () => {
             'email_founder_footer',
             'registration_welcome',
         ]);
+    });
+
+    it('loads the manual COROS campaign only when explicitly requested', () => {
+        const documents = loadEmailTemplateSeedDocuments(TEMPLATE_ROOT, [COROS_DELIVERY_UPDATE_TEMPLATE_ID]);
+
+        expect(documents.map(document => document.id)).toEqual([COROS_DELIVERY_UPDATE_TEMPLATE_ID]);
+        expect(documents[0]?.data.subject).toBe('New: send activities and routes to COROS');
+        expect(documents[0]?.data.html).toContain('Your COROS connection in Quantified Self can now do more');
+        expect(documents[0]?.data.text).toContain('I read every reply personally');
     });
 
     it('keeps development_update byte-for-byte unchanged', () => {

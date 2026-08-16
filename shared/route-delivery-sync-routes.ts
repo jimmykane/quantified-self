@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 export const ROUTE_DELIVERY_SYNC_ROUTE_IDS = {
     SuuntoApp_to_GarminAPI: 'SuuntoApp_to_GarminAPI',
     SuuntoApp_to_WahooAPI: 'SuuntoApp_to_WahooAPI',
+    SuuntoApp_to_COROSAPI: 'SuuntoApp_to_COROSAPI',
 } as const;
 
 export type RouteDeliverySyncRouteId = typeof ROUTE_DELIVERY_SYNC_ROUTE_IDS[keyof typeof ROUTE_DELIVERY_SYNC_ROUTE_IDS];
@@ -26,6 +27,12 @@ export const ROUTE_DELIVERY_SYNC_ROUTES: Record<RouteDeliverySyncRouteId, RouteD
         sourceServiceName: ServiceNames.SuuntoApp,
         destinationServiceName: ServiceNames.WahooAPI,
         destinationRequiredPermissions: ['routes_read', 'routes_write'],
+    },
+    [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
+        id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+        sourceServiceName: ServiceNames.SuuntoApp,
+        destinationServiceName: ServiceNames.COROSAPI,
+        destinationRequiredPermissions: [],
     },
 };
 

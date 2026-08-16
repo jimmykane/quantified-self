@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
+import {
+  ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
+  ASSISTANT_PROMPT_EXAMPLES,
+} from '../../../shared/assistant.prompts';
 import {
   ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
@@ -77,6 +81,14 @@ describe('Assistant MCP session', () => {
             toolName as typeof ASSISTANT_MCP_TOOL_NAMES[number],
           )),
           `published Assistant example ${example.id} has an unavailable workflow`,
+        ).toEqual([]);
+      }
+      for (const workflow of ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS) {
+        expect(
+          workflow.toolWorkflow.filter(toolName => !productionToolNames.has(
+            toolName as typeof ASSISTANT_MCP_TOOL_NAMES[number],
+          )),
+          `analytical Assistant workflow ${workflow.id} has an unavailable tool`,
         ).toEqual([]);
       }
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
@@ -265,8 +277,8 @@ describe('Assistant MCP session', () => {
             aggregation: {
               dataType: 'Distance',
               valueType: 'Total',
-              categoryType: 'Date',
-              resolvedTimeInterval: 'Yearly',
+              categoryType: 'Date Type',
+              resolvedTimeInterval: TimeIntervals.Yearly,
               buckets: [{
                 bucketKey: Date.parse('2024-01-01T00:00:00.000Z'),
                 time: Date.parse('2024-01-01T00:00:00.000Z'),

@@ -1,0 +1,62 @@
+<section class="bottom-sheet-container training-mobile-destination-sheet" aria-label="Choose training view">
+  <app-bottom-sheet-header title="Training view" icon="monitoring">
+    <button mat-icon-button type="button" aria-label="Close training view picker" (click)="close()">
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+
+  <div class="bottom-sheet-content training-mobile-destination-content">
+    <p class="training-mobile-destination-intro">
+      Switch the analysis you see. Your recorded training and totals do not change.
+    </p>
+
+    @for (section of sections; track section.id) {
+      <section
+        class="training-mobile-destination-section"
+        [class.training-mobile-destination-shortcuts]="section.id === 'shortcuts'"
+        [class.training-mobile-destination-more]="section.id === 'more'">
+        @if (section.label) {
+          <h3>{{ section.label }}</h3>
+        }
+        <mat-action-list [attr.aria-label]="section.label || 'All training'">
+          @for (option of section.options; track option.id) {
+            <button
+              mat-list-item
+              type="button"
+              class="training-mobile-destination-item"
+              [activated]="isSelected(option)"
+              [class.training-mobile-destination-item-selected]="isSelected(option)"
+              [attr.data-destination]="option.id"
+              [attr.aria-pressed]="isSelected(option)"
+              (click)="selectDestination(option.id)">
+              @if (option.iconActivityType) {
+                <app-activity-type-icon
+                  matListItemIcon
+                  [activityType]="option.iconActivityType"
+                  size="22px"
+                  aria-hidden="true">
+                </app-activity-type-icon>
+              } @else if (option.materialIcon) {
+                <mat-icon matListItemIcon aria-hidden="true">{{ option.materialIcon }}</mat-icon>
+              }
+              <span matListItemTitle>{{ option.label }}</span>
+              @if (isSelected(option)) {
+                <span matListItemMeta class="training-mobile-destination-check" aria-hidden="true">
+                  <mat-icon>check</mat-icon>
+                </span>
+              }
+            </button>
+          }
+        </mat-action-list>
+      </section>
+    }
+  </div>
+
+  <mat-divider></mat-divider>
+  <div class="training-mobile-destination-footer">
+    <button mat-button type="button" (click)="manageShortcuts()">
+      <mat-icon aria-hidden="true">tune</mat-icon>
+      <span>Manage sport shortcuts</span>
+    </button>
+  </div>
+</section>

@@ -7,6 +7,9 @@ export const ACTIVITY_SYNC_ROUTE_IDS = {
     COROSAPI_to_WahooAPI: 'COROSAPI_to_WahooAPI',
     SuuntoApp_to_WahooAPI: 'SuuntoApp_to_WahooAPI',
     WahooAPI_to_SuuntoApp: 'WahooAPI_to_SuuntoApp',
+    GarminAPI_to_COROSAPI: 'GarminAPI_to_COROSAPI',
+    SuuntoApp_to_COROSAPI: 'SuuntoApp_to_COROSAPI',
+    WahooAPI_to_COROSAPI: 'WahooAPI_to_COROSAPI',
 } as const;
 
 export type ActivitySyncRouteId = typeof ACTIVITY_SYNC_ROUTE_IDS[keyof typeof ACTIVITY_SYNC_ROUTE_IDS];
@@ -53,6 +56,24 @@ export const ACTIVITY_SYNC_ROUTES: Record<ActivitySyncRouteId, ActivitySyncRoute
         id: ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
         sourceServiceName: ServiceNames.WahooAPI,
         destinationServiceName: ServiceNames.SuuntoApp,
+        supportedFileExtensions: ['fit'],
+    },
+    [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI]: {
+        id: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+        sourceServiceName: ServiceNames.GarminAPI,
+        destinationServiceName: ServiceNames.COROSAPI,
+        supportedFileExtensions: ['fit'],
+    },
+    [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: {
+        id: ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+        sourceServiceName: ServiceNames.SuuntoApp,
+        destinationServiceName: ServiceNames.COROSAPI,
+        supportedFileExtensions: ['fit'],
+    },
+    [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI]: {
+        id: ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI,
+        sourceServiceName: ServiceNames.WahooAPI,
+        destinationServiceName: ServiceNames.COROSAPI,
         supportedFileExtensions: ['fit'],
     },
 };

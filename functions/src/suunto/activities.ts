@@ -3,12 +3,10 @@
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import {
   getUserDeletionGuardState,
-  getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
@@ -36,17 +34,22 @@ import {
   ProviderOperation,
   ProviderOperationError,
   ProviderRetryMode,
+  toProviderOperationLogDetails,
 } from '../shared/provider-operation-error';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { recordSuccessfulActivityUpload } from '../activity-sync/upload-count';
+import {
+  ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
+  recordActivitySyncOutboundFingerprint,
+} from '../activity-sync/outbound-fingerprint';
 
 const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([408, 502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
-const SUUNTO_STATUS_POLL_DELAY_MS = 2000;
-const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 10;
-const SUUNTO_DIRECT_UPLOAD_COUNT_IDEMPOTENCY_WINDOW = 100;
+const SUUNTO_STATUS_POLL_DELAY_MS = 10_000;
+const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 5;
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const SUUNTO_UPLOAD_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 const SUUNTO_PROVIDER_USER_ID_MAX_LENGTH = 200;
@@ -217,85 +220,14 @@ async function incrementUploadedActivitiesCountIfUserActive(
   userID: string,
   countContext?: SuuntoActivityUploadCountContext,
 ): Promise<boolean> {
-  const db = admin.firestore();
-  const userServiceMetaDocumentSnapshot = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
-
-  return db.runTransaction(async (transaction) => {
-    let deletionGuard;
-    try {
-      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
-    } catch (error) {
-      throw new UserDeletionGuardReadError(userID, 'suunto_activity_upload_meta', error);
-    }
-
-    if (deletionGuard.shouldSkip) {
-      logger.warn(`Skipping Suunto uploadedActivitiesCount update because user ${userID} is missing or deletion is in progress.`);
-      return false;
-    }
-
-    const serviceMetaUpdate: Record<string, unknown> = {
-      uploadedActivitiesCount: FieldValue.increment(1),
-    };
-    if (countContext?.queueItemRef) {
-      const queueItemSnapshot = await transaction.get(countContext.queueItemRef);
-      if (!queueItemSnapshot.exists) {
-        logger.warn('Skipping Suunto uploadedActivitiesCount update because the activity-sync queue item no longer exists.', {
-          userID,
-          uploadId: countContext.uploadId,
-        });
-        return false;
-      }
-
-      const queueItemData = queueItemSnapshot.data() as {
-        destinationUploadID?: unknown;
-        destinationUploadCountedID?: unknown;
-      } | undefined;
-      const currentUploadId = `${queueItemData?.destinationUploadID || ''}`.trim();
-      if (currentUploadId !== countContext.uploadId) {
-        logger.warn('Skipping Suunto uploadedActivitiesCount update because the activity-sync queue item no longer references this upload.', {
-          userID,
-          uploadId: countContext.uploadId,
-          currentUploadId: currentUploadId || null,
-        });
-        return false;
-      }
-      const countedUploadId = `${queueItemData?.destinationUploadCountedID || ''}`.trim();
-      if (countedUploadId === countContext.uploadId) {
-        return false;
-      }
-      if (countedUploadId) {
-        logger.error('Skipping Suunto uploadedActivitiesCount update because the queue item already counted a different upload.', {
-          userID,
-          uploadId: countContext.uploadId,
-          countedUploadId,
-        });
-        return false;
-      }
-
-      transaction.update(countContext.queueItemRef, {
-        destinationUploadCountedID: countContext.uploadId,
-        destinationUploadCountedAt: Date.now(),
-      });
-    } else if (countContext) {
-      const serviceMetaSnapshot = await transaction.get(userServiceMetaDocumentSnapshot);
-      const serviceMetaData = serviceMetaSnapshot.data() as {
-        recentDirectActivityUploadCountedIDs?: unknown;
-      } | undefined;
-      const recentUploadIds = Array.isArray(serviceMetaData?.recentDirectActivityUploadCountedIDs)
-        ? serviceMetaData.recentDirectActivityUploadCountedIDs
-          .filter((value): value is string => typeof value === 'string' && value.length > 0)
-        : [];
-      if (recentUploadIds.includes(countContext.uploadId)) {
-        return false;
-      }
-      serviceMetaUpdate.recentDirectActivityUploadCountedIDs = [
-        ...recentUploadIds.filter(uploadId => uploadId !== countContext.uploadId),
-        countContext.uploadId,
-      ].slice(-SUUNTO_DIRECT_UPLOAD_COUNT_IDEMPOTENCY_WINDOW);
-    }
-
-    transaction.set(userServiceMetaDocumentSnapshot, serviceMetaUpdate, { merge: true });
-    return true;
+  if (!countContext) {
+    return false;
+  }
+  return recordSuccessfulActivityUpload({
+    userID,
+    serviceName: ServiceNames.SuuntoApp,
+    uploadId: countContext.uploadId,
+    queueItemRef: countContext.queueItemRef,
   });
 }
 
@@ -358,6 +290,8 @@ export interface SuuntoActivityUploadInitializationState extends SuuntoActivityU
 }
 
 export interface SuuntoActivityUploadOptions {
+  /** Runs after account validation and immediately before upload initialization. */
+  beforeProviderRequest?: () => Promise<void>;
   /**
    * Persists the provider identifiers before the FIT blob is sent. Returning
    * false means the caller's guarded state was removed and the upload must stop.
@@ -415,6 +349,7 @@ function shouldPreserveServiceLifecycleError(error: unknown): boolean {
     || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
     || error.name === 'SuuntoActivityUploadStatePersistenceSkippedError'
     || error.name === 'SuuntoActivityUploadStatePersistenceError'
+    || error.name === 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError'
   );
 }
 
@@ -588,40 +523,29 @@ async function pollSuuntoActivityUploadStatus(
 ): Promise<SuuntoActivityUploadResult> {
   const maxAttempts = options.maxAttempts ?? SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS;
   const pollDelayMs = options.pollDelayMs ?? SUUNTO_STATUS_POLL_DELAY_MS;
-  // UNKNOWN is deliberate: a missing/malformed status response must never be
-  // interpreted as provider-confirmed NEW, because callers may only replace an
-  // empty direct-upload job after Suunto explicitly reports NEW.
+  // UNKNOWN is deliberate: a missing or malformed response must remain
+  // distinguishable from an explicit provider status in retry diagnostics.
   let status = 'UNKNOWN';
   let statusRequestAttempts = 0;
 
   while (statusRequestAttempts < maxAttempts) {
-    if (pollDelayMs > 0) {
+    if (statusRequestAttempts > 0 && pollDelayMs > 0) {
       await sleep(pollDelayMs);
     }
     await assertSuuntoActivityUploadUserActive(userID, 'before_status_poll');
 
     try {
-      const remainingStatusRequestAttempts = maxAttempts - statusRequestAttempts;
-      const maxStatusRequestRetries = Math.min(
-        SUUNTO_MAX_TRANSIENT_RETRIES,
-        Math.max(0, remainingStatusRequestAttempts - 1)
-      );
-      const statusJson = await withSuuntoTransientRetry(
-        `Check upload status for ${uploadId} for user ${userID}`,
-        async () => {
-          statusRequestAttempts++;
-          return requestPromise.get({
-            headers: {
-              'Authorization': toSuuntoAuthorizationHeader(accessToken),
-              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-            },
-            json: true,
-            url: `https://cloudapi.suunto.com/v2/upload/${encodeURIComponent(uploadId)}`,
-          });
+      // Status retries stay in this outer loop so every provider request uses
+      // the same poll interval instead of the shorter generic transport retry.
+      statusRequestAttempts++;
+      const statusJson = await requestPromise.get({
+        headers: {
+          'Authorization': toSuuntoAuthorizationHeader(accessToken),
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
         },
-        maxStatusRequestRetries,
-        true
-      );
+        json: true,
+        url: `https://cloudapi.suunto.com/v2/upload/${encodeURIComponent(uploadId)}`,
+      });
 
       if (!statusJson || !statusJson.status) {
         logger.warn('Suunto activity status response omitted status.', {
@@ -732,15 +656,7 @@ function logSuuntoActivityProviderFailure(userID: string, error: ProviderOperati
   const details = {
     userID,
     serviceName: error.serviceName,
-    operation: error.operation,
-    disposition: error.disposition,
-    retryMode: error.retryMode,
-    code: error.code,
-    statusCode: error.statusCode,
-    providerUserId: error.providerUserId,
-    providerOperationId: error.providerOperationId,
-    message: error.message,
-    dlqContext: error.dlqContext,
+    ...toProviderOperationLogDetails(error),
   };
   if (error.disposition === 'retryable') {
     logger.warn('[SuuntoActivityUpload] Provider operation will be retried.', details);
@@ -957,6 +873,10 @@ export async function uploadActivityFileToSuunto(
         tokenQueryDocumentSnapshot,
         async (accessToken) => {
           await assertSuuntoActivityUploadUserActive(userID, 'before_init_upload');
+          if (options.beforeProviderRequest) {
+            await options.beforeProviderRequest();
+            await assertSuuntoActivityUploadUserActive(userID, 'after_pre_request_write');
+          }
           try {
             return await withSuuntoTransientRetry(
               `Init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
@@ -1186,7 +1106,8 @@ export const importActivityToSuuntoApp = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   timeoutSeconds: 300,
-  maxInstances: 10,
+  concurrency: 1,
+  maxInstances: 1,
 }, async (request) => {
   logger.info('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
 
@@ -1212,18 +1133,20 @@ export const importActivityToSuuntoApp = onCall({
   }
 
   try {
+    const startDirectUpload = (buffer: Buffer) => uploadActivityFileToSuunto(userID, buffer, {
+      beforeProviderRequest: async () => {
+        await recordActivitySyncOutboundFingerprint({
+          userID,
+          destinationServiceName: ServiceNames.SuuntoApp,
+          fileBuffer: buffer,
+        });
+      },
+    });
     let result: SuuntoActivityUploadResult;
     if (resumeState) {
       result = await getSuuntoActivityUploadStatus(userID, resumeState.uploadId, resumeState.providerUserId);
-      if (result.status === 'pending' && result.providerStatus === 'NEW') {
-        // Direct uploads do not persist signed blob URLs server-side. A NEW
-        // provider status confirms the original job never received its FIT, so
-        // replacing that empty job is safe and prevents an unrecoverable loop.
-        fileBuffer = decodeSuuntoActivityUpload(request.data?.file);
-        result = await uploadActivityFileToSuunto(userID, fileBuffer);
-      }
     } else {
-      result = await uploadActivityFileToSuunto(userID, fileBuffer as Buffer);
+      result = await startDirectUpload(fileBuffer as Buffer);
     }
     if (result.status === 'pending') {
       throw toPendingSuuntoActivityUploadError(result);
@@ -1233,6 +1156,15 @@ export const importActivityToSuuntoApp = onCall({
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError') {
       throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');
+    }
+    if (error instanceof UserDeletionGuardReadError) {
+      throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
+    }
+    if (
+      error instanceof ActivitySyncOutboundFingerprintSkippedForDeletedUserError
+      || error instanceof SuuntoActivityUploadSkippedForDeletedUserError
+    ) {
+      throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
     }
     if (isProviderOperationError(error)) {
       throw toSuuntoActivityCallableError(error);

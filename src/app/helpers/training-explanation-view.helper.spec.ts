@@ -43,13 +43,14 @@ describe('buildTrainingExplanationViewModel', () => {
       }),
       expect.objectContaining({
         key: 'mix',
-        title: 'Running load',
+        title: 'Largest sport load change · Running',
         iconActivityType: 'Running',
         valueText: 'Above usual load',
         tone: 'neutral',
       }),
       expect.objectContaining({
         key: 'rhythm',
+        title: 'Largest rhythm change · Running',
         iconActivityType: 'Running',
         valueText: 'More active days',
         tone: 'neutral',
@@ -63,9 +64,16 @@ describe('buildTrainingExplanationViewModel', () => {
   it('retains text-only comparison values for the metric renderer', () => {
     const input = payload();
     input.current.rhythms[0] = { ...input.current.rhythms[0], activeDayCount: input.baselineMedian.rhythms[0].activeDayCount };
+    input.current.sportLoads[0] = {
+      ...input.current.sportLoads[0],
+      trainingStressScore: input.baselineMedian.sportLoads[0].trainingStressScore,
+    };
 
     const view = buildTrainingExplanationViewModel(input);
 
+    expect(view?.cards.find(card => card.key === 'mix')?.title).toBe('Sport load comparison · Running');
+    expect(view?.cards.find(card => card.key === 'mix')?.valueText).toBe('At your usual load');
+    expect(view?.cards.find(card => card.key === 'rhythm')?.title).toBe('Sport rhythm comparison · Running');
     expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same rhythm');
   });
 
@@ -88,7 +96,7 @@ describe('buildTrainingExplanationViewModel', () => {
     const rhythm = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'rhythm');
 
     expect(rhythm).toEqual(expect.objectContaining({
-      title: 'Cycling rhythm',
+      title: 'Sport rhythm comparison · Cycling',
       iconActivityType: 'Cycling',
       valueText: 'Same rhythm',
     }));
@@ -121,7 +129,7 @@ describe('buildTrainingExplanationViewModel', () => {
       const loadCard = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'mix');
 
       expect(loadCard).toEqual(expect.objectContaining({
-        title: `${label} load`,
+        title: `Largest sport load change · ${label}`,
         iconActivityType: null,
       }));
     }
@@ -151,7 +159,7 @@ describe('buildTrainingExplanationViewModel', () => {
 
     expect(buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'mix'))
       .toEqual(expect.objectContaining({
-        title: 'Rowing load',
+        title: 'Largest sport load change · Rowing',
         iconActivityType: 'Rowing',
       }));
   });

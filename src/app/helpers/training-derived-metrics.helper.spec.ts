@@ -206,6 +206,37 @@ describe('training derived metric normalizers', () => {
     expect(resolveTrainingDurabilityMetricPayload(payload)).toEqual(payload);
   });
 
+  it('retains a valid Cycling scope when candidates have evidence but no eligible summary', () => {
+    const payload = durabilityPayload();
+    const excludedCoverage = {
+      candidateActivityCount: 2,
+      evidenceActivityCount: 2,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 2,
+      eligibilityRatio: 0,
+      exclusions: [{ reason: 'missing-output', activityCount: 2 }],
+    };
+    const excludedWindow28 = {
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      coverage: excludedCoverage,
+      summaries: [],
+    };
+    const excludedWindow7 = { ...excludedWindow28, periodDays: 7 };
+    payload.scopes[1] = {
+      scope: 'cycling',
+      current: excludedWindow28,
+      baselineBlocks: [excludedWindow28, excludedWindow28, excludedWindow28],
+      usual: { coverage: excludedCoverage, summaries: [] },
+      weeks: Array.from({ length: 12 }, () => excludedWindow7),
+      recentSupportingEvents: [],
+    };
+
+    expect(resolveTrainingDurabilityMetricPayload(payload)?.scopes[1]).toEqual(payload.scopes[1]);
+  });
+
   it('rejects impossible durability coverage arithmetic and context totals', () => {
     const invalidRatio = durabilityPayload();
     invalidRatio.scopes[0].current = {

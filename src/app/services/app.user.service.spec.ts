@@ -1404,6 +1404,34 @@ describe('AppUserService', () => {
             expect(result).toEqual(tokens);
         });
 
+        it('should fail closed when COROS metadata pins a token that is no longer present', () => {
+            service = TestBed.inject(AppUserService);
+            const hasConnectedToken = (service as any).hasConnectedActivityServiceToken.bind(service);
+
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'remaining-coros-account' }],
+                { providerUserId: 'missing-pinned-account' },
+            )).toBe(false);
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'active-coros-account' }],
+                { providerUserId: 'active-coros-account' },
+            )).toBe(true);
+        });
+
+        it('should recognize an unpinned legacy COROS token until the backend pins it', () => {
+            service = TestBed.inject(AppUserService);
+            const hasConnectedToken = (service as any).hasConnectedActivityServiceToken.bind(service);
+
+            expect(hasConnectedToken(
+                ServiceNames.COROSAPI,
+                [{ openId: 'legacy-coros-account' }],
+                {},
+            )).toBe(true);
+            expect(hasConnectedToken(ServiceNames.COROSAPI, [{ accessToken: 'malformed' }], {})).toBe(false);
+        });
+
         it('getServiceToken should read Garmin tokens from garminAPITokens collection', async () => {
             const user = { uid: 'u3' } as any;
             const tokens = [{ accessToken: 'garmin-token' }];
@@ -1482,6 +1510,30 @@ describe('AppUserService', () => {
                 .mockReturnValueOnce(of([]))
                 .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
                 .mockReturnValueOnce(of([]));
+
+            const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+
+            expect(result).toEqual({
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: false,
+                [ServiceNames.COROSAPI]: false,
+                [ServiceNames.WahooAPI]: false,
+            });
+        });
+
+        it('watchActivityServiceConnectionState should not expose reconnect-required COROS tokens as usable', async () => {
+            const user = { uid: 'u10c' } as any;
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.COROSAPI
+                    ? [{ accessToken: 'coros-token', openId: 'coros-user' }]
+                    : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.COROSAPI
+                    ? { connectionState: 'reconnect_required' }
+                    : undefined
+            ) as any);
 
             const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
 
@@ -1766,12 +1818,18 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
         });
 
-        it('does not replay server-owned training settings with unrelated preference writes', async () => {
+        it('strips server-owned Training settings while retaining client-owned workspace preferences', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
             const updates = {
                 displayName: 'New Name',
                 settings: {
                     theme: 'dark',
+                    appSettings: {
+                        trainingWorkspace: {
+                            preferredDestination: 'cycling',
+                            sportShortcuts: ['running', 'cycling'],
+                        },
+                    },
                     trainingSettings: {
                         visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
@@ -1783,7 +1841,15 @@ describe('AppUserService', () => {
 
             await service.updateUserProperties(user, updates);
 
-            expect(setDoc).toHaveBeenCalledWith(expect.anything(), { theme: 'dark' }, { merge: true });
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), {
+                theme: 'dark',
+                appSettings: {
+                    trainingWorkspace: {
+                        preferredDestination: 'cycling',
+                        sportShortcuts: ['running', 'cycling'],
+                    },
+                },
+            }, { merge: true });
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
         });
 
@@ -2066,8 +2132,20 @@ describe('AppUserService', () => {
                 await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
-                    startDate,
-                    endDate
+                    startDate: '2023-01-01',
+                    endDate: '2023-01-31'
+                });
+            });
+
+            it('sends COROS history dates as local calendar dates rather than UTC timestamps', async () => {
+                const localStart = new Date(2023, 0, 1, 23, 30);
+                const localEnd = new Date(2023, 0, 2, 1, 30);
+
+                await service.importServiceHistoryForCurrentUser(ServiceNames.COROSAPI, localStart, localEnd);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
+                    startDate: '2023-01-01',
+                    endDate: '2023-01-02',
                 });
             });
 
@@ -2372,6 +2450,35 @@ describe('AppUserService', () => {
                     code: 'code',
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                 });
+            });
+        });
+
+        describe('checkCurrentUserCOROSBindingState', () => {
+            it('coalesces concurrent checks for the same local and provider account', async () => {
+                let resolveCall!: (value: unknown) => void;
+                mockFunctionsService.call.mockReturnValueOnce(new Promise(resolve => {
+                    resolveCall = resolve;
+                }));
+
+                const first = service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+                const second = service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+
+                expect(second).toBe(first);
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIBindingState');
+
+                resolveCall({ data: { status: 'bound', bound: true, checkedAt: 123 } });
+                await expect(first).resolves.toEqual({ status: 'bound', bound: true, checkedAt: 123 });
+
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { status: 'bound', bound: true } });
+                await service.checkCurrentUserCOROSBindingState('u1', 'open-id');
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+            });
+
+            it('rejects a binding check for a user other than the authenticated user', async () => {
+                await expect(service.checkCurrentUserCOROSBindingState('other-user', 'open-id'))
+                    .rejects.toThrow('inactive account');
+                expect(mockFunctionsService.call).not.toHaveBeenCalled();
             });
         });
 

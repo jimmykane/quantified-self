@@ -293,7 +293,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'Training Analysis for Endurance Athletes',
     description: 'Analyze eight sport families—from running, cycling, swimming, and rowing to walking and hiking, Nordic skiing, strength, and paddling—with readiness, load trends, intensity, durability, sleep context, and historical build comparisons, all through context-aware summaries.',
     h1: 'Training analysis for endurance athletes',
-    intro: 'Training is a curated workspace for understanding your current workload in context: compare it with your usual training, see what changed, and inspect the evidence behind readiness, performance, and long-session durability.',
+    intro: 'Training is a curated workspace for understanding your current workload in context. Start with one All training overview, then switch to a focused sport destination for its historical build, performance, power, and durability evidence without losing any global totals.',
     chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -326,7 +326,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Eight conservative sport families keep materially different contexts separate, including individual registered legs from multisport activities.',
+        copy: 'Use account-saved sport shortcuts or the complete selector to open one of eight conservative sport families. Every sport stays available, and materially different contexts—including registered legs from multisport activities—remain separate.',
         items: [
           {
             icon: 'directions_run',
@@ -341,7 +341,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'show_chart',
             title: 'Context-aware sport summaries',
-            copy: 'Keep indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
+            copy: 'Switch to one sport for its detailed current-versus-usual summary while All training keeps the compact cross-sport mix. Indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts remain separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
           },
         ],
       },
@@ -383,7 +383,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'How is Training different from the Dashboard?',
-        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace that combines related evidence into a consistent current, historical, and discipline-specific view.',
+        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace with one global overview and focused sport destinations. Account-saved shortcuts speed up navigation but never hide a sport or change the calculations.',
       },
     ],
     closingTitle: 'Start with the work you already recorded',
@@ -500,7 +500,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
     description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, saved-route summaries, and optional interactive charts or activity maps. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
-    h1: 'A fitness-data Assistant grounded in your own history',
+    h1: 'If you could ask your training history one question, what would it be?',
     intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools, shows the results that grounded each answer, and can add a deterministic chart or opt-in activity map when it clarifies the result. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Charts & maps', 'Saved routes'],
     actions: [
@@ -762,15 +762,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'routeFiles',
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
-    title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
-    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto or Garmin Connect, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
-    h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
-    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; sending routes requires a connected provider account, and Garmin also requires Course Import permission.`,
-    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Saved routes', 'Original files'],
+    title: 'FIT and GPX Route Files with Multi-Provider Delivery',
+    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    h1: 'Save FIT and GPX route files, then send them to connected services',
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
+    chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route send'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
       routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
+      routeAction('COROS Integration', '/integrations/coros', 'stroked', 'route'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
     sections: [
@@ -798,7 +799,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Send Routes',
-        title: 'Move routes between Quantified Self, Suunto, and Garmin Connect',
+        title: 'Move routes between Quantified Self and connected services',
         copy: 'Use Routes as the private route library between planning files, saved provider routes, and connected device ecosystems without turning planned courses into completed activities.',
         items: [
           {
@@ -810,6 +811,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'route',
             title: 'Send saved routes to Garmin Connect',
             copy: 'Send saved FIT and GPX route records to Garmin Connect as Garmin courses when Course Import is allowed. Sending the same saved route again updates the same Garmin course for that account.',
+          },
+          {
+            icon: 'near_me',
+            title: 'Send saved routes to Wahoo or COROS',
+            copy: 'Use the Routes table or bulk actions to send FIT- or GPX-backed routes to Wahoo or COROS. Eligible connected Pro users see COROS in the table, bulk actions, and route detail menu.',
           },
           {
             icon: 'sync',
@@ -859,6 +865,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes, when Garmin is connected and Course Import is allowed. Saved FIT and GPX routes can be sent to Garmin Connect from Routes, and sending the same saved route again updates the same Garmin course for that account.',
       },
       {
+        question: 'Can I send saved routes to Wahoo or COROS?',
+        answer: 'Wahoo and COROS route delivery are available with Pro and a connected destination account.',
+      },
+      {
         question: 'Can Quantified Self import routes from Suunto?',
         answer: 'Yes, when Suunto is connected. New and updated Suunto routes are imported automatically, and Services includes Import existing routes for routes already in your Suunto account.',
       },
@@ -872,11 +882,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Save the route file, then send it where it needs to go',
-    closingCopy: 'Use Routes when you have a planned course, GPX route, Suunto route, Garmin course target, or device route file that should stay attached to its original source file without mixing into workout history.',
+    closingCopy: 'Use Routes when you have a planned course, GPX route, provider route target, or device route file that should stay attached to its original source file without mixing into workout history.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin', 'stroked', 'route'),
       routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
+      routeAction('COROS Integration', '/integrations/coros', 'stroked', 'route'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
   },

@@ -103,7 +103,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private destroyed = false;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
-  readonly composerPlaceholder = 'Ask about your data…';
+  readonly composerPlaceholder = 'Ask your history…';
   readonly promptControl = new FormControl('', {
     nonNullable: true,
     validators: [

@@ -3280,6 +3280,74 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
+    it('keeps steady Cycling contexts eligible while excluding Enduro and Downhill evidence', async () => {
+        const { buildTrainingDurabilityMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const eligibleCyclingEvidence = aerobicEvidence(4, {
+            discipline: 'cycling',
+            outputSource: 'power',
+            outputUnit: 'W',
+        });
+        const unsupportedGravityEvidence = aerobicEvidence(0, {
+            discipline: 'cycling',
+            outputSource: 'power',
+            outputUnit: 'W',
+            qualifyingDurationSeconds: 0,
+            coverageRatio: 0,
+            eligibility: {
+                eligible: false,
+                reason: 'unsupported-context',
+                validSampleCount: 0,
+                comparisonSegments: 'halves',
+                earlySampleCount: 0,
+                lateSampleCount: 0,
+                outputCoefficientOfVariation: null,
+                hardZoneRatio: null,
+            },
+            evidence: null,
+        });
+        const activityTypes = [
+            ActivityTypes.Cycling,
+            ActivityTypes.IndoorCycling,
+            ActivityTypes.VirtualCycling,
+            ActivityTypes.MountainBiking,
+            ActivityTypes['Enduro MTB'],
+            ActivityTypes.DownhillCycling,
+        ];
+        const docs = activityTypes.map((activityType, index) => eventDoc(`cycling-context-${index}`, {
+            startDate: Date.UTC(2026, 6, 8 + index),
+            stats: {
+                [DataActivityTypes.type]: [activityType],
+                [DataDurabilityEvidence.type]: index < 4
+                    ? eligibleCyclingEvidence
+                    : unsupportedGravityEvidence,
+            },
+        }));
+
+        const cycling = buildTrainingDurabilityMetricPayload(buildTrainingActivitySources(docs), nowMs)
+            .payload.scopes.find(scope => scope.scope === 'cycling')!;
+
+        expect(cycling.current.coverage).toEqual({
+            candidateActivityCount: 6,
+            evidenceActivityCount: 6,
+            eligibleActivityCount: 4,
+            missingEvidenceActivityCount: 0,
+            excludedActivityCount: 2,
+            eligibilityRatio: 0.6667,
+            exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+        });
+        expect(cycling.current.summaries).toEqual([
+            expect.objectContaining({
+                context: expect.objectContaining({
+                    contextKey: 'cycling|power|W|-|-',
+                    scope: 'cycling',
+                    outputSource: 'power',
+                }),
+                sampleCount: 4,
+            }),
+        ]);
+    });
+
     it('does not count registered families without durability adapters as durability sources or candidates', async () => {
         const {
             aggregatePersistedTrainingDurability,
@@ -3995,7 +4063,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4027,7 +4095,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
             { incrementEventMutationVersion: true },
         );
@@ -4070,7 +4138,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4090,11 +4158,11 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 22);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('test-user-uid', 22);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
             '[derived-metrics] Coordinator appears stuck; forcing requeue.',
             expect.objectContaining({
-                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                uid: 'test-user-uid',
                 status: 'queued',
                 generation: 21,
             }),
@@ -4119,7 +4187,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4139,11 +4207,11 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('xcsAolLDDTWTgtRN9eYF3lW2YKL2', 31);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('test-user-uid', 31);
         expect(hoisted.loggerWarn).toHaveBeenCalledWith(
             '[derived-metrics] Coordinator appears stuck; forcing requeue.',
             expect.objectContaining({
-                uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+                uid: 'test-user-uid',
                 status: 'processing',
                 generation: 30,
             }),
@@ -4187,7 +4255,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         hoisted.enqueueDerivedMetricsTask.mockRejectedValueOnce(new Error('transient task queue error'));
 
         await expect(markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.TrainingBuildComparison],
         )).resolves.toEqual({
             accepted: false,
@@ -4234,7 +4302,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 
@@ -4270,7 +4338,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         });
 
         const response = await markDerivedMetricsDirtyAndMaybeQueue(
-            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            'test-user-uid',
             [DERIVED_METRIC_KINDS.Form],
         );
 

@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import {
   GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
   GARMIN_DELIVERY_METADATA_PERSIST_FAILURE_MESSAGE,
@@ -117,6 +118,19 @@ vi.mock('../wahoo/routes', () => ({
   },
 }));
 
+const corosRouteMocks = {
+  createCOROSRouteSendContext: vi.fn(),
+  sendSavedRouteToCOROS: vi.fn(),
+};
+
+vi.mock('../coros/routes', () => ({
+  createCOROSRouteSendContext: (...args: unknown[]) => corosRouteMocks.createCOROSRouteSendContext(...args),
+  sendSavedRouteToCOROS: (...args: unknown[]) => corosRouteMocks.sendSavedRouteToCOROS(...args),
+  COROSRouteUploadSkippedForDeletedUserError: class COROSRouteUploadSkippedForDeletedUserError extends Error {
+    readonly name = 'COROSRouteUploadSkippedForDeletedUserError';
+  },
+}));
+
 const routePersistenceMocks = {
   isRouteFromSourceService: vi.fn(),
   setRouteDeliveryMetadata: vi.fn(),
@@ -194,12 +208,17 @@ vi.mock('firebase-admin', () => {
 import { sendRoutesToService } from './send-routes-to-service';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
-function createRequest(data: Record<string, unknown>, overrides: Partial<{ auth: { uid: string } | null; app: object | null }> = {}) {
+type SendRoutesRequest = Parameters<typeof sendRoutesToService>[0];
+
+function createRequest(
+  data: Record<string, unknown>,
+  overrides: Partial<{ auth: { uid: string } | null; app: object | null }> = {},
+): SendRoutesRequest {
   return {
     auth: overrides.auth !== undefined ? overrides.auth : { uid: 'user-1' },
     app: overrides.app !== undefined ? overrides.app : { appId: 'app-1' },
     data,
-  };
+  } as unknown as SendRoutesRequest;
 }
 
 function createRouteFile(routeNames: Array<string | null> = ['Original segment']) {
@@ -262,12 +281,19 @@ describe('sendRoutesToService', () => {
       providerRouteId: 'wahoo-route-1',
       message: 'Route uploaded to Wahoo.',
     });
+    corosRouteMocks.createCOROSRouteSendContext.mockResolvedValue({ providerUserId: 'coros-user-1' });
+    corosRouteMocks.sendSavedRouteToCOROS.mockResolvedValue({
+      status: 'success',
+      providerRouteId: '9223372036854775806',
+      providerUserId: 'coros-user-1',
+      message: 'Route uploaded to COROS.',
+    });
   });
 
   it('rejects unsupported destinations', async () => {
     await expect(sendRoutesToService(createRequest({
       routeIds: ['route-1'],
-      destinationServiceName: ServiceNames.COROSAPI,
+      destinationServiceName: 'Unsupported API' as ServiceNames,
     }) as any)).rejects.toMatchObject({
       code: 'failed-precondition',
     });
@@ -303,7 +329,7 @@ describe('sendRoutesToService', () => {
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
       destinationServiceName: ServiceNames.SuuntoApp,
-    }) as any);
+    }));
 
     expect(result).toMatchObject({
       destinationServiceName: ServiceNames.SuuntoApp,
@@ -332,7 +358,7 @@ describe('sendRoutesToService', () => {
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1', 'route-2'],
       destinationServiceName: ServiceNames.GarminAPI,
-    }) as any);
+    }));
 
     expect(result).toMatchObject({
       destinationServiceName: ServiceNames.GarminAPI,
@@ -385,27 +411,45 @@ describe('sendRoutesToService', () => {
   });
 
   it('returns typed destination permission failures in-band', async () => {
-    garminRouteMocks.createGarminRouteSendContext.mockRejectedValueOnce(new ProviderOperationError({
-      serviceName: ServiceNames.GarminAPI,
+    corosRouteMocks.createCOROSRouteSendContext.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
       operation: 'route_create',
       disposition: 'permission_required',
       retryMode: 'none',
       code: 'permission-denied',
-      message: 'Grant Garmin Course Import permission before sending routes.',
+      message: 'Enable COROS route access before sending routes.',
+      providerCode: '30009',
+      providerUserId: 'coros-user-1',
     }));
 
     const result = await sendRoutesToService(createRequest({
       routeIds: ['route-1'],
-      destinationServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
     }) as any);
 
     expect(result.results).toEqual([
       expect.objectContaining({
         routeId: 'route-1',
         reason: 'DESTINATION_PERMISSION_REQUIRED',
-        message: 'Grant Garmin Course Import permission before sending routes.',
+        message: 'Enable COROS route access before sending routes.',
       }),
     ]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[sendRoutesToService] Destination provider failure returned in-band.',
+      expect.objectContaining({
+        destinationServiceName: ServiceNames.COROSAPI,
+        affectedRouteCount: 1,
+        code: 'permission-denied',
+        providerCode: '30009',
+        providerUserId: 'coros-user-1',
+        providerMessage: 'Enable COROS route access before sending routes.',
+        outcome: 'returned_in_band',
+      }),
+    );
+    const providerFailureLog = vi.mocked(logger.warn).mock.calls.find(
+      ([summary]) => summary === '[sendRoutesToService] Destination provider failure returned in-band.',
+    );
+    expect(providerFailureLog?.[1]).not.toHaveProperty('message');
   });
 
   it('sends saved routes to Wahoo through the shared route-send adapter', async () => {
@@ -434,6 +478,78 @@ describe('sendRoutesToService', () => {
       destinationServiceName: ServiceNames.WahooAPI,
       status: 'success',
       successCount: 1,
+    });
+  });
+
+  it('sends saved routes to the pinned COROS account and persists its deterministic route id', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'COROS Ready Route',
+      srcFileType: 'gpx',
+      activityTypes: ['cycling'],
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.COROSAPI,
+    }));
+
+    expect(corosRouteMocks.createCOROSRouteSendContext).toHaveBeenCalledWith('user-1');
+    expect(corosRouteMocks.sendSavedRouteToCOROS).toHaveBeenCalledWith(
+      'user-1',
+      'route-1',
+      expect.objectContaining({ name: 'COROS Ready Route' }),
+      expect.stringContaining('<gpx>'),
+      expect.objectContaining({ activityTypes: ['cycling'] }),
+      { providerUserId: 'coros-user-1' },
+    );
+    expect(routePersistenceMocks.setRouteDeliveryMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryMetadata: expect.objectContaining({
+        serviceName: ServiceNames.COROSAPI,
+        providerUserId: 'coros-user-1',
+        providerRouteId: '9223372036854775806',
+      }),
+    }));
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.COROSAPI,
+      status: 'success',
+      successCount: 1,
+    });
+  });
+
+  it('classifies a COROS deletion race as a skipped route delivery', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+    const { COROSRouteUploadSkippedForDeletedUserError } = await import('../coros/routes');
+    corosRouteMocks.sendSavedRouteToCOROS.mockRejectedValueOnce(
+      new COROSRouteUploadSkippedForDeletedUserError(),
+    );
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.COROSAPI,
+    }));
+
+    expect(result).toMatchObject({
+      status: 'failure',
+      routeCount: 1,
+      failureCount: 0,
+      skippedCount: 1,
+      results: [{
+        routeId: 'route-1',
+        status: 'skipped',
+        reason: 'ACCOUNT_DELETION_IN_PROGRESS',
+      }],
     });
   });
 

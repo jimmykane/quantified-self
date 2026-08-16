@@ -83,9 +83,11 @@ are included in summaries and can themselves contain user- or provider-assigned 
 
 ## Deterministic visual answers
 
-An answer may store at most one chart and one map. Gemini decides whether a visual would materially clarify
+An answer may store at most one chart and one map. Gemini normally decides whether a visual would materially clarify
 the answer and selects only a server-advertised per-turn source ID, chart presentation (`line` or `bar`), and up to four
-allowlisted series keys. It never supplies plotted values, coordinates, colors, URLs, ECharts options, Mapbox
+allowlisted series keys. When the user explicitly asks to plot, chart, graph, or visualize data, the backend validates
+Gemini's selection and falls back to the sole compatible server-owned chart descriptor if the model omitted or
+mis-selected it. When several sources could be relevant, it does not guess. Gemini never supplies plotted values, coordinates, colors, URLs, ECharts options, Mapbox
 configuration, or visual titles. `functions/src/assistant/visuals.ts` deterministically copies those fields from the
 already authorized, strictly validated MCP result into the shared `AssistantVisual` contract. Unknown sources or series
 are ignored, and visual projection failure never replaces an otherwise valid text answer or evidence list.
@@ -150,6 +152,12 @@ measurement names, Sports Lib metric and activity-group labels, and local date-o
 before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
 accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
 
+Raw chart-stream labels are also normalized to their persisted summary family when an aggregate or per-activity
+summary read requires it. For example, an average/minimum/maximum `Temperature` selection resolves to Sports Lib's
+`Average Temperature`, `Minimum Temperature`, and `Maximum Temperature` stats rather than treating the absence of a raw
+stream stat as evidence that temperature was never recorded. The same catalog-driven rule applies to other Sports Lib
+summary families and preserves an explicitly selected canonical summary metric unchanged.
+
 Gemini `UNAVAILABLE` responses are treated as transient provider failures. Each model phase retries them at most twice
 with bounded exponential backoff. If an otherwise recoverable grounded runtime attempt still fails—including a model
 formatting or transient read failure—the callable rebuilds the in-process MCP session and makes one final complete
@@ -188,9 +196,17 @@ composer, or public home page. An exact case- and whitespace-insensitive match a
 the model's system instructions, while the user's message remains untrusted. The runtime fails closed if a workflow
 tool is absent or generation does not invoke the declared tools in order. Tests execute every current example through
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
-Assistant examples are therefore the only conversational prompt catalog that needs maintenance. Each model generation
-phase receives fresh dynamic Genkit action objects so their request-local registries do not produce
-duplicate-registration errors during discovery-and-answer workflows.
+Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
+
+`functions/src/assistant/metric-intent.ts` adds one narrow catalog-driven workflow outside that marketing catalog: an
+unambiguous yearly or all-history request for one Sports Lib summary family with explicit average, minimum, or maximum
+semantics. It derives canonical metric selectors and canonical activity types from Sports Lib, derives the bounded
+historical range and timezone from server-validated request context, restricts that model turn to `query_metrics`, and
+lets the existing Assistant MCP session page the request through unchanged public-compatible windows. Ambiguous,
+multi-family, non-yearly, and ordinary activity-detail questions do not activate this policy. An empty incomplete
+`query_activities` scan cannot ground a final no-data answer; the model must continue the cursor or use the appropriate
+aggregate path. Each model generation phase receives fresh dynamic Genkit action objects so their request-local
+registries do not produce duplicate-registration errors during discovery-and-answer workflows.
 
 The published MTB example also locks the Assistant to the shared MCP superlative workflow: discover the Mountain Biking
 activity-group value, pass it to the shared ranker so Sports Lib expands every canonical subtype, and follow the
@@ -200,6 +216,18 @@ Coordinate-redacted jump records are read only when the user explicitly asks for
 avoiding a redundant scan that can exceed the Assistant's turn budget on jump-heavy activities. This is the same ranking
 path available to external MCP clients. It never substitutes `jumpCount` or a newest-first sample for jump quality, and
 an over-budget all-history scan fails instead of being described as an all-time result.
+
+Five additional high-value analytical intents use server-owned workflows without becoming public starter prompts. A
+six-week Cycling load/sleep/HRV comparison aligns weekly TSS and sleep-trend ranges; late-session Cycling fade uses the
+persisted durability snapshot rather than sampling arbitrary raw charts; strongest-build questions use the configured
+equal-window Best Build comparison and never substitute current-versus-usual; body weight versus volume aligns a
+28-day measurement query with Training Summary; and two-hour endurance-route questions use the complete Cycling family
+in one saved-route scan. Fixed metric kinds, aggregations, lookbacks, and limits override model
+guesses, while returned account evidence remains authoritative. Each workflow fails closed when its required tool
+sequence is not completed. The model sees only the tools in the matched workflow;
+Cycling load and route workflows also receive the complete app-owned Cycling/MTB activity family server-side instead
+of relying on the model to reproduce catalog values. Because these selectors are server-owned, the workflows omit
+redundant discovery calls and spend their bounded tool budget only on account-data reads.
 
 ## Grounded evidence
 
@@ -284,7 +312,7 @@ subscription period is available.
 ## Operations and rollout
 
 Deploy the Firestore rules and single-field index exemptions before exposing the feature, then roll out the four
-Assistant backend callables before the frontend route. The legacy AI Insights callable, deterministic prompt parser,
+Assistant backend callables before the frontend route. The legacy AI Insights callable, legacy snapshot prompt parser,
 snapshot UI, chart pipeline, and prompt-repair writer have been removed; `/ai-insights` is now permanently owned by the
 Assistant. The new `users/{uid}/assistantUsage/{periodId}` ledger deliberately starts empty and never reads the
 retired `aiInsightsUsage` collection, so this release resets every account's Assistant allowance. The Admin user list
@@ -327,8 +355,8 @@ changes:
 
 1. Follow `.agent/skills/mcp-metric-surface/SKILL.md` and the public MCP lifecycle in `docs/mcp-server.md`.
 2. Decide explicitly whether the built-in Assistant should receive it. Do not widen scopes or add tools implicitly.
-3. Update the Assistant allowlist, `tool-input.ts` model-input normalization, system routing guidance, evidence and
-   visual projections, Help, policies, and this document when the boundary changes.
+3. Update the Assistant allowlist, `tool-input.ts` model-input normalization, `metric-intent.ts` summary-family policy,
+   system routing guidance, evidence and visual projections, Help, policies, and this document when the boundary changes.
 4. Update the deterministic visual projector when the result should support charts or maps. Never let the model provide
    data points, coordinates, renderer configuration, or arbitrary labels. Add positive routing/projection tests plus
    negative leakage tests for identifiers, provenance, files, route geography, coordinates, and unsupported visual keys.

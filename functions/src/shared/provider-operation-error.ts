@@ -25,6 +25,7 @@ export interface ProviderOperationErrorOptions {
   message: string;
   statusCode?: number;
   providerCode?: string;
+  providerStatus?: number;
   providerUserId?: string;
   providerOperationId?: string;
   retryAfterSeconds?: number;
@@ -77,6 +78,14 @@ function normalizeFiniteNonNegativeNumber(value: unknown): number | undefined {
   return Number.isFinite(normalized) && normalized >= 0 ? normalized : undefined;
 }
 
+function normalizeFiniteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return undefined;
+  }
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : undefined;
+}
+
 export interface TerminalServiceAuthErrorLike {
   name: 'TerminalServiceAuthError';
   message?: string;
@@ -110,6 +119,7 @@ export class ProviderOperationError extends Error {
   readonly code: string;
   readonly statusCode?: number;
   readonly providerCode?: string;
+  readonly providerStatus?: number;
   readonly providerUserId?: string;
   readonly providerOperationId?: string;
   readonly retryAfterSeconds?: number;
@@ -126,6 +136,7 @@ export class ProviderOperationError extends Error {
     this.code = normalizeOptionalString(options.code, 100) || 'provider_operation_failed';
     this.statusCode = normalizeFiniteNonNegativeNumber(options.statusCode);
     this.providerCode = normalizeOptionalString(options.providerCode, 100);
+    this.providerStatus = normalizeFiniteNumber(options.providerStatus);
     this.providerUserId = normalizeOptionalString(options.providerUserId, 200);
     this.providerOperationId = normalizeOptionalString(options.providerOperationId, 200);
     this.retryAfterSeconds = normalizeFiniteNonNegativeNumber(options.retryAfterSeconds);
@@ -135,6 +146,34 @@ export class ProviderOperationError extends Error {
 
 export function isProviderOperationError(error: unknown): error is ProviderOperationError {
   return error instanceof ProviderOperationError;
+}
+
+export function toProviderOperationLogDetails(error: ProviderOperationError): {
+  operation: ProviderOperation;
+  disposition: ProviderFailureDisposition;
+  retryMode: ProviderRetryMode;
+  code: string;
+  providerCode?: string;
+  providerStatus?: number;
+  statusCode?: number;
+  providerUserId?: string;
+  providerOperationId?: string;
+  providerMessage: string;
+  dlqContext?: string;
+} {
+  return {
+    operation: error.operation,
+    disposition: error.disposition,
+    retryMode: error.retryMode,
+    code: error.code,
+    providerCode: error.providerCode,
+    providerStatus: error.providerStatus,
+    statusCode: error.statusCode,
+    providerUserId: error.providerUserId,
+    providerOperationId: error.providerOperationId,
+    providerMessage: error.message,
+    dlqContext: error.dlqContext,
+  };
 }
 
 /**

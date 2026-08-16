@@ -10,6 +10,7 @@ describe('route-delivery-sync/allowlist', () => {
     expect(Object.keys(ROUTE_DELIVERY_SYNC_ROUTES)).toEqual([
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
     ]);
     expect(ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]).toMatchObject({
       id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
@@ -18,6 +19,10 @@ describe('route-delivery-sync/allowlist', () => {
     expect(ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]).toMatchObject({
       id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
       destinationRequiredPermissions: ['routes_read', 'routes_write'],
+    });
+    expect(ROUTE_DELIVERY_SYNC_ROUTES[ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]).toMatchObject({
+      id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      destinationRequiredPermissions: [],
     });
   });
 
@@ -29,5 +34,20 @@ describe('route-delivery-sync/allowlist', () => {
     expect(isRouteDeliverySyncRouteUserAllowlisted(routeId, 'user-1')).toBe(true);
     expect(isRouteDeliverySyncRouteUserAllowlisted(routeId, 'someone-else')).toBe(true);
     expect(isRouteDeliverySyncRouteUserAllowlisted(routeId, '')).toBe(false);
+  });
+
+  it('allows Suunto-to-COROS route delivery for every non-empty uid', () => {
+    expect(isRouteDeliverySyncRouteUserAllowlisted(
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      'user-1',
+    )).toBe(true);
+    expect(isRouteDeliverySyncRouteUserAllowlisted(
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      'someone-else',
+    )).toBe(true);
+    expect(isRouteDeliverySyncRouteUserAllowlisted(
+      ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+      '',
+    )).toBe(false);
   });
 });

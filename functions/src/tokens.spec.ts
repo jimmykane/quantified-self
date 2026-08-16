@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 import {
     getTokenData,
     refreshTokens,
@@ -16,7 +16,14 @@ const hoisted = vi.hoisted(() => ({
         shouldSkip: false,
     }),
     isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+    logger: {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+    },
 }));
+
+vi.mock('firebase-functions/logger', () => hoisted.logger);
 
 vi.mock('firebase-functions', () => ({
     config: () => ({
@@ -463,25 +470,100 @@ describe('tokens', () => {
         });
 
         it('should handle COROS token refresh', async () => {
-            mockDoc.data.mockReturnValue({
+            const storedToken = {
                 accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
                 serviceName: ServiceNames.COROSAPI,
                 openId: 'coros-user',
                 expiresAt: 1000,
-            });
+                dateCreated: 500,
+                dateRefreshed: 750,
+            };
+            mockDoc.data.mockReturnValue(storedToken);
 
             mockToken.expired.mockReturnValue(true);
             mockToken.refresh.mockResolvedValue({
                 token: {
                     access_token: 'new-coros',
+                    result: '0000',
                     message: 'OK',
                 },
             });
 
+            const beforeRefreshMs = Date.now();
             const result = await getTokenData(mockDoc, ServiceNames.COROSAPI, false);
+            const afterRefreshMs = Date.now();
 
             expect(result.accessToken).toBe('old-coros');
-            expect(mockDoc.ref.update).toHaveBeenCalled();
+            expect(result.refreshToken).toBe('old-coros-refresh');
+            expect((result as COROSAPIAuth2ServiceTokenInterface).openId).toBe('coros-user');
+            expect(result.dateCreated).toBe(500);
+            expect(result.dateRefreshed).toBeGreaterThanOrEqual(beforeRefreshMs);
+            expect(result.dateRefreshed).toBeLessThanOrEqual(afterRefreshMs);
+            expect(result.expiresAt).toBeGreaterThanOrEqual(beforeRefreshMs + (30 * 24 * 60 * 60 * 1000) - (5 * 60 * 1000));
+            expect(result.expiresAt).toBeLessThanOrEqual(afterRefreshMs + (30 * 24 * 60 * 60 * 1000) - (5 * 60 * 1000));
+            expect(mockDoc.ref.update).toHaveBeenCalledWith(result);
+            expect(storedToken).toEqual(expect.objectContaining({
+                expiresAt: 1000,
+                dateRefreshed: 750,
+            }));
+        });
+
+        it('routes COROS invalid-authorization refresh results through reconnect handling', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                expiresAt: 1000,
+                dateCreated: 500,
+                dateRefreshed: 750,
+            });
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    result: '5006',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toBeInstanceOf(TerminalServiceAuthError);
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
+                mockDoc,
+                ServiceNames.COROSAPI,
+                expect.objectContaining({ openId: 'coros-user' }),
+                expect.objectContaining({
+                    statusCode: 401,
+                    providerErrorCode: '5006',
+                    isTerminalAuthFailure: true,
+                }),
+                expect.objectContaining({ name: 'COROSTokenRefreshRejectedError' }),
+            );
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('does not mark other COROS refresh rejections as terminal', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-coros',
+                refreshToken: 'old-coros-refresh',
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                expiresAt: 1000,
+                dateCreated: 500,
+                dateRefreshed: 750,
+            });
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    result: '5001',
+                    message: 'Parameter error',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({ name: 'COROSTokenRefreshRejectedError' });
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
         });
 
         it('should persist Wahoo rotating tokens with the exact provider expiry and stable user ID', async () => {
@@ -553,6 +635,18 @@ describe('tokens', () => {
             expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(hoisted.logger.error).not.toHaveBeenCalled();
+            expect(hoisted.logger.warn).toHaveBeenCalledWith(
+                '[ServiceAuth] Provider token refresh rejected with a known non-terminal error.',
+                {
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: 'token_refresh',
+                    providerStatus: 400,
+                    providerErrorCode: 'invalid_grant',
+                    terminal: false,
+                    outcome: 'retry',
+                },
+            );
         });
 
         it('should delegate non-Suunto invalid_grant errors to the terminal auth lifecycle', async () => {
@@ -625,7 +719,7 @@ describe('tokens', () => {
             error.data = {
                 payload: {
                     error: 'invalid_grant',
-                    error_description: 'User no longer active/connected with the partner',
+                    error_description: 'Invalid refresh credential: secret-refresh-value',
                 },
             };
             mockToken.refresh.mockRejectedValue(error);
@@ -636,6 +730,8 @@ describe('tokens', () => {
             expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(hoisted.logger.error).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.warn.mock.calls)).not.toContain('secret-refresh-value');
         });
 
         it('should detect non-Suunto invalid_grant from nested provider payloads as terminal', async () => {

@@ -33,4 +33,20 @@ describe('activity-sync Wahoo route registry', () => {
     expect(route.supportedFileExtensions).toEqual(['fit']);
     expect(getActivitySyncRouteId(route.sourceServiceName, route.destinationServiceName)).toBe(route.id);
   });
+
+  it('registers Garmin, Suunto, and Wahoo FIT delivery to COROS', () => {
+    const routes = [
+      ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI],
+      ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI],
+      ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI],
+    ];
+
+    for (const route of routes) {
+      expect(route.destinationServiceName).toBe(
+        ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp].sourceServiceName,
+      );
+      expect(route.supportedFileExtensions).toEqual(['fit']);
+      expect(getActivitySyncRouteId(route.sourceServiceName, route.destinationServiceName)).toBe(route.id);
+    }
+  });
 });

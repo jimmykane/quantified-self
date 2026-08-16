@@ -44,6 +44,12 @@ import {
   WahooRouteUploadSkippedForDeletedUserError,
   WahooRouteWriteScopeRequiredError,
 } from '../wahoo/routes';
+import {
+  COROSRouteSendContext,
+  COROSRouteUploadSkippedForDeletedUserError,
+  createCOROSRouteSendContext,
+  sendSavedRouteToCOROS,
+} from '../coros/routes';
 import { setRouteDeliveryMetadata } from './route-persistence';
 import {
   TokenRefreshSkippedForDeletedUserError,
@@ -219,14 +225,50 @@ class WahooRouteSendAdapter implements RouteSendDestinationAdapter<void> {
   }
 }
 
+class COROSRouteSendAdapter implements RouteSendDestinationAdapter<COROSRouteSendContext> {
+  readonly destinationServiceName = ServiceNames.COROSAPI;
+
+  createContext(userID: string): Promise<COROSRouteSendContext> {
+    return createCOROSRouteSendContext(userID);
+  }
+
+  async sendRoute(
+    userID: string,
+    preparedRoute: PreparedSavedRoute,
+    context: COROSRouteSendContext,
+    onProviderAccepted?: RouteProviderAcceptanceHandler,
+  ): Promise<RouteProviderSendResult> {
+    const result = await sendSavedRouteToCOROS(
+      userID,
+      preparedRoute.routeId,
+      preparedRoute.routeFile,
+      preparedRoute.gpxContent,
+      preparedRoute.routeDocument,
+      context,
+    );
+    const providerResult: RouteProviderSendResult = {
+      providerRouteId: result.providerRouteId,
+      complete: true,
+      deliveries: [{
+        providerUserId: result.providerUserId,
+        providerRouteId: result.providerRouteId,
+      }],
+    };
+    await onProviderAccepted?.(providerResult);
+    return providerResult;
+  }
+}
+
 const ROUTE_SEND_ADAPTERS = new Map<ServiceNames, RouteSendDestinationAdapter>([
   [ServiceNames.SuuntoApp, new SuuntoRouteSendAdapter()],
   [ServiceNames.GarminAPI, new GarminRouteSendAdapter()],
   [ServiceNames.WahooAPI, new WahooRouteSendAdapter()],
+  [ServiceNames.COROSAPI, new COROSRouteSendAdapter()],
 ]);
 
 const STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS = new Set<ServiceNames>([
   ServiceNames.GarminAPI,
+  ServiceNames.COROSAPI,
 ]);
 const ROUTE_DELIVERY_METADATA_MAX_ATTEMPTS = 3;
 
@@ -745,10 +787,12 @@ export function isAccountDeletionSkipError(error: unknown): boolean {
   return error instanceof RouteSendSkippedForDeletedUserError
     || error instanceof SuuntoRouteUploadSkippedForDeletedUserError
     || error instanceof WahooRouteUploadSkippedForDeletedUserError
+    || error instanceof COROSRouteUploadSkippedForDeletedUserError
     || error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'RouteSendSkippedForDeletedUserError')
     || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError')
     || (error instanceof Error && error.name === 'WahooRouteUploadSkippedForDeletedUserError')
+    || (error instanceof Error && error.name === 'COROSRouteUploadSkippedForDeletedUserError')
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 

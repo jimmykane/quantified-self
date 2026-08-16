@@ -77,6 +77,10 @@ describe('SummariesComponent', () => {
     expect(settingsPayload.unitSettings).toBeUndefined();
   };
 
+  const localDashboardDate = (hour: number, minute = 0, second = 0, millisecond = 0): Date => (
+    new Date(2026, 7, 14, hour, minute, second, millisecond)
+  );
+
   beforeEach(async () => {
     vi.restoreAllMocks();
     mockThemeService = {
@@ -190,6 +194,222 @@ describe('SummariesComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('renders the owner greeting from the first display-name part', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(9));
+    component.user = {
+      uid: 'owner-user',
+      displayName: '  Dimitrios Kanellopoulos  ',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    component.showActions = false;
+
+    fixture.detectChanges();
+
+    expect(component.isOwnerDashboard).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
+      .toBe('Good morning, Dimitrios');
+  });
+
+  it('renders a generic owner greeting without deriving a name from email', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(13));
+    component.user = {
+      uid: 'owner-user',
+      email: 'morgan@example.com',
+      displayName: '   ',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
+      .toBe('Good afternoon');
+  });
+
+  it('hides the greeting for non-owners, disabled Today summaries, and derived-status headers', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(9));
+    component.user = {
+      uid: 'owner-user',
+      displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [], showTodaySummary: true } },
+    } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    component.showActions = true;
+    component.derivedMetricsBanner = {
+      type: 'pending',
+      title: 'Building derived metrics',
+      description: 'Some dashboard insights are still being prepared.',
+      showRetry: false,
+    };
+
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
+
+    component.derivedMetricsBanner = null;
+    component.user.settings.dashboardSettings.showTodaySummary = false;
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
+
+    component.user.settings.dashboardSettings.showTodaySummary = true;
+    fixture.componentRef.setInput('eventUser', { uid: 'other-user' } as any);
+    fixture.componentRef.setInput('showActions', true);
+    fixture.detectChanges();
+    expect(component.isOwnerDashboard).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
+  });
+
+  it('refreshes the greeting when the signed-in user input changes with the same uid', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(9));
+    const previousUser = {
+      uid: 'owner-user',
+      displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    fixture.componentRef.setInput('user', previousUser);
+    fixture.componentRef.setInput('eventUser', previousUser);
+    fixture.componentRef.setInput('showActions', true);
+    fixture.detectChanges();
+
+    const currentUser = {
+      ...previousUser,
+      displayName: 'Taylor Lee',
+    } as any;
+    fixture.componentRef.setInput('user', currentUser);
+    fixture.componentRef.setInput('eventUser', currentUser);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
+      .toBe('Good morning, Taylor');
+  });
+
+  it('refreshes at the noon and evening local-time boundaries', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(11, 59, 59));
+    component.user = {
+      uid: 'owner-user',
+      displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+    fixture.detectChanges();
+
+    expect(component.todayGreeting).toBe('Good morning, Morgan');
+
+    vi.advanceTimersByTime(1_000);
+    fixture.detectChanges();
+    expect(component.todayGreeting).toBe('Good afternoon, Morgan');
+
+    vi.advanceTimersByTime(6 * 60 * 60 * 1_000);
+    fixture.detectChanges();
+    expect(component.todayGreeting).toBe('Good evening, Morgan');
+  });
+
+  it('refreshes the localized date and greeting after local midnight', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(23, 59, 59));
+    component.user = {
+      uid: 'owner-user',
+      displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+    fixture.detectChanges();
+    const previousDateSubtitle = component.todayDateSubtitle;
+
+    vi.advanceTimersByTime(1_000);
+    fixture.detectChanges();
+
+    expect(component.todayGreeting).toBe('Good morning, Morgan');
+    expect(component.todayDateSubtitle).not.toBe(previousDateSubtitle);
+    expect(component.todayDateSubtitle).toBe(new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date()));
+  });
+
+  it('pauses while hidden, then catches up and reschedules when visible again', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(8));
+    component.user = {
+      uid: 'owner-user',
+      displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+    fixture.detectChanges();
+    expect(component.todayGreeting).toBe('Good morning, Morgan');
+
+    vi.setSystemTime(localDashboardDate(19));
+    const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(vi.getTimerCount()).toBe(0);
+
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
+
+      expect(component.todayGreeting).toBe('Good evening, Morgan');
+      expect(vi.getTimerCount()).toBe(1);
+    } finally {
+      if (visibilityDescriptor) {
+        Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+      } else {
+        delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+      }
+    }
+  });
+
+  it('does not schedule a greeting boundary timer when initialized in a hidden document', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(8));
+    const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      component.user = {
+        uid: 'owner-user',
+        settings: { dashboardSettings: { tiles: [] } },
+      } as any;
+      component.showActions = true;
+
+      fixture.detectChanges();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      if (visibilityDescriptor) {
+        Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+      } else {
+        delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+      }
+    }
+  });
+
+  it('clears the boundary timer and visibility listener when destroyed', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(localDashboardDate(8));
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    component.user = {
+      uid: 'owner-user',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+    fixture.detectChanges();
+    expect(vi.getTimerCount()).toBe(1);
+
+    fixture.destroy();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('exposes the Training action without a duplicate Calendar action', () => {
@@ -359,11 +579,17 @@ describe('SummariesComponent', () => {
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
     expect(template).toContain('class="dashboard-today-calendar-button"');
+    expect(template).toContain('class="dashboard-summary-heading"');
+    expect(template).toContain('class="dashboard-today-greeting"');
     expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
     expect(styles).toContain('.dashboard-training-link-label');
     expect(styles).toContain('.dashboard-today-calendar-button');
+    expect(styles).toContain('font: var(--mat-sys-body-medium);');
+    expect(styles).toContain('color: var(--mat-sys-on-surface-variant);');
+    expect(styles).toContain('margin: 0.35rem 0 0;');
+    expect(styles).not.toContain('margin: -0.35rem 0 0.75rem;');
     expect(styles).not.toContain('.dashboard-calendar-link');
   });
 
@@ -2237,9 +2463,10 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const status = nativeElement.querySelector('.qs-page-header--status');
     const statusHeader = status?.closest('.dashboard-summary-header');
+    const summaryHeading = statusHeader?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
-    expect(statusHeader?.nextElementSibling).toBe(today);
+    expect(summaryHeading?.nextElementSibling).toBe(today);
     expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 

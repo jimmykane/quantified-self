@@ -30,9 +30,10 @@ import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
-import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -184,22 +185,15 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
 }
 
 async function getCorosSleepBackfillToken(userID: string): Promise<CorosSleepBackfillToken> {
-    const tokenSnapshot = await admin.firestore()
-        .collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME)
-        .doc(userID)
-        .collection('tokens')
-        .get();
-
-    for (const tokenDoc of tokenSnapshot.docs) {
-        try {
-            const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
-            const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
-            if (providerUserId) {
-                return { providerUserId };
-            }
-        } catch (error) {
-            logger.warn(`[SleepBackfill] Could not use COROS token ${tokenDoc.id} for ${userID}`, error);
+    try {
+        const tokenDoc = await getActiveCOROSTokenSnapshot(userID);
+        const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
+        const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
+        if (providerUserId && providerUserId === tokenDoc.id) {
+            return { providerUserId };
         }
+    } catch (error) {
+        logger.warn(`[SleepBackfill] Could not use the active COROS token for ${userID}`, error);
     }
 
     throw new HttpsError('failed-precondition', 'Connected COROS token is required for sleep backfill.');
@@ -678,7 +672,7 @@ export const backfillCorosAPISleep = onCall({
     const token = await getCorosSleepBackfillToken(userID);
     const startMs = getCorosSleepBackfillStartMs(nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI, 'COROS');
-    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+    const windows = chunkCOROSInclusiveTimestampRange(startMs, nowMs, windowDays);
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
     const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.COROSAPI, startMs, nowMs, nextAllowedAtMs);
     if (!cooldownClaimed) {

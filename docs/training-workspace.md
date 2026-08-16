@@ -43,8 +43,10 @@ The following rules are architectural constraints:
   converted to zero.
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
   activities are classified and counted separately.
-- Hiding a sport changes detailed cards only. It does not change the overall state, load explanation, or underlying
-  derived calculations.
+- Changing the Training destination changes presentation only. **All training** owns global state, readiness, load,
+  sleep, body-weight, intensity, and the compact cross-sport mix. A sport destination owns that family's detailed mix,
+  Best Build, rolling power types, and capability-matched specialist evidence. Neither destination nor shortcuts change
+  derived calculations or discard a sport from the account.
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
@@ -56,8 +58,9 @@ The following rules are architectural constraints:
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
   FTP, and only components that pass Sports-lib's `ready` gates expose a value.
-- Power systems is part of the Training workspace for every authenticated user. Its empty, preparing, failed, and ready
-  states remain visible independently of the Running/Cycling/Swimming detail-card selection.
+- Power systems remains available to every authenticated user, but its exact activity types are routed into the matching
+  registered sport destination. Canonical types outside the registry are routed to **Other power activities**. No
+  combined all-sports capacity value is created.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -90,7 +93,8 @@ The following rules are architectural constraints:
 | Exact-type 42-day window policy and rolling capacity history | Quantified Self Functions | `training_power_systems` builder in `derived-metrics.service.ts` |
 | Current, usual, weekly, and benchmark windows | Quantified Self Functions | derived-metric builders |
 | Derived snapshot persistence and refresh | Quantified Self Functions | coordinator, triggers, ingress worker, and derived worker |
-| User visibility and benchmark settings | Quantified Self Functions/shared contracts | authenticated callables and `shared/derived-metrics.ts` |
+| Workspace destination and shortcut preferences | Quantified Self frontend | owner-writable `appSettings.trainingWorkspace` |
+| Training benchmark settings | Quantified Self Functions/shared contracts | authenticated benchmark callable and `shared/derived-metrics.ts` |
 | Payload validation and view models | Quantified Self frontend | `dashboard-derived-metrics.service.ts` and Training helpers |
 | Shared readiness scoring, labels, and confidence | Quantified Self shared layer | `shared/readiness.ts` |
 | Historical 14-day readiness series | Quantified Self Functions | `training_readiness` derived builder |
@@ -121,6 +125,7 @@ flowchart TD
     S --> P["Bounded 30-day live sleep listener"]
     U["Training benchmark callable"] --> H["Training settings"]
     U --> I["Mark training_build_comparison dirty"]
+    V["Destination and shortcuts"] --> W["Direct owner Firestore write: appSettings.trainingWorkspace"]
     F --> J["Derived-metrics coordinator"]
     G --> J
     I --> J
@@ -137,6 +142,7 @@ flowchart TD
     L --> M["Angular snapshot listeners"]
     M --> N["Payload normalizers and view-model helpers"]
     N --> O["Curated Training workspace"]
+    W --> O
     M --> Q["Shared live readiness formula"]
     P --> Q
     Q --> O
@@ -162,7 +168,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared readiness snapshot validator: `shared/training-readiness-metric.ts`
 - Historical readiness builder: `functions/src/derived-metrics/derived-metrics.service.ts`
 - Benchmark dialog: `src/app/components/training/training-build-benchmark-dialog.component.*`
-- Sport visibility dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
+- Sport-shortcuts dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
+- Mobile destination sheet: `src/app/components/training/training-mobile-destination-sheet.component.*`
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
 - Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
@@ -188,7 +195,9 @@ The app-wide, consent-gated Firebase `screen_view` already records `/training` r
 second custom page-view event. The workspace records only these low-volume configuration outcomes through
 `AppAnalyticsService.logEvent`:
 
-- `training_sport_visibility_saved`: automatic or fixed mode and saved-selection count.
+- `training_destination_saved`: overview, sport, or Other destination type; registered sport family when applicable; and
+  desktop-shortcut, desktop-selector, or mobile-selector source.
+- `training_sport_shortcuts_saved`: automatic or fixed mode and saved-shortcut count.
 - `training_benchmark_saved`: set or cleared action and discipline; successful saves also include event/manual reference
   mode and duration preset.
 
@@ -203,7 +212,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `training-analysis.helper.ts` | Overall 28-day comparison and state inputs |
 | `current-training-state.helper.ts` | Shared current Form/ramp source selection, CTL/ATL context, and TSS-only Training state for Training and Dashboard Today |
 | `training-capacity.helper.ts` | Imported FTP/VO2 marker provenance |
-| `training-power-systems.helper.ts` | Strict rolling-capacity normalization, exact-type selector data, cards, and sparse trends |
+| `training-power-systems.helper.ts` | Strict rolling-capacity normalization, registry/Other destination grouping, exact-type selector data, cards, and sparse trends |
 | `training-derived-metrics.helper.ts` | Strict normalization of explanation, durability, and readiness-history payloads |
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
 | `training-explanation-view.helper.ts` | Load, contributor, sport-driver, rhythm, and coverage cards |
@@ -212,7 +221,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
 | `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend data |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
-| `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
+| `training-sport-visibility.helper.ts` | Automatic/fixed shortcut resolution, four-slot ranking, refresh-stable slot reconciliation, legacy fallback, and off-shortcut destination placement |
 | `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
 
 ## Firestore Data Model
@@ -276,14 +285,29 @@ priority when building the single Overnight HR driver.
 The settings branch is:
 
 ```ts
-trainingSettings: {
-  visibleDisciplines?: TrainingSportId[];
-  buildBenchmarks?: Partial<Record<TrainingSportId, TrainingBuildBenchmarkSelection>>;
+settings: {
+  appSettings: {
+    trainingWorkspace?: {
+      preferredDestination?: 'overview' | TrainingSportId | 'other-power';
+      sportShortcuts?: TrainingSportId[] | null;
+    };
+  };
+
+  trainingSettings: {
+    /** Deprecated: read only as a migration fallback for sport shortcuts. */
+    visibleDisciplines?: TrainingSportId[];
+    buildBenchmarks?: Partial<Record<TrainingSportId, TrainingBuildBenchmarkSelection>>;
+  };
 }
 ```
 
-Absence of `visibleDisciplines` means automatic sport selection. It is not equivalent to an empty array. Benchmark
-selections are independent per discipline.
+`preferredDestination` is account-scoped UI state. Missing, malformed, or unknown values normalize to `overview`.
+`sportShortcuts: null` explicitly selects automatic shortcuts; a valid array pins one to four registry-ordered sports.
+When `sportShortcuts` is absent, the frontend reads the legacy `trainingSettings.visibleDisciplines` value as a
+compatibility fallback until a new shortcut preference exists. If neither exists, automatic selection ranks current
+28-day evidence by duration and workout count, with a valid saved benchmark keeping an otherwise inactive sport eligible.
+The legacy field is no longer written.
+Benchmark selections remain independent per discipline and stay under server-owned `trainingSettings`.
 
 ### Derived snapshots
 
@@ -310,7 +334,8 @@ A generation claim prevents an old Cloud Task from overwriting a newer request.
 
 `shared/training-disciplines.ts` is the Quantified Self sport registry. Sports-lib owns canonical activity types and alias
 resolution; this registry owns Training families, context separation, presentation metadata, capability flags, and
-analysis policies. Builders, callables, visibility, normalizers, and generic profile-metric rendering derive from it.
+analysis policies. Builders, callables, destination grouping, shortcut normalization, and generic profile-metric
+rendering derive from it.
 
 | Training family | Registered contexts and profiles | Conservative canonical membership |
 | --- | --- | --- |
@@ -339,7 +364,8 @@ Important behavior:
   `Unclassified`.
 - Membership is intentionally conservative. CrossFit, ski touring/backcountry skiing, snowshoeing, surfing, sailing,
   and other unlisted types remain Other rather than inheriting a nearby Training profile.
-- The overall state and explanation remain global even if a discipline is hidden from detailed cards.
+- The overall state and explanation remain on **All training**. Sport shortcuts affect navigation only and never filter
+  global calculations or remove a registered family from the complete selector.
 
 The registry also declares context metrics and their aggregation semantics: additive distance/time/ascent/descent,
 descent time and jumps; the maximum recorded jump distance across contributing workouts; arithmetic-mean grit, flow,
@@ -468,7 +494,8 @@ merely because the manager dialog was opened.
   version. Readiness itself has no activity dependency and can reuse the Form seed; the pre-existing build comparison
   still owns the wider activity/settings scan needed for build-range recovery context.
 - The benchmark callable marks only `training_build_comparison` dirty.
-- The visibility callable writes settings only; it does not rebuild data because visibility is presentation state.
+- Destination and shortcut changes write only `appSettings.trainingWorkspace` through the normal owner-authorized
+  Firestore settings path. They do not dirty or rebuild derived metrics because they are presentation state.
 
 Ingress is debounced by UID and a short time bucket. Deterministic task names coalesce bursts of event/activity writes.
 The ingress worker marks the relevant kinds dirty and queues one derived worker generation.
@@ -528,7 +555,7 @@ The derived worker:
 
 Failures mark affected snapshots failed, preserve an error, and are rethrown so the Cloud Tasks retry policy can apply.
 
-## Page Lifecycle and Sport Visibility
+## Page Lifecycle and Destination Navigation
 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
@@ -543,11 +570,12 @@ surface is missing, queued, processing, building, or stale, the projected status
 of inserting a banner into the analytical content. A stale snapshot says that any available last completed values
 remain visible while the replacement finishes. A failed visible snapshot takes precedence,
 uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
-visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines, while the always-
-visible Power systems surface always participates. The optional imported recovery snapshot participates only while its
-active `Recovery left` estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route
-header in an updating state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form
-or freshness-forecast
+visible scope is healthy, the normal eyebrow returns. The status scope follows the selected destination: Overview
+evaluates global surfaces, a sport evaluates only its summary/build and declared
+specialist capabilities, and Other power activities evaluates rolling power systems. The optional imported recovery
+snapshot participates only while its active `Recovery left` estimate is visible on Overview, so missing, failed, or
+elapsed optional recovery does not keep the route header in an updating state. Compact Form Now, Ramp Rate, and Form +7
+snapshots participate only when the primary Form or freshness-forecast
 series cannot supply the displayed fallback value. Dashboard uses the same continuity rule in its existing top
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
@@ -555,40 +583,59 @@ the header or change its height when a single-sport label is selected. At 640 px
 Material touch targets but leaves only an 8 px external gap before the first section divider. These fixed header slots
 prevent derived status changes from moving the value cards or initially presenting stale values without context.
 
-Sport visibility has two modes:
+The route has three destination kinds:
 
-- **Automatic:** use any registered family with current 28-day activity or a saved benchmark. While evidence is loading,
-  or when nothing qualifies, show no sport-detail cards. Global state, load, readiness, and explanation sections remain.
-- **Fixed:** show the persisted non-empty subset selected by the user.
+- **All training** (`overview`, the default) renders the global state, readiness and recovery context, What drove this,
+  Form/freshness/load, compact current-versus-usual cards for every recorded registered family, the global intensity
+  distribution, and body-weight context. It does not duplicate specialist or exact-type power panels.
+- **Registered sport** renders exactly one family's Best Build card, detailed Training Mix, and the specialist surfaces
+  enabled by that sport's registry capabilities. Sleep inside Best Build compares the same date windows but is explicitly
+  labeled as not sport-filtered.
+- **Other power activities** renders only exact rolling-power types that cannot be resolved into the Training registry.
+  The destination is discoverable when such evidence exists and remains renderable as an honest empty state if it was
+  the account's saved destination before that evidence disappeared.
 
-The action label compacts to one sport, `N sports`, `All sports`, or `No sports`; its accessible label lists the actual
-families and whether selection is automatic.
+Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
+with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
+with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
+temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
+widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable rail of compact
+Material text buttons exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. The selected
+button uses a tonal state, and each 40 px visual button retains Material's 48 px touch target. A fixed 48 px Material icon
+button with the accessible **All sports** label preserves more width for that rail and opens a viewport-bounded Material
+bottom sheet. The sheet keeps **All training** first, groups automatic or pinned shortcuts next, sorts the remaining
+available destinations by label, marks the current view, and places **Manage sport shortcuts** in its stable footer.
+As independently loaded snapshots hydrate or refresh, any destination that remains visible keeps its existing shortcut
+slot and a newly eligible destination fills an open or vacated slot. This prevents the active button and its neighbors
+from changing order under the user while still allowing the automatic top-four membership to update.
+Choosing an off-shortcut registered sport temporarily places it at the front of the rail's sport slots and returns the
+rail to its leading edge. The selected destination is intentionally not encoded in the URL or browser history.
 
-The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
-overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
-mistaken for a filter on the global state, time, workouts, or load explanation.
+Sport shortcuts have two modes:
 
-Visibility affects:
+- **Automatic:** rank registered families with current 28-day activity by duration and then workout count; saved Best
+  Build benchmarks provide fallback eligibility; registry order resolves remaining ties. Keep at most four.
+- **Fixed:** retain the user's persisted non-empty one-to-four-sport subset.
 
-- Best Build cards;
-- discipline Training Mix cards;
-- all specialist cards selected by the visible families' capabilities, including imported capacity, Swimming Pace,
-  durability, Running/Cycling power profiles, and generic context/profile summaries.
+Missing new shortcut state falls back to legacy `trainingSettings.visibleDisciplines`; explicit `null` bypasses that
+fallback and restores automatic mode. Shortcuts affect navigation only. Every registry sport remains available in the
+complete selector, Overview totals remain global, and all derived snapshots/calculations are unchanged.
 
-Visibility does not affect:
-
-- the overall Training state;
-- training time and workout comparison used by that state section;
-- What drove this;
-- global form/freshness/load charts; or
-- the all-eligible-activity intensity-distribution chart; or
-- the exact-type Power systems selector and its rolling capacity evidence.
+Destination changes update the view optimistically and persist the last choice to the current account. Rapid changes
+coalesce to the latest queued destination. Every queued write carries the expected UID and a workspace generation so an
+account switch drops stale queued work and optimistic state. A failed write keeps the requested view open, removes the
+saving indicator, and explains that only the account default failed to save. Because Firestore can publish a local-cache
+settings echo before the server accepts the write, that echo does not retire the optimistic destination until the matching
+write is acknowledged. Intermediate echoes from coalesced choices and unrelated stale settings emissions likewise cannot
+replace the latest requested view.
 
 ## Page Sections and Calculations
 
-The sections appear in the following fixed order.
+The sections retain the following relative order when their destination renders them.
 
 ### 1. Compared With Your Usual 28 Days
+
+Overview only.
 
 The section combines `training_summary`, form/load metrics, `recovery_now`, and the recovery comparison stored in
 `training_build_comparison`.
@@ -617,7 +664,7 @@ The 84-day summary baseline normalizes activity counts, additive metric values, 
 Maximum, mean, and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows
 use their raw 8-, 10-, or 12-week totals and counts.
 
-The top training time and workout values sum all eight registered families, regardless of detailed-card visibility.
+The top training time and workout values sum all eight registered families and appear only on Overview.
 Gravity Cycling and Strength contexts contribute reliable time/workout volume, but their profile policy prevents zones
 or TSS from being presented as sport-specific intensity/load evidence. Strength omits distance.
 
@@ -760,6 +807,8 @@ Sleep values remain visible without deltas when coverage or provider comparabili
 
 ### 2. Best Build vs Now
 
+Registered sport destinations only; exactly one sport card is built and rendered.
+
 `training_build_comparison` builds one independent card per visible registered family. All eight families support one
 saved benchmark; specialist rows remain capability- and evidence-gated.
 
@@ -855,6 +904,8 @@ retains exact values and text deltas without adding inline comparison bars.
 
 ### 3. What Drove This
 
+Overview only.
+
 `training_explanation` compares the current 28 days with the median of three distinct preceding 28-day blocks.
 
 It intentionally separates parent-event load from child-activity composition:
@@ -880,14 +931,20 @@ The four driver cards use one balanced row on wide screens, a two-by-two tablet 
 Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
 levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
 supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
-event label and its load share do not split into an ambiguous separator-delimited sentence. Registered-family load and
-rhythm headings reuse the shared registry icon activity type; overall load, contributor, Other, and Unclassified cards
-remain text-only.
+event label and its load share do not split into an ambiguous separator-delimited sentence. The two selected sport-driver
+headings state both the overview rule and its result, for example `Largest sport load change · Cycling` and
+`Largest rhythm change · Cycling`, so they cannot be mistaken for Cycling-destination cards. If the selected sport's
+effective load delta is under 0.5 TSS or its active-day delta is zero, the corresponding heading uses the neutral
+`Sport load comparison` or `Sport rhythm comparison` label instead of claiming a change. Registered-family driver
+headings reuse the shared registry icon activity type; overall load, contributor, Other, and Unclassified cards remain
+text-only.
 
 The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
 turning missing data into a negative or positive training judgment.
 
 ### 4. Load Trajectory
+
+Overview only.
 
 This section reuses global derived load metrics:
 
@@ -927,6 +984,8 @@ scenario with today; it does not imply that the athlete should stop training.
 
 ### 5. Training Mix
 
+Overview renders the compact cross-sport form; registered sport destinations render the detailed single-sport form.
+
 Discipline cards use `training_summary`:
 
 - Current 28-day child activity count and duration.
@@ -936,32 +995,36 @@ Discipline cards use `training_summary`:
 Power zones take priority over heart-rate zones per activity. If neither exists, that activity contributes to count and
 duration but not to the zone denominator.
 
-The separate intensity-distribution chart is global and can include any activity with eligible power or heart-rate zone
-data. It is not filtered by the sport visibility control.
+On Overview, each recorded registered family is a compact workout-count and duration card with its normalized usual
+values; the separate intensity-distribution chart remains global and can include any activity with eligible power or
+heart-rate zone data. A sport destination replaces that compact card with the existing detailed current-versus-usual
+zone/context analysis for exactly one family and omits the global intensity chart.
 
 Each discipline summary states whether its current zone balance is close to usual or whether easy/hard work has shifted.
 It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is
 material enough to investigate.
 
-On desktop, Training Mix uses its actual visible-family count rather than auto-fitting empty grid tracks: one
-discipline pairs a matched-height summary with the intensity chart. The summary keeps activity totals at the top and uses
-the otherwise available vertical space for a clear current-versus-usual intensity balance: each zone has a current share,
-normalized baseline share, current fill, and baseline marker. It deliberately does not add redundant load, readiness, or
-capacity metrics just to fill the card. The chart's nested loading host participates in the card's flex height so the plot
-occupies the remaining canvas. Multiple visible families use compact responsive summary rows with the global chart
-below. Tablet and mobile retain the stacked layout.
+On a sport destination, the detailed summary keeps activity totals at the top and uses the available vertical space for
+a clear current-versus-usual intensity balance: each zone has a current share, normalized baseline share, current fill,
+and baseline marker. It deliberately does not add redundant load, readiness, or capacity metrics just to fill the card.
+Overview's compact sport grid and global chart collapse responsively at tablet and mobile widths.
 
 Within one discipline card, every observed context after the first starts below a matching theme-aware divider. This
 keeps Cycling, Mountain biking, Enduro MTB, and Downhill MTB visually distinct while preserving one shared card surface.
 
 ### 6. Power Systems
 
-`training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
-every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
-eight-family sport visibility setting and has no combined or all-sports option.
+Registered sport destinations with matching exact-type evidence, plus the Other power activities destination.
 
-The Training page renders this section for every authenticated account. When no exact activity type has a usable stored
-power curve, it shows the normal preparing, unavailable, or confirmed-empty state instead of hiding the feature.
+`training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
+every exact canonical activity type with a usable persisted Power Curve and has no combined or all-sports capacity.
+The frontend resolves each exact type through the shared Training sport registry, places registered types under their
+sport destination, and places unmatched canonical types under **Other power activities**. It never guesses a nearby
+family.
+
+A registered sport renders Power systems only when at least one matching exact type exists. Other power activities
+retains the section and its confirmed-empty state when selected even if its previously available evidence disappears.
+Overview deliberately omits the section because every exact type has a dedicated destination.
 
 Policy version 1 is fixed:
 
@@ -1047,6 +1110,8 @@ calibrate fitness/fatigue response.
 
 ### 7. Settings vs Recent Evidence
 
+Registered sport destinations only, capability-gated by the selected sport.
+
 This section contains capability-gated imported capacity observations, swimming performance, durability, and
 Running/Cycling power profiles. Generic context/profile summaries live with each family's Training Mix and Best Build
 cards rather than creating eight bespoke specialist sections.
@@ -1112,6 +1177,8 @@ It also states the strongest supported conclusion before the chart, describes th
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
 ### 8. Body-weight Context
+
+Overview only.
 
 Body-weight context is the final Training section, after Settings vs Recent Evidence. Keeping it separate and last makes
 the recorded measurements available without presenting them as a performance marker or a primary training signal.
@@ -1281,11 +1348,18 @@ and SWOLF change. Training compares:
 The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
 frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,
 and the primary ineligibility reasons already present in the snapshot. The power-confirmed count is the evidence count
-minus `missing-output` exclusions; it does not query activity history. Bar height shows power-recorded activities, the
-compact bar label shows `eligible / power-recorded`, and the line appears only for eligible aerobic-decoupling evidence.
-A stored Power Curve alone therefore does not guarantee a durability point. Sports-lib records one primary eligibility
-reason per activity, so aggregate exclusion copy must call these **primary exclusions** rather than implying an
-exhaustive list of every threshold that activity missed.
+minus `missing-output` and `unsupported-context` exclusions; it does not query activity history. Gravity Cycling receives
+`unsupported-context` before Sports Lib inspects a power stream, so that evidence must not be presented as confirmed
+power. Bar height shows power-recorded activities, the compact bar label shows `eligible / power-recorded`, and the line
+appears only for eligible aerobic-decoupling evidence. A stored Power Curve alone therefore does not guarantee a
+durability point. Sports-lib records one primary eligibility reason per activity, so aggregate exclusion copy must call
+these **primary exclusions** rather than implying an exhaustive list of every threshold that activity missed.
+
+Cycling has one fixed durability context, `cycling|power|W|-|-`. When a valid Cycling scope has no eligible summary in any
+retained window, the frontend materializes that known context so the 12-week evidence chart remains mounted. This does
+not synthesize a durability metric: the line stays absent, and the snapshot's candidate, power-confirmed, eligible,
+missing-evidence, and primary-exclusion counts remain visible. Missing processed evidence stays distinct from a confirmed
+`missing-output` exclusion; the chart labels it as power unknown rather than no power.
 
 The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
 dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
@@ -1384,8 +1458,9 @@ UI principles:
 - A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
   instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.
-- A durability week without an eligible sample must expose candidate/input counts and primary exclusion reasons rather
-  than using an unexplained `Empty` label.
+- A durability week without an eligible sample must expose candidate/input counts, missing processed evidence, and
+  primary exclusion reasons rather than using an unexplained `Empty` label. Unknown processed evidence must remain
+  distinct from a confirmed missing output signal.
 - Null optional metrics render as an em dash or unavailable copy, never zero.
 - Compact loading cards remain readable without reserving the full chart canvas. Ready empty states keep the full chart card
   height so their domain-specific explanation is not compressed.
@@ -1397,7 +1472,7 @@ untrusted input even though Functions produced them.
 
 ## Security and Write Safety
 
-All Training settings writes go through callable Functions. Both callables require:
+The metric-affecting Best Build setting continues through `setTrainingBuildBenchmark`. That callable requires:
 
 - Firebase Authentication;
 - App Check;
@@ -1405,8 +1480,17 @@ All Training settings writes go through callable Functions. Both callables requi
 - a user deletion guard before work; and
 - a second deletion guard inside the write transaction.
 
-The frontend must not write `trainingSettings` directly. Settings writes use merge semantics and touch only the requested
-branch. Clearing one benchmark must not overwrite visibility or another discipline's benchmark.
+The frontend must not write `trainingSettings` directly. Benchmark writes use merge semantics and touch only the
+requested discipline branch, so clearing one benchmark cannot overwrite another discipline's benchmark.
+
+Destination and shortcut preferences are non-metric UI state. The frontend writes only
+`appSettings.trainingWorkspace` through `AppUserSettingsQueryService` and the normal owner-authorized
+`users/{uid}/config/settings` Firestore rule. Each write verifies the expected signed-in UID, uses merge semantics, and
+propagates failures to the UI. The service accepts only `preferredDestination` and `sportShortcuts`, validates the
+destination against the registry, and canonicalizes only `null` or a unique non-empty list of at most four supported
+shortcuts before writing. Firestore rules continue to reject all client mutations of `trainingSettings`, including the
+deprecated legacy visibility field. `setTrainingVisibleDisciplines` is retired from source and the Functions manifest;
+remove its already-deployed endpoint separately after the compatible frontend release is available.
 
 Derived triggers and workers also check deletion state before enqueueing and before writes. Never add user-scoped async
 state without extending recursive deletion handling and deletion guards.
@@ -1431,7 +1515,7 @@ Do not add provider aliases directly to the Training builder.
 
 Add one definition to `TRAINING_SPORT_DEFINITIONS` with its presentation metadata, disjoint contexts, exact canonical
 activity types, profile, policies, metrics, and capabilities. The registry-derived family union, visible-discipline and
-benchmark contracts, accumulators, callable validation, automatic/fixed visibility, and generic profile tables should
+benchmark contracts, accumulators, callable validation, automatic/fixed shortcuts, destination grouping, and generic profile tables should
 then extend without another family branch. Add focused tests that prove those consumers picked it up, plus help and this
 document. If a new requirement cannot be expressed as registry data or a reusable capability, add one reusable policy
 primitive rather than branching on the new family throughout the backend and UI.
@@ -1546,7 +1630,6 @@ From the Quantified Self root:
 npm --prefix functions test -- \
   src/derived-metrics/derived-metrics.service.spec.ts \
   src/derived-metrics/set-training-build-benchmark.spec.ts \
-  src/derived-metrics/set-training-visible-disciplines.spec.ts \
   src/tasks/derived-metrics-worker.spec.ts \
   src/tasks/derived-metrics-ingress-worker.spec.ts
 npm --prefix functions run build
@@ -1593,8 +1676,11 @@ git diff --check
 
 Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. Cover:
 
-- automatic and fixed sport visibility;
-- all sports and each single-sport mode;
+- Overview, every registered sport, and Other power activities;
+- automatic and fixed one-to-four-sport shortcuts, legacy fallback, and a selected off-shortcut sport;
+- desktop hybrid navigation, intermediate-width wrapping, and the mobile shortcut rail plus complete-destination sheet;
+- rapid destination switching, a pre-acknowledgement local Firestore echo, failed persistence, and an account switch
+  during an in-flight preference write;
 - benchmark unset, saving, updating, invalid, cleared, and ready;
 - event and manual benchmark flows for 8/10/12 weeks;
 - no TSS, no zones, no pace, no SWOLF, and no sleep;
@@ -1605,7 +1691,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
   plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
 - one and multiple imported-capacity cards;
-- no, one, and multiple exact Power systems types, including non-Running/Cycling types;
+- no, one, and multiple exact Power systems types, including registered non-Running/Cycling types and unmatched types
+  under Other power activities;
 - Power systems ready, partial, insufficient-evidence, poor-fit, unstable, invalid-input, and stale-payload states;
 - loading, stale, failed, and valid empty snapshots;
 - dark and light themes;

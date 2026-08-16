@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
@@ -29,12 +30,16 @@ const {
   mockRecordSuccessfulSuuntoActivityUploadForQueueItem,
   mockUploadActivityFileToWahoo,
   mockGetWahooActivityUploadStatus,
+  mockUploadActivityFileToCOROS,
+  mockGetCOROSActivityUploadStatus,
+  mockGetActiveCOROSTokenSnapshot,
   mockHasProAccess,
   mockGetServiceConnectionMeta,
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
   mockUpdateQueueItemIfUserActive,
   mockFieldValueDelete,
+  mockRecordActivitySyncOutboundFingerprint,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -68,12 +73,16 @@ const {
     mockRecordSuccessfulSuuntoActivityUploadForQueueItem: vi.fn(),
     mockUploadActivityFileToWahoo: vi.fn(),
     mockGetWahooActivityUploadStatus: vi.fn(),
+    mockUploadActivityFileToCOROS: vi.fn(),
+    mockGetCOROSActivityUploadStatus: vi.fn(),
+    mockGetActiveCOROSTokenSnapshot: vi.fn(),
     mockHasProAccess: vi.fn(),
     mockGetServiceConnectionMeta: vi.fn(),
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
     mockUpdateQueueItemIfUserActive: vi.fn(),
     mockFieldValueDelete: Symbol('FIELD_VALUE_DELETE'),
+    mockRecordActivitySyncOutboundFingerprint: vi.fn(),
   };
 });
 
@@ -202,6 +211,19 @@ vi.mock('../wahoo/activities', () => ({
   getWahooActivityUploadStatus: mockGetWahooActivityUploadStatus,
 }));
 
+vi.mock('../coros/activities', () => ({
+  uploadActivityFileToCOROS: mockUploadActivityFileToCOROS,
+  getCOROSActivityUploadStatus: mockGetCOROSActivityUploadStatus,
+}));
+
+vi.mock('../coros/account', () => ({
+  getActiveCOROSTokenSnapshot: mockGetActiveCOROSTokenSnapshot,
+}));
+
+vi.mock('./outbound-fingerprint', () => ({
+  recordActivitySyncOutboundFingerprint: mockRecordActivitySyncOutboundFingerprint,
+}));
+
 vi.mock('../utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils')>();
   return {
@@ -269,6 +291,7 @@ describe('activity-sync/process-queue-item', () => {
     delete baseQueueItem.destinationUploadCountedID;
     delete baseQueueItem.destinationUploadCountedAt;
     delete baseQueueItem.destinationUploadContinuation;
+    baseQueueItem.outboundFingerprintID = 'exact-v1-existing';
     mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue(null);
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
@@ -309,6 +332,19 @@ describe('activity-sync/process-queue-item', () => {
       uploadId: 'wahoo-upload-1',
       workoutKey: 'wahoo-workout-1',
     });
+    mockUploadActivityFileToCOROS.mockResolvedValue({
+      status: 'pending',
+      message: 'processing',
+      uploadId: '9223372036854775806',
+      providerUserId: 'coros-user-1',
+    });
+    mockGetCOROSActivityUploadStatus.mockResolvedValue({
+      status: 'success',
+      message: 'ok',
+      uploadId: '9223372036854775806',
+      providerUserId: 'coros-user-1',
+    });
+    mockGetActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-user-1' });
     mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
     mockRecordSuccessfulSuuntoActivityUploadForQueueItem.mockResolvedValue(undefined);
     mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
@@ -318,6 +354,30 @@ describe('activity-sync/process-queue-item', () => {
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
     mockUpdateQueueItemIfUserActive.mockReset().mockResolvedValue('updated');
+    mockRecordActivitySyncOutboundFingerprint.mockResolvedValue({
+      exactFingerprintId: 'exact-v1-new',
+      fingerprintIds: ['exact-v1-new', 'semantic-v1-new'],
+    });
+  });
+
+  it('persists provider-echo fingerprints before starting a new destination upload', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+
+    await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.SuuntoApp,
+      fileBuffer: Buffer.from('FITDATA'),
+    });
+    const markerCall = mockUpdateQueueItemIfUserActive.mock.calls.find(
+      ([params]) => params.phase === 'before_activity_sync_outbound_fingerprint_marker',
+    );
+    expect(markerCall?.[0]).toEqual(expect.objectContaining({
+      updateData: { outboundFingerprintID: 'exact-v1-new' },
+    }));
+    expect(mockRecordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadActivityFileToSuunto.mock.invocationCallOrder[0]);
   });
 
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
@@ -497,7 +557,7 @@ describe('activity-sync/process-queue-item', () => {
         uploadUrl: 'https://storage.suunto.com/persisted-upload?signed=true',
         uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
       },
-      ref: {} as any,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
     mockResumeSuuntoActivityBlobUpload.mockImplementationOnce(async (_userID, loadFile) => {
       expect(mockDownload).not.toHaveBeenCalled();
@@ -545,7 +605,7 @@ describe('activity-sync/process-queue-item', () => {
         uploadUrl: 'https://storage.suunto.com/processed-upload?signed=true',
         uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
       },
-      ref: {} as any,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
 
     const result = await processActivitySyncQueueItem(queueItem);
@@ -680,7 +740,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
 
     const result = await processActivitySyncQueueItem(queueItem);
@@ -707,7 +767,7 @@ describe('activity-sync/process-queue-item', () => {
         uploadUrl: 'https://storage.suunto.com/stale-signed-url',
         uploadHeaders: { Authorization: 'stale-secret' },
       },
-      ref: {} as any,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
 
     const result = await processActivitySyncQueueItem(queueItem);
@@ -782,6 +842,155 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists COROS async identifiers and resumes status without uploading the FIT file again', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_coros_upload_state_persist',
+      updateData: expect.objectContaining({
+        destinationUploadID: '9223372036854775806',
+        destinationProviderUserID: 'coros-user-1',
+      }),
+    }));
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        name: 'ProviderOperationError',
+        disposition: 'retryable',
+        retryMode: 'resume',
+      }),
+      1,
+      undefined,
+      'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    );
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledWith(
+      'user-1',
+      '9223372036854775806',
+      'coros-user-1',
+      { queueItemRef: queueItem.ref },
+    );
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries COROS post-upload writes after the upload count marker is committed', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockSetActivitySyncSuccessMetadata.mockRejectedValueOnce(Object.assign(
+      new Error('Firestore unavailable'),
+      { code: 'unavailable' },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    const retryTransition = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0];
+    expect(retryTransition?.isCurrent({
+      ...queueItem,
+      destinationUploadCountedID: '9223372036854775806',
+      destinationUploadCountedAt: Date.now(),
+    })).toBe(true);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
+  it('treats a missing pinned COROS token as disconnected before provider upload', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockGetActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+      new Error('Reconnect COROS before sending data.'),
+      { code: 'unauthenticated' },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockRecordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+  });
+
+  it('rejects incomplete COROS resume identifiers without calling the provider', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42',
+      destinationProviderUserID: null,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockGetCOROSActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({ dlqContext: 'DESTINATION_PROVIDER_INVALID_RESUME_STATE' }),
+      undefined,
+      'DESTINATION_PROVIDER_INVALID_RESUME_STATE',
+    );
+  });
+
+  it('treats an identifier-less COROS duplicate as a completed delivery', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockUploadActivityFileToCOROS.mockResolvedValueOnce({
+      status: 'duplicate',
+      code: 'ALREADY_EXISTS',
+      message: 'Activity already exists in COROS.',
+      providerUserId: 'coros-user-1',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: undefined,
+      infoCode: 'ALREADY_EXISTS',
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenLastCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_success_finalize',
+      updateData: expect.objectContaining({
+        processed: true,
+        destinationUploadID: null,
+        destinationProviderUserID: 'coros-user-1',
+        destinationInfoCode: 'ALREADY_EXISTS',
+        resultStatus: 'success',
+      }),
+    }));
   });
 
   it('persists a pending Suunto upload and polls the same provider job on retry', async () => {
@@ -1487,16 +1696,18 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('moves an explicitly permanent Suunto provider failure directly to DLQ', async () => {
-    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+    const providerError = new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
       operation: 'activity_upload_status',
       disposition: 'permanent',
       code: 'failed-precondition',
       message: 'Suunto processing failed: Unsupported FIT file format',
+      providerStatus: -1,
       providerUserId: 'suunto-user-1',
       providerOperationId: 'suunto-rejected-1',
       dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
-    }));
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(providerError);
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
@@ -1508,6 +1719,18 @@ describe('activity-sync/process-queue-item', () => {
       'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
     );
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        code: 'failed-precondition',
+        providerStatus: -1,
+        providerMessage: 'Suunto processing failed: Unsupported FIT file format',
+      }),
+    );
+    const providerFailureLog = vi.mocked(logger.error).mock.calls.find(
+      ([summary]) => summary === '[ActivitySync] Destination provider failure moved to DLQ.',
+    );
+    expect(providerFailureLog?.[1]).not.toHaveProperty('message');
   });
 
   it('moves an ambiguous Wahoo activity POST directly to DLQ without retrying it', async () => {
@@ -2047,6 +2270,30 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('defers COROS when disconnect starts between connection metadata and active-account lookup', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    mockGetActiveCOROSTokenSnapshot.mockRejectedValueOnce(Object.assign(
+      new Error('COROS disconnect is pending.'),
+      {
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        code: 'failed-precondition',
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockRecordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
   });
 
   it('defers when Wahoo detects a pending disconnect inside the provider adapter', async () => {

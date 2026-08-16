@@ -190,6 +190,7 @@ export async function enqueueActivitySyncQueueItem(
             sourceActivityID: params.sourceActivityID || '',
             originalFile: params.originalFile,
             manual: params.manual === true,
+            outboundFingerprintID: null,
         };
 
         transaction.set(queueDocRef, queueItem);

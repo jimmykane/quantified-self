@@ -99,9 +99,10 @@ service cloud.firestore {
            
       }
 
-      // Config Settings (Private / Owner Read-Write). Training benchmarks are
-      // deliberately server-owned so every selection is validated and queues
-      // a targeted derived-metrics refresh through its App-Check callable.
+      // Config Settings (Private / Owner Read-Write). Client-owned appSettings,
+      // including Training destination and shortcut preferences, use this path.
+      // Metric-affecting trainingSettings stay server-owned so benchmark changes
+      // are validated and queue a targeted refresh through an App-Check callable.
       match /config/settings {
          allow read: if request.auth.uid == userID;
          allow create: if request.auth.uid == userID
@@ -133,6 +134,12 @@ service cloud.firestore {
 
       // Event merge operations contain server-owned idempotency and lease state.
       match /eventMergeOperations/{operationID} {
+         allow read, write: if false;
+      }
+
+      // Short-lived provider-echo fingerprints are server-owned operational
+      // receipts and never exposed to browser clients.
+      match /activitySyncOutboundFingerprints/{fingerprintID} {
          allow read, write: if false;
       }
 
@@ -400,11 +407,10 @@ service cloud.firestore {
         && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
           allow read: if isNonAnonymousOwner(userID);
-          allow write: if isNonAnonymousOwner(userID)
-            && (
-              !exists(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID))
-              || get(/databases/$(database)/documents/COROSAPIAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
-            );
+          // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.
+          // Legacy browser reads still derive connection state from this tree,
+          // but credentials and stable provider identity are server-owned for writes.
+          allow write: if false;
        }
     }
 

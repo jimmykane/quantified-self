@@ -905,7 +905,8 @@ requested range, IANA timezone, grouping, recorded-vital coverage, and the same 
 aggregate-vital buckets as the lower-level summary path. The implementation performs one bounded projected read and
 cannot diagnose illness or infer missing physiology. An individual session's SpO₂ aggregate is its maximum; a grouped
 bucket's value is the average of the contributing session maxima. Grouped respiration likewise averages the
-contributing session-level averages.
+contributing session-level averages. Grouped HRV sample counts are averaged across contributing sessions and rounded to
+the nearest whole sample so the value retains the registered integer-count contract.
 
 The trend and lower-level summary now call one shared normalized sleep loader and aggregation path, so HRV, sleep heart
 rate, SpO₂, respiration, stage, and duration values cannot drift between those tools. The daily report continues to use
