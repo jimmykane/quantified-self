@@ -84,7 +84,8 @@ describe('normalizeDownloadedFitPayload', () => {
             reason: 'valid',
             headerSize: 14,
             declaredDataSize: 3,
-            expectedTotalLength: fitPayload.length,
+            minimumTotalLength: fitPayload.length - 2,
+            normalizedFitLength: fitPayload.length,
         });
     });
 
@@ -96,7 +97,8 @@ describe('normalizeDownloadedFitPayload', () => {
             isCompleteFit: false,
             reason: 'invalid_header_size',
             declaredDataSize: null,
-            expectedTotalLength: null,
+            minimumTotalLength: null,
+            normalizedFitLength: null,
         });
     });
 
@@ -110,7 +112,32 @@ describe('normalizeDownloadedFitPayload', () => {
             reason: 'truncated_payload',
             headerSize: 14,
             declaredDataSize: 40,
-            expectedTotalLength: fitPayload.length,
+            minimumTotalLength: fitPayload.length - 2,
+            normalizedFitLength: null,
+        });
+    });
+
+    it('accepts a complete FIT whose optional file CRC is absent', () => {
+        const fitPayload = createSyntheticFitPayload(Buffer.from([0x10, 0x20, 0x30]));
+        const withoutFileCRC = fitPayload.subarray(0, fitPayload.length - 2);
+
+        expect(inspectFitPayload(withoutFileCRC)).toMatchObject({
+            isCompleteFit: true,
+            minimumTotalLength: withoutFileCRC.length,
+            normalizedFitLength: withoutFileCRC.length,
+            reason: 'valid',
+        });
+        expect(normalizeDownloadedFitPayload(withoutFileCRC).data.equals(withoutFileCRC)).toBe(true);
+    });
+
+    it('rejects header sizes that the FIT parser does not support', () => {
+        const fitPayload = createSyntheticFitPayload(Buffer.from([0x10, 0x20, 0x30]));
+        fitPayload.writeUInt8(13, 0);
+
+        expect(inspectFitPayload(fitPayload)).toMatchObject({
+            isCompleteFit: false,
+            headerSize: 13,
+            reason: 'invalid_header_size',
         });
     });
 });

@@ -78,7 +78,6 @@ import {
   createSessionlessSuuntoFITError,
   downloadSuuntoFITFile,
   isSuspiciouslySmallSuuntoFIT,
-  PermanentSuuntoFITPayloadError,
   RetryableSuuntoFITPayloadError,
   SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT,
 } from './suunto/fit-download';
@@ -790,6 +789,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let oneSuccess = false;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
+  let retryableSuuntoFITPayloadError: RetryableSuuntoFITPayloadError | null = null;
   let terminalAuthError: TerminalServiceAuthError | null = null;
   let sawRetryableFailure = false;
   let sawUserDeletionSkip = false;
@@ -1005,8 +1005,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         }
       } else if (e instanceof PermanentCOROSFITDownloadError) {
         return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
-      } else if (e instanceof PermanentSuuntoFITPayloadError) {
-        return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'SUUNTO_FIT_DOWNLOAD_REJECTED');
       } else if (e instanceof RetryableSuuntoFITPayloadError) {
         logger.warn('Suunto FIT response was incomplete and will be retried.', {
           queueItemId: queueItem.id,
@@ -1016,6 +1014,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           contentTypeCategory: e.contentTypeCategory,
         });
         lastError = e;
+        retryableSuuntoFITPayloadError = e;
         sawRetryableFailure = true;
         continue;
       } else if (e.statusCode === 401) {
@@ -1043,9 +1042,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           if (retryError instanceof PermanentCOROSFITDownloadError) {
             return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
           }
-          if (retryError instanceof PermanentSuuntoFITPayloadError) {
-            return moveToDeadLetterQueue(queueItem, retryError, bulkWriter, 'SUUNTO_FIT_DOWNLOAD_REJECTED');
-          }
           if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
             sawUserDeletionSkip = true;
             logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} during forced refresh because user ${parentID} is missing or deletion is in progress.`);
@@ -1065,6 +1061,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
               contentTypeCategory: retryError.contentTypeCategory,
             });
             lastError = retryError;
+            retryableSuuntoFITPayloadError = retryError;
             sawRetryableFailure = true;
             continue;
           }
@@ -1299,6 +1296,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           responseBytes: result.length,
         });
         lastError = retryableError;
+        retryableSuuntoFITPayloadError = retryableError;
         sawRetryableFailure = true;
         continue;
       } else if ((e as any).code === 'EVENT_EMPTY_ERROR') {
@@ -1358,13 +1356,15 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
-  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${lastError.message}. Increasing retry count.`));
+  const retryError = retryableSuuntoFITPayloadError || lastError;
+  const effectiveRetryIncrement = retryableSuuntoFITPayloadError ? 1 : retryIncrement;
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${retryError.message}. Increasing retry count.`));
   return increaseRetryCountForQueueItem(
     queueItem,
-    lastError,
-    retryIncrement,
+    retryError,
+    effectiveRetryIncrement,
     bulkWriter,
-    lastError instanceof RetryableSuuntoFITPayloadError
+    retryableSuuntoFITPayloadError
       ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
       : undefined,
   );

@@ -91,7 +91,6 @@ vi.mock('./queue-utils', async (importOriginal) => {
 });
 
 vi.mock('./request-helper', () => ({
-    ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
     get: vi.fn(),
     getBinaryResponse: vi.fn(),
 }));

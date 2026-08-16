@@ -141,7 +141,6 @@ vi.mock('../request-helper', () => {
         default: { get: getBinaryResponse, getBinaryResponse },
         get: getBinaryResponse,
         getBinaryResponse,
-        ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
     };
 });
 

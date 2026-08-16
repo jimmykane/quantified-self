@@ -9,7 +9,7 @@ export class ResponseBodyTooLargeError extends Error {
     }
 }
 
-export interface BoundedBinaryResponse {
+export interface BinaryResponse {
     body: Buffer;
     statusCode: number;
     contentType: string | null;
@@ -90,7 +90,7 @@ export async function get(urlOrOptions: string | any, options: any = {}) {
 export async function getBinaryResponse(
     urlOrOptions: string | any,
     options: any = {},
-): Promise<BoundedBinaryResponse> {
+): Promise<BinaryResponse> {
     return request(urlOrOptions, {
         ...options,
         method: 'GET',
@@ -152,9 +152,6 @@ async function request(urlOrOptions: string | any, options: any = {}) {
 
     const timeoutMs = Number(opts.timeout);
     const maxResponseBytes = normalizeMaxResponseBytes(opts.maxResponseBytes);
-    if (opts.includeBinaryResponseMetadata === true && maxResponseBytes === null) {
-        throw new TypeError('Binary responses require an explicit maxResponseBytes limit.');
-    }
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
         if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
@@ -201,7 +198,7 @@ async function request(urlOrOptions: string | any, options: any = {}) {
                     contentLength: /^\d+$/.test(contentLengthHeader)
                         ? Number(contentLengthHeader)
                         : null,
-                } satisfies BoundedBinaryResponse;
+                } satisfies BinaryResponse;
             }
             return body;
         }

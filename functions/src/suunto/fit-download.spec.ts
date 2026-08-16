@@ -11,27 +11,16 @@ vi.mock('../config', () => ({
 }));
 
 vi.mock('../request-helper', () => {
-  class MockResponseBodyTooLargeError extends Error {
-    readonly name = 'ResponseBodyTooLargeError';
-    constructor(readonly maxResponseBytes: number, readonly receivedBytes: number) {
-      super('Response body exceeded its configured byte limit.');
-    }
-  }
   return {
     getBinaryResponse: (...args: unknown[]) => mockGetBinaryResponse(...args),
-    ResponseBodyTooLargeError: MockResponseBodyTooLargeError,
   };
 });
 
-import { MAX_ACTIVITY_UPLOAD_BYTES } from '../shared/activity-processing-config';
-import { ResponseBodyTooLargeError } from '../request-helper';
 import {
   downloadSuuntoFITFile,
   isSuspiciouslySmallSuuntoFIT,
-  PermanentSuuntoFITPayloadError,
   RetryableSuuntoFITPayloadError,
 } from './fit-download';
-import { SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS } from './constants';
 
 function createSyntheticFitPayload(dataBytes: Buffer): Buffer {
   const headerSize = 14;
@@ -49,7 +38,7 @@ describe('downloadSuuntoFITFile', () => {
     vi.clearAllMocks();
   });
 
-  it('uses bounded provider-compliant authorization and returns a complete FIT', async () => {
+  it('uses provider-compliant authorization without a timeout or body limit and returns a complete FIT', async () => {
     const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
     mockGetBinaryResponse.mockResolvedValue({
       body: fit,
@@ -66,10 +55,10 @@ describe('downloadSuuntoFITFile', () => {
         Authorization: 'Bearer raw-access-token',
         'Ocp-Apim-Subscription-Key': 'test-subscription-key',
       }),
-      maxResponseBytes: MAX_ACTIVITY_UPLOAD_BYTES,
-      timeout: SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS,
       url: 'https://cloudapi.suunto.com/v3/workouts/workout%2Fwith%20space/fit',
     }));
+    expect(mockGetBinaryResponse.mock.calls[0][0]).not.toHaveProperty('maxResponseBytes');
+    expect(mockGetBinaryResponse.mock.calls[0][0]).not.toHaveProperty('timeout');
   });
 
   it('does not double-prefix an existing Bearer token', async () => {
@@ -146,13 +135,17 @@ describe('downloadSuuntoFITFile', () => {
     });
   });
 
-  it('turns an oversized response into a sanitized permanent failure', async () => {
-    mockGetBinaryResponse.mockRejectedValue(
-      new ResponseBodyTooLargeError(MAX_ACTIVITY_UPLOAD_BYTES, MAX_ACTIVITY_UPLOAD_BYTES + 1),
-    );
+  it('accepts a complete FIT response without the optional file CRC', async () => {
+    const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
+    const withoutFileCRC = fit.subarray(0, fit.length - 2);
+    mockGetBinaryResponse.mockResolvedValue({
+      body: withoutFileCRC,
+      statusCode: 200,
+      contentType: 'application/octet-stream',
+      contentLength: withoutFileCRC.length,
+    });
 
-    await expect(downloadSuuntoFITFile('token', 'workout-1'))
-      .rejects.toBeInstanceOf(PermanentSuuntoFITPayloadError);
+    await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(withoutFileCRC);
   });
 
   it('identifies only bounded sessionless FITs as suspiciously small', () => {

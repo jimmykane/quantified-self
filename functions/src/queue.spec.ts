@@ -157,7 +157,6 @@ vi.mock('./request-helper', () => {
     return {
         __esModule: true,
         default: mock,
-        ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
         ...mock
     };
 });
@@ -3831,6 +3830,41 @@ describe('queue', () => {
                 error: expect.stringContaining(`${providerBody.length} bytes`),
             }));
             expect(JSON.stringify(mockBatch.set.mock.calls[0][1])).not.toContain('temporary provider response');
+        });
+
+        it('keeps an incomplete Suunto response retryable when another matching token returned 403', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'forbidden-token',
+                    ref: {
+                        id: 'forbidden-token',
+                        parent: { id: 'tokens', parent: { id: 'forbidden-user-id' } },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'provider-ready-token',
+                    ref: {
+                        id: 'provider-ready-token',
+                        parent: { id: 'tokens', parent: { id: 'provider-ready-user-id' } },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'forbidden', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'provider-ready', userName: 'suuntoUser' } as any);
+            vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode: 403 })
+                .mockResolvedValueOnce(createBinaryResponse(Buffer.from('FIT is still preparing'), 'text/plain'));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
         it('redownloads a suspiciously small valid Suunto FIT when parsing reports no session', async () => {

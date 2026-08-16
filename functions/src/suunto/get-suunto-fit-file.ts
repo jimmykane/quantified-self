@@ -9,7 +9,6 @@ import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constan
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
   downloadSuuntoFITFile,
-  PermanentSuuntoFITPayloadError,
   RetryableSuuntoFITPayloadError,
 } from './fit-download';
 
@@ -115,11 +114,9 @@ export const getSuuntoFITFile = functions
     logger.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}.`));
     const responseStatus = e instanceof RetryableSuuntoFITPayloadError
       ? 503
-      : e instanceof PermanentSuuntoFITPayloadError
-        ? 413
-        : Number.isInteger(providerStatusCode) && providerStatusCode >= 400 && providerStatusCode <= 599
-          ? providerStatusCode
-          : 502;
+      : Number.isInteger(providerStatusCode) && providerStatusCode >= 400 && providerStatusCode <= 599
+        ? providerStatusCode
+        : 502;
     res.status(responseStatus);
     res.send();
     return;

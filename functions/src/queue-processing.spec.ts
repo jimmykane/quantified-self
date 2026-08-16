@@ -90,7 +90,6 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
 import { parseWorkoutQueueItemForServiceName } from './queue';
 
 vi.mock('./request-helper', () => ({
-    ResponseBodyTooLargeError: class ResponseBodyTooLargeError extends Error {},
     default: {
         get: mockGetWorkoutForService,
         post: vi.fn(),

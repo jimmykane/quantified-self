@@ -35,13 +35,9 @@ vi.mock('./fit-download', () => {
     class MockRetryableSuuntoFITPayloadError extends Error {
         readonly name = 'RetryableSuuntoFITPayloadError';
     }
-    class MockPermanentSuuntoFITPayloadError extends Error {
-        readonly name = 'PermanentSuuntoFITPayloadError';
-    }
     return {
         downloadSuuntoFITFile: (...args: unknown[]) => mockDownloadSuuntoFITFile(...args),
         RetryableSuuntoFITPayloadError: MockRetryableSuuntoFITPayloadError,
-        PermanentSuuntoFITPayloadError: MockPermanentSuuntoFITPayloadError,
     };
 });
 

@@ -18,7 +18,8 @@ export interface FitPayloadInspection {
     reason: FitPayloadInspectionReason;
     headerSize: number | null;
     declaredDataSize: number | null;
-    expectedTotalLength: number | null;
+    minimumTotalLength: number | null;
+    normalizedFitLength: number | null;
 }
 
 function toBuffer(payload: Buffer | ArrayBuffer | Uint8Array): Buffer {
@@ -37,14 +38,15 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
         reason: Exclude<FitPayloadInspectionReason, 'valid'>,
         headerSize: number | null = null,
         declaredDataSize: number | null = null,
-        expectedTotalLength: number | null = null,
+        minimumTotalLength: number | null = null,
     ): FitPayloadInspection => ({
         byteLength,
         isCompleteFit: false,
         reason,
         headerSize,
         declaredDataSize,
-        expectedTotalLength,
+        minimumTotalLength,
+        normalizedFitLength: null,
     });
 
     // FIT header fields through the ".FIT" signature occupy the first 12 bytes.
@@ -53,7 +55,7 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
     }
 
     const headerSize = buffer.readUInt8(start);
-    if (headerSize < 12 || headerSize > 64) {
+    if (headerSize !== 12 && headerSize !== 14) {
         return invalid('invalid_header_size', headerSize);
     }
 
@@ -66,10 +68,15 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
     }
 
     const dataSize = buffer.readUInt32LE(start + 4);
-    const totalLength = headerSize + dataSize + 2; // +2 FIT CRC bytes
-    if (start + totalLength > buffer.length) {
-        return invalid('truncated_payload', headerSize, dataSize, totalLength);
+    const minimumTotalLength = headerSize + dataSize;
+    if (start + minimumTotalLength > buffer.length) {
+        return invalid('truncated_payload', headerSize, dataSize, minimumTotalLength);
     }
+    // The parser's best-effort mode accepts a missing file CRC. Retain it when present,
+    // but do not classify a complete declared data section as truncated without it.
+    const normalizedFitLength = byteLength >= minimumTotalLength + 2
+        ? minimumTotalLength + 2
+        : minimumTotalLength;
 
     return {
         byteLength,
@@ -77,7 +84,8 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
         reason: 'valid',
         headerSize,
         declaredDataSize: dataSize,
-        expectedTotalLength: totalLength,
+        minimumTotalLength,
+        normalizedFitLength,
     };
 }
 
@@ -106,9 +114,9 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
 
     // Fast-path: already a valid FIT payload from byte zero.
     const rootInspection = inspectFitPayloadAt(buffer, 0);
-    if (rootInspection.isCompleteFit && rootInspection.expectedTotalLength !== null) {
+    if (rootInspection.isCompleteFit && rootInspection.normalizedFitLength !== null) {
         return {
-            data: buffer.subarray(0, rootInspection.expectedTotalLength),
+            data: buffer.subarray(0, rootInspection.normalizedFitLength),
             normalizedFromMultipart: false,
             fitOffset: 0,
         };
@@ -124,7 +132,7 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
         ) {
             const start = i - 8;
             const inspection = inspectFitPayloadAt(buffer, start);
-            if (!inspection.isCompleteFit || inspection.expectedTotalLength === null) {
+            if (!inspection.isCompleteFit || inspection.normalizedFitLength === null) {
                 continue;
             }
 
@@ -134,7 +142,7 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
             }
 
             return {
-                data: buffer.subarray(start, start + inspection.expectedTotalLength),
+                data: buffer.subarray(start, start + inspection.normalizedFitLength),
                 normalizedFromMultipart: true,
                 fitOffset: start,
             };
