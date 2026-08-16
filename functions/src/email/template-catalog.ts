@@ -1,6 +1,7 @@
 import { buildEmailPlanDetails } from './config';
 
 export const DEVELOPMENT_UPDATE_TEMPLATE_ID = 'development_update';
+export const COROS_DELIVERY_UPDATE_TEMPLATE_ID = 'coros_delivery_update';
 
 export interface EmailTemplatePreviewCase {
     name: string;
@@ -219,6 +220,46 @@ export const REFRESHED_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntr
     },
 ] as const;
 
+/**
+ * Manual product-update campaigns are deliberately excluded from the default
+ * transactional seed and smoke-test flows. They can be seeded only by naming
+ * the template explicitly.
+ */
+export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntry[] = [
+    {
+        id: COROS_DELIVERY_UPDATE_TEMPLATE_ID,
+        subject: 'New: send activities and routes to COROS',
+        htmlFile: 'coros_delivery_update.hbs',
+        textFile: 'coros_delivery_update.txt.hbs',
+        partials: [],
+        previewCases: [
+            {
+                name: 'route-delivery-enabled',
+                data: {
+                    first_name: 'Dimitrios',
+                    route_delivery_available: true,
+                    coros_tools_url: 'https://quantified-self.io/services?serviceName=COROS%20API',
+                    settings_url: 'https://quantified-self.io/settings',
+                },
+            },
+            {
+                name: 'route-pilot-pending',
+                data: {
+                    first_name: 'Ada',
+                    route_delivery_available: false,
+                    coros_tools_url: 'https://quantified-self.io/services?serviceName=COROS%20API',
+                    settings_url: 'https://quantified-self.io/settings',
+                },
+            },
+        ],
+    },
+] as const;
+
+export const LOCAL_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntry[] = [
+    ...REFRESHED_EMAIL_TEMPLATE_CATALOG,
+    ...MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG,
+] as const;
+
 export function selectRefreshedTemplates(requestedIds?: readonly string[]): readonly EmailTemplateCatalogEntry[] {
     if (!requestedIds || requestedIds.length === 0) {
         return REFRESHED_EMAIL_TEMPLATE_CATALOG;
@@ -237,4 +278,22 @@ export function selectRefreshedTemplates(requestedIds?: readonly string[]): read
     });
 
     return selected;
+}
+
+export function selectSeedableTemplates(requestedIds?: readonly string[]): readonly EmailTemplateCatalogEntry[] {
+    if (!requestedIds || requestedIds.length === 0) {
+        return REFRESHED_EMAIL_TEMPLATE_CATALOG;
+    }
+
+    const catalogById = new Map(LOCAL_EMAIL_TEMPLATE_CATALOG.map(entry => [entry.id, entry]));
+    return requestedIds.map(id => {
+        if (id === DEVELOPMENT_UPDATE_TEMPLATE_ID) {
+            throw new Error(`${DEVELOPMENT_UPDATE_TEMPLATE_ID} is intentionally excluded from email lifecycle seeding.`);
+        }
+        const entry = catalogById.get(id);
+        if (!entry) {
+            throw new Error(`Unknown seedable email template '${id}'.`);
+        }
+        return entry;
+    });
 }

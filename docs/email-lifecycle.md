@@ -1,6 +1,6 @@
 # Email lifecycle
 
-This document is the source of truth for Quantified Self transactional email ownership, copy, template rollout, and verification. Marketing campaigns are outside this lifecycle. The existing `development_update` template is intentionally excluded from this refresh and from the seeding allowlist.
+This document is the source of truth for Quantified Self transactional email ownership, copy, template rollout, and verification. Marketing campaigns are outside the automatic transactional lifecycle. The existing `development_update` template remains intentionally excluded from every seed path. Explicitly reviewed manual campaigns, such as `coros_delivery_update`, are excluded from the default seed and smoke-test flows and can be selected only by exact template ID.
 
 ## Lifecycle and ownership
 
@@ -23,6 +23,14 @@ The founder welcome is sent once, only when `users/{uid}.onboardingCompleted` fi
 The allowlisted template and partial catalog is in `functions/src/email/template-catalog.ts`. HTML and plaintext sources are under `functions/templates/`. Standard sender addresses, URLs, date formatting, grace-period calculation, and plan descriptions are centralized in `functions/src/email/config.ts`; numeric limits and device-sync entitlement come from `shared/limits.ts`.
 
 The templates use escaped Handlebars expressions, responsive table layouts, plaintext alternatives, and environment-specific partials supported by the [Firebase Trigger Email extension](https://firebase.google.com/docs/extensions/official/firestore-send-email/templates). Unknown plan roles intentionally render without a benefits list.
+
+Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` without `--templates` never selects a manual campaign, and `test-emails` never queues one. Seed a reviewed campaign only by its exact ID, for example:
+
+```bash
+npm --prefix functions run seed-emails -- --templates=coros_delivery_update
+```
+
+The COROS product update supports both the production-wide activity-delivery copy and a route-delivery conditional. Set `route_delivery_available=true` only for accounts that can actually use COROS route delivery. A broad campaign must additionally require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent.
 
 Cancellation emails and the subscription trigger share one grace deadline. `onSubscriptionUpdated` transactionally re-reads the current active subscriptions plus the user-deletion guard before changing grace state. When every active subscription is scheduled to end, it stores the latest `current_period_end + 30 days` as `scheduledGracePeriodUntil`; any continuing subscription clears that scheduled deadline. Subscription mail creation performs the same current-state and deletion-guard reads in its own transaction, preserves existing deterministic mail documents, and queues cancellation copy only for the canonical latest end when every active entitlement is ending. The expiring-reminder job uses the same aggregate rule, so it skips earlier-ending subscriptions and any user with a continuing entitlement. When paid access ends, `onSubscriptionUpdated` promotes the exact timestamp to `gracePeriodUntil`. The existing enforcement job remains a conservative fallback if subscription-event processing exhausts its retry window; changing its account-level entitlement selection is tracked separately from this email refresh.
 
@@ -112,7 +120,7 @@ All steps below require separate operational approval.
 
 1. Confirm `dimitrios@quantified-self.io` receives external replies.
 2. Apply and smoke-test the Firebase Authentication templates and verified sender domain as described above.
-3. Seed only the refreshed Firestore templates and required partials. The default command selects the full refreshed allowlist and cannot select `development_update`:
+3. Seed only the refreshed Firestore templates and required partials. The default command selects the full refreshed transactional allowlist and cannot select `development_update` or any manual campaign:
 
    ```bash
    npm --prefix functions run seed-emails
