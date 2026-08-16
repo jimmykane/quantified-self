@@ -160,6 +160,7 @@ export interface COROSBindingStateResult {
   status: 'bound' | 'unbound' | 'stale';
   bound: boolean | null;
   checkedAt?: number;
+  retryAt?: number;
 }
 
 export interface SuuntoRouteCatchUpPromptContext {

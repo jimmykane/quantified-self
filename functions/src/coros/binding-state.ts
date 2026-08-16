@@ -35,7 +35,7 @@ interface COROSBindingStateResponse {
 const COROS_BINDING_STATE_CACHE_MS = 5 * 60 * 1000;
 const COROS_BINDING_STATE_STALE_WHILE_IN_FLIGHT_MS = 15 * 60 * 1000;
 const COROS_BINDING_STATE_LEASE_MS = 45 * 1000;
-const COROS_BINDING_STATE_FAILURE_COOLDOWN_MS = 15 * 1000;
+const COROS_BINDING_STATE_ACCOUNT_COOLDOWN_MS = 15 * 1000;
 const COROS_BINDING_STATE_MAX_RESPONSE_BYTES = 16 * 1024;
 const COROS_BINDING_STATE_GLOBAL_WINDOW_MS = 60 * 1000;
 const COROS_BINDING_STATE_GLOBAL_REQUESTS_PER_WINDOW = 60;
@@ -46,6 +46,7 @@ export interface COROSBindingStateResult {
   status: 'bound' | 'unbound' | 'stale';
   bound: boolean | null;
   checkedAt?: number;
+  retryAt?: number;
 }
 
 export class COROSBindingStateUnavailableError extends Error {
@@ -202,7 +203,7 @@ async function claimCOROSBindingStateCheck(params: {
       }
       throw new HttpsError(
         'resource-exhausted',
-        'COROS connection checks are cooling down after a provider failure. Please retry shortly.',
+        'COROS connection checks are cooling down after a recent check. Please retry shortly.',
         { retryAt: nextRetryAt },
       );
     }
@@ -339,7 +340,7 @@ async function settleCOROSBindingStateCheckLeaseIfCurrent(params: {
   userID: string;
   leaseId: string;
   nextRetryAt: number;
-  deletionGuardPhase: 'coros_binding_state_stale_release' | 'coros_binding_state_failure_cooldown';
+  deletionGuardPhase: 'coros_binding_state_stale_cooldown' | 'coros_binding_state_failure_cooldown';
 }): Promise<boolean> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(params.userID).collection('meta').doc(ServiceNames.COROSAPI);
@@ -366,16 +367,19 @@ async function settleCOROSBindingStateCheckLeaseIfCurrent(params: {
   });
 }
 
-async function releaseCOROSBindingStateCheckLeaseIfCurrent(
-  userID: string,
-  leaseId: string,
-): Promise<void> {
-  await settleCOROSBindingStateCheckLeaseIfCurrent({
-    userID,
-    leaseId,
-    nextRetryAt: 0,
-    deletionGuardPhase: 'coros_binding_state_stale_release',
+async function recordCOROSBindingStateStaleCooldownIfCurrent(params: {
+  userID: string;
+  leaseId: string;
+  staleAt: number;
+}): Promise<number | null> {
+  const retryAt = params.staleAt + COROS_BINDING_STATE_ACCOUNT_COOLDOWN_MS;
+  const didSettleLease = await settleCOROSBindingStateCheckLeaseIfCurrent({
+    userID: params.userID,
+    leaseId: params.leaseId,
+    nextRetryAt: retryAt,
+    deletionGuardPhase: 'coros_binding_state_stale_cooldown',
   });
+  return didSettleLease ? retryAt : null;
 }
 
 async function recordCOROSBindingStateFailureCooldownIfCurrent(params: {
@@ -383,7 +387,7 @@ async function recordCOROSBindingStateFailureCooldownIfCurrent(params: {
   leaseId: string;
   failedAt: number;
 }): Promise<number | null> {
-  const retryAt = params.failedAt + COROS_BINDING_STATE_FAILURE_COOLDOWN_MS;
+  const retryAt = params.failedAt + COROS_BINDING_STATE_ACCOUNT_COOLDOWN_MS;
   const didSettleLease = await settleCOROSBindingStateCheckLeaseIfCurrent({
     userID: params.userID,
     leaseId: params.leaseId,
@@ -451,8 +455,16 @@ export async function checkCOROSBindingStateForUser(
       throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
     }
     if (writeResult === 'stale') {
-      await releaseCOROSBindingStateCheckLeaseIfCurrent(userID, claim.leaseId);
-      return { status: 'stale', bound: null };
+      const retryAt = await recordCOROSBindingStateStaleCooldownIfCurrent({
+        userID,
+        leaseId: claim.leaseId,
+        staleAt: Date.now(),
+      });
+      return {
+        status: 'stale',
+        bound: null,
+        ...(retryAt !== null ? { retryAt } : {}),
+      };
     }
     return { status: bound ? 'bound' : 'unbound', bound, checkedAt };
   } catch (error) {

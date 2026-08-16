@@ -172,6 +172,36 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('COROS server-owned token credentials', () => {
+        const userId = 'coros_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('preserves owner reads while denying client credential and identity mutations', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`).set({
+                    accessToken: 'stored-access-token',
+                    refreshToken: 'stored-refresh-token',
+                    openId: 'open-id',
+                    dateCreated: 1_000,
+                });
+            });
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const tokenRef = db.doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`);
+
+            await assertSucceeds(tokenRef.get());
+            await assertFails(tokenRef.update({ accessToken: 'forged-access-token' }));
+            await assertFails(tokenRef.update({ refreshToken: 'forged-refresh-token' }));
+            await assertFails(tokenRef.update({ openId: 'forged-open-id' }));
+            await assertFails(tokenRef.update({ dateCreated: 2_000 }));
+            await assertFails(tokenRef.delete());
+            await assertFails(db.doc(`COROSAPIAccessTokens/${userId}/tokens/other-id`).set({
+                accessToken: 'forged-access-token',
+                openId: 'other-id',
+                dateCreated: 2_000,
+            }));
+        });
+    });
+
     describe('Wahoo server-owned integration state', () => {
         const userId = 'wahoo_user';
 

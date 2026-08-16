@@ -232,22 +232,65 @@ describe('ServicesCorosComponent', () => {
         expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
     });
 
-    it('checks the current token again when an in-flight provider result is stale', async () => {
-        mockUserService.checkCurrentUserCOROSBindingState
-            .mockResolvedValueOnce({ status: 'stale', bound: null })
-            .mockResolvedValueOnce({ status: 'bound', bound: true });
-        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
-        component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as Auth2ServiceTokenInterface[];
-        const testComponent = component as unknown as { onServiceDataChanged(): void };
+    it('checks the current token once after the stale-result cooldown expires', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-16T10:00:00Z'));
+        try {
+            const retryAt = Date.now() + 15_000;
+            mockUserService.checkCurrentUserCOROSBindingState
+                .mockResolvedValueOnce({ status: 'stale', bound: null, retryAt })
+                .mockResolvedValueOnce({ status: 'bound', bound: true });
+            component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+            component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as Auth2ServiceTokenInterface[];
+            const testComponent = component as unknown as { onServiceDataChanged(): void };
 
-        testComponent.onServiceDataChanged();
-        await vi.waitFor(() => {
+            testComponent.onServiceDataChanged();
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+
+            testComponent.onServiceDataChanged();
+            await Promise.resolve();
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+
+            await vi.advanceTimersByTimeAsync(14_999);
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(1);
             expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
-        });
-        await Promise.resolve();
 
-        expect(component.isCheckingCOROSBindingState).toBe(false);
-        expect(component.corosBindingStateCheckError).toBe(false);
+            expect(component.isCheckingCOROSBindingState).toBe(false);
+            expect(component.corosBindingStateCheckError).toBe(false);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not chain automatic retries when the delayed stale retry is also stale', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-16T10:00:00Z'));
+        try {
+            mockUserService.checkCurrentUserCOROSBindingState
+                .mockResolvedValueOnce({ status: 'stale', bound: null, retryAt: Date.now() + 15_000 })
+                .mockResolvedValueOnce({ status: 'stale', bound: null, retryAt: Date.now() + 30_000 })
+                .mockResolvedValueOnce({ status: 'bound', bound: true });
+            component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+            component.serviceTokens = [{ accessToken: 'token', openId: 'coros-user' }] as Auth2ServiceTokenInterface[];
+            const testComponent = component as unknown as { onServiceDataChanged(): void };
+
+            testComponent.onServiceDataChanged();
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(1);
+
+            await vi.advanceTimersByTimeAsync(15_000);
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(mockUserService.checkCurrentUserCOROSBindingState).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
     });
 
     it('shows a retry action when the binding check is temporarily unavailable', async () => {

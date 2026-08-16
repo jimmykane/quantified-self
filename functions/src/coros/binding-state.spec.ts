@@ -205,40 +205,55 @@ describe('COROS binding state', () => {
     }, { merge: true });
   });
 
-  it('releases a stale provider-check lease so the automatic retry can use the changed token', async () => {
-    mocks.requestGet.mockImplementationOnce(async () => {
-      currentTokenData = { accessToken: 'new-access-token', openId: 'open-id', dateCreated: 200 };
-      mocks.getActiveCOROSTokenSnapshot.mockResolvedValue({
-        id: 'open-id',
-        ref: mocks.tokenRef,
-        exists: true,
-        data: () => ({ accessToken: 'new-access-token', openId: 'open-id', dateCreated: 200 }),
+  it('records a stale-result cooldown before allowing another global budget debit', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(5_678);
+    try {
+      mocks.requestGet.mockImplementationOnce(async () => {
+        currentTokenData = { accessToken: 'new-access-token', openId: 'open-id', dateCreated: 200 };
+        mocks.getActiveCOROSTokenSnapshot.mockResolvedValue({
+          id: 'open-id',
+          ref: mocks.tokenRef,
+          exists: true,
+          data: () => ({ accessToken: 'new-access-token', openId: 'open-id', dateCreated: 200 }),
+        });
+        return '{"result":"0000","data":{"bindState":0}}';
       });
-      return '{"result":"0000","data":{"bindState":0}}';
-    });
-    mocks.requestGet.mockResolvedValueOnce('{"result":"0000","data":{"bindState":1}}');
+      mocks.requestGet.mockResolvedValueOnce('{"result":"0000","data":{"bindState":1}}');
 
-    await expect(checkCOROSBindingStateForUser('user-1', 5678)).resolves.toEqual({
-      status: 'stale',
-      bound: null,
-    });
-    expect(mocks.transactionSet).not.toHaveBeenCalledWith(
-      mocks.metaRef,
-      expect.objectContaining({ providerBindingState: 'unbound' }),
-      { merge: true },
-    );
-    expect(currentMetaData).toMatchObject({
-      providerBindingCheckLeaseId: null,
-      providerBindingCheckLeaseExpiresAt: 0,
-      providerBindingCheckNextRetryAt: 0,
-    });
+      await expect(checkCOROSBindingStateForUser('user-1', 5_678)).resolves.toEqual({
+        status: 'stale',
+        bound: null,
+        retryAt: 20_678,
+      });
+      expect(mocks.transactionSet).not.toHaveBeenCalledWith(
+        mocks.metaRef,
+        expect.objectContaining({ providerBindingState: 'unbound' }),
+        { merge: true },
+      );
+      expect(currentMetaData).toMatchObject({
+        providerBindingCheckLeaseId: null,
+        providerBindingCheckLeaseExpiresAt: 0,
+        providerBindingCheckNextRetryAt: 20_678,
+      });
 
-    await expect(checkCOROSBindingStateForUser('user-1', 5679)).resolves.toEqual({
-      status: 'bound',
-      bound: true,
-      checkedAt: 5679,
-    });
-    expect(mocks.requestGet).toHaveBeenCalledTimes(2);
+      await expect(checkCOROSBindingStateForUser('user-1', 5_679)).rejects.toMatchObject({
+        code: 'resource-exhausted',
+        details: { retryAt: 20_678 },
+      });
+      expect(mocks.requestGet).toHaveBeenCalledTimes(1);
+      expect(currentRateLimitData).toMatchObject({ count: 1 });
+
+      dateNow.mockReturnValue(20_678);
+      await expect(checkCOROSBindingStateForUser('user-1', 20_678)).resolves.toEqual({
+        status: 'bound',
+        bound: true,
+        checkedAt: 20_678,
+      });
+      expect(mocks.requestGet).toHaveBeenCalledTimes(2);
+      expect(currentRateLimitData).toMatchObject({ count: 2 });
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it('ignores an unbound result from before a same-account OAuth reconnect', async () => {
@@ -254,6 +269,7 @@ describe('COROS binding state', () => {
     await expect(checkCOROSBindingStateForUser('user-1', 5678)).resolves.toEqual({
       status: 'stale',
       bound: null,
+      retryAt: expect.any(Number),
     });
     expect(mocks.transactionSet).not.toHaveBeenCalledWith(
       mocks.metaRef,
