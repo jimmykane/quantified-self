@@ -99,7 +99,7 @@ Provider-to-provider activity delivery can otherwise return through a destinatio
 
 Receipts contain hashes, destination identity, timestamps, and TTL metadata—not the activity file. Browser access is denied. They expire after 120 days through Firestore TTL and are also removed by recursive account deletion. Wahoo independently omits third-party-app workouts from its import API, while the shared receipt still protects outbound deliveries consistently.
 
-Inbound COROS FIT URLs are treated as untrusted provider input. The worker accepts only HTTPS downloads and redirects on the provider-documented `oss.coros.com` host, applies a 60-second deadline and the shared 30 MB activity limit, validates the FIT signature before parsing, and reduces transport failures to errors that do not expose signed URL query values.
+Inbound COROS FIT URLs are treated as untrusted provider input. The worker accepts only HTTPS downloads and redirects on `oss.coros.com` or a `*.cloudfront.net` distribution, and requires COROS's bounded `/fit/<account>/<workout>.fit` path shape. COROS's API reference describes `fitUrl` as a provider-returned download URL and uses `oss.coros.com` in examples without defining a fixed-host contract; production also returns rotating CloudFront distribution hosts. The worker applies a 60-second deadline and the shared 30 MB activity limit, validates the FIT signature before parsing, and reduces transport failures to errors that do not expose signed URL query values.
 
 ## Route delivery
 

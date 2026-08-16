@@ -12,3 +12,4 @@ export const COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 export const COROS_API_REQUEST_TIMEOUT_MS = 30_000;
 export const COROS_FIT_DOWNLOAD_TIMEOUT_MS = 60_000;
 export const COROS_FIT_DOWNLOAD_ALLOWED_HOSTS = ['oss.coros.com'] as const;
+export const COROS_FIT_DOWNLOAD_ALLOWED_HOST_SUFFIXES = ['.cloudfront.net'] as const;

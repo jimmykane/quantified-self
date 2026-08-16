@@ -28,6 +28,9 @@ function response(status: number, payload: Buffer | null, headers: Record<string
 }
 
 describe('downloadCOROSFITFile', () => {
+  const ossFitUrl = 'https://oss.coros.com/fit/407419767966679040/418408855184113664.fit';
+  const cloudFrontFitUrl = 'https://d31oxp44ddzkyk.cloudfront.net/fit/430290351243149312/479633578857103363.fit';
+
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
@@ -37,35 +40,45 @@ describe('downloadCOROSFITFile', () => {
     const payload = fitPayload();
     fetchMock.mockResolvedValue(response(200, payload, { 'content-length': `${payload.length}` }));
 
-    await expect(downloadCOROSFITFile('https://oss.coros.com/fit/activity.fit')).resolves.toEqual(payload);
+    await expect(downloadCOROSFITFile(ossFitUrl)).resolves.toEqual(payload);
+  });
+
+  it('downloads from rotating CloudFront distributions returned by COROS', async () => {
+    const payload = fitPayload();
+    fetchMock.mockResolvedValue(response(200, payload, { 'content-length': `${payload.length}` }));
+
+    await expect(downloadCOROSFITFile(cloudFrontFitUrl)).resolves.toEqual(payload);
   });
 
   it('rejects unsafe URLs before fetching', async () => {
-    await expect(downloadCOROSFITFile('http://oss.coros.com/fit/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
-    await expect(downloadCOROSFITFile('https://example.com/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
-    await expect(downloadCOROSFITFile('https://127.0.0.1/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
-    await expect(downloadCOROSFITFile('https://user:pass@oss.coros.com/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile(ossFitUrl.replace('https:', 'http:'))).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://example.com/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://cloudfront.net/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://d31oxp44ddzkyk.cloudfront.net.evil.example/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://127.0.0.1/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://user:pass@oss.coros.com/fit/407419767966679040/418408855184113664.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile('https://d31oxp44ddzkyk.cloudfront.net/not-fit/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('validates every redirect destination', async () => {
-    fetchMock.mockResolvedValue(response(302, null, { location: 'https://attacker.example/activity.fit' }));
+    fetchMock.mockResolvedValue(response(302, null, { location: 'https://attacker.example/fit/407419767966679040/418408855184113664.fit' }));
 
-    await expect(downloadCOROSFITFile('https://oss.coros.com/fit/activity.fit')).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
+    await expect(downloadCOROSFITFile(ossFitUrl)).rejects.toBeInstanceOf(UnsafeCOROSFileUrlError);
   });
 
   it('rejects oversized and malformed FIT payloads permanently', async () => {
     fetchMock.mockResolvedValueOnce(response(200, fitPayload(), { 'content-length': `${30 * 1024 * 1024 + 1}` }));
-    await expect(downloadCOROSFITFile('https://oss.coros.com/fit/large.fit'))
+    await expect(downloadCOROSFITFile(ossFitUrl))
       .rejects.toBeInstanceOf(PermanentCOROSFITDownloadError);
 
     fetchMock.mockResolvedValueOnce(response(200, Buffer.from('not-fit')));
-    await expect(downloadCOROSFITFile('https://oss.coros.com/fit/bad.fit'))
+    await expect(downloadCOROSFITFile(ossFitUrl))
       .rejects.toThrow('valid FIT');
   });
 
   it('does not expose a signed FIT URL when the HTTP client fails', async () => {
-    const signedUrl = 'https://oss.coros.com/fit/activity.fit?signature=secret-value';
+    const signedUrl = `${cloudFrontFitUrl}?signature=secret-value`;
     fetchMock.mockRejectedValue(new Error(`request to ${signedUrl} failed`));
 
     await expect(downloadCOROSFITFile(signedUrl)).rejects.toThrow('COROS FIT download request failed.');
@@ -82,7 +95,7 @@ describe('downloadCOROSFITFile', () => {
       });
     }));
 
-    const download = downloadCOROSFITFile('https://oss.coros.com/fit/activity.fit');
+    const download = downloadCOROSFITFile(ossFitUrl);
     const expectation = expect(download).rejects.toThrow('COROS FIT download timed out.');
     await vi.advanceTimersByTimeAsync(COROS_FIT_DOWNLOAD_TIMEOUT_MS);
 

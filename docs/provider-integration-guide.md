@@ -208,11 +208,11 @@ Also stop work when the provider is disconnected, reconnect-required, or disconn
 
 ### Downloading provider files safely
 
-Provider file URLs are external input even if they came from an authenticated partner API. The Wahoo and COROS implementations use the shared defensive pattern for a safe FIT download path; each keeps its own exact provider-host allowlist and provider-specific response handling:
+Provider file URLs are external input even if they came from an authenticated partner API. The Wahoo and COROS implementations use the shared defensive pattern for a safe FIT download path; each keeps its own provider-host policy and provider-specific response handling. Prefer exact hosts. When a provider contract returns rotating CDN distribution names, a provider CDN suffix is acceptable only with a provider-specific path constraint and the controls below:
 
 - require HTTPS;
 - reject credentials in URLs, IP literals, localhost, private targets, and unapproved redirect targets;
-- allowlist exact provider-owned hosts through configuration;
+- allowlist exact provider-owned hosts, or a narrowly scoped provider CDN suffix plus its expected path shape, through configuration;
 - enforce a request deadline and a byte limit;
 - validate response type and file magic bytes before parsing;
 - never persist or log the full signed URL.
