@@ -311,6 +311,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every sport');
     expect(trainingSection?.content).toContain('**Manage sport shortcuts**');
     expect(trainingSection?.content).toContain('training duration and workouts in the latest 28 days');
+    expect(trainingSection?.content).toContain('selected shortcut does not jump');
     expect(trainingSection?.content).toContain('Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, or Paddling');
     expect(trainingSection?.content).toContain('Shortcuts change navigation only');
     expect(trainingSection?.content).toContain('**Use automatic selection**');

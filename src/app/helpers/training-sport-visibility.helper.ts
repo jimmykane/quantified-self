@@ -132,6 +132,37 @@ export function resolveTrainingShortcutDestinations(
     .slice(0, TRAINING_SPORT_SHORTCUT_LIMIT);
 }
 
+/**
+ * Reconciles a newly resolved shortcut set without moving destinations that
+ * are already visible. Derived snapshots can hydrate independently, so the
+ * automatic set may change several times during one refresh. Keeping retained
+ * destinations in their existing slots prevents the selected control from
+ * moving under the user while new destinations fill the available gaps.
+ */
+export function resolveStableTrainingShortcutDestinations(
+  previousDestinations: readonly TrainingVisibleDiscipline[],
+  shortcuts: readonly TrainingVisibleDiscipline[],
+  selectedDestination: TrainingDestinationId,
+): TrainingVisibleDiscipline[] {
+  const nextDestinations = resolveTrainingShortcutDestinations(shortcuts, selectedDestination);
+  if (previousDestinations.length === 0 || nextDestinations.length === 0) {
+    return nextDestinations;
+  }
+
+  const remainingDestinations = new Set(nextDestinations);
+  const slots: Array<TrainingVisibleDiscipline | undefined> = Array.from(
+    { length: nextDestinations.length },
+  );
+  previousDestinations.slice(0, slots.length).forEach((destination, index) => {
+    if (remainingDestinations.delete(destination)) {
+      slots[index] = destination;
+    }
+  });
+  const additions = nextDestinations.filter(destination => remainingDestinations.has(destination));
+  let additionIndex = 0;
+  return slots.map(destination => destination ?? additions[additionIndex++]!);
+}
+
 export function resolveTrainingSportVisibility(
   preference: unknown,
   summary: DashboardTrainingSummaryContext | null,

@@ -8,6 +8,7 @@ import {
   formatTrainingVisibleDisciplinesScopeLabel,
   TRAINING_VISIBLE_DISCIPLINE_OPTIONS,
   normalizeTrainingSportShortcuts,
+  resolveStableTrainingShortcutDestinations,
   resolveTrainingShortcutDestinations,
   resolveTrainingSportShortcuts,
   resolveTrainingSportVisibility,
@@ -136,6 +137,28 @@ describe('resolveTrainingSportVisibility', () => {
     )).toEqual(['strength', 'running', 'cycling', 'swimming']);
     expect(resolveTrainingShortcutDestinations(['running', 'cycling'], 'overview'))
       .toEqual(['running', 'cycling']);
+  });
+
+  it('keeps retained shortcut destinations in stable slots while automatic evidence hydrates', () => {
+    expect(resolveStableTrainingShortcutDestinations(
+      ['strength'],
+      ['cycling', 'strength', 'swimming', 'running'],
+      'strength',
+    )).toEqual(['strength', 'cycling', 'swimming', 'running']);
+
+    expect(resolveStableTrainingShortcutDestinations(
+      ['cycling', 'strength', 'swimming', 'running'],
+      ['cycling', 'rowing', 'strength', 'swimming'],
+      'overview',
+    )).toEqual(['cycling', 'strength', 'swimming', 'rowing']);
+  });
+
+  it('keeps a selected destination in its existing slot when it leaves the automatic top four', () => {
+    expect(resolveStableTrainingShortcutDestinations(
+      ['cycling', 'strength', 'swimming', 'running'],
+      ['cycling', 'rowing', 'swimming', 'paddling'],
+      'running',
+    )).toEqual(['cycling', 'rowing', 'swimming', 'running']);
   });
 
   it('keeps a sport visible automatically when it has a valid saved benchmark', () => {

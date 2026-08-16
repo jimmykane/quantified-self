@@ -149,7 +149,7 @@ import {
   formatTrainingVisibleDisciplinesCompactLabel,
   formatTrainingVisibleDisciplinesLabel,
   normalizeTrainingSportShortcuts,
-  resolveTrainingShortcutDestinations,
+  resolveStableTrainingShortcutDestinations,
   resolveTrainingSportShortcuts,
   trainingSportVisibilitySelectionKey,
 } from '../../helpers/training-sport-visibility.helper';
@@ -1129,7 +1129,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       ? formatTrainingVisibleDisciplinesLabel(this.sportShortcuts)
       : 'no current shortcuts';
     this.sportShortcutsAccessibleLabel = `Choose sport shortcuts. ${shortcutResolution.isAutomatic ? 'Automatic' : 'Fixed'} selection: ${shortcutLabels}.`;
-    this.visibleSportShortcuts = resolveTrainingShortcutDestinations(
+    this.visibleSportShortcuts = resolveStableTrainingShortcutDestinations(
+      this.visibleSportShortcuts,
       this.sportShortcuts,
       this.selectedTrainingDestination,
     );
@@ -1225,6 +1226,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.preferredDestinationSaveFailed = false;
     this.selectedTrainingDestination = destination;
     this.preferredDestinationOverride = destination;
+    if (isTrainingDiscipline(destination) && !this.sportShortcuts.includes(destination)) {
+      // An explicit off-shortcut choice should still be brought to the leading
+      // edge. Snapshot hydration uses stable reconciliation instead.
+      this.visibleSportShortcuts = [];
+    }
     this.refreshSportSpecificViewModels();
     this.changeDetector.markForCheck();
     this.queuePreferredTrainingDestinationWrite(destination, source);
@@ -1448,6 +1454,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.pendingTrainingVisibleDisciplinesBaselineKey = this.resolvePersistedTrainingSportVisibilityKey();
         this.pendingTrainingVisibleDisciplines = result.visibleDisciplines;
       }
+      this.visibleSportShortcuts = [];
       this.refreshSportSpecificViewModels();
       this.changeDetector.markForCheck();
     }));

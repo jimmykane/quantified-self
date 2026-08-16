@@ -1476,6 +1476,71 @@ describe('TrainingWorkspaceComponent', () => {
     expect(select.value).toBeNull();
   });
 
+  it('keeps the selected shortcut in a stable slot while automatic sport evidence hydrates', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const disciplineSummary = (discipline: string, durationSeconds: number) => ({
+      discipline,
+      current28d: {
+        periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+        durationSeconds, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+      },
+      baseline28d: {
+        periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+        durationSeconds, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+      },
+    });
+
+    component.selectedTrainingDestination = 'strength';
+    (component as any).refreshTrainingSportVisibility();
+    expect(component.visibleSportShortcuts).toEqual(['strength']);
+
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          disciplineSummary('cycling', 4_000),
+          disciplineSummary('strength', 3_000),
+          disciplineSummary('swimming', 2_000),
+          disciplineSummary('running', 1_000),
+        ],
+      } as any,
+    };
+    (component as any).refreshTrainingSportVisibility();
+
+    expect(component.sportShortcuts).toEqual(['cycling', 'strength', 'swimming', 'running']);
+    expect(component.visibleSportShortcuts).toEqual(['strength', 'cycling', 'swimming', 'running']);
+
+    component.derivedState = {
+      ...component.derivedState,
+      trainingSummary: {
+        asOfDayMs: 3,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          disciplineSummary('rowing', 5_000),
+          disciplineSummary('cycling', 4_000),
+          disciplineSummary('swimming', 3_000),
+          disciplineSummary('strength', 2_000),
+        ],
+      } as any,
+    };
+    (component as any).refreshTrainingSportVisibility();
+
+    expect(component.sportShortcuts).toEqual(['rowing', 'cycling', 'swimming', 'strength']);
+    expect(component.visibleSportShortcuts).toEqual(['strength', 'cycling', 'swimming', 'rowing']);
+  });
+
   it('opens the complete mobile sport picker and applies its destination result', () => {
     const ngZone = { run: vi.fn((callback: () => void) => callback()) };
     const bottomSheetRef = {

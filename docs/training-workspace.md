@@ -221,7 +221,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
 | `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend data |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
-| `training-sport-visibility.helper.ts` | Automatic/fixed shortcut resolution, four-slot ranking, legacy fallback, and off-shortcut destination placement |
+| `training-sport-visibility.helper.ts` | Automatic/fixed shortcut resolution, four-slot ranking, refresh-stable slot reconciliation, legacy fallback, and off-shortcut destination placement |
 | `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
 
 ## Firestore Data Model
@@ -605,6 +605,9 @@ button uses a tonal state, and each 40 px visual button retains Material's 48 px
 button with the accessible **All sports** label preserves more width for that rail and opens a viewport-bounded Material
 bottom sheet. The sheet keeps **All training** first, groups automatic or pinned shortcuts next, sorts the remaining
 available destinations by label, marks the current view, and places **Manage sport shortcuts** in its stable footer.
+As independently loaded snapshots hydrate or refresh, any destination that remains visible keeps its existing shortcut
+slot and a newly eligible destination fills an open or vacated slot. This prevents the active button and its neighbors
+from changing order under the user while still allowing the automatic top-four membership to update.
 Choosing an off-shortcut registered sport temporarily places it at the front of the rail's sport slots and returns the
 rail to its leading edge. The selected destination is intentionally not encoded in the URL or browser history.
 
