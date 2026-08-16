@@ -1074,6 +1074,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Wahoo rejects repeated token refreshes');
     expect(serviceConnectionsSection?.content).toContain('keeps unaccepted automatic activity and saved-route deliveries parked');
     expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
+    expect(serviceConnectionsSection?.content).toContain('automatically synced from Garmin, COROS, or Suunto');
+    expect(serviceConnectionsSection?.content).toContain("keeps Wahoo's inferred type instead of guessing");
+    expect(serviceConnectionsSection?.content).toContain("Direct FIT activity uploads keep Wahoo's inferred type");
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');
