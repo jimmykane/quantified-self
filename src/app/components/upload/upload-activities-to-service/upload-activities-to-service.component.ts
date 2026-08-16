@@ -9,6 +9,7 @@ import { AppFunctionsService } from '../../../services/app.functions.service';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import type { FunctionName } from '@shared/functions-manifest';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import { getWahooWorkoutTypeById } from '@shared/wahoo-activity-types';
 
 const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
 const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL = '20MB';
@@ -41,6 +42,7 @@ interface ServiceUploadRow {
   jobId?: string;
   uploadId?: string;
   providerUserId?: string;
+  expectedWorkoutTypeId?: number;
 }
 
 interface SuuntoUploadResumeState {
@@ -54,6 +56,7 @@ interface ServiceUploadResult {
   pending?: boolean;
   uploadId?: string;
   providerUserId?: string;
+  expectedWorkoutTypeId?: number;
   message?: string;
 }
 
@@ -63,12 +66,14 @@ interface ServiceUploadCallableResponse {
   message?: string;
   uploadId?: string;
   providerUserId?: string;
+  expectedWorkoutTypeId?: number;
   result?: {
     status?: string;
     code?: string;
     message?: string;
     uploadId?: string;
     providerUserId?: string;
+    expectedWorkoutTypeId?: number;
   };
 }
 
@@ -428,6 +433,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           message,
           uploadId: result.uploadId || row.uploadId,
           providerUserId: result.providerUserId || row.providerUserId,
+          expectedWorkoutTypeId: result.expectedWorkoutTypeId ?? row.expectedWorkoutTypeId,
         });
         this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
         this.startWahooStatusPolling(row.id);
@@ -596,7 +602,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return RETRYABLE_WAHOO_STATUS_ERROR_CODES.has(code);
   }
 
-  private async getServiceUploadStatusResult(row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>): Promise<ServiceUploadResult> {
+  private async getServiceUploadStatusResult(
+    row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'expectedWorkoutTypeId'>,
+  ): Promise<ServiceUploadResult> {
     if (!row.uploadId) {
       throw new Error(`Missing ${this.destinationName} upload identifier.`);
     }
@@ -605,7 +613,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       : 'getWahooAPIWorkoutFileUploadStatus';
     const payload = this.serviceName === ServiceNames.COROSAPI
       ? { uploadId: row.uploadId, providerUserId: row.providerUserId }
-      : { uploadId: row.uploadId };
+      : {
+        uploadId: row.uploadId,
+        ...(row.expectedWorkoutTypeId !== undefined
+          ? { expectedWorkoutTypeId: row.expectedWorkoutTypeId }
+          : {}),
+      };
     const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
       callableFunction,
       payload,
@@ -820,14 +833,23 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private getAsynchronousUploadStateUpdate(
     error: unknown,
-  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
+  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'expectedWorkoutTypeId'> | Record<string, never> {
     const details = (error as { details?: unknown } | null)?.details;
     if (!details || typeof details !== 'object') {
       return {};
     }
     const retryMode = `${(details as { retryMode?: unknown }).retryMode || ''}`.trim();
     if (retryMode === 'restart') {
-      return { uploadId: undefined, providerUserId: undefined };
+      return { uploadId: undefined, providerUserId: undefined, expectedWorkoutTypeId: undefined };
+    }
+    if (this.serviceName === ServiceNames.WahooAPI && retryMode === 'resume') {
+      const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
+      const expectedWorkoutType = getWahooWorkoutTypeById(
+        (details as { expectedWorkoutTypeId?: unknown }).expectedWorkoutTypeId,
+      );
+      return uploadId
+        ? { uploadId, providerUserId: undefined, expectedWorkoutTypeId: expectedWorkoutType?.id }
+        : {};
     }
     if (this.serviceName === ServiceNames.COROSAPI && retryMode === 'resume') {
       const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
@@ -839,13 +861,18 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private toServiceUploadResult(
     response: ServiceUploadCallableResponse | undefined,
-    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
+    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'expectedWorkoutTypeId'>,
   ): ServiceUploadResult {
     const responseCode = response?.code || response?.result?.code;
     const responseMessage = response?.message || response?.result?.message;
     const responseStatus = `${response?.status || response?.result?.status || ''}`.trim().toLowerCase();
     const uploadId = response?.uploadId || response?.result?.uploadId || resumeState?.uploadId;
     const providerUserId = response?.providerUserId || response?.result?.providerUserId || resumeState?.providerUserId;
+    const expectedWorkoutType = getWahooWorkoutTypeById(
+      response?.expectedWorkoutTypeId
+      ?? response?.result?.expectedWorkoutTypeId
+      ?? resumeState?.expectedWorkoutTypeId,
+    );
     if (responseCode === 'ALREADY_EXISTS') {
       return { success: true, duplicate: true, message: responseMessage };
     }
@@ -860,6 +887,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         pending: true,
         uploadId,
         providerUserId,
+        expectedWorkoutTypeId: expectedWorkoutType?.id,
         message: responseMessage,
       };
     }

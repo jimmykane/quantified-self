@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
+import type { DocumentReference } from 'firebase-admin/firestore';
 import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
 const {
   mockTokenGet,
+  mockEventGet,
   mockDownload,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
@@ -46,6 +48,7 @@ const {
 
   return {
     mockTokenGet,
+    mockEventGet: vi.fn(),
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
@@ -86,15 +89,41 @@ const {
   };
 });
 
+type ProviderLeaseQueueItem = Pick<
+  ActivitySyncQueueItemInterface,
+  'dispatchedToCloudTask' | 'providerOperationStartedAt'
+>;
+
+interface IncreaseRetryParams {
+  queueItem: ActivitySyncQueueItemInterface;
+  error: unknown;
+  incrementBy?: number;
+  bulkWriter?: unknown;
+  maxRetryDlqContext?: string;
+}
+
+interface MoveToDeadLetterQueueParams {
+  queueItem: ActivitySyncQueueItemInterface;
+  error: unknown;
+  bulkWriter?: unknown;
+  context: string;
+}
+
+const mockDocumentReference = {} as DocumentReference;
+
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
-    collection: vi.fn(() => ({
+    collection: vi.fn((collectionName: string) => ({
       doc: vi.fn(() => ({
-        collection: vi.fn(() => ({
-          limit: vi.fn(() => ({
-            get: mockTokenGet,
-          })),
-        })),
+        collection: vi.fn((nestedCollectionName: string) => (
+          collectionName === 'users' && nestedCollectionName === 'events'
+            ? { doc: vi.fn(() => ({ get: mockEventGet })) }
+            : {
+              limit: vi.fn(() => ({
+                get: mockTokenGet,
+              })),
+            }
+        )),
       })),
     })),
   }),
@@ -123,7 +152,7 @@ vi.mock('../queue-utils', () => ({
       super(`Provider operation for queue item ${queueItemId} is still in flight.`);
     }
   },
-  isProviderOperationInFlightLeaseActive: (queueItem: any) => (
+  isProviderOperationInFlightLeaseActive: (queueItem: ProviderLeaseQueueItem) => (
     queueItem.dispatchedToCloudTask === Number.MAX_SAFE_INTEGER - 1
     && Number(queueItem.providerOperationStartedAt) > Date.now() - 12 * 60 * 1000
   ),
@@ -140,7 +169,7 @@ vi.mock('../queue-utils', () => ({
   deferQueueItemForPendingDisconnectIfCurrentUserActive: mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
   markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
-  increaseRetryCountIfCurrentUserActive: async (params: any) => {
+  increaseRetryCountIfCurrentUserActive: async (params: IncreaseRetryParams) => {
     mockIncreaseRetryCountIfCurrentParams(params);
     const args = [params.queueItem, params.error, params.incrementBy, params.bulkWriter];
     if (params.maxRetryDlqContext !== undefined) {
@@ -154,7 +183,7 @@ vi.mock('../queue-utils', () => ({
     return result;
   },
   moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
-  moveToDeadLetterQueueIfCurrentUserActive: (params: any) => {
+  moveToDeadLetterQueueIfCurrentUserActive: (params: MoveToDeadLetterQueueParams) => {
     mockMoveToDeadLetterQueueIfCurrentParams(params);
     return mockMoveToDeadLetterQueue(
       params.queueItem,
@@ -264,7 +293,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
   totalRetryCount: 0,
   errors: [],
   dispatchedToCloudTask: null,
-  ref: {} as any,
+  ref: mockDocumentReference,
   routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
   sourceServiceName: ServiceNames.GarminAPI,
   destinationServiceName: ServiceNames.SuuntoApp,
@@ -281,7 +310,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
 describe('activity-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    baseQueueItem.ref = {} as any;
+    baseQueueItem.ref = mockDocumentReference;
     baseQueueItem.dispatchedToCloudTask = null;
     delete baseQueueItem.providerOperationStartedAt;
     delete baseQueueItem.destinationUploadID;
@@ -357,6 +386,11 @@ describe('activity-sync/process-queue-item', () => {
     mockRecordActivitySyncOutboundFingerprint.mockResolvedValue({
       exactFingerprintId: 'exact-v1-new',
       fingerprintIds: ['exact-v1-new', 'semantic-v1-new'],
+      activityTypes: ['Hiking'],
+    });
+    mockEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Hiking'] } }),
     });
   });
 
@@ -746,6 +780,13 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: 9 }),
+    );
+    expect(mockEventGet.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0]);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_wahoo_upload_state_persist',
       updateData: expect.objectContaining({
@@ -755,6 +796,156 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0])
       .toBeLessThan(mockSetActivitySyncSuccessMetadata.mock.invocationCallOrder[0]);
     expect(mockRecordSuccessfulSuuntoActivityUploadForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('maps multiple persisted event activity types to Wahoo multisport', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Running', 'Cycling'] } }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: 62 }),
+    );
+  });
+
+  it('keeps Wahoo inference for an explicitly unmapped persisted event type', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Soccer'] } }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: undefined }),
+    );
+  });
+
+  it('retries an event activity-type read failure before claiming or calling Wahoo', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockRejectedValueOnce(Object.assign(new Error('Firestore unavailable'), {
+      code: 'unavailable',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('persists a transient Wahoo type-correction resume ID and never reposts the FIT', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: 'unavailable',
+      message: 'Wahoo could not update the workout type.',
+      providerOperationId: 'wahoo-correction-resume',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
+    }));
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.destinationUploadID).toBe('wahoo-correction-resume');
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+
+    const secondResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(secondResult).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-correction-resume',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the accepted Wahoo upload ID when type correction cannot be reconciled', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Wahoo completed without a workout ID.',
+      providerOperationId: 'wahoo-complete-without-workout-id',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_MISSING_WORKOUT_ID',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationUploadID: 'wahoo-complete-without-workout-id',
+      }),
+      expect.objectContaining({ providerOperationId: 'wahoo-complete-without-workout-id' }),
+      undefined,
+      'WAHOO_ACTIVITY_TYPE_CORRECTION_MISSING_WORKOUT_ID',
+    );
+  });
+
+  it('repeats only Wahoo status and its idempotent correction after final queue persistence fails', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockResolvedValueOnce('updated')
+      .mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.Failed);
+    expect(queueItem.destinationUploadID).toBe('wahoo-upload-1');
+    queueItem.providerOperationStartedAt = Date.now() - 13 * 60 * 1000;
+
+    const secondResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(secondResult).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-upload-1',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
   });
 
   it('clears an irrelevant signed continuation while persisting Wahoo upload state', async () => {
@@ -809,7 +1000,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -839,7 +1030,7 @@ describe('activity-sync/process-queue-item', () => {
 
     await processActivitySyncQueueItem(queueItem);
 
-    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1', 9);
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
   });
@@ -996,7 +1187,7 @@ describe('activity-sync/process-queue-item', () => {
   it('persists a pending Suunto upload and polls the same provider job on retry', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1045,7 +1236,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1077,7 +1268,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1107,7 +1298,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     const invalidResponseError = Object.assign(
       new Error('Wahoo completed the upload without a token.'),
@@ -1135,7 +1326,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1170,7 +1361,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1194,7 +1385,7 @@ describe('activity-sync/process-queue-item', () => {
   it('persists a resumable Suunto provider error before incrementing retry state', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
@@ -1224,7 +1415,7 @@ describe('activity-sync/process-queue-item', () => {
   it('marks a normalized terminal Suunto auth failure as reconnect-required work instead of DLQ', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
@@ -1261,7 +1452,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed when authentication is lost while polling an accepted upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'accepted-upload-1',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1305,7 +1496,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed on a legacy authentication error while polling an accepted upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'accepted-upload-legacy-auth',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1336,7 +1527,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves partial persisted Suunto resume state to DLQ without downloading or reposting the FIT file', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'suunto-upload-without-user',
     };
 
@@ -1360,7 +1551,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves a pending Suunto response without resumable identifiers directly to DLQ', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1390,7 +1581,7 @@ describe('activity-sync/process-queue-item', () => {
   it('uses persisted Suunto identifiers when a resumable status error omits them', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'suunto-existing-upload',
       destinationProviderUserID: 'suunto-existing-user',
     };
@@ -1418,7 +1609,7 @@ describe('activity-sync/process-queue-item', () => {
   it('preserves persisted Suunto identifiers when a successful status response omits them', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'suunto-existing-upload',
       destinationProviderUserID: 'suunto-existing-user',
       destinationWorkoutKey: 'suunto-existing-workout',
@@ -1451,7 +1642,7 @@ describe('activity-sync/process-queue-item', () => {
   it('does not carry stale job metadata into a fresh successful upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationWorkoutKey: 'stale-workout',
       destinationInfoCode: 'PROCESSING',
     };
@@ -1508,7 +1699,7 @@ describe('activity-sync/process-queue-item', () => {
   it('clears an errored Suunto upload before restarting it on the next retry', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'suunto-failed-1',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1576,7 +1767,7 @@ describe('activity-sync/process-queue-item', () => {
   it('restarts a provider-confirmed failed Wahoo upload instead of requiring manual reconciliation', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'wahoo-definitively-failed-upload',
@@ -1598,6 +1789,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       'wahoo-definitively-failed-upload',
+      9,
     );
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_pending_upload_restart',
@@ -1636,7 +1828,7 @@ describe('activity-sync/process-queue-item', () => {
   it('does not restart a Wahoo status failure without the provider-confirmed restart signal', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'wahoo-status-failure-without-restart-confirmation',
@@ -1662,7 +1854,7 @@ describe('activity-sync/process-queue-item', () => {
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationWorkoutKey: 'stale-workout',
       destinationInfoCode: 'PROCESSING',
     };
@@ -1738,7 +1930,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.WahooAPI,
@@ -1794,7 +1986,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1817,7 +2009,7 @@ describe('activity-sync/process-queue-item', () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
 
     const result = await processActivitySyncQueueItem(queueItem);
@@ -1844,7 +2036,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
       providerOperationStartedAt: Date.now(),
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
 
     await expect(processActivitySyncQueueItem(queueItem)).rejects.toMatchObject({
@@ -1865,7 +2057,7 @@ describe('activity-sync/process-queue-item', () => {
       providerOperationStartedAt: Date.now(),
       destinationUploadID: 'persisted-upload-1',
       destinationProviderUserID: 'suunto-user-1',
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
 
     await expect(processActivitySyncQueueItem(queueItem)).rejects.toMatchObject({
@@ -2049,7 +2241,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: mockDocumentReference,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'duplicate',
@@ -2128,7 +2320,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed instead of skipping an accepted upload when the destination now requires reconnect', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'accepted-upload-reconnect-required',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -2190,7 +2382,7 @@ describe('activity-sync/process-queue-item', () => {
   ])('resumes an accepted Suunto upload before %s can skip it', async (_scenario, configureEligibilitySkip) => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       destinationUploadID: 'accepted-upload-before-eligibility-check',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -2219,7 +2411,7 @@ describe('activity-sync/process-queue-item', () => {
   it('resumes an accepted Wahoo upload before a disabled route can skip it', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: mockDocumentReference,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'accepted-wahoo-upload-before-eligibility-check',
@@ -2236,6 +2428,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       queueItem.destinationUploadID,
+      9,
     );
     expect(mockDownload).not.toHaveBeenCalled();
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
@@ -2325,6 +2518,41 @@ describe('activity-sync/process-queue-item', () => {
     const guardedDeferral = mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mock.calls[0][0];
     expect(guardedDeferral.isCurrent({ ...queueItem })).toBe(true);
     expect(guardedDeferral.isCurrent({ ...queueItem, processed: true })).toBe(false);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('persists an accepted Wahoo upload before deferring post-acceptance disconnect work', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(Object.assign(
+      new Error('Wahoo disconnect is pending.'),
+      {
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        serviceName: ServiceNames.WahooAPI,
+        providerOperationId: 'wahoo-accepted-upload',
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_wahoo_upload_state_persist',
+      updateData: expect.objectContaining({
+        destinationUploadID: 'wahoo-accepted-upload',
+      }),
+    }));
+    expect(mockDeferQueueItemForPendingDisconnectIfCurrentUserActive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueItem: expect.objectContaining({
+          destinationUploadID: 'wahoo-accepted-upload',
+        }),
+      }),
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
   });
 

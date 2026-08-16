@@ -322,7 +322,12 @@ describe('UploadActivitiesToServiceComponent', () => {
     it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
         component.serviceName = ServiceNames.WahooAPI;
         mockFunctionsService.call.mockResolvedValueOnce({
-            data: { status: 'pending', uploadId: 'wahoo-upload-1', message: 'Wahoo is processing the activity.' },
+            data: {
+                status: 'pending',
+                uploadId: 'wahoo-upload-1',
+                expectedWorkoutTypeId: 9,
+                message: 'Wahoo is processing the activity.',
+            },
         });
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
@@ -350,6 +355,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
             message: 'Wahoo is processing the activity.',
         });
     });
@@ -374,6 +380,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
             message: 'Wahoo is processing the activity.',
         });
         mockFunctionsService.call
@@ -384,13 +391,14 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'processing',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         });
 
         await vi.advanceTimersByTimeAsync(2000);
         expect(component.uploadRows()[0]).toMatchObject({ status: 'processing' });
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'getWahooAPIWorkoutFileUploadStatus',
-            { uploadId: 'wahoo-upload-1' },
+            { uploadId: 'wahoo-upload-1', expectedWorkoutTypeId: 9 },
         );
 
         await vi.advanceTimersByTimeAsync(4000);
@@ -529,6 +537,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         };
 
         component.uploadRows.set([row]);
@@ -562,6 +571,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Reconnect Wahoo before checking the upload.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         };
         component.uploadRows.set([row]);
         mockProcessingService.addJob.mockReturnValueOnce('wahoo-retry-job');
@@ -574,7 +584,7 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'getWahooAPIWorkoutFileUploadStatus',
-            { uploadId: 'wahoo-upload-1' },
+            { uploadId: 'wahoo-upload-1', expectedWorkoutTypeId: 9 },
         );
         expect(uploadSpy).not.toHaveBeenCalled();
         expect(component.uploadRows()[0]).toMatchObject({
@@ -600,6 +610,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         };
         component.uploadRows.set([row]);
         mockFunctionsService.call.mockRejectedValueOnce({
@@ -612,6 +623,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'failed',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         });
     });
 
@@ -631,6 +643,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
+            expectedWorkoutTypeId: 9,
         };
         component.uploadRows.set([row]);
         mockFunctionsService.call.mockRejectedValueOnce({
@@ -644,7 +657,45 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'failed',
             uploadId: undefined,
+            expectedWorkoutTypeId: undefined,
         });
+    });
+
+    it('retains a backend-validated Wahoo type when initial correction must resume', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/unavailable',
+            message: 'Wahoo is temporarily unable to update the workout type.',
+            details: {
+                retryMode: 'resume',
+                resumeUploadId: 'wahoo-correction-resume',
+                expectedWorkoutTypeId: 9,
+            },
+        });
+
+        await component.getFiles(event);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: 'wahoo-correction-resume',
+            expectedWorkoutTypeId: 9,
+        });
+
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'success', message: 'Activity uploaded to Wahoo.' },
+        });
+        await component.retryUpload(component.uploadRows()[0]);
+
+        expect(mockFunctionsService.call).toHaveBeenLastCalledWith(
+            'getWahooAPIWorkoutFileUploadStatus',
+            { uploadId: 'wahoo-correction-resume', expectedWorkoutTypeId: 9 },
+        );
     });
 
     it('should reject non-fit files', async () => {
