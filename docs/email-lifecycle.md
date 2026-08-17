@@ -38,7 +38,7 @@ npm --prefix functions run seed-emails -- --templates=mcp_connection_update
 npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=mcp_connection_update
 ```
 
-The reviewed bulk queue is intentionally separate from generic campaign tooling. It reads active (`active`, `trialing`, or `past_due`) Basic and Pro Stripe subscription records, deduplicates by Firebase UID, confirms the Auth account and user document are still present, excludes disabled or deletion-marked accounts, and renders the local source inline through the Trigger Email extension. It defaults to dry-run and requires the exact live recipient count before it can queue mail. It uses deterministic `mail` document IDs and `toUids` so the existing account-deletion cleanup can remove pending mail.
+The reviewed bulk queue is intentionally separate from generic campaign tooling. It reads active (`active`, `trialing`, or `past_due`) Basic and Pro Stripe subscription records, deduplicates by Firebase UID, confirms the Auth account and user document are still present, excludes disabled or deletion-marked accounts, and renders the local source inline through the Trigger Email extension. It defaults to dry-run and requires the exact live recipient count before it can queue mail. It uses deterministic `mail` document IDs plus the existing cleanup-recognized `uid` marker so account deletion can remove pending mail. It queues one message at a time, 200 ms apart by default, to stay below the provider's per-second limit.
 
 ```bash
 # Inspect only: prints counts by role and exclusion reason, without writing mail.

@@ -10,7 +10,7 @@ describe('queue-mcp-connection-update', () => {
         expect(parseQueueOptions(['--project=quantified-self-io'])).toEqual({
             projectId: 'quantified-self-io',
             dryRun: true,
-            concurrency: 10,
+            intervalMs: 200,
         });
         expect(() => parseQueueOptions([
             '--project=quantified-self-io',
@@ -23,7 +23,7 @@ describe('queue-mcp-connection-update', () => {
         ])).toThrow(/outside quantified-self-io/);
         expect(() => parseQueueOptions([
             '--project=quantified-self-io',
-            '--concurrency=21',
+            '--interval-ms=99',
         ])).toThrow(/Usage/);
     });
 
@@ -49,7 +49,7 @@ describe('queue-mcp-connection-update', () => {
         });
 
         expect(document.to).toBe('member@example.com');
-        expect(document.toUids).toEqual(['user-1']);
+        expect(document.uid).toBe('user-1');
         expect(document.message.subject).toBe('Reconnect your Quantified Self ChatGPT app');
         expect(document.message.html).toContain('Hi Ada');
         expect(document.message.text).toContain('select Manage');

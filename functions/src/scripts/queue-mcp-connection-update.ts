@@ -1,7 +1,6 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as path from 'path';
-import pLimit from 'p-limit';
 import {
     FOUNDER_EMAIL_FROM,
     FOUNDER_EMAIL_REPLY_TO,
@@ -28,7 +27,7 @@ interface QueueOptions {
     projectId: string;
     dryRun: boolean;
     expectedRecipientCount?: number;
-    concurrency: number;
+    intervalMs: number;
 }
 
 interface ActiveSubscriptionRecord {
@@ -55,7 +54,7 @@ interface RecipientResolution {
 
 interface CampaignMailDocument {
     to: string;
-    toUids: string[];
+    uid: string;
     from: string;
     replyTo: string;
     message: {
@@ -109,11 +108,11 @@ export function parseQueueOptions(args: readonly string[]): QueueOptions {
         '--project=',
         '--dry-run=',
         '--expected-recipients=',
-        '--concurrency=',
+        '--interval-ms=',
     ];
     if (args.some(argument => !supportedPrefixes.some(prefix => argument.startsWith(prefix)))) {
         throw new Error(
-            'Usage: npm run queue-mcp-connection-update -- --project=quantified-self-io [--dry-run=false --expected-recipients=COUNT] [--concurrency=1..20]',
+            'Usage: npm run queue-mcp-connection-update -- --project=quantified-self-io [--dry-run=false --expected-recipients=COUNT] [--interval-ms=100..5000]',
         );
     }
 
@@ -123,11 +122,11 @@ export function parseQueueOptions(args: readonly string[]): QueueOptions {
         getSingleOptionValue(args, 'expected-recipients'),
         'expected-recipients',
     );
-    const concurrency = parsePositiveInteger(getSingleOptionValue(args, 'concurrency'), 'concurrency') ?? 10;
+    const intervalMs = parsePositiveInteger(getSingleOptionValue(args, 'interval-ms'), 'interval-ms') ?? 200;
 
-    if (!projectId || concurrency < 1 || concurrency > 20) {
+    if (!projectId || intervalMs < 100 || intervalMs > 5000) {
         throw new Error(
-            'Usage: npm run queue-mcp-connection-update -- --project=quantified-self-io [--dry-run=false --expected-recipients=COUNT] [--concurrency=1..20]',
+            'Usage: npm run queue-mcp-connection-update -- --project=quantified-self-io [--dry-run=false --expected-recipients=COUNT] [--interval-ms=100..5000]',
         );
     }
     if (!dryRun && projectId !== PRODUCTION_PROJECT_ID) {
@@ -141,7 +140,7 @@ export function parseQueueOptions(args: readonly string[]): QueueOptions {
         projectId,
         dryRun,
         ...(expectedRecipientCount === undefined ? {} : { expectedRecipientCount }),
-        concurrency,
+        intervalMs,
     };
 }
 
@@ -314,7 +313,10 @@ export function buildCampaignMailDocument(recipient: CampaignRecipient): Campaig
 
     return {
         to: recipient.email,
-        toUids: [recipient.uid],
+        // The mail extension resolves a top-level toUids field through the
+        // user document. Our authoritative recipient address comes from Auth,
+        // so use an inert UID marker that existing account cleanup recognizes.
+        uid: recipient.uid,
         from: FOUNDER_EMAIL_FROM,
         replyTo: FOUNDER_EMAIL_REPLY_TO,
         message,
@@ -345,6 +347,10 @@ async function queueRecipient(
         transaction.create(mailRef, buildCampaignMailDocument(recipient));
         return 'queued';
     });
+}
+
+function waitForQueueInterval(intervalMs: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, intervalMs));
 }
 
 export async function queueMcpConnectionUpdate(options: QueueOptions): Promise<void> {
@@ -378,12 +384,19 @@ export async function queueMcpConnectionUpdate(options: QueueOptions): Promise<v
         );
     }
 
-    const limit = pLimit(options.concurrency);
-    const results = await Promise.all(resolution.recipients.map(recipient => limit(
-        () => queueRecipient(db, recipient),
-    )));
-    const queued = results.filter(result => result === 'queued').length;
-    const alreadyQueued = results.length - queued;
+    let queued = 0;
+    let alreadyQueued = 0;
+    for (const [index, recipient] of resolution.recipients.entries()) {
+        const result = await queueRecipient(db, recipient);
+        if (result === 'queued') {
+            queued++;
+        } else {
+            alreadyQueued++;
+        }
+        if (index < resolution.recipients.length - 1) {
+            await waitForQueueInterval(options.intervalMs);
+        }
+    }
     console.log(JSON.stringify({ campaignId: CAMPAIGN_ID, queued, alreadyQueued }));
 }
 
