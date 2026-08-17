@@ -6,7 +6,10 @@ import {
   normalizeDownloadedFitPayload,
 } from '../shared/fit-payload';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
-import { SUUNTO_SUSPICIOUS_EMPTY_FIT_MAX_BYTES } from './constants';
+import {
+  SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS,
+  SUUNTO_SUSPICIOUS_EMPTY_FIT_MAX_BYTES,
+} from './constants';
 
 export const SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT = 'SUUNTO_FIT_RESPONSE_RETRY_EXHAUSTED';
 
@@ -65,6 +68,7 @@ export async function downloadSuuntoFITFile(
       Authorization: toSuuntoAuthorizationHeader(accessToken),
       'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
     },
+    timeout: SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS,
     url: `https://cloudapi.suunto.com/v3/workouts/${encodeURIComponent(workoutID)}/fit`,
   });
 
