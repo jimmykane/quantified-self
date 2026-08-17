@@ -12,7 +12,8 @@ export const SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT = 'SUUNTO_FIT_RESPONSE_RETRY_EXH
 
 export type SuuntoFITContentTypeCategory = 'fit' | 'json' | 'text' | 'binary' | 'missing' | 'other';
 export type RetryableSuuntoFITPayloadReason = Exclude<FitPayloadInspectionReason, 'valid'>
-  | 'sessionless_suspiciously_small';
+  | 'sessionless_suspiciously_small'
+  | 'unexpected_success_status';
 
 function classifyContentType(contentType: string | null): SuuntoFITContentTypeCategory {
   const normalized = `${contentType || ''}`.trim().toLowerCase();
@@ -66,6 +67,21 @@ export async function downloadSuuntoFITFile(
     },
     url: `https://cloudapi.suunto.com/v3/workouts/${encodeURIComponent(workoutID)}/fit`,
   });
+
+  if (response.statusCode !== 200) {
+    throw new RetryableSuuntoFITPayloadError(
+      'unexpected_success_status',
+      response.body.length,
+      classifyContentType(response.contentType),
+    );
+  }
+
+  const rootInspection = inspectFitPayload(response.body);
+  if (rootInspection.isCompleteFit) {
+    // Keep direct FIT downloads byte-for-byte intact. The manual endpoint promises
+    // the original file, and valid FIT files may contain chained trailing payloads.
+    return response.body;
+  }
 
   const normalized = normalizeDownloadedFitPayload(response.body);
   const inspection = inspectFitPayload(normalized.data);

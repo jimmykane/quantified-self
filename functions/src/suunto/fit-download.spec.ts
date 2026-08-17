@@ -77,6 +77,35 @@ describe('downloadSuuntoFITFile', () => {
     }));
   });
 
+  it('preserves a raw FIT response byte-for-byte when trailing data follows its first envelope', async () => {
+    const firstFit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
+    const secondFit = createSyntheticFitPayload(Buffer.from([0x04, 0x05]));
+    const rawResponse = Buffer.concat([firstFit, secondFit]);
+    mockGetBinaryResponse.mockResolvedValue({
+      body: rawResponse,
+      statusCode: 200,
+      contentType: 'application/octet-stream',
+      contentLength: rawResponse.length,
+    });
+
+    await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(rawResponse);
+  });
+
+  it('retries an unexpected partial-content success even when its body starts with a complete FIT', async () => {
+    const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
+    mockGetBinaryResponse.mockResolvedValue({
+      body: fit,
+      statusCode: 206,
+      contentType: 'application/octet-stream',
+      contentLength: fit.length,
+    });
+
+    await expect(downloadSuuntoFITFile('token', 'workout-1')).rejects.toMatchObject({
+      byteLength: fit.length,
+      reason: 'unexpected_success_status',
+    });
+  });
+
   it('unwraps a multipart response before validating it', async () => {
     const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
     const boundary = '------SuuntoFitBoundary';
@@ -97,6 +126,31 @@ describe('downloadSuuntoFITFile', () => {
     });
 
     await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(fit);
+  });
+
+  it('retries a multipart FIT whose missing CRC was followed by boundary bytes', async () => {
+    const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
+    const truncatedFit = fit.subarray(0, fit.length - 2);
+    const boundary = '------SuuntoFitBoundary';
+    const multipart = Buffer.concat([
+      Buffer.from(
+        `${boundary}\r\nContent-Disposition: form-data; name="file"; filename="activity.fit"\r\n`
+          + 'Content-Type: application/octet-stream\r\n\r\n',
+        'latin1',
+      ),
+      truncatedFit,
+      Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
+    ]);
+    mockGetBinaryResponse.mockResolvedValue({
+      body: multipart,
+      statusCode: 200,
+      contentType: 'multipart/form-data',
+      contentLength: multipart.length,
+    });
+
+    await expect(downloadSuuntoFITFile('token', 'workout-1')).rejects.toMatchObject({
+      reason: 'invalid_header_size',
+    });
   });
 
   it('classifies a tiny JSON provider body as retryable without retaining its contents', async () => {
@@ -135,7 +189,7 @@ describe('downloadSuuntoFITFile', () => {
     });
   });
 
-  it('accepts a complete FIT response without the optional file CRC', async () => {
+  it('retries a FIT response missing only its trailing file CRC', async () => {
     const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
     const withoutFileCRC = fit.subarray(0, fit.length - 2);
     mockGetBinaryResponse.mockResolvedValue({
@@ -145,7 +199,10 @@ describe('downloadSuuntoFITFile', () => {
       contentLength: withoutFileCRC.length,
     });
 
-    await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(withoutFileCRC);
+    await expect(downloadSuuntoFITFile('token', 'workout-1')).rejects.toMatchObject({
+      byteLength: withoutFileCRC.length,
+      reason: 'truncated_payload',
+    });
   });
 
   it('identifies only bounded sessionless FITs as suspiciously small', () => {

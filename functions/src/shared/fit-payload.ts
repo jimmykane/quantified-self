@@ -18,8 +18,7 @@ export interface FitPayloadInspection {
     reason: FitPayloadInspectionReason;
     headerSize: number | null;
     declaredDataSize: number | null;
-    minimumTotalLength: number | null;
-    normalizedFitLength: number | null;
+    expectedTotalLength: number | null;
 }
 
 function toBuffer(payload: Buffer | ArrayBuffer | Uint8Array): Buffer {
@@ -38,15 +37,14 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
         reason: Exclude<FitPayloadInspectionReason, 'valid'>,
         headerSize: number | null = null,
         declaredDataSize: number | null = null,
-        minimumTotalLength: number | null = null,
+        expectedTotalLength: number | null = null,
     ): FitPayloadInspection => ({
         byteLength,
         isCompleteFit: false,
         reason,
         headerSize,
         declaredDataSize,
-        minimumTotalLength,
-        normalizedFitLength: null,
+        expectedTotalLength,
     });
 
     // FIT header fields through the ".FIT" signature occupy the first 12 bytes.
@@ -68,15 +66,10 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
     }
 
     const dataSize = buffer.readUInt32LE(start + 4);
-    const minimumTotalLength = headerSize + dataSize;
-    if (start + minimumTotalLength > buffer.length) {
-        return invalid('truncated_payload', headerSize, dataSize, minimumTotalLength);
+    const expectedTotalLength = headerSize + dataSize + 2; // trailing FIT file CRC
+    if (start + expectedTotalLength > buffer.length) {
+        return invalid('truncated_payload', headerSize, dataSize, expectedTotalLength);
     }
-    // The parser's best-effort mode accepts a missing file CRC. Retain it when present,
-    // but do not classify a complete declared data section as truncated without it.
-    const normalizedFitLength = byteLength >= minimumTotalLength + 2
-        ? minimumTotalLength + 2
-        : minimumTotalLength;
 
     return {
         byteLength,
@@ -84,8 +77,7 @@ function inspectFitPayloadAt(buffer: Buffer, start: number): FitPayloadInspectio
         reason: 'valid',
         headerSize,
         declaredDataSize: dataSize,
-        minimumTotalLength,
-        normalizedFitLength,
+        expectedTotalLength,
     };
 }
 
@@ -109,14 +101,25 @@ function hasMultipartPrefix(prefix: Buffer): boolean {
         hasOctetStreamContentType;
 }
 
+function getMultipartPartEnd(buffer: Buffer, prefix: Buffer, partStart: number): number | null {
+    const boundaryLineEnd = prefix.indexOf('\r\n');
+    if (boundaryLineEnd <= 2) {
+        return null;
+    }
+    const boundaryLine = prefix.subarray(0, boundaryLineEnd);
+    const nextBoundaryMarker = Buffer.concat([Buffer.from('\r\n', 'latin1'), boundaryLine]);
+    const partEnd = buffer.indexOf(nextBoundaryMarker, partStart);
+    return partEnd >= partStart ? partEnd : null;
+}
+
 export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Uint8Array): NormalizedFitPayload {
     const buffer = toBuffer(payload);
 
     // Fast-path: already a valid FIT payload from byte zero.
     const rootInspection = inspectFitPayloadAt(buffer, 0);
-    if (rootInspection.isCompleteFit && rootInspection.normalizedFitLength !== null) {
+    if (rootInspection.isCompleteFit && rootInspection.expectedTotalLength !== null) {
         return {
-            data: buffer.subarray(0, rootInspection.normalizedFitLength),
+            data: buffer.subarray(0, rootInspection.expectedTotalLength),
             normalizedFromMultipart: false,
             fitOffset: 0,
         };
@@ -132,7 +135,7 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
         ) {
             const start = i - 8;
             const inspection = inspectFitPayloadAt(buffer, start);
-            if (!inspection.isCompleteFit || inspection.normalizedFitLength === null) {
+            if (!inspection.isCompleteFit || inspection.expectedTotalLength === null) {
                 continue;
             }
 
@@ -140,9 +143,17 @@ export function normalizeDownloadedFitPayload(payload: Buffer | ArrayBuffer | Ui
             if (!hasMultipartPrefix(prefix)) {
                 continue;
             }
+            const partEnd = getMultipartPartEnd(buffer, prefix, start);
+            if (partEnd === null) {
+                continue;
+            }
+            const isolatedInspection = inspectFitPayloadAt(buffer.subarray(start, partEnd), 0);
+            if (!isolatedInspection.isCompleteFit || isolatedInspection.expectedTotalLength === null) {
+                continue;
+            }
 
             return {
-                data: buffer.subarray(start, start + inspection.normalizedFitLength),
+                data: buffer.subarray(start, start + isolatedInspection.expectedTotalLength),
                 normalizedFromMultipart: true,
                 fitOffset: start,
             };
