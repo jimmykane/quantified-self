@@ -31,11 +31,21 @@ npm --prefix functions run seed-emails -- --templates=coros_delivery_update
 npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=coros_delivery_update
 ```
 
-`mcp_connection_update` is a manually approved service notice for users affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
+`mcp_connection_update` is a manually approved service notice for current Basic and Pro subscribers affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
 
 ```bash
 npm --prefix functions run seed-emails -- --templates=mcp_connection_update
 npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=mcp_connection_update
+```
+
+The reviewed bulk queue is intentionally separate from generic campaign tooling. It reads active (`active`, `trialing`, or `past_due`) Basic and Pro Stripe subscription records, deduplicates by Firebase UID, confirms the Auth account and user document are still present, excludes disabled or deletion-marked accounts, and renders the local source inline through the Trigger Email extension. It defaults to dry-run and requires the exact live recipient count before it can queue mail. It uses deterministic `mail` document IDs and `toUids` so the existing account-deletion cleanup can remove pending mail.
+
+```bash
+# Inspect only: prints counts by role and exclusion reason, without writing mail.
+npm --prefix functions run queue-mcp-connection-update -- --project=quantified-self-io
+
+# Queue exactly the count reported by dry-run; this is the only write mode.
+npm --prefix functions run queue-mcp-connection-update -- --project=quantified-self-io --expected-recipients=COUNT --dry-run=false
 ```
 
 The COROS product update presents activity and route delivery as generally available and has no per-recipient rollout variable. Broad campaigns normally require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent. The explicitly approved August 2026 COROS bug-exception campaign may include a missing legacy consent field, but must still exclude `acceptedMarketingPolicy === false`, revalidate the active COROS connection immediately before queueing, and use connection-based footer copy rather than claiming the recipient opted in.
