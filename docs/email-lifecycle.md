@@ -24,10 +24,18 @@ The allowlisted template and partial catalog is in `functions/src/email/template
 
 The templates use escaped Handlebars expressions, responsive table layouts, plaintext alternatives, and environment-specific partials supported by the [Firebase Trigger Email extension](https://firebase.google.com/docs/extensions/official/firestore-send-email/templates). Unknown plan roles intentionally render without a benefits list.
 
-Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` without `--templates` never selects a manual campaign, and `test-emails` never queues one. Seed a reviewed campaign only by its exact ID, for example:
+Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` or `test-emails` without `--templates` never selects a manual campaign. A controlled test can queue an explicitly named manual campaign only after copy review, for example:
 
 ```bash
 npm --prefix functions run seed-emails -- --templates=coros_delivery_update
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=coros_delivery_update
+```
+
+`mcp_connection_update` is a manually approved service notice for active Pro members who were affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
+
+```bash
+npm --prefix functions run seed-emails -- --templates=mcp_connection_update
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=mcp_connection_update
 ```
 
 The COROS product update presents activity and route delivery as generally available and has no per-recipient rollout variable. Broad campaigns normally require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent. The explicitly approved August 2026 COROS bug-exception campaign may include a missing legacy consent field, but must still exclude `acceptedMarketingPolicy === false`, revalidate the active COROS connection immediately before queueing, and use connection-based footer copy rather than claiming the recipient opted in.

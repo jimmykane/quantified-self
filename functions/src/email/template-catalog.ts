@@ -2,6 +2,7 @@ import { buildEmailPlanDetails } from './config';
 
 export const DEVELOPMENT_UPDATE_TEMPLATE_ID = 'development_update';
 export const COROS_DELIVERY_UPDATE_TEMPLATE_ID = 'coros_delivery_update';
+export const MCP_CONNECTION_UPDATE_TEMPLATE_ID = 'mcp_connection_update';
 
 export interface EmailTemplatePreviewCase {
     name: string;
@@ -239,6 +240,22 @@ export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatal
                     first_name: 'Dimitrios',
                     coros_tools_url: 'https://quantified-self.io/services?serviceName=COROS%20API',
                     settings_url: 'https://quantified-self.io/settings',
+                },
+            },
+        ],
+    },
+    {
+        id: MCP_CONNECTION_UPDATE_TEMPLATE_ID,
+        subject: 'Action required: reconnect your Quantified Self ChatGPT app',
+        htmlFile: 'mcp_connection_update.hbs',
+        textFile: 'mcp_connection_update.txt.hbs',
+        partials: [],
+        previewCases: [
+            {
+                name: 'active-pro-member',
+                data: {
+                    first_name: 'Dimitrios',
+                    mcp_settings_url: 'https://quantified-self.io/services?serviceName=mcp&utm_source=mcp_connection_update_email&utm_medium=email&utm_campaign=mcp_connection_update&utm_content=connection_settings',
                 },
             },
         ],
