@@ -474,6 +474,9 @@ describe('MCP registered-contract compatibility', () => {
       ),
       'private_key_jwt',
     ];
+    candidate.authorizationServer.token_endpoint_auth_signing_alg_values_supported = [
+      'RS256',
+    ];
     candidate.server.capabilities.resources = {
       listChanged: true,
     };
@@ -497,6 +500,9 @@ describe('MCP registered-contract compatibility', () => {
       }),
       expect.objectContaining({
         path: 'authorizationServer.token_endpoint_auth_methods_supported',
+      }),
+      expect.objectContaining({
+        path: 'authorizationServer.token_endpoint_auth_signing_alg_values_supported',
       }),
       expect.objectContaining({
         path: 'authorizationServer.revocation_endpoint_auth_methods_supported',

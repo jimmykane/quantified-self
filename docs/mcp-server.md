@@ -256,9 +256,27 @@ omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoe
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
 
+Token-endpoint discovery advertises both `none` and `private_key_jwt`, while PKCE S256 remains mandatory for every
+authorization-code client. Public CIMD clients such as Claude use `none`. Confidential CIMD clients such as ChatGPT
+may select `private_key_jwt`; their metadata must publish `token_endpoint_auth_method: "private_key_jwt"`,
+`token_endpoint_auth_signing_alg: "RS256"`, and a public HTTPS `jwks_uri`. The selected method and key location are
+bound into the authorization request, code, connection, and rotating refresh family. A later metadata change therefore
+cannot downgrade a newly issued confidential grant to public-client authentication. Pre-binding refresh records keep
+their public compatibility path; when such a legacy client presents a valid private assertion, the rotated replacement
+is upgraded to the private binding.
+
+Private assertions use the RFC 7523 client-assertion parameters. The server verifies an RS256 signature using only the
+bound JWKS URI, requires `iss` and `sub` to equal the exact CIMD client ID, accepts only the advertised issuer or exact
+token endpoint as `aud`, enforces a short bounded `exp` window plus optional `iat`/`nbf`, and limits RSA keys to at least
+2048 bits. It ignores assertion-provided key URLs and algorithms. Assertion replay markers are SHA-256-derived opaque
+documents in `mcpOAuthRateLimits`; they contain neither the assertion nor raw client ID and expire by TTL after the
+assertion validity window. A supplied `jti` is used for replay identity; otherwise the signed assertion itself is
+hashed. Invalid assertions return the same generic `invalid_client` response.
+
 The authorization-server metadata advertises the RFC 7009 revocation endpoint and
-`revocation_endpoint_auth_methods_supported: ["none"]`. Quantified Self supports public CIMD clients only: a revocation
-request is a server-to-server `POST` with an `application/x-www-form-urlencoded` body containing `token`, optional
+`revocation_endpoint_auth_methods_supported: ["none"]`. Revocation intentionally remains a token-authenticated public
+CIMD operation for both token-endpoint client modes: a request is a server-to-server `POST` with an
+`application/x-www-form-urlencoded` body containing `token`, optional
 `token_type_hint`, and the exact HTTPS Client ID Metadata Document URL in `client_id`. There is no client secret, HTTP
 Basic client authentication, browser redirect, or revocation callback. Unknown token-type hints are ignored and the
 lookup expands across both supported token types.
@@ -272,8 +290,11 @@ are authoritative, so a revocation request cannot trigger client-controlled DNS 
 Unknown, expired, already-rotated, already-revoked, and wrong-client tokens all receive the same empty HTTP 200 response
 and do not reveal whether a token existed.
 
-Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
-responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
+Clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized responses,
+private or loopback metadata hosts, shared-secret authentication methods, unsupported grant types, and redirect URIs
+that were not registered. Private JWKS retrieval applies the same DNS resolution, public-address pinning, redirect,
+five-second timeout, and 64 KiB response protections, accepts at most ten JSON Web Keys, and never follows a JWT header
+URL.
 Loopback HTTP is allowed only for the client's redirect URI and is called out in the consent UI.
 Before any client-metadata DNS lookup or HTTPS fetch, authorization starts consume transactional fixed-window limits keyed
 by a hash of the Client ID Metadata URL and a separate hash of the Cloud Functions requester address. The rate-limit
@@ -310,8 +331,10 @@ usage are hidden. Canonical active records fail closed if their `grantId` is mis
 without a generation retain their compatibility path until superseded. Firestore TTL removes first-time abandoned
 pending records and authorization-code documents; an expired marker on a live connection is inert and can be replaced
 by a later approval. Connection documents have no descendant collections by design. Grant-generation, pending-marker,
-suppressor, and connection-audience fields are read only through document-ID lookups and are exempt from automatic
-single-field indexing; the existing `createdAtMs` ordering remains the only connection-list query requirement.
+suppressor, client-authentication binding, and connection-audience fields are read only through document-ID lookups and
+are exempt from automatic single-field indexing; the existing `createdAtMs` ordering remains the only connection-list
+query requirement. The same unqueried client-authentication maps are exempt on authorization requests, codes, and
+refresh-token records; the replay marker's opaque client hash is also exempt.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
 consent, listing, and dashboard revocation. The list callable returns an explicit display allowlist and never exposes
@@ -1066,9 +1089,12 @@ requires no new Firestore composite index.
   minute. Rate-limit document IDs hash both raw keys. Each accepted endpoint request performs exactly two hash-document
   lookups and, only for a matching token, the bounded account-guard and single-connection reads in that same
   transaction.
+- Private client assertions are limited to 16 KiB and ten minutes, use an RS256 key of at least 2048 bits from a
+  bounded ten-key JWKS, and are single-use through opaque TTL replay markers. The server accepts either its advertised
+  issuer or exact token endpoint as the RFC 7523 audience for MCP SDK and vendor interoperability.
 - Requests require valid IANA timezones where local date bucketing is relevant.
-- Logs must not contain access or refresh tokens, authorization codes, client payloads, event data, sleep data, or user
-  IDs.
+- Logs must not contain access or refresh tokens, authorization codes, client assertions, client payloads, event data,
+  sleep data, or user IDs.
 
 ## Local verification and release
 
