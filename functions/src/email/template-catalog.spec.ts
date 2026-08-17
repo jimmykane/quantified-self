@@ -142,13 +142,14 @@ describe('refreshed email template catalog', () => {
         const html = htmlEnvironment.compile(readTemplate(template.htmlFile), { strict: true })(preview.data);
         const text = Handlebars.compile(readTemplate(template.textFile), { strict: true })(preview.data);
 
-        expect(template.subject).toBe('Action required: reconnect your Quantified Self ChatGPT app');
+        expect(template.subject).toBe('Reconnect your Quantified Self ChatGPT app');
         expect(html).toContain('select <strong>Manage</strong>');
         expect(html).toContain('Select <strong>Delete</strong> and confirm');
         expect(html).toContain('Create it again with Quantified Self’s MCP server URL');
         expect(html).toContain('Scan the available tools');
         expect(text).toContain('select Manage');
-        expect(text).toContain('active Quantified Self Pro membership');
+        expect(text).toContain('service update about the Quantified Self ChatGPT connection');
+        expect(text).not.toMatch(/Pro membership/i);
         expect(text).not.toMatch(/\bmarketing\b/i);
     });
 
@@ -195,7 +196,7 @@ describe('refreshed email template catalog', () => {
         const documents = loadEmailTemplateSeedDocuments(TEMPLATE_ROOT, [MCP_CONNECTION_UPDATE_TEMPLATE_ID]);
 
         expect(documents.map(document => document.id)).toEqual([MCP_CONNECTION_UPDATE_TEMPLATE_ID]);
-        expect(documents[0]?.data.subject).toBe('Action required: reconnect your Quantified Self ChatGPT app');
+        expect(documents[0]?.data.subject).toBe('Reconnect your Quantified Self ChatGPT app');
         expect(documents[0]?.data.html).toContain('a change to ChatGPT’s custom-app authentication flow');
         expect(documents[0]?.data.text).toContain('No activities, health data, or existing working connections were affected.');
     });

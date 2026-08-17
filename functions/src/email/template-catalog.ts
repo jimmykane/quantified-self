@@ -246,7 +246,7 @@ export const MANUAL_CAMPAIGN_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatal
     },
     {
         id: MCP_CONNECTION_UPDATE_TEMPLATE_ID,
-        subject: 'Action required: reconnect your Quantified Self ChatGPT app',
+        subject: 'Reconnect your Quantified Self ChatGPT app',
         htmlFile: 'mcp_connection_update.hbs',
         textFile: 'mcp_connection_update.txt.hbs',
         partials: [],

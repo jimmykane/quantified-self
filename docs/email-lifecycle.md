@@ -31,7 +31,7 @@ npm --prefix functions run seed-emails -- --templates=coros_delivery_update
 npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=coros_delivery_update
 ```
 
-`mcp_connection_update` is a manually approved service notice for active Pro members who were affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
+`mcp_connection_update` is a manually approved service notice for users affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
 
 ```bash
 npm --prefix functions run seed-emails -- --templates=mcp_connection_update
