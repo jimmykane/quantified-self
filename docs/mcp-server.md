@@ -1095,6 +1095,9 @@ requires no new Firestore composite index.
 - Private client assertions are limited to 16 KiB and ten minutes, use an RS256 key of at least 2048 bits from a
   bounded ten-key JWKS, and are single-use through opaque TTL replay markers. The server accepts either its advertised
   issuer or exact token endpoint as the RFC 7523 audience for MCP SDK and vendor interoperability.
+- A rejected private client assertion emits only a fixed internal stage (`parameters`, `encoding`, `header`, `jwks`,
+  `signature`, `claims`, or `replay`) and the generic OAuth error code. It never logs the assertion, any token or
+  authorization code, client ID, request parameters, or user identity.
 - Requests require valid IANA timezones where local date bucketing is relevant.
 - Logs must not contain access or refresh tokens, authorization codes, client assertions, client payloads, event data,
   sleep data, or user IDs.

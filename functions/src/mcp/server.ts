@@ -22,6 +22,7 @@ import {
 } from './measurement-catalog';
 import {
   createMcpOAuthService,
+  McpOAuthClientAuthenticationError,
   McpOAuthAuthorizationRedirectError,
   McpOAuthError,
   McpOAuthScope,
@@ -306,6 +307,12 @@ function sendOAuthError(
   if (!(error instanceof McpOAuthError)) {
     logger.error('[MCP OAuth] Request failed unexpectedly', {
       errorName: error instanceof Error ? error.name : 'unknown',
+    });
+  }
+  if (error instanceof McpOAuthClientAuthenticationError) {
+    logger.warn('[MCP OAuth] Client authentication rejected', {
+      stage: error.stage,
+      errorCode: error.code,
     });
   }
   if (oauthError.statusCode === 429) {

@@ -138,6 +138,37 @@ export class McpOAuthError extends Error {
   }
 }
 
+export const MCP_OAUTH_CLIENT_AUTHENTICATION_STAGES = [
+  'parameters',
+  'encoding',
+  'header',
+  'jwks',
+  'signature',
+  'claims',
+  'replay',
+] as const;
+
+export type McpOAuthClientAuthenticationStage =
+  typeof MCP_OAUTH_CLIENT_AUTHENTICATION_STAGES[number];
+
+/**
+ * A private-client authentication failure that is safe to classify in logs.
+ * The stage is an internal fixed vocabulary: it never contains a JWT, client
+ * identifier, authorization code, token, or request-supplied value.
+ */
+export class McpOAuthClientAuthenticationError extends McpOAuthError {
+  constructor(readonly stage: McpOAuthClientAuthenticationStage) {
+    super('invalid_client', 'The client authentication is invalid.');
+    this.name = 'McpOAuthClientAuthenticationError';
+  }
+}
+
+function rejectClientAuthentication(
+  stage: McpOAuthClientAuthenticationStage,
+): McpOAuthClientAuthenticationError {
+  return new McpOAuthClientAuthenticationError(stage);
+}
+
 export class McpOAuthAuthorizationRedirectError extends McpOAuthError {
   constructor(
     code: OAuthErrorCode,
@@ -1631,18 +1662,21 @@ interface ClientAssertionClaims {
   jti?: string;
 }
 
-function decodeJwtObject(segment: string): Record<string, unknown> {
+function decodeJwtObject(
+  segment: string,
+  stage: McpOAuthClientAuthenticationStage,
+): Record<string, unknown> {
   if (!/^[A-Za-z0-9_-]+$/.test(segment) || segment.length > CLIENT_ASSERTION_MAX_LENGTH) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication(stage);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
   } catch {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication(stage);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication(stage);
   }
   return parsed as Record<string, unknown>;
 }
@@ -1731,7 +1765,7 @@ function validateClientAssertionClaims(
       )
     )
   ) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('claims');
   }
 
   const expMs = (value.exp as number) * 1000;
@@ -1751,7 +1785,7 @@ function validateClientAssertionClaims(
     )
     || (nbfMs !== null && nbfMs > nowMs + CLIENT_ASSERTION_CLOCK_SKEW_MS)
   ) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('claims');
   }
   return value as unknown as ClientAssertionClaims;
 }
@@ -1779,42 +1813,50 @@ async function authenticateTokenEndpointClient(
     || assertion.length < 1
     || assertion.length > CLIENT_ASSERTION_MAX_LENGTH
   ) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('parameters');
   }
 
   const segments = assertion.split('.');
   if (segments.length !== 3 || segments.some(segment => !segment)) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('encoding');
   }
   const [encodedHeader, encodedPayload, encodedSignature] = segments;
   if (!/^[A-Za-z0-9_-]+$/.test(encodedSignature)) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('encoding');
   }
-  const header = decodeJwtObject(encodedHeader);
+  const header = decodeJwtObject(encodedHeader, 'header');
   if (
     header.alg !== clientAuth.signingAlg
     || (header.typ !== undefined && header.typ !== 'JWT')
     || header.crit !== undefined
     || (header.kid !== undefined && typeof header.kid !== 'string')
   ) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('header');
   }
   const kid = typeof header.kid === 'string' && header.kid ? header.kid : null;
-  const jwks = await fetchClientJwks(clientAuth.jwksUri);
+  let jwks: ClientJwks;
+  try {
+    jwks = await fetchClientJwks(clientAuth.jwksUri);
+  } catch (error) {
+    if (error instanceof McpOAuthError) {
+      throw rejectClientAuthentication('jwks');
+    }
+    throw error;
+  }
   const matchingKeys = jwks.keys.filter(key => isValidRsaSigningJwk(key, kid));
   if (matchingKeys.length !== 1) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('jwks');
   }
   const verificationKey = createRsaVerificationKey(matchingKeys[0]);
   if (!verificationKey) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('jwks');
   }
 
   let signature: Buffer;
   try {
     signature = Buffer.from(encodedSignature, 'base64url');
   } catch {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('encoding');
   }
   const verified = (() => {
     try {
@@ -1829,25 +1871,32 @@ async function authenticateTokenEndpointClient(
     }
   })();
   if (!verified) {
-    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+    throw rejectClientAuthentication('signature');
   }
 
   const claims = validateClientAssertionClaims(
-    decodeJwtObject(encodedPayload),
+    decodeJwtObject(encodedPayload, 'claims'),
     clientId,
     acceptedAudiences,
     nowMs,
   );
-  await store.consumeClientAssertion({
-    assertionId: hashOpaqueValue(
-      claims.jti === undefined
-        ? `client-assertion-jwt-v1:${assertion}`
-        : `client-assertion-jti-v1:${clientId}:${claims.jti}`,
-    ),
-    clientIdHash: hashOpaqueValue(clientId),
-    nowMs,
-    expiresAtMs: claims.exp * 1000 + CLIENT_ASSERTION_CLOCK_SKEW_MS,
-  });
+  try {
+    await store.consumeClientAssertion({
+      assertionId: hashOpaqueValue(
+        claims.jti === undefined
+          ? `client-assertion-jwt-v1:${assertion}`
+          : `client-assertion-jti-v1:${clientId}:${claims.jti}`,
+      ),
+      clientIdHash: hashOpaqueValue(clientId),
+      nowMs,
+      expiresAtMs: claims.exp * 1000 + CLIENT_ASSERTION_CLOCK_SKEW_MS,
+    });
+  } catch (error) {
+    if (error instanceof McpOAuthError && error.code === 'invalid_client') {
+      throw rejectClientAuthentication('replay');
+    }
+    throw error;
+  }
 }
 
 export interface McpOAuthServiceDependencies {

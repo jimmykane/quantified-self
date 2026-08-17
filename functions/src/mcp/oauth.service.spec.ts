@@ -23,6 +23,7 @@ import {
   isPrivateAddress,
   McpConnection,
   McpOAuthAuthorizationRedirectError,
+  McpOAuthClientAuthenticationError,
   McpOAuthError,
   McpOAuthStore,
   MCP_OAUTH_SCOPES,
@@ -1212,42 +1213,46 @@ describe('MCP OAuth service', () => {
     await expect(service.exchangeAuthorizationCode(
       baseExchange,
       'https://quantified-self.io',
-    )).rejects.toMatchObject({ code: 'invalid_client' });
+    )).rejects.toMatchObject({
+      code: 'invalid_client',
+      stage: 'parameters',
+    } satisfies Partial<McpOAuthClientAuthenticationError>);
 
-    for (const assertion of [
-      createClientAssertion(privateKey, {
+    for (const [assertion, stage] of [
+      [createClientAssertion(privateKey, {
         clientId,
         audience: 'https://other.example/oauth/token',
         nowMs,
         jti: 'wrong-audience',
-      }),
-      createClientAssertion(privateKey, {
+      }), 'claims'],
+      [createClientAssertion(privateKey, {
         clientId,
         audience: 'https://quantified-self.io',
         nowMs,
         expiresAtMs: nowMs - 2 * 60 * 1000,
         issuedAtMs: nowMs - 7 * 60 * 1000,
         jti: 'expired',
-      }),
-      createClientAssertion(privateKey, {
+      }), 'claims'],
+      [createClientAssertion(privateKey, {
         clientId,
         issuer: 'https://attacker.example/client.json',
         audience: 'https://quantified-self.io',
         nowMs,
         jti: 'wrong-issuer',
-      }),
-      createClientAssertion(wrongPrivateKey, {
+      }), 'claims'],
+      [createClientAssertion(wrongPrivateKey, {
         clientId,
         audience: 'https://quantified-self.io',
         nowMs,
         jti: 'wrong-signature',
-      }),
+      }), 'signature'],
     ]) {
       await expect(service.exchangeAuthorizationCode({
         ...baseExchange,
         ...clientAssertionParams(assertion),
       }, 'https://quantified-self.io')).rejects.toMatchObject({
         code: 'invalid_client',
+        stage,
       });
     }
 
@@ -1275,6 +1280,7 @@ describe('MCP OAuth service', () => {
       })),
     }, 'https://quantified-self.io')).rejects.toMatchObject({
       code: 'invalid_client',
+      stage: 'jwks',
     });
 
     const authorizationAssertion = createClientAssertion(privateKey, {
@@ -1315,6 +1321,7 @@ describe('MCP OAuth service', () => {
       ...clientAssertionParams(authorizationAssertion),
     }, 'https://quantified-self.io')).rejects.toMatchObject({
       code: 'invalid_client',
+      stage: 'replay',
     });
     expect(store.refreshTokens.get(hashOpaqueValue(tokens.refresh_token))?.active)
       .toBe(true);
