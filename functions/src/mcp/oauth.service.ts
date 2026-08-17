@@ -94,7 +94,10 @@ const NON_PUBLIC_IPV6_ADDRESSES = new BlockList();
 });
 
 [
-  ['::', 128],
+  // Reject the deprecated IPv4-compatible IPv6 range as well as the
+  // unspecified address. Without the /96 range, values such as
+  // ::127.0.0.1 bypass the public-host check used for CIMD and JWKS fetches.
+  ['::', 96],
   ['::1', 128],
   ['::ffff:0:0', 96],
   ['64:ff9b::', 96],
@@ -390,21 +393,25 @@ function isCurrentMcpGrant(
 }
 
 function clientAuthBindingsMatch(
-  stored: ClientTokenEndpointAuth | undefined,
+  stored: unknown,
   presented: ClientTokenEndpointAuth,
 ): boolean {
-  if (!stored) {
+  const storedAuth = readStoredClientTokenEndpointAuth(stored);
+  if (storedAuth === null) {
+    return false;
+  }
+  if (storedAuth === undefined) {
     // Records created before token-endpoint client authentication was bound
     // may upgrade to a verified private_key_jwt binding during rotation.
     return true;
   }
-  return stored.method === presented.method
+  return storedAuth.method === presented.method
     && (
-      stored.method === 'none'
+      storedAuth.method === 'none'
       || (
         presented.method === 'private_key_jwt'
-        && stored.jwksUri === presented.jwksUri
-        && stored.signingAlg === presented.signingAlg
+        && storedAuth.jwksUri === presented.jwksUri
+        && storedAuth.signingAlg === presented.signingAlg
       )
     );
 }
@@ -1572,6 +1579,48 @@ function clientTokenEndpointAuthFromMetadata(
   };
 }
 
+function readStoredClientTokenEndpointAuth(
+  value: unknown,
+): ClientTokenEndpointAuth | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = value as Partial<ClientTokenEndpointAuth>;
+  if (candidate.method === 'none') {
+    return { method: 'none' };
+  }
+  if (
+    candidate.method !== 'private_key_jwt'
+    || candidate.signingAlg !== 'RS256'
+    || typeof candidate.jwksUri !== 'string'
+  ) {
+    return null;
+  }
+  try {
+    parseClientJwksUrl(candidate.jwksUri);
+  } catch {
+    return null;
+  }
+  return {
+    method: 'private_key_jwt',
+    jwksUri: candidate.jwksUri,
+    signingAlg: 'RS256',
+  };
+}
+
+function requireStoredClientTokenEndpointAuth(
+  value: unknown,
+): ClientTokenEndpointAuth | undefined {
+  const clientAuth = readStoredClientTokenEndpointAuth(value);
+  if (clientAuth === null) {
+    throw new McpOAuthError('invalid_grant', 'The authorization grant is invalid.');
+  }
+  return clientAuth;
+}
+
 interface ClientAssertionClaims {
   iss: string;
   sub: string;
@@ -1618,11 +1667,29 @@ function isValidRsaSigningJwk(
         || !key.key_ops.includes('verify')
       )
     )
-    || Buffer.from(key.n, 'base64url').byteLength < 256
   ) {
     return false;
   }
   return kid === null || key.kid === kid;
+}
+
+function createRsaVerificationKey(key: ClientJwk) {
+  try {
+    const publicKey = createPublicKey({ key, format: 'jwk' });
+    const modulusLength = publicKey.asymmetricKeyDetails?.modulusLength;
+    if (
+      publicKey.asymmetricKeyType !== 'rsa'
+      || typeof modulusLength !== 'number'
+      || !Number.isInteger(modulusLength)
+      || modulusLength < 2048
+      || modulusLength > 8192
+    ) {
+      return null;
+    }
+    return publicKey;
+  } catch {
+    return null;
+  }
 }
 
 function validateClientAssertionClaims(
@@ -1738,6 +1805,10 @@ async function authenticateTokenEndpointClient(
   if (matchingKeys.length !== 1) {
     throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
   }
+  const verificationKey = createRsaVerificationKey(matchingKeys[0]);
+  if (!verificationKey) {
+    throw new McpOAuthError('invalid_client', 'The client authentication is invalid.');
+  }
 
   let signature: Buffer;
   try {
@@ -1750,7 +1821,7 @@ async function authenticateTokenEndpointClient(
       return verifySignature(
         'RSA-SHA256',
         Buffer.from(`${encodedHeader}.${encodedPayload}`, 'ascii'),
-        createPublicKey({ key: matchingKeys[0], format: 'jwk' }),
+        verificationKey,
         signature,
       );
     } catch {
@@ -1813,22 +1884,20 @@ export function createMcpOAuthService(
   const { store } = resolvedDependencies;
   const fetchClientJwks = dependencies?.fetchClientJwks || fetchClientJwksDocument;
   const resolveStoredClientAuth = async (
-    stored: ClientTokenEndpointAuth | undefined,
-    params: Record<string, unknown>,
+    stored: unknown,
     clientId: string,
   ): Promise<ClientTokenEndpointAuth> => {
-    if (stored) {
-      return stored;
+    const storedClientAuth = requireStoredClientTokenEndpointAuth(stored);
+    if (storedClientAuth !== undefined) {
+      return storedClientAuth;
     }
-    if (
-      params.client_assertion !== undefined
-      || params.client_assertion_type !== undefined
-    ) {
-      return clientTokenEndpointAuthFromMetadata(
-        await resolvedDependencies.fetchClientMetadata(clientId),
-      );
-    }
-    return { method: 'none' };
+    // One-time migration for grants created before client authentication was
+    // persisted: resolve their authoritative current CIMD method before the
+    // token exchange. This preserves public clients while preventing legacy
+    // confidential grants from silently falling back to `none`.
+    return clientTokenEndpointAuthFromMetadata(
+      await resolvedDependencies.fetchClientMetadata(clientId),
+    );
   };
 
   return {
@@ -2041,7 +2110,6 @@ export function createMcpOAuthService(
       }
       const clientAuth = await resolveStoredClientAuth(
         storedCode.clientAuth,
-        params,
         clientId,
       );
       await authenticateTokenEndpointClient(
@@ -2124,7 +2192,6 @@ export function createMcpOAuthService(
       }
       const clientAuth = await resolveStoredClientAuth(
         storedRefresh.clientAuth,
-        params,
         clientId,
       );
       await authenticateTokenEndpointClient(

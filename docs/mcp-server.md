@@ -261,14 +261,16 @@ authorization-code client. Public CIMD clients such as Claude use `none`. Confid
 may select `private_key_jwt`; their metadata must publish `token_endpoint_auth_method: "private_key_jwt"`,
 `token_endpoint_auth_signing_alg: "RS256"`, and a public HTTPS `jwks_uri`. The selected method and key location are
 bound into the authorization request, code, connection, and rotating refresh family. A later metadata change therefore
-cannot downgrade a newly issued confidential grant to public-client authentication. Pre-binding refresh records keep
-their public compatibility path; when such a legacy client presents a valid private assertion, the rotated replacement
-is upgraded to the private binding.
+cannot downgrade a newly issued confidential grant to public-client authentication. For a pre-binding code or refresh
+record, its first token exchange performs one authoritative CIMD lookup before any authentication decision: a current
+public client remains public, while a current confidential client must supply its private assertion and its rotated
+replacement is upgraded to the private binding. Malformed legacy bindings fail closed.
 
 Private assertions use the RFC 7523 client-assertion parameters. The server verifies an RS256 signature using only the
 bound JWKS URI, requires `iss` and `sub` to equal the exact CIMD client ID, accepts only the advertised issuer or exact
 token endpoint as `aud`, enforces a short bounded `exp` window plus optional `iat`/`nbf`, and limits RSA keys to at least
-2048 bits. It ignores assertion-provided key URLs and algorithms. Assertion replay markers are SHA-256-derived opaque
+2048 and at most 8192 actual key bits after JWK import. It ignores assertion-provided key URLs and algorithms.
+Assertion replay markers are SHA-256-derived opaque
 documents in `mcpOAuthRateLimits`; they contain neither the assertion nor raw client ID and expire by TTL after the
 assertion validity window. A supplied `jti` is used for replay identity; otherwise the signed assertion itself is
 hashed. Invalid assertions return the same generic `invalid_client` response.
@@ -294,7 +296,8 @@ Clients are described by HTTPS Client ID Metadata Documents. Metadata loading re
 private or loopback metadata hosts, shared-secret authentication methods, unsupported grant types, and redirect URIs
 that were not registered. Private JWKS retrieval applies the same DNS resolution, public-address pinning, redirect,
 five-second timeout, and 64 KiB response protections, accepts at most ten JSON Web Keys, and never follows a JWT header
-URL.
+URL. The public-address filter also rejects IPv4-compatible, mapped, translated, tunnelled, loopback, link-local,
+documentation, multicast, and private IPv6 ranges before it opens a connection.
 Loopback HTTP is allowed only for the client's redirect URI and is called out in the consent UI.
 Before any client-metadata DNS lookup or HTTPS fetch, authorization starts consume transactional fixed-window limits keyed
 by a hash of the Client ID Metadata URL and a separate hash of the Cloud Functions requester address. The rate-limit
