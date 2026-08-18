@@ -1368,6 +1368,13 @@ appears only for eligible aerobic-decoupling evidence. A stored Power Curve alon
 durability point. Sports-lib records one primary eligibility reason per activity, so aggregate exclusion copy must call
 these **primary exclusions** rather than implying an exhaustive list of every threshold that activity missed.
 
+Training shows a durability scope tab only when that scope has recorded candidate or summary evidence in a retained
+current, usual, baseline, or weekly window (or a recorded supporting workout). This applies to every supported scope,
+not only Pool and Open water: a no-data capability must not create an empty tab beside a scope with evidence. Scopes with
+recorded candidates remain visible even if none is eligible, so their missing-evidence and primary-exclusion copy stays
+inspectable. When a selected sport has no recorded durability evidence in any of its scopes, Training shows one explicit
+empty state instead of tabs.
+
 Cycling has one fixed durability context, `cycling|power|W|-|-`. When a valid Cycling scope has no eligible summary in any
 retained window, the frontend materializes that known context so the 12-week evidence chart remains mounted. This does
 not synthesize a durability metric: the line stays absent, and the snapshot's candidate, power-confirmed, eligible,
@@ -1381,7 +1388,8 @@ load: disposal invalidates both the pending result and every caller waiting on t
 serializes a fresh initialization against the replacement element. Otherwise a completed chart can bind to the detached
 host and leave the visible replacement blank. The component lifecycle spec must exercise delayed host insertion and a
 remove/reinsert cycle during pending initialization rather than only assigning a synthetic element before testing chart
-options.
+options. A Material durability-tab animation also explicitly refreshes its active trajectory after the animation ends,
+so the ECharts canvas measures the visible tab body rather than a transitional layout.
 
 The usual value is withheld unless evidence exists in at least two baseline blocks with at least two samples in total.
 Best Build requires at least two samples on both sides of the exact context.

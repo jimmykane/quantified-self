@@ -84,7 +84,10 @@ export function buildTrainingDurabilityScopeViewModels(
 ): TrainingDurabilityScopeViewModel[] {
   if (!payload) return [];
   const visibleScopes = resolveVisibleScopes(visibleDisciplines);
-  return payload.scopes.filter(item => visibleScopes.has(item.scope)).map((item) => {
+  const scopes = payload.scopes
+    .filter(item => visibleScopes.has(item.scope))
+    .filter(hasRecordedDurabilityEvidence);
+  return scopes.map((item) => {
     const currentByContext = new Map(item.current.summaries.map(summary => [summary.context.contextKey, summary]));
     const usualByContext = new Map(item.usual.summaries.map(summary => [summary.context.contextKey, summary]));
     const contextsByKey = new Map<string, DerivedTrainingDurabilityContext>();
@@ -143,6 +146,21 @@ export function buildTrainingDurabilityScopeViewModels(
       supportingEventsText: supportingLabels.length ? `Recent supporting workouts: ${supportingLabels.join(' · ')}` : null,
     };
   });
+}
+
+function hasRecordedDurabilityEvidence(
+  scope: DerivedTrainingDurabilityMetricPayload['scopes'][number],
+): boolean {
+  if (scope.recentSupportingEvents.length > 0) {
+    return true;
+  }
+
+  return [
+    scope.current,
+    scope.usual,
+    ...scope.baselineBlocks,
+    ...scope.weeks,
+  ].some(window => window.coverage.candidateActivityCount > 0 || window.summaries.length > 0);
 }
 
 function buildScopeConclusion(

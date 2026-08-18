@@ -1017,7 +1017,11 @@
             @if (derivedState.trainingDurabilityStatus !== 'ready') {
               <p class="training-recovery-update" role="status">Updating durability evidence…</p>
             }
-            <mat-tab-group mat-stretch-tabs="false" animationDuration="200ms">
+            <mat-tab-group
+              mat-stretch-tabs="false"
+              animationDuration="200ms"
+              (animationDone)="refreshDurabilityChartsAfterTabAnimation()"
+            >
               @for (scope of trainingDurabilityScopes; track scope.scope) {
                 <mat-tab [label]="scope.label">
                   <div class="training-durability-tab">
@@ -1066,6 +1070,8 @@
                 </mat-tab>
               }
             </mat-tab-group>
+          } @else if (derivedState.trainingDurabilityStatus === 'ready') {
+            <p class="training-empty-state">No recorded {{ trainingDestinationLabel }} workout evidence is available for durability yet.</p>
           } @else {
             <div class="training-capacity-loading" role="status">
               <mat-spinner diameter="24"></mat-spinner>

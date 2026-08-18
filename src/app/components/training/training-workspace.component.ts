@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, QueryList, Signal, TemplateRef, ViewChild, ViewChildren, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
@@ -144,6 +144,7 @@ import {
   type TrainingMobileDestinationSheetData,
   type TrainingMobileDestinationSheetResult,
 } from './training-mobile-destination-sheet.component';
+import { TrainingDurabilityTrajectoryChartComponent } from './training-durability-trajectory-chart.component';
 import {
   formatTrainingVisibleDisciplinesActivityLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
@@ -411,6 +412,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isDurabilityVisible = false;
   public isCyclingPowerProfileVisible = false;
   public isRunningPowerProfileVisible = false;
+
+  @ViewChildren(TrainingDurabilityTrajectoryChartComponent)
+  private durabilityTrajectoryCharts!: QueryList<TrainingDurabilityTrajectoryChartComponent>;
+
   public trainingBuildRecoveryExpanded: Record<DerivedTrainingDiscipline, boolean> = createTrainingSportRecord(() => false);
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -1271,6 +1276,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     // null and Angular has no changed input to write back, so clear it through
     // the component's public value API to avoid showing the destination twice.
     select.value = this.desktopAllSportsSelectorValue;
+  }
+
+  public refreshDurabilityChartsAfterTabAnimation(): void {
+    this.durabilityTrajectoryCharts?.forEach(chart => chart.refreshAfterTabAnimation());
   }
 
   public openTrainingMobileDestinationSheet(): void {

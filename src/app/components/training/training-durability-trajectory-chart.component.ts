@@ -98,6 +98,10 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
     this.chartHost.dispose();
   }
 
+  public refreshAfterTabAnimation(): void {
+    void this.refresh();
+  }
+
   private async refresh(): Promise<void> {
     this.refreshLabels();
     if (!this.chartDiv?.nativeElement) {
