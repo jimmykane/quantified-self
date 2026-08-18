@@ -7,6 +7,7 @@ import {
     ActivityInterface,
     ActivityTypes,
     DataDuration,
+    DataHeartRateMax,
     DataPaceAvg,
     DataSpeedAvg,
     DataSpeedMax,
@@ -48,13 +49,12 @@ function createRenderableLap(type: LapTypes): LapInterface {
     } as unknown as LapInterface;
 }
 
-function createLapColumnSelectionChange(metricTypes: string[]): MatSelectionListChange {
+function createLapColumnSelectionChange(
+    metricTypes: string[],
+    selected = true,
+): MatSelectionListChange {
     return {
-        source: {
-            selectedOptions: {
-                selected: metricTypes.map((value) => ({ value })),
-            },
-        },
+        options: metricTypes.map((value) => ({ value, selected })),
     } as unknown as MatSelectionListChange;
 }
 
@@ -304,6 +304,10 @@ describe('EventCardLapsComponent', () => {
         } as ActivityInterface;
         component.canCustomize = true;
         component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { cycling: [] },
+        }));
+        fixture.detectChanges();
 
         component.ngOnChanges();
         await component.onLapColumnSelectionChange(
@@ -338,6 +342,10 @@ describe('EventCardLapsComponent', () => {
         const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
         component.canCustomize = true;
         component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { running: [] },
+        }));
+        fixture.detectChanges();
         component.ngOnChanges();
 
         await component.onLapColumnSelectionChange(
@@ -347,6 +355,82 @@ describe('EventCardLapsComponent', () => {
 
         expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type]);
         expect(updateLapTableColumns).toHaveBeenCalledWith('running', [DataPaceAvg.type]);
+    });
+
+    it('retains selected metrics when selecting a metric from a filtered column search', async () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const initialMetricTypes = [DataDuration.type, DataPaceAvg.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { running: [] },
+        }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange(initialMetricTypes),
+        );
+        updateLapTableColumns.mockClear();
+
+        const runningGroup = component.lapColumnMenuGroups.find((group) => group.family === 'running');
+        if (!runningGroup) {
+            throw new Error('Expected running lap column group');
+        }
+        component.onLapColumnMetricSearchInput(runningGroup, {
+            target: { value: 'maximum heart rate' },
+        } as unknown as Event);
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataHeartRateMax.type]),
+        );
+
+        expect(component.getColumnsToDisplay('Running')).toEqual([
+            '#',
+            ...initialMetricTypes,
+            DataHeartRateMax.type,
+        ]);
+        expect(updateLapTableColumns).toHaveBeenCalledWith('running', [
+            ...initialMetricTypes,
+            DataHeartRateMax.type,
+        ]);
+    });
+
+    it('retains metrics outside the search when deselecting a filtered metric', async () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const initialMetricTypes = [DataDuration.type, DataPaceAvg.type, DataHeartRateMax.type];
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { running: initialMetricTypes },
+        }));
+        fixture.detectChanges();
+        component.ngOnChanges();
+
+        const runningGroup = component.lapColumnMenuGroups.find((group) => group.family === 'running');
+        if (!runningGroup) {
+            throw new Error('Expected running lap column group');
+        }
+        component.onLapColumnMetricSearchInput(runningGroup, {
+            target: { value: 'maximum heart rate' },
+        } as unknown as Event);
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataHeartRateMax.type], false),
+        );
+
+        expect(component.getColumnsToDisplay('Running')).toEqual([
+            '#',
+            DataDuration.type,
+            DataPaceAvg.type,
+        ]);
+        expect(updateLapTableColumns).toHaveBeenCalledWith('running', [
+            DataDuration.type,
+            DataPaceAvg.type,
+        ]);
     });
 
     it('keeps independent column menu groups for multisport event details', () => {
