@@ -991,19 +991,26 @@ scenario with today; it does not imply that the athlete should stop training.
 
 Overview renders the compact cross-sport form; registered sport destinations render the detailed single-sport form.
 
-Discipline cards use `training_summary`:
+Discipline cards use `training_summary` for:
 
 - Current 28-day child activity count and duration.
 - Current zone percentages.
 - Normalized preceding-84-day zone percentages.
 
+The compact Overview cards also use the matching-cutoff `training_explanation` snapshot for each family's current
+activity TSS and usual TSS. Its usual TSS is the median of the three preceding 28-day blocks, rather than the
+summary's normalized 84-day count/duration baseline. TSS stays unavailable (`--`) when the family has no eligible
+sport-specific recorded load (including intentionally volume-only contexts), or while the two snapshots do not share
+the same cutoff; it is never treated as zero.
+
 Power zones take priority over heart-rate zones per activity. If neither exists, that activity contributes to count and
 duration but not to the zone denominator.
 
-On Overview, each recorded registered family is a compact workout-count and duration card with its normalized usual
-values; the separate intensity-distribution chart remains global and can include any activity with eligible power or
-heart-rate zone data. A sport destination replaces that compact card with the existing detailed current-versus-usual
-zone/context analysis for exactly one family and omits the global intensity chart.
+On Overview, each recorded registered family is a compact workout-count, duration, and available TSS card. Workout
+and duration use normalized usual values; TSS carries the separate preceding-block median described above. The
+separate intensity-distribution chart remains global and can include any activity with eligible power or heart-rate
+zone data. A sport destination replaces that compact card with the existing detailed current-versus-usual zone/context
+analysis for exactly one family and omits the global intensity chart.
 
 Each discipline summary states whether its current zone balance is close to usual or whether easy/hard work has shifted.
 It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is

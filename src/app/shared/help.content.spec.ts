@@ -317,6 +317,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**All sports**');
     expect(trainingSection?.content).toContain('compact swipeable sport buttons');
     expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every sport');
+    expect(trainingSection?.content).toContain('available TSS summary');
+    expect(trainingSection?.content).toContain('median of the three preceding 28-day blocks');
     expect(trainingSection?.content).toContain('**Manage sport shortcuts**');
     expect(trainingSection?.content).toContain('training duration and workouts in the latest 28 days');
     expect(trainingSection?.content).toContain('selected shortcut does not jump');

@@ -170,6 +170,8 @@ interface TrainingMixDisciplineViewModel {
   baselineActivityCountText: string;
   durationText: string;
   baselineDurationText: string;
+  tssText: string;
+  baselineTssText: string;
   zones: TrainingMixZoneViewModel[];
   intensityEvidenceText: string | null;
   contexts: TrainingContextMetricsViewModel[];
@@ -944,7 +946,31 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.trainingBuildBenchmarkDialogDiscipline = null;
       dialogRef.close();
     }
-    const summaries = this.derivedState.trainingSummary?.disciplines || [];
+    const trainingSummary = this.derivedState.trainingSummary;
+    const currentTssByDiscipline = new Map<DerivedTrainingDiscipline, number | null>();
+    const baselineTssByDiscipline = new Map<DerivedTrainingDiscipline, number | null>();
+    const trainingExplanation = this.derivedState.trainingExplanation;
+
+    // The summary and explanation snapshots are built independently. Do not
+    // combine a fresh workout/time summary with load values from an older cutoff.
+    if (
+      trainingSummary
+      && trainingExplanation
+      && trainingSummary.asOfDayMs === trainingExplanation.asOfDayMs
+    ) {
+      trainingExplanation.current.sportLoads.forEach((sportLoad) => {
+        if (isTrainingDiscipline(sportLoad.sport)) {
+          currentTssByDiscipline.set(sportLoad.sport, sportLoad.trainingStressScore);
+        }
+      });
+      trainingExplanation.baselineMedian.sportLoads.forEach((sportLoad) => {
+        if (isTrainingDiscipline(sportLoad.sport)) {
+          baselineTssByDiscipline.set(sportLoad.sport, sportLoad.trainingStressScore);
+        }
+      });
+    }
+
+    const summaries = trainingSummary?.disciplines || [];
     this.trainingMixDisciplines = summaries
       .filter(summary => isTrainingVisibleDiscipline(summary.discipline)
         && hasTrainingSportCapability(summary.discipline, 'training-mix'))
@@ -969,6 +995,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           baselineActivityCountText: this.formatNumber(summary.baseline28d.activityCount, 0),
           durationText: formatSleepDuration(summary.current28d.durationSeconds),
           baselineDurationText: formatSleepDuration(summary.baseline28d.durationSeconds),
+          tssText: this.formatNumber(currentTssByDiscipline.get(summary.discipline), 0),
+          baselineTssText: this.formatNumber(baselineTssByDiscipline.get(summary.discipline), 0),
           guidance: buildTrainingMixGuidance(summary, label, isVolumeOnly ? 'volume-only' : 'zones'),
           intensityEvidenceText: hasZoneEvidence
             ? null

@@ -359,7 +359,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
   });
 
-  it('renders activity-family icons only for sport-specific training driver cards', async () => {
+  it('renders activity-family icons for sport-specific training driver cards and TSS in the overview mix', async () => {
     const coverage = {
       totalCount: 4,
       loadedCount: 4,
@@ -413,10 +413,34 @@ describe('TrainingWorkspaceComponent', () => {
       ...createDashboardDerivedMetricsMissingState(),
       trainingSummaryStatus: 'ready',
       trainingSummary: {
-        asOfDayMs: 0,
+        asOfDayMs: 2,
         currentWindowDays: 28,
         baselineWindowDays: 84,
-        disciplines: [],
+        disciplines: [{
+          discipline: 'cycling',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: 1,
+            windowEndDayMs: 2,
+            activityCount: 4,
+            durationSeconds: 7_200,
+            easySeconds: 0,
+            moderateSeconds: 0,
+            hardSeconds: 0,
+            contexts: [],
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: 1,
+            windowEndDayMs: 2,
+            activityCount: 3,
+            durationSeconds: 5_400,
+            easySeconds: 0,
+            moderateSeconds: 0,
+            hardSeconds: 0,
+            contexts: [],
+          },
+        }],
       },
       trainingExplanationStatus: 'ready',
       trainingExplanation: {
@@ -482,6 +506,31 @@ describe('TrainingWorkspaceComponent', () => {
       .toEqual(['Cycling', 'Running']);
     expect(globalCards).toHaveLength(2);
     expect(globalCards.every(card => card.querySelector('app-activity-type-icon') === null)).toBe(true);
+
+    const overviewCard = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('.training-overview-sport-panel');
+    expect(overviewCard?.textContent).toContain('Workouts');
+    expect(overviewCard?.textContent).toContain('Time');
+    expect(overviewCard?.textContent).toContain('TSS');
+    expect(overviewCard?.textContent).toContain('300');
+    expect(overviewCard?.textContent).toContain('usual 200');
+
+    const component = fixture.componentInstance as unknown as {
+      derivedState: DashboardDerivedMetricsState;
+      trainingMixDisciplines: Array<{ tssText: string; baselineTssText: string }>;
+      refreshSportSpecificViewModels(): void;
+    };
+    component.derivedState = {
+      ...derivedState,
+      trainingExplanation: {
+        ...derivedState.trainingExplanation!,
+        asOfDayMs: 3,
+      },
+    };
+    component.refreshSportSpecificViewModels();
+
+    expect(component.trainingMixDisciplines[0].tssText).toBe('--');
+    expect(component.trainingMixDisciplines[0].baselineTssText).toBe('--');
   });
 
   it('keeps the last complete Training state visible but labels it while the Form/TSS refresh is building', async () => {

@@ -239,13 +239,13 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-overview-sport-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .training-overview-sport-panel > header > div { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .training-overview-sport-panel > header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); white-space: nowrap; }
-.training-overview-sport-panel dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-overview-sport-panel dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-overview-sport-panel dl > div { min-width: 0; padding: 11px 8px 0 0; }
 .training-overview-sport-panel dl > div + div { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-overview-sport-panel dd,
 .training-overview-sport-panel small { display: block; min-width: 0; }
 .training-overview-sport-panel dd { font-size: var(--training-card-stat-font-size); }
-.training-overview-sport-panel small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; }
+.training-overview-sport-panel small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; overflow-wrap: anywhere; }
 .training-mix-panel { padding: 20px; }
 .training-mix-panel header { margin-bottom: 18px; }
 .training-mix-panel header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); white-space: nowrap; }
