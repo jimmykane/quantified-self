@@ -17,7 +17,7 @@
 .training-page-header { margin-bottom: 32px; }
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .training-page-actions mat-icon { margin-right: 4px; }
-.training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 18px; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 0; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
 .training-destination-desktop { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .training-destination-shortcuts { flex: 0 1 auto; width: fit-content; max-width: 100%; min-width: 0; }
 .training-destination-shortcuts mat-button-toggle { min-width: 0; }
@@ -51,6 +51,7 @@ h2, h3, p { margin-top: 0; }
 h2 { margin-bottom: 0; font-size: 22px; line-height: 1.2; }
 h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-height: 1.25; }
 .training-section { border-top: 1px solid var(--mat-sys-outline-variant); padding: 28px 0 36px; }
+.training-destination-navigation + .training-section { border-top: 0; }
 .training-section-heading { margin-bottom: 16px; align-items: end; }
 .training-section-heading p { margin-bottom: 0; }
 .training-card-guidance { display: grid; gap: 5px; margin: 0 0 14px; padding: 0 0 13px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }

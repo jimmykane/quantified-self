@@ -322,6 +322,14 @@ describe('TrainingWorkspaceComponent', () => {
     expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
   });
 
+  it('uses one divider between destination navigation and the first Training section', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(styles).toContain('margin: -12px 0 0;');
+    expect(styles).toContain('.training-destination-navigation + .training-section { border-top: 0; }');
+  });
+
   it('uses compact swipeable Material buttons while the all-sports icon remains fixed', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),

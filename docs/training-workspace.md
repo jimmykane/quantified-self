@@ -585,7 +585,8 @@ series cannot supply the displayed fallback value. Dashboard uses the same conti
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
 the header or change its height when a single-sport label is selected. At 640 px and below, the row retains its 48 px
-Material touch targets but leaves only an 8 px external gap before the first section divider. These fixed header slots
+Material touch targets but leaves only an 8 px external gap before the first section divider. The destination navigation
+owns that single divider; the first rendered section begins without adding a second border. These fixed header slots
 prevent derived status changes from moving the value cards or initially presenting stale values without context.
 
 The route has three destination kinds:
