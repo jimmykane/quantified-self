@@ -1159,9 +1159,6 @@ describe('MCP OAuth service', () => {
     const { privateKey: wrongPrivateKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,
     });
-    const { publicKey: weakPublicKey, privateKey: weakPrivateKey } = generateKeyPairSync('rsa', {
-      modulusLength: 1024,
-    });
     const publicJwk = publicKey.export({ format: 'jwk' });
     const jwks: ClientJwks = {
       keys: [{
@@ -1256,13 +1253,13 @@ describe('MCP OAuth service', () => {
       });
     }
 
-    const weakPublicJwk = weakPublicKey.export({ format: 'jwk' });
+    const shortModulus = Buffer.from(publicJwk.n!, 'base64url').subarray(-128);
     fetchClientJwks.mockResolvedValueOnce({
       keys: [{
-        ...weakPublicJwk,
+        ...publicJwk,
         n: Buffer.concat([
           Buffer.alloc(128),
-          Buffer.from(weakPublicJwk.n!, 'base64url'),
+          shortModulus,
         ]).toString('base64url'),
         kid: 'test-key',
         alg: 'RS256',
@@ -1272,11 +1269,11 @@ describe('MCP OAuth service', () => {
     });
     await expect(service.exchangeAuthorizationCode({
       ...baseExchange,
-      ...clientAssertionParams(createClientAssertion(weakPrivateKey, {
+      ...clientAssertionParams(createClientAssertion(privateKey, {
         clientId,
         audience: 'https://quantified-self.io',
         nowMs,
-        jti: 'padded-weak-key',
+        jti: 'padded-short-modulus',
       })),
     }, 'https://quantified-self.io')).rejects.toMatchObject({
       code: 'invalid_client',
