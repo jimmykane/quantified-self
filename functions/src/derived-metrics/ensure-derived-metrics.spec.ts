@@ -1,10 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
+
+const callableRegistration = vi.hoisted(() => ({
+    options: [] as unknown[],
+}));
+
+vi.mock('firebase-functions/v2/https', () => ({
+    onCall: vi.fn((options: unknown, handler: unknown) => {
+        callableRegistration.options.push(options);
+        return handler;
+    }),
+    HttpsError: class HttpsError extends Error {
+        constructor(public readonly code: string, message: string) {
+            super(message);
+        }
+    },
+}));
+
 import {
     decideDerivedMetricsFreshness,
     resolveDerivedMetricSnapshotPayloadValidity,
@@ -53,6 +70,14 @@ describe('decideDerivedMetricsFreshness', () => {
             },
         }),
     };
+
+    it('uses enough memory for concurrent coordinator and snapshot reads', () => {
+        expect(callableRegistration.options).toContainEqual(expect.objectContaining({
+            memory: '512MiB',
+            timeoutSeconds: 120,
+            maxInstances: 100,
+        }));
+    });
 
     it('returns fresh when requested metric snapshot is aligned and projected to today', () => {
         const decision = decideDerivedMetricsFreshness(baseInput);

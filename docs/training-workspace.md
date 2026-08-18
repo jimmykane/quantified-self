@@ -536,6 +536,11 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
+`ensureDerivedMetrics` runs with 512 MiB of memory, a 120-second timeout, and at most 100 instances. It performs the
+authenticated freshness check, reads the coordinator and requested snapshot metadata, validates the narrowly scoped
+payload contracts, and queues only the metric kinds that need rebuilding. Full-history derived calculations remain in
+the separate worker below.
+
 `processDerivedMetricsTask` runs with 2 GiB of memory and per-instance concurrency `1` because a single full-history
 Training build can hold large event and activity source sets. Cloud Run must scale separate instances for concurrent
 builds instead of placing multiple full-history generations in one JavaScript heap. The worker creates one canonical
