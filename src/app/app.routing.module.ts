@@ -292,10 +292,10 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'FIT, GPX, TCX File Comparison & Benchmark Tool',
+      title: 'FIT, GPX & TCX Benchmark Tool Trusted by Device Reviewers',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, and TCX workout files, create saved benchmark reports, review GNSS, heart-rate, and altitude metrics, and keep device notes in Quantified Self.',
+      description: 'Compare FIT, GPX, and TCX recordings side by side with a benchmark tool trusted by device reviewers for repeatable GNSS, heart-rate, altitude, power, and all other device metrics.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',

@@ -32,7 +32,7 @@
 
     <section class="public-footer__column public-footer__company" aria-labelledby="footer-company-title">
       <h2 id="footer-company-title">Company</h2>
-      <p class="public-footer__operator">Operated by {{ operator.name }}</p>
+      <p class="public-footer__operator">{{ operator.brandName }} IO</p>
       <address>
         @for (line of operator.addressLines; track line) {
           <span>{{ line }}</span>

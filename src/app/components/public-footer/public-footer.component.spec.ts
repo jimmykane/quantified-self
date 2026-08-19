@@ -17,7 +17,7 @@ describe('PublicFooterComponent', () => {
     fixture.detectChanges();
   });
 
-  it('renders product, support, legal, and operator information', () => {
+  it('renders product, support, legal, and company information', () => {
     const footer = fixture.nativeElement.querySelector('.public-footer') as HTMLElement | null;
     const text = footer?.textContent ?? '';
 
@@ -33,7 +33,7 @@ describe('PublicFooterComponent', () => {
     expect(footer?.querySelector('a[href="/terms"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/policies"]')).toBeTruthy();
     expect(text).toContain('Help & support');
-    expect(text).toContain('Dimitrios Kanellopoulos');
+    expect(text).toContain('Quantified Self IO');
     expect(text).toContain('Kaloudi 15');
     expect(text).toContain('45500 Ioannina');
     expect(text).toContain('Greece');
