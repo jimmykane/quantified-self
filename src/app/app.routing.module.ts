@@ -295,7 +295,7 @@ const topLevelRoutes: Routes = [
       title: 'FIT, GPX & TCX Benchmark Tool Trusted by Device Reviewers',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, and TCX recordings side by side with a benchmark tool trusted by device reviewers for repeatable GNSS, heart-rate, and altitude metrics.',
+      description: 'Compare FIT, GPX, and TCX recordings side by side with a benchmark tool trusted by device reviewers for repeatable GNSS, heart-rate, altitude, power, and other compatible device-data metrics.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',

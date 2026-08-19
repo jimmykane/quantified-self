@@ -300,7 +300,7 @@ describe('AppRoutingModule routes', () => {
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
     expect(compareRoute?.data?.['title']).toBe('FIT, GPX & TCX Benchmark Tool Trusted by Device Reviewers');
     expect(compareRoute?.data?.['description']).toContain('trusted by device reviewers');
-    expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, and altitude metrics');
+    expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, altitude, power');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
       name: 'FIT, GPX, TCX File Comparison & Benchmark Tool',
