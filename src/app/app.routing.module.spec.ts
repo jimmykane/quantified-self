@@ -298,8 +298,8 @@ describe('AppRoutingModule routes', () => {
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX File Comparison & Benchmark Tool');
-    expect(compareRoute?.data?.['description']).toContain('saved benchmark reports');
+    expect(compareRoute?.data?.['title']).toBe('FIT, GPX & TCX Benchmark Tool Trusted by Device Reviewers');
+    expect(compareRoute?.data?.['description']).toContain('trusted by device reviewers');
     expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, and altitude metrics');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
