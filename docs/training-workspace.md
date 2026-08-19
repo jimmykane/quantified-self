@@ -536,6 +536,11 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
+`ensureDerivedMetrics` runs with 512 MiB of memory, a 120-second timeout, and at most 100 instances. It performs the
+authenticated freshness check, reads the coordinator and requested snapshot metadata, validates the narrowly scoped
+payload contracts, and queues only the metric kinds that need rebuilding. Full-history derived calculations remain in
+the separate worker below.
+
 `processDerivedMetricsTask` runs with 2 GiB of memory and per-instance concurrency `1` because a single full-history
 Training build can hold large event and activity source sets. Cloud Run must scale separate instances for concurrent
 builds instead of placing multiple full-history generations in one JavaScript heap. The worker creates one canonical
@@ -580,7 +585,8 @@ series cannot supply the displayed fallback value. Dashboard uses the same conti
 summary-header slot before Today and the tiles. Below the tablet breakpoint, Training moves its route actions to one
 dedicated non-wrapping row and compacts every action to an accessible icon-only control. Retry therefore cannot wrap
 the header or change its height when a single-sport label is selected. At 640 px and below, the row retains its 48 px
-Material touch targets but leaves only an 8 px external gap before the first section divider. These fixed header slots
+Material touch targets but leaves only an 8 px external gap before the first section divider. The destination navigation
+owns that single divider; the first rendered section begins without adding a second border. These fixed header slots
 prevent derived status changes from moving the value cards or initially presenting stale values without context.
 
 The route has three destination kinds:
@@ -986,19 +992,26 @@ scenario with today; it does not imply that the athlete should stop training.
 
 Overview renders the compact cross-sport form; registered sport destinations render the detailed single-sport form.
 
-Discipline cards use `training_summary`:
+Discipline cards use `training_summary` for:
 
 - Current 28-day child activity count and duration.
 - Current zone percentages.
 - Normalized preceding-84-day zone percentages.
 
+The compact Overview cards also use the matching-cutoff `training_explanation` snapshot for each family's current
+activity TSS and usual TSS. Its usual TSS is the median of the three preceding 28-day blocks, rather than the
+summary's normalized 84-day count/duration baseline. TSS stays unavailable (`--`) when the family has no eligible
+sport-specific recorded load (including intentionally volume-only contexts), or while the two snapshots do not share
+the same cutoff; it is never treated as zero.
+
 Power zones take priority over heart-rate zones per activity. If neither exists, that activity contributes to count and
 duration but not to the zone denominator.
 
-On Overview, each recorded registered family is a compact workout-count and duration card with its normalized usual
-values; the separate intensity-distribution chart remains global and can include any activity with eligible power or
-heart-rate zone data. A sport destination replaces that compact card with the existing detailed current-versus-usual
-zone/context analysis for exactly one family and omits the global intensity chart.
+On Overview, each recorded registered family is a compact workout-count, duration, and available TSS card. Workout
+and duration use normalized usual values; TSS carries the separate preceding-block median described above. The
+separate intensity-distribution chart remains global and can include any activity with eligible power or heart-rate
+zone data. A sport destination replaces that compact card with the existing detailed current-versus-usual zone/context
+analysis for exactly one family and omits the global intensity chart.
 
 Each discipline summary states whether its current zone balance is close to usual or whether easy/hard work has shifted.
 It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is
@@ -1355,6 +1368,13 @@ appears only for eligible aerobic-decoupling evidence. A stored Power Curve alon
 durability point. Sports-lib records one primary eligibility reason per activity, so aggregate exclusion copy must call
 these **primary exclusions** rather than implying an exhaustive list of every threshold that activity missed.
 
+Training shows a durability scope tab only when that scope has recorded candidate or summary evidence in a retained
+current, usual, baseline, or weekly window (or a recorded supporting workout). This applies to every supported scope,
+not only Pool and Open water: a no-data capability must not create an empty tab beside a scope with evidence. Scopes with
+recorded candidates remain visible even if none is eligible, so their missing-evidence and primary-exclusion copy stays
+inspectable. When a selected sport has no recorded durability evidence in any of its scopes, Training shows one explicit
+empty state instead of tabs.
+
 Cycling has one fixed durability context, `cycling|power|W|-|-`. When a valid Cycling scope has no eligible summary in any
 retained window, the frontend materializes that known context so the 12-week evidence chart remains mounted. This does
 not synthesize a durability metric: the line stays absent, and the snapshot's candidate, power-confirmed, eligible,
@@ -1368,7 +1388,8 @@ load: disposal invalidates both the pending result and every caller waiting on t
 serializes a fresh initialization against the replacement element. Otherwise a completed chart can bind to the detached
 host and leave the visible replacement blank. The component lifecycle spec must exercise delayed host insertion and a
 remove/reinsert cycle during pending initialization rather than only assigning a synthetic element before testing chart
-options.
+options. A Material durability-tab animation also explicitly refreshes its active trajectory after the animation ends,
+so the ECharts canvas measures the visible tab body rather than a transitional layout.
 
 The usual value is withheld unless evidence exists in at least two baseline blocks with at least two samples in total.
 Best Build requires at least two samples on both sides of the exact context.

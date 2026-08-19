@@ -3,12 +3,14 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
-import { config } from '../config';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import {
+  downloadSuuntoFITFile,
+  RetryableSuuntoFITPayloadError,
+} from './fit-download';
 
 /**
  * Downloads the original file
@@ -95,26 +97,27 @@ export const getSuuntoFITFile = functions
   let result;
   try {
     logger.info('Starting timer: GetFIT');
-    result = await requestPromise.get({
-      headers: {
-        'Authorization': serviceTokenToUse.accessToken,
-        'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-      },
-      encoding: null,
-      // gzip: true,
-      url: `https://cloudapi.suunto.com/v3/workouts/${req.body.workoutID}/fit`,
-    });
+    result = await downloadSuuntoFITFile(
+      serviceTokenToUse.accessToken,
+      `${req.body.workoutID}`,
+    );
     logger.info('Ending timer: GetFIT');
     logger.info(`Downloaded FIT file for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}`);
   } catch (e: any) {
-    if (e.statusCode === 403) {
+    const providerStatusCode = Number(e?.statusCode);
+    if (providerStatusCode === 403) {
       logger.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName} due to 403`));
     }
-    if (e.statusCode === 500) {
-      logger.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName} due to 403`));
+    if (providerStatusCode === 500) {
+      logger.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName} due to 500`));
     }
     logger.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}.`));
-    res.status(e.statusCode);
+    const responseStatus = e instanceof RetryableSuuntoFITPayloadError
+      ? 503
+      : Number.isInteger(providerStatusCode) && providerStatusCode >= 400 && providerStatusCode <= 599
+        ? providerStatusCode
+        : 502;
+    res.status(responseStatus);
     res.send();
     return;
   }

@@ -98,6 +98,41 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     fixture.destroy();
   });
 
+  it('refreshes an active chart after its Material tab animation finishes', async () => {
+    const chart = {
+      dispatchAction: vi.fn(),
+      isDisposed: vi.fn(() => false),
+    };
+    const eChartsLoader = {
+      attachMobileSeriesTapFeedback: vi.fn(() => () => undefined),
+      dispose: vi.fn(),
+      init: vi.fn().mockResolvedValue(chart),
+      resize: vi.fn(),
+      setOption: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => undefined),
+    };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      providers: [
+        { provide: EChartsLoaderService, useValue: eChartsLoader },
+        { provide: LoggerService, useValue: { error: vi.fn() } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingDurabilityTrajectoryChartComponent);
+
+    fixture.componentRef.setInput('trajectory', trajectory());
+    fixture.componentRef.setInput('status', 'ready');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1));
+
+    fixture.componentInstance.refreshAfterTabAnimation();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2));
+
+    fixture.destroy();
+  });
+
   it('initializes a replacement chart host when the first lazy initialization is still pending', async () => {
     const firstChart = {
       dispatchAction: vi.fn(),

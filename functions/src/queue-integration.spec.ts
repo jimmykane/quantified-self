@@ -91,7 +91,8 @@ vi.mock('./queue-utils', async (importOriginal) => {
 });
 
 vi.mock('./request-helper', () => ({
-    get: vi.fn()
+    get: vi.fn(),
+    getBinaryResponse: vi.fn(),
 }));
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
@@ -128,6 +129,20 @@ import { parseWorkoutQueueItemForServiceName } from './queue';
 import { getTokenData } from './tokens';
 import * as requestHelper from './request-helper';
 
+function createSyntheticFitResponse() {
+    const fit = Buffer.alloc(32);
+    fit.writeUInt8(14, 0);
+    fit.writeUInt8(0x20, 1);
+    fit.writeUInt32LE(16, 4);
+    fit.write('.FIT', 8, 'ascii');
+    return {
+        body: fit,
+        statusCode: 200,
+        contentType: 'application/octet-stream',
+        contentLength: fit.length,
+    };
+}
+
 describe('Queue Integration Logic', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -136,6 +151,7 @@ describe('Queue Integration Logic', () => {
         mockShouldSkipQueueWorkForDeletedUser.mockReset();
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         (requestHelper.get as any).mockReset();
+        (requestHelper.getBinaryResponse as any).mockReset();
     });
 
     it('should move to Dead Letter Queue (fail fast) if no tokens are found', async () => {
@@ -177,7 +193,7 @@ describe('Queue Integration Logic', () => {
 
         // First token succeeds
         (getTokenData as any).mockResolvedValueOnce({ accessToken: 'valid-1' });
-        (requestHelper.get as any).mockResolvedValueOnce(Buffer.from('fake-fit-data'));
+        (requestHelper.getBinaryResponse as any).mockResolvedValueOnce(createSyntheticFitResponse());
 
         const queueItem = {
             id: 'item-123',
@@ -212,7 +228,7 @@ describe('Queue Integration Logic', () => {
         (getTokenData as any).mockRejectedValueOnce(new Error('Refresh failed'));
         // Second token succeeds
         (getTokenData as any).mockResolvedValueOnce({ accessToken: 'valid-2' });
-        (requestHelper.get as any).mockResolvedValueOnce(Buffer.from('fake-fit-data'));
+        (requestHelper.getBinaryResponse as any).mockResolvedValueOnce(createSyntheticFitResponse());
 
         const queueItem = {
             id: 'item-123',

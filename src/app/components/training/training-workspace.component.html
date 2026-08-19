@@ -734,6 +734,7 @@
                 <dl>
                   <div><dt>Workouts</dt><dd><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text><small>usual {{ discipline.baselineActivityCountText }}</small></dd></div>
                   <div><dt>Time</dt><dd><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text><small>usual {{ discipline.baselineDurationText }}</small></dd></div>
+                  <div><dt>TSS</dt><dd><app-training-metric-text [text]="discipline.tssText"></app-training-metric-text><small>usual {{ discipline.baselineTssText }}</small></dd></div>
                 </dl>
               </article>
             } @else {
@@ -1016,7 +1017,11 @@
             @if (derivedState.trainingDurabilityStatus !== 'ready') {
               <p class="training-recovery-update" role="status">Updating durability evidence…</p>
             }
-            <mat-tab-group mat-stretch-tabs="false" animationDuration="200ms">
+            <mat-tab-group
+              mat-stretch-tabs="false"
+              animationDuration="200ms"
+              (animationDone)="refreshDurabilityChartsAfterTabAnimation()"
+            >
               @for (scope of trainingDurabilityScopes; track scope.scope) {
                 <mat-tab [label]="scope.label">
                   <div class="training-durability-tab">
@@ -1065,6 +1070,8 @@
                 </mat-tab>
               }
             </mat-tab-group>
+          } @else if (derivedState.trainingDurabilityStatus === 'ready') {
+            <p class="training-empty-state">No recorded {{ trainingDestinationLabel }} workout evidence is available for durability yet.</p>
           } @else {
             <div class="training-capacity-loading" role="status">
               <mat-spinner diameter="24"></mat-spinner>

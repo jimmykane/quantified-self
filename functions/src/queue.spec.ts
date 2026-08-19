@@ -138,16 +138,6 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-// Mock the request-helper module (used by getWorkoutForService)
-vi.mock('./request-helper', () => {
-    const mock: any = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
-    mock.get = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
-    mock.post = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
-    mock.put = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
-    mock.delete = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
-    return mock;
-});
-
 // Mock the history module
 vi.mock('./history', () => ({
     getServiceWorkoutQueueName: vi.fn((serviceName: ServiceNames, fromHistory = false) => {
@@ -160,6 +150,7 @@ vi.mock('./history', () => ({
 vi.mock('./request-helper', () => {
     const mock: any = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.get = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
+    mock.getBinaryResponse = mock.get;
     mock.post = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.put = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.delete = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
@@ -192,7 +183,7 @@ vi.mock('./utils', () => ({
 }));
 
 import * as utils from './utils';
-import requestHelper from './request-helper';
+import { getBinaryResponse } from './request-helper';
 
 vi.mock('./queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('standardized-event-id'),
@@ -364,6 +355,26 @@ import {
     PermanentCOROSFITDetailError,
 } from './coros/workout-detail';
 import { claimCOROSEventWriteRevision } from './coros/queue-processing';
+
+function createSyntheticFitPayload(dataBytes = Buffer.alloc(16)): Buffer {
+    const headerSize = 14;
+    const result = Buffer.alloc(headerSize + dataBytes.length + 2);
+    result.writeUInt8(headerSize, 0);
+    result.writeUInt8(0x20, 1);
+    result.writeUInt32LE(dataBytes.length, 4);
+    result.write('.FIT', 8, 'ascii');
+    dataBytes.copy(result, headerSize);
+    return result;
+}
+
+function createBinaryResponse(body: Buffer, contentType = 'application/octet-stream') {
+    return {
+        body,
+        statusCode: 200,
+        contentType,
+        contentLength: body.length,
+    };
+}
 
 describe('queue', () => {
     beforeEach(async () => {
@@ -2621,7 +2632,7 @@ describe('queue', () => {
                 userName: 'suuntoUser'
             } as any);
 
-            vi.mocked(requestHelper.get).mockResolvedValue(new ArrayBuffer(8));
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload()));
         });
 
         it('should call garmin processor for GarminAPI service', async () => {
@@ -2844,7 +2855,7 @@ describe('queue', () => {
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
             expect(result).toBe(QueueResult.Deferred);
-            expect(requestHelper.get).not.toHaveBeenCalled();
+            expect(getBinaryResponse).not.toHaveBeenCalled();
             expect(mockBatch.set).not.toHaveBeenCalled();
             expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
             expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -3571,7 +3582,7 @@ describe('queue', () => {
 
             expect(getTokenData).not.toHaveBeenCalled();
             expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
-            expect(requestHelper.get).not.toHaveBeenCalled();
+            expect(getBinaryResponse).not.toHaveBeenCalled();
             expect(vi.mocked(utils.setEvent)).not.toHaveBeenCalled();
             expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
                 processed: true,
@@ -3721,18 +3732,19 @@ describe('queue', () => {
         });
 
         it('should handle 401 Unauthorized with token refresh and retry', async () => {
-            vi.mocked(requestHelper.get)
+            vi.mocked(getBinaryResponse)
                 .mockRejectedValueOnce({ statusCode: 401 })
-                .mockResolvedValueOnce(new ArrayBuffer(8));
+                .mockResolvedValueOnce(createBinaryResponse(createSyntheticFitPayload()));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
+            expect(getBinaryResponse).toHaveBeenCalledTimes(2);
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
         });
 
         it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
-            vi.mocked(requestHelper.get).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({
                     accessToken: 'stale-token',
@@ -3760,7 +3772,7 @@ describe('queue', () => {
         });
 
         it('should handle 403 Forbidden by increasing retry count significantly', async () => {
-            vi.mocked(requestHelper.get).mockRejectedValue({ statusCode: 403 });
+            vi.mocked(getBinaryResponse).mockRejectedValue({ statusCode: 403 });
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
@@ -3770,7 +3782,7 @@ describe('queue', () => {
         });
 
         it('should handle 500 Internal Server Error by retrying instead of immediate DLQ', async () => {
-            vi.mocked(requestHelper.get).mockRejectedValue({ statusCode: 500 });
+            vi.mocked(getBinaryResponse).mockRejectedValue({ statusCode: 500 });
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
@@ -3781,6 +3793,115 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
                 context: 'MAX_RETRY_REACHED'
             }));
+        });
+
+        it('retries a successful Suunto response that is not a complete FIT without parsing or retaining its body', async () => {
+            const providerBody = Buffer.from('{"privateProviderMessage":"FIT is still preparing"}', 'utf8');
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(
+                providerBody,
+                'application/json; charset=utf-8',
+            ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(EventImporterFIT.getFromArrayBuffer).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                errors: expect.arrayContaining([expect.objectContaining({
+                    error: expect.stringContaining(`${providerBody.length} bytes`),
+                })]),
+            }));
+            const persistedUpdate = mockRef.update.mock.calls[0][0];
+            expect(JSON.stringify(persistedUpdate)).not.toContain('privateProviderMessage');
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('retains a Suunto-specific DLQ context when incomplete FIT responses exhaust retries', async () => {
+            suuntoQueueItem.retryCount = 9;
+            const providerBody = Buffer.from('temporary provider response', 'utf8');
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(providerBody, 'text/plain'));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'SUUNTO_FIT_RESPONSE_RETRY_EXHAUSTED',
+                error: expect.stringContaining(`${providerBody.length} bytes`),
+            }));
+            expect(JSON.stringify(mockBatch.set.mock.calls[0][1])).not.toContain('temporary provider response');
+        });
+
+        it('keeps an incomplete Suunto response retryable when another matching token returned 403', async () => {
+            const admin = await import('firebase-admin');
+            vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'forbidden-token',
+                    ref: {
+                        id: 'forbidden-token',
+                        parent: { id: 'tokens', parent: { id: 'forbidden-user-id' } },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'provider-ready-token',
+                    ref: {
+                        id: 'provider-ready-token',
+                        parent: { id: 'tokens', parent: { id: 'provider-ready-user-id' } },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as any);
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'forbidden', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'provider-ready', userName: 'suuntoUser' } as any);
+            vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode: 403 })
+                .mockResolvedValueOnce(createBinaryResponse(Buffer.from('FIT is still preparing'), 'text/plain'));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('redownloads a suspiciously small valid Suunto FIT when parsing reports no session', async () => {
+            const smallFit = createSyntheticFitPayload(Buffer.alloc(20));
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(smallFit));
+            const emptyEventError = Object.assign(new Error('No activities found'), {
+                code: 'EVENT_EMPTY_ERROR',
+            });
+            vi.mocked(EventImporterFIT.getFromArrayBuffer).mockRejectedValueOnce(emptyEventError);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: 1,
+                errors: [expect.objectContaining({
+                    error: expect.stringContaining('sessionless_suspiciously_small'),
+                })],
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('keeps a full-sized structurally valid sessionless FIT terminal', async () => {
+            const fullSizedFit = createSyntheticFitPayload(Buffer.alloc(600));
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(fullSizedFit));
+            const emptyEventError = Object.assign(new Error('No activities found'), {
+                code: 'EVENT_EMPTY_ERROR',
+            });
+            vi.mocked(EventImporterFIT.getFromArrayBuffer).mockRejectedValueOnce(emptyEventError);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'EVENT_EMPTY_ERROR',
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
         });
 
         it('should unwrap multipart FIT payload before parsing', async () => {
@@ -3804,7 +3925,7 @@ describe('queue', () => {
                 Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
             ]);
 
-            vi.mocked(requestHelper.get).mockResolvedValue(multipart);
+            vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(multipart, 'multipart/form-data'));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.Processed);

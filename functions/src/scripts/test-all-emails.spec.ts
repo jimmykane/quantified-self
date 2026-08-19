@@ -5,7 +5,10 @@ import {
     TRANSACTIONAL_EMAIL_FROM,
     TRANSACTIONAL_EMAIL_REPLY_TO,
 } from '../email/config';
-import { REFRESHED_EMAIL_TEMPLATE_CATALOG } from '../email/template-catalog';
+import {
+    MCP_CONNECTION_UPDATE_TEMPLATE_ID,
+    REFRESHED_EMAIL_TEMPLATE_CATALOG,
+} from '../email/template-catalog';
 import { createLocalEmailTemplateRenderer } from '../email/template-renderer';
 import {
     buildEmailTestAdminOptions,
@@ -19,7 +22,7 @@ const TARGET_EMAIL = 'controlled-inbox@example.com';
 describe('test-all-emails', () => {
     const renderer = createLocalEmailTemplateRenderer(TEMPLATE_ROOT);
 
-    it('requires one recipient and an explicit project while accepting only the inline flag', () => {
+    it('requires one recipient and an explicit project while allowing an exact manual-template selection', () => {
         expect(parseTestEmailArguments([TARGET_EMAIL, '--project=quantified-self-test'])).toEqual({
             targetEmail: TARGET_EMAIL,
             projectId: 'quantified-self-test',
@@ -33,6 +36,16 @@ describe('test-all-emails', () => {
             targetEmail: TARGET_EMAIL,
             projectId: 'quantified-self-test',
             inline: true,
+        });
+        expect(parseTestEmailArguments([
+            TARGET_EMAIL,
+            '--project=quantified-self-test',
+            `--templates=${MCP_CONNECTION_UPDATE_TEMPLATE_ID}`,
+        ])).toEqual({
+            targetEmail: TARGET_EMAIL,
+            projectId: 'quantified-self-test',
+            inline: false,
+            templateIds: [MCP_CONNECTION_UPDATE_TEMPLATE_ID],
         });
         expect(() => parseTestEmailArguments([])).toThrow(/Usage/);
         expect(() => parseTestEmailArguments([TARGET_EMAIL])).toThrow(/Usage/);
@@ -51,6 +64,16 @@ describe('test-all-emails', () => {
             TARGET_EMAIL,
             '--project=first-project',
             '--project=second-project',
+        ])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([
+            TARGET_EMAIL,
+            '--project=quantified-self-test',
+            '--templates=',
+        ])).toThrow(/Usage/);
+        expect(() => parseTestEmailArguments([
+            TARGET_EMAIL,
+            '--project=quantified-self-test',
+            `--templates=${MCP_CONNECTION_UPDATE_TEMPLATE_ID},${MCP_CONNECTION_UPDATE_TEMPLATE_ID}`,
         ])).toThrow(/Usage/);
     });
 

@@ -352,4 +352,58 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
   it('respects selected sport visibility', () => {
     expect(buildTrainingDurabilityScopeViewModels(payload, ['cycling'])).toEqual([]);
   });
+
+  it('shows only scopes with recorded evidence for every supported discipline', () => {
+    const emptyCoverage = {
+      candidateActivityCount: 0,
+      evidenceActivityCount: 0,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 0,
+      eligibilityRatio: null,
+      exclusions: [],
+    };
+    const emptyWindow = (periodDays: 28 | 7) => ({
+      periodDays,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      coverage: emptyCoverage,
+      summaries: [],
+    });
+    const emptyScope = (scope: 'cycling' | 'pool-swimming') => ({
+      scope,
+      current: emptyWindow(28),
+      baselineBlocks: Array.from({ length: 3 }, () => emptyWindow(28)),
+      usual: { coverage: emptyCoverage, summaries: [] },
+      weeks: Array.from({ length: 12 }, () => emptyWindow(7)),
+      recentSupportingEvents: [],
+    });
+    const openWaterContext = {
+      ...context,
+      contextKey: 'open-water:speed',
+      scope: 'open-water-swimming' as const,
+    };
+    const openWaterSummary = {
+      ...currentSummary,
+      context: openWaterContext,
+    };
+    const swimmingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [
+        emptyScope('pool-swimming'),
+        {
+          scope: 'open-water-swimming',
+          current: makeWindow(28, [openWaterSummary]),
+          baselineBlocks: Array.from({ length: 3 }, () => makeWindow(28, [openWaterSummary])),
+          usual: { coverage, summaries: [openWaterSummary] },
+          weeks: Array.from({ length: 12 }, () => makeWindow(7, [openWaterSummary])),
+          recentSupportingEvents: [],
+        },
+        emptyScope('cycling'),
+      ],
+    };
+
+    expect(buildTrainingDurabilityScopeViewModels(swimmingPayload, ['swimming', 'cycling'])
+      .map(view => view.scope)).toEqual(['open-water-swimming']);
+  });
 });

@@ -17,7 +17,7 @@
 .training-page-header { margin-bottom: 32px; }
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .training-page-actions mat-icon { margin-right: 4px; }
-.training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 18px; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.training-destination-navigation { display: grid; gap: 8px; margin: -12px 0 0; padding-bottom: 18px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
 .training-destination-desktop { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .training-destination-shortcuts { flex: 0 1 auto; width: fit-content; max-width: 100%; min-width: 0; }
 .training-destination-shortcuts mat-button-toggle { min-width: 0; }
@@ -51,6 +51,7 @@ h2, h3, p { margin-top: 0; }
 h2 { margin-bottom: 0; font-size: 22px; line-height: 1.2; }
 h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-height: 1.25; }
 .training-section { border-top: 1px solid var(--mat-sys-outline-variant); padding: 28px 0 36px; }
+.training-destination-navigation + .training-section { border-top: 0; }
 .training-section-heading { margin-bottom: 16px; align-items: end; }
 .training-section-heading p { margin-bottom: 0; }
 .training-card-guidance { display: grid; gap: 5px; margin: 0 0 14px; padding: 0 0 13px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
@@ -239,13 +240,13 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-overview-sport-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .training-overview-sport-panel > header > div { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .training-overview-sport-panel > header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); white-space: nowrap; }
-.training-overview-sport-panel dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-overview-sport-panel dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-overview-sport-panel dl > div { min-width: 0; padding: 11px 8px 0 0; }
 .training-overview-sport-panel dl > div + div { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-overview-sport-panel dd,
 .training-overview-sport-panel small { display: block; min-width: 0; }
 .training-overview-sport-panel dd { font-size: var(--training-card-stat-font-size); }
-.training-overview-sport-panel small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; }
+.training-overview-sport-panel small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); font-weight: 400; overflow-wrap: anywhere; }
 .training-mix-panel { padding: 20px; }
 .training-mix-panel header { margin-bottom: 18px; }
 .training-mix-panel header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); white-space: nowrap; }

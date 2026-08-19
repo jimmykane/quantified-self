@@ -191,6 +191,7 @@ const UNORDERED_METADATA_ARRAY_KEYS = new Map([
     'revocation_endpoint_auth_methods_supported',
     'scopes_supported',
     'token_endpoint_auth_methods_supported',
+    'token_endpoint_auth_signing_alg_values_supported',
   ])],
   ['protectedResource', new Set([
     'authorization_servers',
@@ -1009,6 +1010,7 @@ function compareAuthorizationServer(
     'revocation_endpoint_auth_methods_supported',
     'scopes_supported',
     'token_endpoint_auth_methods_supported',
+    'token_endpoint_auth_signing_alg_values_supported',
   ]);
   const additiveBooleanKeys = new Set([
     'client_id_metadata_document_supported',

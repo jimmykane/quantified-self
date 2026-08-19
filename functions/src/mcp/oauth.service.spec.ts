@@ -1,4 +1,9 @@
 import type { LookupAddress } from 'node:dns';
+import {
+  generateKeyPairSync,
+  sign as signJwt,
+} from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AccessTokenRecord,
@@ -7,21 +12,25 @@ import {
   buildMcpLogicalConnectionId,
   buildMcpRateLimitBucketId,
   ClientMetadata,
+  ClientJwks,
   createPinnedAddressLookup,
   createMcpOAuthService,
   createPkceChallenge,
   fetchClientMetadataDocument,
+  fetchClientJwksDocument,
   hasValidMcpScopeDependencies,
   hashOpaqueValue,
   isPrivateAddress,
   McpConnection,
   McpOAuthAuthorizationRedirectError,
+  McpOAuthClientAuthenticationError,
   McpOAuthError,
   McpOAuthStore,
   MCP_OAUTH_SCOPES,
   normalizeOAuthScopes,
   RefreshTokenRecord,
   validateClientMetadataDocument,
+  validateClientJwksDocument,
 } from './oauth.service';
 
 function createMemoryStore(): McpOAuthStore & {
@@ -30,12 +39,14 @@ function createMemoryStore(): McpOAuthStore & {
   accessTokens: Map<string, AccessTokenRecord>;
   refreshTokens: Map<string, RefreshTokenRecord & { active: boolean }>;
   connections: Map<string, McpConnection>;
+  clientAssertions: Set<string>;
 } {
   const requests = new Map<string, AuthorizationRequestRecord>();
   const codes = new Map<string, AuthorizationCodeRecord>();
   const accessTokens = new Map<string, AccessTokenRecord>();
   const refreshTokens = new Map<string, RefreshTokenRecord & { active: boolean }>();
   const connections = new Map<string, McpConnection>();
+  const clientAssertions = new Set<string>();
   const connectionKey = (uid: string, connectionId: string) => `${uid}:${connectionId}`;
 
   return {
@@ -44,11 +55,18 @@ function createMemoryStore(): McpOAuthStore & {
     accessTokens,
     refreshTokens,
     connections,
+    clientAssertions,
     async consumeAuthorizationStartRateLimit() {
       return;
     },
     async consumeRevocationRateLimit() {
       return;
+    },
+    async consumeClientAssertion(input) {
+      if (clientAssertions.has(input.assertionId)) {
+        throw new McpOAuthError('invalid_client', 'invalid client authentication');
+      }
+      clientAssertions.add(input.assertionId);
     },
     async saveAuthorizationRequest(record) {
       requests.set(record.requestId, record);
@@ -107,6 +125,12 @@ function createMemoryStore(): McpOAuthStore & {
       requests.set(requestId, { ...request, status: 'denied' });
       return request;
     },
+    async getAuthorizationCode(codeHash) {
+      return codes.get(codeHash) || null;
+    },
+    async getRefreshToken(tokenHash) {
+      return refreshTokens.get(tokenHash) || null;
+    },
     async exchangeAuthorizationCode(input) {
       const code = codes.get(input.codeHash);
       if (
@@ -116,6 +140,10 @@ function createMemoryStore(): McpOAuthStore & {
         || code.redirectUri !== input.redirectUri
         || code.audience !== input.audience
         || code.codeChallenge !== input.codeChallenge
+        || (
+          code.clientAuth !== undefined
+          && JSON.stringify(code.clientAuth) !== JSON.stringify(input.clientAuth)
+        )
       ) {
         throw new McpOAuthError('invalid_grant', 'invalid code');
       }
@@ -126,6 +154,10 @@ function createMemoryStore(): McpOAuthStore & {
       if (
         !connection
         || connection.clientId !== code.clientId
+        || (
+          connection.clientAuth !== undefined
+          && JSON.stringify(connection.clientAuth) !== JSON.stringify(input.clientAuth)
+        )
         || (
           isLogicalConnection
             ? (
@@ -157,6 +189,7 @@ function createMemoryStore(): McpOAuthStore & {
         uid: code.uid,
         connectionId: code.connectionId,
         scopes: code.scopes,
+        clientAuth: input.clientAuth,
         active: true,
       });
       connections.set(key, {
@@ -166,6 +199,7 @@ function createMemoryStore(): McpOAuthStore & {
         scopes: code.scopes,
         audience: code.audience,
         grantId,
+        clientAuth: input.clientAuth,
         supersedesLegacy: isLogicalConnection || connection.supersedesLegacy === true,
         createdAtMs: input.nowMs,
         status: 'active',
@@ -184,6 +218,10 @@ function createMemoryStore(): McpOAuthStore & {
         || refresh.expiresAtMs <= input.nowMs
         || refresh.clientId !== input.clientId
         || refresh.audience !== input.audience
+        || (
+          refresh.clientAuth !== undefined
+          && JSON.stringify(refresh.clientAuth) !== JSON.stringify(input.clientAuth)
+        )
       ) {
         throw new McpOAuthError('invalid_grant', 'invalid refresh token');
       }
@@ -195,6 +233,10 @@ function createMemoryStore(): McpOAuthStore & {
         : connections.get(connectionKey(refresh.uid, logicalConnectionId));
       if (
         connection?.clientId !== refresh.clientId
+        || (
+          connection?.clientAuth !== undefined
+          && JSON.stringify(connection.clientAuth) !== JSON.stringify(input.clientAuth)
+        )
         || (
           logicalConnection
           && logicalConnection.clientId !== refresh.clientId
@@ -264,12 +306,14 @@ function createMemoryStore(): McpOAuthStore & {
         connectionId: refresh.connectionId,
         scopes,
         familyId: refresh.familyId,
+        clientAuth: input.clientAuth,
         active: true,
       });
       connections.set(key, {
         ...connection,
         status: 'active',
         scopes,
+        clientAuth: input.clientAuth,
         lastUsedAtMs: input.nowMs,
       });
       return refresh;
@@ -462,6 +506,73 @@ function authorizationParams(verifier: string) {
   };
 }
 
+function privateClientMetadata(): ClientMetadata {
+  return {
+    ...metadata(),
+    client_id: 'https://chatgpt.com/oauth/test-client/client.json',
+    client_name: 'ChatGPT',
+    redirect_uris: ['https://chatgpt.com/connector/oauth/test-client'],
+    grant_types: ['authorization_code', 'refresh_token'],
+    token_endpoint_auth_method: 'private_key_jwt',
+    token_endpoint_auth_signing_alg: 'RS256',
+    jwks_uri: 'https://chatgpt.com/oauth/jwks.json',
+  };
+}
+
+function privateAuthorizationParams(verifier: string) {
+  const client = privateClientMetadata();
+  return {
+    ...authorizationParams(verifier),
+    client_id: client.client_id,
+    redirect_uri: client.redirect_uris[0],
+  };
+}
+
+function createClientAssertion(
+  privateKey: KeyObject,
+  input: {
+    clientId: string;
+    audience: string;
+    nowMs: number;
+    jti?: string;
+    issuer?: string;
+    subject?: string;
+    expiresAtMs?: number;
+    issuedAtMs?: number;
+    omitIssuedAt?: boolean;
+  },
+): string {
+  const encodedHeader = Buffer.from(JSON.stringify({
+    alg: 'RS256',
+    typ: 'JWT',
+    kid: 'test-key',
+  })).toString('base64url');
+  const encodedPayload = Buffer.from(JSON.stringify({
+    iss: input.issuer || input.clientId,
+    sub: input.subject || input.clientId,
+    aud: input.audience,
+    exp: Math.floor((input.expiresAtMs ?? input.nowMs + 5 * 60 * 1000) / 1000),
+    ...(input.omitIssuedAt
+      ? {}
+      : { iat: Math.floor((input.issuedAtMs ?? input.nowMs) / 1000) }),
+    ...(input.jti === undefined ? {} : { jti: input.jti }),
+  })).toString('base64url');
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  return `${signingInput}.${signJwt(
+    'RSA-SHA256',
+    Buffer.from(signingInput, 'ascii'),
+    privateKey,
+  ).toString('base64url')}`;
+}
+
+function clientAssertionParams(assertion: string) {
+  return {
+    client_assertion_type:
+      'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+    client_assertion: assertion,
+  };
+}
+
 describe('MCP OAuth service', () => {
   it('enforces the complete parent and location scope dependency matrix', () => {
     const states = [false, true];
@@ -579,6 +690,69 @@ describe('MCP OAuth service', () => {
     }, metadata().client_id)).toThrow(expect.objectContaining({
       code: 'invalid_client',
     }));
+  });
+
+  it('accepts the current ChatGPT confidential-client and Claude public-client metadata shapes', () => {
+    const chatGpt = privateClientMetadata();
+    expect(validateClientMetadataDocument({
+      ...chatGpt,
+      token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+    }, chatGpt.client_id)).toEqual(chatGpt);
+
+    const claudeClientId = 'https://claude.ai/oauth/mcp-oauth-client-metadata';
+    expect(validateClientMetadataDocument({
+      client_id: claudeClientId,
+      client_name: 'Claude',
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      grant_types: [
+        'authorization_code',
+        'refresh_token',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      ],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    }, claudeClientId)).toEqual({
+      client_id: claudeClientId,
+      client_name: 'Claude',
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      grant_types: [
+        'authorization_code',
+        'refresh_token',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      ],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
+  });
+
+  it('requires bounded public RS256 key metadata for private_key_jwt clients', () => {
+    const privateClient = privateClientMetadata();
+    for (const override of [
+      { jwks_uri: undefined },
+      { jwks_uri: 'https://127.0.0.1/jwks.json' },
+      { token_endpoint_auth_signing_alg: 'ES256' },
+      { token_endpoint_auth_method: 'client_secret_basic' },
+    ]) {
+      expect(() => validateClientMetadataDocument({
+        ...privateClient,
+        ...override,
+      }, privateClient.client_id)).toThrow(expect.objectContaining({
+        code: 'invalid_client',
+      }));
+    }
+
+    expect(validateClientJwksDocument({
+      keys: [{ kty: 'RSA', kid: 'one' }],
+    }).keys).toHaveLength(1);
+    expect(() => validateClientJwksDocument({ keys: [] })).toThrow(
+      expect.objectContaining({ code: 'invalid_client' }),
+    );
+    expect(() => validateClientJwksDocument({
+      keys: Array.from({ length: 11 }, (_, index) => ({
+        kty: 'RSA',
+        kid: `${index}`,
+      })),
+    })).toThrow(expect.objectContaining({ code: 'invalid_client' }));
   });
 
   it('shares one request-rate bucket across access tokens for a connection', () => {
@@ -825,9 +999,6 @@ describe('MCP OAuth service', () => {
       'access-token-1',
       'refresh-token-1',
       'family-id',
-      'replay-access-token',
-      'replay-refresh-token',
-      'replay-family-id',
       'access-token-2',
       'refresh-token-2',
       'reused-access-token',
@@ -977,6 +1148,354 @@ describe('MCP OAuth service', () => {
       retainedScope.access_token,
       'https://quantified-self.io/mcp',
     )).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it('authenticates ChatGPT-style private_key_jwt clients and rejects invalid or replayed assertions', async () => {
+    const store = createMemoryStore();
+    const nowMs = 1_800_000_000_000;
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    const { privateKey: wrongPrivateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    const publicJwk = publicKey.export({ format: 'jwk' });
+    const jwks: ClientJwks = {
+      keys: [{
+        ...publicJwk,
+        kid: 'test-key',
+        alg: 'RS256',
+        use: 'sig',
+        key_ops: ['verify'],
+      }],
+    };
+    const randomValues = [
+      'private-request',
+      'private-code',
+      'private-access',
+      'private-refresh',
+      'private-family',
+      'rotated-access',
+      'rotated-refresh',
+    ];
+    const fetchClientJwks = vi.fn().mockResolvedValue(jwks);
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn().mockResolvedValue(privateClientMetadata()),
+      fetchClientJwks,
+      now: () => nowMs,
+      randomToken: () => randomValues.shift()!,
+    });
+    const verifier = 'private-client-verifier-with-at-least-43-characters';
+    const started = await service.startAuthorization(
+      privateAuthorizationParams(verifier),
+      'https://quantified-self.io',
+    );
+    const approved = await service.decideAuthorization({
+      uid: 'private-user',
+      requestId: started.requestId,
+      approved: true,
+    });
+    const code = new URL(approved.redirectUri).searchParams.get('code')!;
+    const clientId = privateClientMetadata().client_id;
+    const baseExchange = {
+      grant_type: 'authorization_code',
+      code,
+      client_id: clientId,
+      redirect_uri: privateClientMetadata().redirect_uris[0],
+      code_verifier: verifier,
+      resource: 'https://quantified-self.io/mcp',
+    };
+
+    await expect(service.exchangeAuthorizationCode(
+      baseExchange,
+      'https://quantified-self.io',
+    )).rejects.toMatchObject({
+      code: 'invalid_client',
+      stage: 'parameters',
+    } satisfies Partial<McpOAuthClientAuthenticationError>);
+
+    for (const [assertion, stage] of [
+      [createClientAssertion(privateKey, {
+        clientId,
+        audience: 'https://other.example/oauth/token',
+        nowMs,
+        jti: 'wrong-audience',
+      }), 'claims'],
+      [createClientAssertion(privateKey, {
+        clientId,
+        audience: 'https://quantified-self.io',
+        nowMs,
+        expiresAtMs: nowMs - 2 * 60 * 1000,
+        issuedAtMs: nowMs - 7 * 60 * 1000,
+        jti: 'expired',
+      }), 'claims'],
+      [createClientAssertion(privateKey, {
+        clientId,
+        issuer: 'https://attacker.example/client.json',
+        audience: 'https://quantified-self.io',
+        nowMs,
+        jti: 'wrong-issuer',
+      }), 'claims'],
+      [createClientAssertion(wrongPrivateKey, {
+        clientId,
+        audience: 'https://quantified-self.io',
+        nowMs,
+        jti: 'wrong-signature',
+      }), 'signature'],
+    ]) {
+      await expect(service.exchangeAuthorizationCode({
+        ...baseExchange,
+        ...clientAssertionParams(assertion),
+      }, 'https://quantified-self.io')).rejects.toMatchObject({
+        code: 'invalid_client',
+        stage,
+      });
+    }
+
+    const shortModulus = Buffer.from(publicJwk.n!, 'base64url').subarray(-128);
+    fetchClientJwks.mockResolvedValueOnce({
+      keys: [{
+        ...publicJwk,
+        n: Buffer.concat([
+          Buffer.alloc(128),
+          shortModulus,
+        ]).toString('base64url'),
+        kid: 'test-key',
+        alg: 'RS256',
+        use: 'sig',
+        key_ops: ['verify'],
+      }],
+    });
+    await expect(service.exchangeAuthorizationCode({
+      ...baseExchange,
+      ...clientAssertionParams(createClientAssertion(privateKey, {
+        clientId,
+        audience: 'https://quantified-self.io',
+        nowMs,
+        jti: 'padded-short-modulus',
+      })),
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_client',
+      stage: 'jwks',
+    });
+
+    const authorizationAssertion = createClientAssertion(privateKey, {
+      clientId,
+      // The MCP SDK defaults private_key_jwt to the advertised issuer.
+      audience: 'https://quantified-self.io',
+      nowMs,
+      jti: 'authorization-code-exchange',
+    });
+    const tokens = await service.exchangeAuthorizationCode({
+      ...baseExchange,
+      ...clientAssertionParams(authorizationAssertion),
+    }, 'https://quantified-self.io');
+    expect(tokens).toEqual(expect.objectContaining({
+      access_token: 'private-access',
+      refresh_token: 'private-refresh',
+    }));
+    expect(fetchClientJwks).toHaveBeenCalledWith(
+      privateClientMetadata().jwks_uri,
+    );
+    expect(store.refreshTokens.get(hashOpaqueValue(tokens.refresh_token)))
+      .toEqual(expect.objectContaining({
+        clientAuth: {
+          method: 'private_key_jwt',
+          jwksUri: privateClientMetadata().jwks_uri,
+          signingAlg: 'RS256',
+        },
+      }));
+
+    const refreshBase = {
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: clientId,
+      resource: 'https://quantified-self.io/mcp',
+    };
+    await expect(service.exchangeRefreshToken({
+      ...refreshBase,
+      ...clientAssertionParams(authorizationAssertion),
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_client',
+      stage: 'replay',
+    });
+    expect(store.refreshTokens.get(hashOpaqueValue(tokens.refresh_token))?.active)
+      .toBe(true);
+
+    const rotated = await service.exchangeRefreshToken({
+      ...refreshBase,
+      ...clientAssertionParams(createClientAssertion(privateKey, {
+        clientId,
+        audience: 'https://quantified-self.io/oauth/token',
+        nowMs,
+        omitIssuedAt: true,
+      })),
+    }, 'https://quantified-self.io');
+    expect(rotated).toEqual(expect.objectContaining({
+      access_token: 'rotated-access',
+      refresh_token: 'rotated-refresh',
+    }));
+  });
+
+  it('does not accept client assertions for Claude-style public clients', async () => {
+    const store = createMemoryStore();
+    const randomValues = ['public-request', 'public-code'];
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
+      now: () => 1000,
+      randomToken: () => randomValues.shift()!,
+    });
+    const verifier = 'public-client-verifier-with-at-least-43-characters';
+    const started = await service.startAuthorization(
+      authorizationParams(verifier),
+      'https://quantified-self.io',
+    );
+    const approved = await service.decideAuthorization({
+      uid: 'public-user',
+      requestId: started.requestId,
+      approved: true,
+    });
+    await expect(service.exchangeAuthorizationCode({
+      grant_type: 'authorization_code',
+      code: new URL(approved.redirectUri).searchParams.get('code'),
+      client_id: metadata().client_id,
+      redirect_uri: metadata().redirect_uris[0],
+      code_verifier: verifier,
+      resource: 'https://quantified-self.io/mcp',
+      client_assertion_type:
+        'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      client_assertion: 'unexpected',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_client',
+    });
+  });
+
+  it('upgrades a legacy ChatGPT refresh grant to its current verified private binding', async () => {
+    const store = createMemoryStore();
+    const nowMs = 1_800_000_000_000;
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    const publicJwk = publicKey.export({ format: 'jwk' });
+    const clientId = privateClientMetadata().client_id;
+    const connectionId = buildMcpLogicalConnectionId(clientId);
+    const legacyRefresh = 'legacy-chatgpt-refresh';
+    store.refreshTokens.set(hashOpaqueValue(legacyRefresh), {
+      uid: 'legacy-user',
+      connectionId,
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      familyId: 'legacy-family',
+      createdAtMs: nowMs - 1000,
+      expiresAtMs: nowMs + 100_000,
+      active: true,
+    });
+    store.connections.set(`legacy-user:${connectionId}`, {
+      connectionId,
+      clientId,
+      clientName: 'ChatGPT',
+      redirectHost: 'chatgpt.com',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      grantId: 'legacy-family',
+      supersedesLegacy: true,
+      createdAtMs: nowMs - 1000,
+      lastUsedAtMs: nowMs - 1000,
+      revokedAtMs: null,
+      status: 'active',
+    });
+    const fetchClientMetadata = vi.fn().mockResolvedValue(privateClientMetadata());
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata,
+      fetchClientJwks: vi.fn().mockResolvedValue({
+        keys: [{
+          ...publicJwk,
+          kid: 'test-key',
+          alg: 'RS256',
+          use: 'sig',
+        }],
+      }),
+      now: () => nowMs,
+      randomToken: vi.fn()
+        .mockReturnValueOnce('upgraded-access')
+        .mockReturnValueOnce('upgraded-refresh'),
+    });
+
+    await expect(service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: legacyRefresh,
+      client_id: clientId,
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_client',
+    });
+
+    const upgraded = await service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: legacyRefresh,
+      client_id: clientId,
+      resource: 'https://quantified-self.io/mcp',
+      ...clientAssertionParams(createClientAssertion(privateKey, {
+        clientId,
+        audience: 'https://quantified-self.io',
+        nowMs,
+        jti: 'legacy-upgrade',
+      })),
+    }, 'https://quantified-self.io');
+
+    expect(fetchClientMetadata).toHaveBeenCalledWith(clientId);
+    expect(upgraded.refresh_token).toBe('upgraded-refresh');
+    expect(store.refreshTokens.get(hashOpaqueValue(upgraded.refresh_token)))
+      .toEqual(expect.objectContaining({
+        clientAuth: {
+          method: 'private_key_jwt',
+          jwksUri: privateClientMetadata().jwks_uri,
+          signingAlg: 'RS256',
+        },
+      }));
+  });
+
+  it('fails closed when a stored client-auth binding is malformed', async () => {
+    const store = createMemoryStore();
+    const nowMs = 5_000;
+    const clientId = metadata().client_id;
+    store.refreshTokens.set(hashOpaqueValue('malformed-binding-refresh'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      familyId: 'family-1',
+      clientAuth: {
+        method: 'private_key_jwt',
+        jwksUri: 'http://client.example/jwks.json',
+        signingAlg: 'RS256',
+      } as unknown as RefreshTokenRecord['clientAuth'],
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+      active: true,
+    });
+    const fetchClientMetadata = vi.fn().mockResolvedValue(metadata());
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata,
+      now: () => nowMs,
+      randomToken: () => 'unused',
+    });
+
+    await expect(service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: 'malformed-binding-refresh',
+      client_id: clientId,
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_grant',
+    });
+    expect(fetchClientMetadata).not.toHaveBeenCalled();
   });
 
   it('reuses one logical connection and cuts over only when reauthorization succeeds', async () => {
@@ -1297,11 +1816,17 @@ describe('MCP OAuth service', () => {
     await expect(fetchClientMetadataDocument(
       'https://localhost/client.json',
     )).rejects.toMatchObject({ code: 'invalid_client' });
+    await expect(fetchClientJwksDocument(
+      'https://169.254.169.254/jwks.json',
+    )).rejects.toMatchObject({ code: 'invalid_client' });
 
     expect(isPrivateAddress('100.64.0.1')).toBe(true);
     expect(isPrivateAddress('169.254.169.254')).toBe(true);
     expect(isPrivateAddress('::ffff:172.16.0.1')).toBe(true);
     expect(isPrivateAddress('::ffff:7f00:1')).toBe(true);
+    expect(isPrivateAddress('::127.0.0.1')).toBe(true);
+    expect(isPrivateAddress('::10.0.0.1')).toBe(true);
+    expect(isPrivateAddress('::169.254.169.254')).toBe(true);
     expect(isPrivateAddress('fc00::1')).toBe(true);
     expect(isPrivateAddress('fec0::1')).toBe(true);
     expect(isPrivateAddress('2001:db8::1')).toBe(true);
@@ -1353,7 +1878,7 @@ describe('MCP OAuth service', () => {
     const store = createMemoryStore();
     const consumeRevocationRateLimit = vi.spyOn(store, 'consumeRevocationRateLimit');
     const revokeConnection = vi.spyOn(store, 'revokeConnection');
-    const fetchClientMetadata = vi.fn();
+    const fetchClientMetadata = vi.fn().mockResolvedValue(metadata());
     const service = createMcpOAuthService({
       store,
       fetchClientMetadata,
@@ -1743,7 +2268,7 @@ describe('MCP OAuth service', () => {
     const store = createMemoryStore();
     const service = createMcpOAuthService({
       store,
-      fetchClientMetadata: vi.fn(),
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
       now: () => 5000,
       randomToken: vi.fn()
         .mockReturnValueOnce('access-token')
@@ -1803,7 +2328,7 @@ describe('MCP OAuth service', () => {
     ];
     const service = createMcpOAuthService({
       store,
-      fetchClientMetadata: vi.fn(),
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
       now: () => 5_000,
       randomToken: () => randomValues.shift()!,
     });
@@ -1906,7 +2431,7 @@ describe('MCP OAuth service', () => {
     const store = createMemoryStore();
     const service = createMcpOAuthService({
       store,
-      fetchClientMetadata: vi.fn(),
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
       now: () => 5_000,
       randomToken: vi.fn()
         .mockReturnValueOnce('unused-access')
@@ -1974,7 +2499,7 @@ describe('MCP OAuth service', () => {
     const store = createMemoryStore();
     const service = createMcpOAuthService({
       store,
-      fetchClientMetadata: vi.fn(),
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
       now: () => 5_000,
       randomToken: vi.fn()
         .mockReturnValueOnce('unused-access')

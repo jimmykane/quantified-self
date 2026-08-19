@@ -22,8 +22,6 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
-import * as requestPromise from './request-helper';
-import { config } from './config';
 import {
   getTokenData,
   TerminalServiceAuthError,
@@ -33,7 +31,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
-import { normalizeDownloadedFitPayload } from './shared/fit-payload';
+import { inspectFitPayload, normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
 import { isActivitySyncOutboundEcho } from './activity-sync/outbound-fingerprint';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
@@ -76,6 +74,13 @@ import {
   hasMatchingQueueRevision,
   normalizeQueueRevision,
 } from './queue/revision-identity';
+import {
+  createSessionlessSuuntoFITError,
+  downloadSuuntoFITFile,
+  isSuspiciouslySmallSuuntoFIT,
+  RetryableSuuntoFITPayloadError,
+  SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT,
+} from './suunto/fit-download';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -583,15 +588,10 @@ export function getWorkoutForService(
       return downloadCOROSFITFile(fitFileURI);
     }
     case ServiceNames.SuuntoApp:
-      return requestPromise.get({
-        headers: {
-          'Authorization': (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).accessToken,
-          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-        },
-        encoding: null,
-        // gzip: true,
-        url: `https://cloudapi.suunto.com/v3/workouts/${(workoutQueueItem as SuuntoAppWorkoutQueueItemInterface).workoutID}/fit`,
-      });
+      return downloadSuuntoFITFile(
+        (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).accessToken,
+        (workoutQueueItem as SuuntoAppWorkoutQueueItemInterface).workoutID,
+      );
   }
 }
 
@@ -789,6 +789,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let oneSuccess = false;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
+  let retryableSuuntoFITPayloadError: RetryableSuuntoFITPayloadError | null = null;
   let terminalAuthError: TerminalServiceAuthError | null = null;
   let sawRetryableFailure = false;
   let sawUserDeletionSkip = false;
@@ -1004,6 +1005,18 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         }
       } else if (e instanceof PermanentCOROSFITDownloadError) {
         return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+      } else if (e instanceof RetryableSuuntoFITPayloadError) {
+        logger.warn('Suunto FIT response was incomplete and will be retried.', {
+          queueItemId: queueItem.id,
+          workoutID: (queueItem as SuuntoAppWorkoutQueueItemInterface).workoutID,
+          reason: e.reason,
+          responseBytes: e.byteLength,
+          contentTypeCategory: e.contentTypeCategory,
+        });
+        lastError = e;
+        retryableSuuntoFITPayloadError = e;
+        sawRetryableFailure = true;
+        continue;
       } else if (e.statusCode === 401) {
         logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
         try {
@@ -1037,6 +1050,19 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           if (retryError instanceof TerminalServiceAuthError) {
             logger.warn(`Terminal auth failure during forced refresh for ${serviceName} token ${tokenQueryDocumentSnapshot.id} while processing ${queueItem.id}; trying any remaining matching tokens before DLQ.`);
             terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
+            continue;
+          }
+          if (retryError instanceof RetryableSuuntoFITPayloadError) {
+            logger.warn('Suunto FIT response remained incomplete after token refresh and will be retried.', {
+              queueItemId: queueItem.id,
+              workoutID: (queueItem as SuuntoAppWorkoutQueueItemInterface).workoutID,
+              reason: retryError.reason,
+              responseBytes: retryError.byteLength,
+              contentTypeCategory: retryError.contentTypeCategory,
+            });
+            lastError = retryError;
+            retryableSuuntoFITPayloadError = retryError;
+            sawRetryableFailure = true;
             continue;
           }
           lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
@@ -1257,8 +1283,32 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
         await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
         return QueueResult.MovedToDLQ;
+      } else if (
+        (e as any).code === 'EVENT_EMPTY_ERROR'
+        && serviceName === ServiceNames.SuuntoApp
+        && result
+        && isSuspiciouslySmallSuuntoFIT(result.length)
+      ) {
+        const retryableError = createSessionlessSuuntoFITError(result.length);
+        logger.warn('Suspiciously small Suunto FIT contained no activity session and will be downloaded again.', {
+          queueItemId: queueItem.id,
+          workoutID: (queueItem as SuuntoAppWorkoutQueueItemInterface).workoutID,
+          responseBytes: result.length,
+        });
+        lastError = retryableError;
+        retryableSuuntoFITPayloadError = retryableError;
+        sawRetryableFailure = true;
+        continue;
       } else if ((e as any).code === 'EVENT_EMPTY_ERROR') {
-        logger.error(new Error(`FIT file for ${queueItem.id} contains no activities. Aborting retries.`));
+        const payloadInspection = result ? inspectFitPayload(result) : null;
+        logger.error(`FIT file for ${queueItem.id} contains no activities. Aborting retries.`, {
+          queueItemId: queueItem.id,
+          serviceName,
+          responseBytes: result?.length || 0,
+          fitEnvelopeReason: payloadInspection?.reason || 'unavailable',
+          fitHeaderSize: payloadInspection?.headerSize ?? null,
+          fitDeclaredDataSize: payloadInspection?.declaredDataSize ?? null,
+        });
         await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'EVENT_EMPTY_ERROR');
         return QueueResult.MovedToDLQ;
       }
@@ -1306,8 +1356,18 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
-  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${lastError.message}. Increasing retry count.`));
-  return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
+  const retryError = retryableSuuntoFITPayloadError || lastError;
+  const effectiveRetryIncrement = retryableSuuntoFITPayloadError ? 1 : retryIncrement;
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${retryError.message}. Increasing retry count.`));
+  return increaseRetryCountForQueueItem(
+    queueItem,
+    retryError,
+    effectiveRetryIncrement,
+    bulkWriter,
+    retryableSuuntoFITPayloadError
+      ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
+      : undefined,
+  );
 }
 
 function isFirestoreAlreadyExistsError(error: unknown): boolean {

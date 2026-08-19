@@ -292,6 +292,7 @@ export const ensureDerivedMetrics = onCall({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
     cors: true,
     timeoutSeconds: 120,
+    memory: '512MiB',
     maxInstances: 100,
 }, async (request): Promise<EnsureDerivedMetricsResponse> => {
     if (!request.auth?.uid) {

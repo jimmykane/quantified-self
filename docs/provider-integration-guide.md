@@ -208,14 +208,18 @@ Also stop work when the provider is disconnected, reconnect-required, or disconn
 
 ### Downloading provider files safely
 
-Provider file URLs are external input even if they came from an authenticated partner API. The Wahoo and COROS implementations use the shared defensive pattern for a safe FIT download path; each keeps its own exact provider-host allowlist and provider-specific response handling:
+Provider file URLs are external input even if they came from an authenticated partner API. The Wahoo and COROS implementations use the shared defensive pattern for a safe FIT download path; each keeps its own provider-host policy and provider-specific response handling. Prefer exact hosts. When a provider contract returns rotating CDN distribution names, a provider CDN suffix is acceptable only with a provider-specific path constraint and the controls below:
 
 - require HTTPS;
 - reject credentials in URLs, IP literals, localhost, private targets, and unapproved redirect targets;
-- allowlist exact provider-owned hosts through configuration;
-- enforce a request deadline and a byte limit;
+- allowlist exact provider-owned hosts, or a narrowly scoped provider CDN suffix plus its expected path shape, through configuration;
+- enforce a request deadline and, when the provider documents a safe maximum, a byte limit;
 - validate response type and file magic bytes before parsing;
 - never persist or log the full signed URL.
+
+Treat a successful HTTP status as transport success, not proof that a provider file is ready. Normalize only recognized wrappers and validate the complete FIT envelope—including its declared length—before invoking Sports Lib. Apply a decoded-body limit when the provider contract documents a safe maximum; do not invent one that could reject valid activity files. A provider-specific incomplete or placeholder response should remain retryable with a distinct exhausted-retry DLQ context. Diagnostics may retain only structural facts such as byte length, an allowlisted content-type category, and validation reason; never retain or log the response body. If a structurally valid FIT parses without a session, retry only when provider evidence supports a narrowly bounded not-ready case (for Suunto, a suspiciously small response); keep ordinary full-sized sessionless files terminal so permanent corruption does not consume the retry budget.
+
+Suunto FIT downloads in the queued sync worker use a 60-second provider deadline without a decoded-body cap because its contract does not establish a safe maximum. That worker has a 540-second runtime, leaving time for sanitized error handling after an abort.
 
 Do not use a provider's short-lived file URL as durable application data. Download it in the worker, validate it, and store the original file through the existing event/file flow so reprocessing, export, and sync use the owned copy.
 

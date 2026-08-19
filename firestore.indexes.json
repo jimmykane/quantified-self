@@ -1402,6 +1402,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpOAuthAuthorizationRequests",
+      "fieldPath": "clientAuth",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "mcpOAuthAuthorizationCodes",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -1420,6 +1426,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpOAuthAuthorizationCodes",
+      "fieldPath": "clientAuth",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "mcpOAuthAccessTokens",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -1432,9 +1444,21 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpOAuthRefreshTokens",
+      "fieldPath": "clientAuth",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "mcpOAuthRateLimits",
       "fieldPath": "expireAt",
       "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpOAuthRateLimits",
+      "fieldPath": "clientIdHash",
+      "ttl": false,
       "indexes": []
     },
     {
@@ -1458,6 +1482,12 @@
     {
       "collectionGroup": "mcpConnections",
       "fieldPath": "grantId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "clientAuth",
       "ttl": false,
       "indexes": []
     },

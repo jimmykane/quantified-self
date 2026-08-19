@@ -435,6 +435,11 @@ describe('Firestore MCP OAuth store', () => {
             codeChallenge: 'challenge',
             scopes: [MCP_OAUTH_SCOPES.MetricsRead],
             audience: 'https://quantified-self.io/mcp',
+            clientAuth: {
+              method: 'private_key_jwt',
+              jwksUri: 'https://client.example/jwks.json',
+              signingAlg: 'RS256',
+            },
             expiresAtMs: 8_000,
           });
         }
@@ -478,6 +483,11 @@ describe('Firestore MCP OAuth store', () => {
       redirectUri: 'https://client.example/oauth/callback',
       audience: 'https://quantified-self.io/mcp',
       codeChallenge: 'challenge',
+      clientAuth: {
+        method: 'private_key_jwt',
+        jwksUri: 'https://client.example/jwks.json',
+        signingAlg: 'RS256',
+      },
       accessTokenHash: 'access-hash',
       accessTokenRecord: {
         uid: '',
@@ -514,6 +524,11 @@ describe('Firestore MCP OAuth store', () => {
         scopes: [MCP_OAUTH_SCOPES.MetricsRead],
         audience: 'https://quantified-self.io/mcp',
         grantId: 'family-1',
+        clientAuth: {
+          method: 'private_key_jwt',
+          jwksUri: 'https://client.example/jwks.json',
+          signingAlg: 'RS256',
+        },
         supersedesLegacy: true,
         createdAtMs: 5_000,
         status: 'active',
@@ -529,6 +544,16 @@ describe('Firestore MCP OAuth store', () => {
     expect(transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'mcpOAuthAccessTokens/access-hash' }),
       expect.objectContaining({ grantId: 'family-1' }),
+    );
+    expect(transaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'mcpOAuthRefreshTokens/refresh-hash' }),
+      expect.objectContaining({
+        clientAuth: {
+          method: 'private_key_jwt',
+          jwksUri: 'https://client.example/jwks.json',
+          signingAlg: 'RS256',
+        },
+      }),
     );
   });
 
@@ -772,6 +797,51 @@ describe('Firestore MCP OAuth store', () => {
     }));
     expect(JSON.stringify([...rateLimits.documents])).not.toContain(clientId);
     expect(JSON.stringify([...rateLimits.documents])).not.toContain(requesterKey);
+  });
+
+  it('persists only an opaque TTL replay marker for each private client assertion', async () => {
+    const documents = new Map<string, Record<string, unknown>>();
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        const data = documents.get(ref.path);
+        return fakeSnapshot(Boolean(data), data);
+      }),
+      create: vi.fn((
+        ref: FakeDocumentReference,
+        data: Record<string, unknown>,
+      ) => {
+        documents.set(ref.path, data);
+      }),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+    const store = buildFirestoreMcpOAuthStore();
+    const input = {
+      assertionId: 'opaque-assertion-id',
+      clientIdHash: 'opaque-client-id',
+      nowMs: 5_000,
+      expiresAtMs: 305_000,
+    };
+
+    await store.consumeClientAssertion(input);
+    await expect(store.consumeClientAssertion(input)).rejects.toMatchObject<
+      McpOAuthError
+    >({ code: 'invalid_client' });
+
+    expect(documents.get(
+      `${MCP_OAUTH_COLLECTIONS.rateLimits}/${input.assertionId}`,
+    )).toEqual({
+      rateLimitType: 'client_assertion_replay',
+      clientIdHash: input.clientIdHash,
+      createdAtMs: input.nowMs,
+      expireAt: { milliseconds: input.expiresAtMs },
+    });
+    expect(JSON.stringify([...documents])).not.toContain(TEST_CLIENT_ID);
   });
 
   it('bounds token revocation across rotating client IDs from one requester', async () => {

@@ -22,6 +22,7 @@ import {
 } from './measurement-catalog';
 import {
   createMcpOAuthService,
+  McpOAuthClientAuthenticationError,
   McpOAuthAuthorizationRedirectError,
   McpOAuthError,
   McpOAuthScope,
@@ -308,6 +309,12 @@ function sendOAuthError(
       errorName: error instanceof Error ? error.name : 'unknown',
     });
   }
+  if (error instanceof McpOAuthClientAuthenticationError) {
+    logger.warn('[MCP OAuth] Client authentication rejected', {
+      stage: error.stage,
+      errorCode: error.code,
+    });
+  }
   if (oauthError.statusCode === 429) {
     response.set('Retry-After', '60');
   }
@@ -373,7 +380,8 @@ export function buildMcpAuthorizationServerMetadata(baseUrl: string) {
     revocation_endpoint: `${baseUrl}/oauth/revoke`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
-    token_endpoint_auth_methods_supported: ['none'],
+    token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+    token_endpoint_auth_signing_alg_values_supported: ['RS256'],
     revocation_endpoint_auth_methods_supported: ['none'],
     code_challenge_methods_supported: ['S256'],
     scopes_supported: Object.values(MCP_OAUTH_SCOPES),

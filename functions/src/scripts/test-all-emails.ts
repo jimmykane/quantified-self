@@ -10,7 +10,7 @@ import {
 import {
     EmailTemplateCatalogEntry,
     EmailTemplatePreviewCase,
-    REFRESHED_EMAIL_TEMPLATE_CATALOG,
+    selectSeedableTemplates,
 } from '../email/template-catalog';
 import {
     createLocalEmailTemplateRenderer,
@@ -26,6 +26,7 @@ export interface TestEmailArguments {
     targetEmail: string;
     projectId: string;
     inline: boolean;
+    templateIds?: string[];
 }
 
 export interface TestMailDocument {
@@ -41,19 +42,30 @@ export interface TestMailDocument {
 
 export function parseTestEmailArguments(args: readonly string[]): TestEmailArguments {
     const projectArguments = args.filter(value => value.startsWith('--project='));
+    const templateArguments = args.filter(value => value.startsWith('--templates='));
     const unsupportedFlags = args.filter(value =>
-        value.startsWith('--') && value !== '--inline' && !value.startsWith('--project=')
+        value.startsWith('--')
+        && value !== '--inline'
+        && !value.startsWith('--project=')
+        && !value.startsWith('--templates=')
     );
     const positionalArguments = args.filter(value => !value.startsWith('--'));
     const projectId = projectArguments[0]?.slice('--project='.length).trim();
+    const templateIds = templateArguments[0]?.slice('--templates='.length)
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean);
     if (
         unsupportedFlags.length > 0
         || positionalArguments.length !== 1
         || projectArguments.length !== 1
+        || templateArguments.length > 1
         || !projectId
+        || (templateArguments.length === 1 && (!templateIds || templateIds.length === 0))
+        || (templateIds && new Set(templateIds).size !== templateIds.length)
     ) {
         throw new Error(
-            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline]'
+            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline] [--templates=template_id,...]'
         );
     }
 
@@ -61,6 +73,7 @@ export function parseTestEmailArguments(args: readonly string[]): TestEmailArgum
         targetEmail: positionalArguments[0],
         projectId,
         inline: args.includes('--inline'),
+        ...(templateIds ? { templateIds } : {}),
     };
 }
 
@@ -113,15 +126,17 @@ export async function sendTestEmails(
     targetEmail: string,
     projectId: string,
     inline = false,
+    templateIds?: readonly string[],
 ): Promise<void> {
     if (!targetEmail || !projectId) {
         throw new Error(
-            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline]'
+            'Usage: npm run test-emails -- target@example.com --project=PROJECT_ID [--inline] [--templates=template_id,...]'
         );
     }
 
     initializeAdmin(projectId);
-    const previewCases = REFRESHED_EMAIL_TEMPLATE_CATALOG.flatMap(template =>
+    const templates = selectSeedableTemplates(templateIds);
+    const previewCases = templates.flatMap(template =>
         template.previewCases.map(preview => ({ template, preview }))
     );
     const modeDescription = inline
@@ -148,9 +163,9 @@ export async function sendTestEmails(
 
 if (require.main === module) {
     try {
-        const { targetEmail, projectId, inline } = parseTestEmailArguments(process.argv.slice(2));
-        sendTestEmails(targetEmail, projectId, inline).catch(error => {
-            logger.error('Failed to queue refreshed-template smoke tests.', error);
+        const { targetEmail, projectId, inline, templateIds } = parseTestEmailArguments(process.argv.slice(2));
+        sendTestEmails(targetEmail, projectId, inline, templateIds).catch(error => {
+            logger.error('Failed to queue selected-template smoke tests.', error);
             process.exitCode = 1;
         });
     } catch (error) {

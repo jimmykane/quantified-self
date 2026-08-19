@@ -9,6 +9,13 @@ export class ResponseBodyTooLargeError extends Error {
     }
 }
 
+export interface BinaryResponse {
+    body: Buffer;
+    statusCode: number;
+    contentType: string | null;
+    contentLength: number | null;
+}
+
 function normalizeMaxResponseBytes(value: unknown): number | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -78,6 +85,18 @@ async function readResponseBodyWithinLimit(
 
 export async function get(urlOrOptions: string | any, options: any = {}) {
     return request(urlOrOptions, { ...options, method: 'GET' });
+}
+
+export async function getBinaryResponse(
+    urlOrOptions: string | any,
+    options: any = {},
+): Promise<BinaryResponse> {
+    return request(urlOrOptions, {
+        ...options,
+        method: 'GET',
+        encoding: null,
+        includeBinaryResponseMetadata: true,
+    });
 }
 
 export async function post(urlOrOptions: string | any, options: any = {}) {
@@ -167,9 +186,21 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         if (opts.encoding === null) {
-            return boundedResponseBody === null
+            const body = boundedResponseBody === null
                 ? Buffer.from(await response.arrayBuffer())
                 : boundedResponseBody;
+            if (opts.includeBinaryResponseMetadata === true) {
+                const contentLengthHeader = response.headers.get('content-length')?.trim() || '';
+                return {
+                    body,
+                    statusCode: response.status,
+                    contentType: response.headers.get('content-type'),
+                    contentLength: /^\d+$/.test(contentLengthHeader)
+                        ? Number(contentLengthHeader)
+                        : null,
+                } satisfies BinaryResponse;
+            }
+            return body;
         }
 
         // Default to JSON parsing only if json: true is explicitly set (matching request-promise-native)
@@ -189,6 +220,7 @@ async function request(urlOrOptions: string | any, options: any = {}) {
 
 const requestFn = request as any;
 requestFn.get = get;
+requestFn.getBinaryResponse = getBinaryResponse;
 requestFn.post = post;
 requestFn.put = put;
 requestFn.delete = del;

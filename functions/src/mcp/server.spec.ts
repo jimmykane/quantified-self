@@ -88,13 +88,14 @@ describe('MCP HTTP scope enforcement', () => {
     };
   }
 
-  it('advertises RFC 7009 revocation for public CIMD clients', () => {
+  it('advertises public and RS256 private CIMD token authentication with public revocation', () => {
     expect(buildMcpAuthorizationServerMetadata('https://quantified-self.io'))
       .toEqual(expect.objectContaining({
         issuer: 'https://quantified-self.io',
         token_endpoint: 'https://quantified-self.io/oauth/token',
         revocation_endpoint: 'https://quantified-self.io/oauth/revoke',
-        token_endpoint_auth_methods_supported: ['none'],
+        token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+        token_endpoint_auth_signing_alg_values_supported: ['RS256'],
         revocation_endpoint_auth_methods_supported: ['none'],
       }));
   });

@@ -7,10 +7,12 @@ import {
 } from '../shared/activity-processing-config';
 import {
   COROS_FIT_DOWNLOAD_ALLOWED_HOSTS,
+  COROS_FIT_DOWNLOAD_ALLOWED_HOST_SUFFIXES,
   COROS_FIT_DOWNLOAD_TIMEOUT_MS,
 } from './constants';
 
 const MAX_REDIRECTS = 3;
+const COROS_FIT_PATH_PATTERN = /^\/fit\/[A-Za-z0-9_-]{1,128}\/[A-Za-z0-9_-]{1,256}\.fit$/i;
 
 export class PermanentCOROSFITDownloadError extends Error {
   constructor(message: string) {
@@ -43,11 +45,16 @@ function assertAllowedUrl(rawUrl: string): URL {
     || hostname.endsWith('.local')) {
     throw new UnsafeCOROSFileUrlError('COROS FIT URL must use a public provider host.');
   }
-  if (!COROS_FIT_DOWNLOAD_ALLOWED_HOSTS.some(allowedHost => allowedHost === hostname)) {
+  const isAllowedHost = COROS_FIT_DOWNLOAD_ALLOWED_HOSTS.some(allowedHost => allowedHost === hostname)
+    || COROS_FIT_DOWNLOAD_ALLOWED_HOST_SUFFIXES.some(allowedSuffix => hostname.endsWith(allowedSuffix));
+  if (!isAllowedHost) {
     throw new UnsafeCOROSFileUrlError('COROS FIT URL host is not allowlisted.');
   }
   if (url.username || url.password || url.port) {
     throw new UnsafeCOROSFileUrlError('COROS FIT URL must not contain credentials or a custom port.');
+  }
+  if (!COROS_FIT_PATH_PATTERN.test(url.pathname)) {
+    throw new UnsafeCOROSFileUrlError('COROS FIT URL path is invalid.');
   }
   return url;
 }

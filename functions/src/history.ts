@@ -35,6 +35,7 @@ import {
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import { getActiveRevisionProcessingLease } from './queue/revision-processing-lease';
+import { toSuuntoAuthorizationHeader } from './suunto/authorization-header';
 
 const BATCH_SIZE = 450;
 
@@ -293,7 +294,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
     case ServiceNames.SuuntoApp:
       result = await requestPromise.get({
         headers: {
-          'Authorization': serviceToken.accessToken,
+          'Authorization': toSuuntoAuthorizationHeader(serviceToken.accessToken),
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },

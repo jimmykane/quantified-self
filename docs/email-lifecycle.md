@@ -24,13 +24,31 @@ The allowlisted template and partial catalog is in `functions/src/email/template
 
 The templates use escaped Handlebars expressions, responsive table layouts, plaintext alternatives, and environment-specific partials supported by the [Firebase Trigger Email extension](https://firebase.google.com/docs/extensions/official/firestore-send-email/templates). Unknown plan roles intentionally render without a benefits list.
 
-Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` without `--templates` never selects a manual campaign, and `test-emails` never queues one. Seed a reviewed campaign only by its exact ID, for example:
+Manual campaign templates live in the same source directory so their HTML, plaintext, URLs, and Handlebars variables receive the same local verification. They are cataloged separately from transactional templates. Running `seed-emails` or `test-emails` without `--templates` never selects a manual campaign. A controlled test can queue an explicitly named manual campaign only after copy review, for example:
 
 ```bash
 npm --prefix functions run seed-emails -- --templates=coros_delivery_update
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=coros_delivery_update
 ```
 
-The COROS product update presents activity and route delivery as generally available and has no per-recipient rollout variable. A broad campaign must require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent.
+`mcp_connection_update` is a manually approved service notice for current Basic and Pro subscribers affected by the August 14–17, 2026 ChatGPT custom-app authentication compatibility issue. It is not a marketing campaign and must never be queued by a default or consent-based campaign job. It tells recipients with a failed connection to remove and recreate their custom ChatGPT app, then scan tools and authorize again so ChatGPT refreshes its OAuth configuration. Existing working connections and health data were unaffected. Seed it only after copy review:
+
+```bash
+npm --prefix functions run seed-emails -- --templates=mcp_connection_update
+npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io --inline --templates=mcp_connection_update
+```
+
+The reviewed bulk queue is intentionally separate from generic campaign tooling. It reads active (`active`, `trialing`, or `past_due`) Basic and Pro Stripe subscription records, deduplicates by Firebase UID, confirms the Auth account and user document are still present, excludes disabled or deletion-marked accounts, and renders the local source inline through the Trigger Email extension. It defaults to dry-run and requires the exact live recipient count before it can queue mail. It uses deterministic `mail` document IDs plus the existing cleanup-recognized `uid` marker so account deletion can remove pending mail. It queues one message at a time, 200 ms apart by default, to stay below the provider's per-second limit.
+
+```bash
+# Inspect only: prints counts by role and exclusion reason, without writing mail.
+npm --prefix functions run queue-mcp-connection-update -- --project=quantified-self-io
+
+# Queue exactly the count reported by dry-run; this is the only write mode.
+npm --prefix functions run queue-mcp-connection-update -- --project=quantified-self-io --expected-recipients=COUNT --dry-run=false
+```
+
+The COROS product update presents activity and route delivery as generally available and has no per-recipient rollout variable. Broad campaigns normally require `acceptedMarketingPolicy === true`; a connected provider is not marketing consent. The explicitly approved August 2026 COROS bug-exception campaign may include a missing legacy consent field, but must still exclude `acceptedMarketingPolicy === false`, revalidate the active COROS connection immediately before queueing, and use connection-based footer copy rather than claiming the recipient opted in.
 
 Cancellation emails and the subscription trigger share one grace deadline. `onSubscriptionUpdated` transactionally re-reads the current active subscriptions plus the user-deletion guard before changing grace state. When every active subscription is scheduled to end, it stores the latest `current_period_end + 30 days` as `scheduledGracePeriodUntil`; any continuing subscription clears that scheduled deadline. Subscription mail creation performs the same current-state and deletion-guard reads in its own transaction, preserves existing deterministic mail documents, and queues cancellation copy only for the canonical latest end when every active entitlement is ending. The expiring-reminder job uses the same aggregate rule, so it skips earlier-ending subscriptions and any user with a continuing entitlement. When paid access ends, `onSubscriptionUpdated` promotes the exact timestamp to `gracePeriodUntil`. The existing enforcement job remains a conservative fallback if subscription-event processing exhausts its retry window; changing its account-level entitlement selection is tracked separately from this email refresh.
 

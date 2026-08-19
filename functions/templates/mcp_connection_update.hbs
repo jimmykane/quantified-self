@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reconnect your Quantified Self ChatGPT app</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .letter { width:100% !important; table-layout:fixed !important; }
+      .letter-body { padding:32px 22px !important; overflow-wrap:break-word !important; word-wrap:break-word !important; }
+      .letter-footer { padding:0 22px 30px !important; overflow-wrap:break-word !important; word-wrap:break-word !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#ffffff; color:#172033; font-family:Georgia,'Times New Roman',serif;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">
+    If a ChatGPT connection attempt failed recently, recreate the custom app to refresh its sign-in configuration.
+  </div>
+  <div role="article" aria-roledescription="email" aria-label="A Quantified Self service update from Dimitrios">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; table-layout:fixed; background-color:#ffffff;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" class="letter" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; max-width:600px; table-layout:fixed;">
+            <tr>
+              <td class="letter-body" style="padding:44px 42px; font-size:18px; line-height:30px; color:#27334a;">
+                <p style="margin:0 0 24px;">Hi {{#if first_name}}{{first_name}}{{else}}there{{/if}},</p>
+
+                <p style="margin:0 0 24px;">Between August 14 and 17, some attempts to connect Quantified Self with ChatGPT failed after a change to ChatGPT’s custom-app authentication flow.</p>
+
+                <p style="margin:0 0 24px;">We have resolved the compatibility issue. If your Quantified Self connection is working, you do not need to do anything.</p>
+
+                <p style="margin:0 0 10px;"><strong>If you could not connect or saw an “invalid_client” message</strong>, please recreate your custom app in ChatGPT:</p>
+                <ol style="margin:0 0 24px; padding-left:24px;">
+                  <li style="margin:0 0 8px;">Open the existing custom Quantified Self app in ChatGPT and select <strong>Manage</strong>.</li>
+                  <li style="margin:0 0 8px;">Select <strong>Delete</strong> and confirm. This removes only the custom app from ChatGPT; it does not uninstall ChatGPT itself.</li>
+                  <li style="margin:0 0 8px;">Create it again with Quantified Self’s MCP server URL: <a href="https://quantified-self.io/mcp" style="color:#174ea6; font-family:Arial,Helvetica,sans-serif; font-weight:700; text-decoration:none;">https://quantified-self.io/mcp</a>.</li>
+                  <li style="margin:0;">Scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.</li>
+                </ol>
+
+                <p style="margin:0 0 24px;">Recreating the app makes ChatGPT fetch the current sign-in configuration. No activities, health data, or existing working connections were affected.</p>
+
+                <p style="margin:0 0 28px;"><a href="{{mcp_settings_url}}" style="color:#174ea6; font-family:Arial,Helvetica,sans-serif; font-weight:700; text-decoration:none;">Open your MCP connection settings →</a></p>
+
+                <p style="margin:0 0 24px;">If you have a question or still cannot connect, reply to this email. I read every reply personally.</p>
+
+                <p style="margin:0 0 28px;">Best regards,<br>Dimitrios<br><span style="font-size:16px; color:#5d687c;">Founder, Quantified Self</span><br><a href="https://quantified-self.io" style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#5d687c; text-decoration:none;">quantified-self.io</a></p>
+              </td>
+            </tr>
+            <tr>
+              <td class="letter-footer" style="padding:0 42px 36px; font-family:Arial,Helvetica,sans-serif; font-size:12px; line-height:18px; color:#6b7485;">
+                You received this service update about the Quantified Self ChatGPT connection.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

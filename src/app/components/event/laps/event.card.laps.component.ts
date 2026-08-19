@@ -282,14 +282,25 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
 
-    const selectedMetricTypes = event.source.selectedOptions.selected
-      .map((option) => option.value)
-      .filter((value): value is string => typeof value === 'string');
+    const selectedMetricTypes = new Set(
+      getSelectedEventLapMetricTypes(this.eventDetailsSettings, sportFamily),
+    );
+    event.options.forEach((option) => {
+      if (typeof option.value !== 'string') {
+        return;
+      }
+      if (option.selected) {
+        selectedMetricTypes.add(option.value);
+      } else {
+        selectedMetricTypes.delete(option.value);
+      }
+    });
+    const nextSelectedMetricTypes = Array.from(selectedMetricTypes);
     const previousSettings = this.eventDetailsSettings;
     const nextSettings = normalizeEventDetailsSettings({
       lapTableColumnsBySportFamily: {
         ...previousSettings.lapTableColumnsBySportFamily,
-        [sportFamily]: selectedMetricTypes,
+        [sportFamily]: nextSelectedMetricTypes,
       },
     });
     this.eventDetailsSettings = nextSettings;
@@ -297,7 +308,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.setSportFamilySaving(sportFamily, true);
 
     try {
-      await this.userSettingsQuery.updateLapTableColumns(sportFamily, selectedMetricTypes);
+      await this.userSettingsQuery.updateLapTableColumns(sportFamily, nextSelectedMetricTypes);
     } catch {
       this.eventDetailsSettings = previousSettings;
       this.updateData();

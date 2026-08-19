@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, QueryList, Signal, TemplateRef, ViewChild, ViewChildren, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
@@ -144,6 +144,7 @@ import {
   type TrainingMobileDestinationSheetData,
   type TrainingMobileDestinationSheetResult,
 } from './training-mobile-destination-sheet.component';
+import { TrainingDurabilityTrajectoryChartComponent } from './training-durability-trajectory-chart.component';
 import {
   formatTrainingVisibleDisciplinesActivityLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
@@ -170,6 +171,8 @@ interface TrainingMixDisciplineViewModel {
   baselineActivityCountText: string;
   durationText: string;
   baselineDurationText: string;
+  tssText: string;
+  baselineTssText: string;
   zones: TrainingMixZoneViewModel[];
   intensityEvidenceText: string | null;
   contexts: TrainingContextMetricsViewModel[];
@@ -409,6 +412,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isDurabilityVisible = false;
   public isCyclingPowerProfileVisible = false;
   public isRunningPowerProfileVisible = false;
+
+  @ViewChildren(TrainingDurabilityTrajectoryChartComponent)
+  private durabilityTrajectoryCharts!: QueryList<TrainingDurabilityTrajectoryChartComponent>;
+
   public trainingBuildRecoveryExpanded: Record<DerivedTrainingDiscipline, boolean> = createTrainingSportRecord(() => false);
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -944,7 +951,31 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.trainingBuildBenchmarkDialogDiscipline = null;
       dialogRef.close();
     }
-    const summaries = this.derivedState.trainingSummary?.disciplines || [];
+    const trainingSummary = this.derivedState.trainingSummary;
+    const currentTssByDiscipline = new Map<DerivedTrainingDiscipline, number | null>();
+    const baselineTssByDiscipline = new Map<DerivedTrainingDiscipline, number | null>();
+    const trainingExplanation = this.derivedState.trainingExplanation;
+
+    // The summary and explanation snapshots are built independently. Do not
+    // combine a fresh workout/time summary with load values from an older cutoff.
+    if (
+      trainingSummary
+      && trainingExplanation
+      && trainingSummary.asOfDayMs === trainingExplanation.asOfDayMs
+    ) {
+      trainingExplanation.current.sportLoads.forEach((sportLoad) => {
+        if (isTrainingDiscipline(sportLoad.sport)) {
+          currentTssByDiscipline.set(sportLoad.sport, sportLoad.trainingStressScore);
+        }
+      });
+      trainingExplanation.baselineMedian.sportLoads.forEach((sportLoad) => {
+        if (isTrainingDiscipline(sportLoad.sport)) {
+          baselineTssByDiscipline.set(sportLoad.sport, sportLoad.trainingStressScore);
+        }
+      });
+    }
+
+    const summaries = trainingSummary?.disciplines || [];
     this.trainingMixDisciplines = summaries
       .filter(summary => isTrainingVisibleDiscipline(summary.discipline)
         && hasTrainingSportCapability(summary.discipline, 'training-mix'))
@@ -969,6 +1000,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           baselineActivityCountText: this.formatNumber(summary.baseline28d.activityCount, 0),
           durationText: formatSleepDuration(summary.current28d.durationSeconds),
           baselineDurationText: formatSleepDuration(summary.baseline28d.durationSeconds),
+          tssText: this.formatNumber(currentTssByDiscipline.get(summary.discipline), 0),
+          baselineTssText: this.formatNumber(baselineTssByDiscipline.get(summary.discipline), 0),
           guidance: buildTrainingMixGuidance(summary, label, isVolumeOnly ? 'volume-only' : 'zones'),
           intensityEvidenceText: hasZoneEvidence
             ? null
@@ -1243,6 +1276,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     // null and Angular has no changed input to write back, so clear it through
     // the component's public value API to avoid showing the destination twice.
     select.value = this.desktopAllSportsSelectorValue;
+  }
+
+  public refreshDurabilityChartsAfterTabAnimation(): void {
+    this.durabilityTrajectoryCharts?.forEach(chart => chart.refreshAfterTabAnimation());
   }
 
   public openTrainingMobileDestinationSheet(): void {
