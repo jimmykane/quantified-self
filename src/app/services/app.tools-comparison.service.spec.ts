@@ -32,6 +32,7 @@ describe('AppToolsComparisonService', () => {
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
+  let originalBackendMode: typeof environment.backendMode;
   let originalFileReader: typeof FileReader;
   let originalCrypto: Crypto | undefined;
   let originalDecompressionStream: typeof DecompressionStream | undefined;
@@ -43,6 +44,7 @@ describe('AppToolsComparisonService', () => {
   beforeEach(() => {
     originalLocalhost = environment.localhost;
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
+    originalBackendMode = environment.backendMode;
     originalFileReader = globalThis.FileReader;
     originalCrypto = globalThis.crypto;
     originalDecompressionStream = globalThis.DecompressionStream;
@@ -128,6 +130,7 @@ describe('AppToolsComparisonService', () => {
   afterEach(() => {
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
+    environment.backendMode = originalBackendMode;
     globalThis.FileReader = originalFileReader;
     Object.defineProperty(globalThis, 'crypto', {
       configurable: true,
@@ -221,7 +224,7 @@ describe('AppToolsComparisonService', () => {
     });
   }
 
-  it('uploads comparison files with auth, App Check, manifest, and title headers', async () => {
+  it('uploads comparison files locally without requesting a hosted App Check token', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -242,9 +245,9 @@ describe('AppToolsComparisonService', () => {
     const result = await service.createComparison(files, 'Review set');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
-    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    expect(appCheckReadinessMock.getToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:5001/quantified-self-io/europe-west2/createToolComparisonEvent',
+      'http://127.0.0.1:5001/quantified-self-io/europe-west2/createToolComparisonEvent',
       expect.objectContaining({
         method: 'POST',
       }),
@@ -253,7 +256,7 @@ describe('AppToolsComparisonService', () => {
     const fetchOptions = fetchMock.mock.calls[0][1];
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer id-token');
-    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
+    expect(headers.get('X-Firebase-AppCheck')).toBeNull();
     expect(headers.get('X-Tool-Comparison-Title-Encoded')).toBe('Review%20set');
     expect(headers.get(TOOL_COMPARISON_EVENT_ID_HEADER)).toBe(expectedComparisonEventID('user-1', [
       { extension: 'fit', bytes: [1, 2, 3] },
@@ -472,6 +475,7 @@ describe('AppToolsComparisonService', () => {
   });
 
   it('uses production function URL when the emulator is disabled', async () => {
+    environment.backendMode = 'hosted';
     environment.useFunctionsEmulator = false;
     fetchMock.mockResolvedValue({
       ok: true,
@@ -492,6 +496,9 @@ describe('AppToolsComparisonService', () => {
       'https://europe-west2-quantified-self-io.cloudfunctions.net/createToolComparisonEvent',
       expect.any(Object),
     );
+    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
   });
 
   it('counts saved benchmark comparisons through AppEventService', async () => {

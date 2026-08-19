@@ -103,6 +103,42 @@ describe('AppUserService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should force at most one token refresh for each claims update revision', async () => {
+        service = TestBed.inject(AppUserService);
+        mockAuth.currentUser.getIdToken.mockClear();
+        mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+            claims: {
+                iat: 100,
+                stripeRole: 'basic',
+            },
+        });
+        const mergeClaims = (service as any).mergeClaims.bind(service);
+        const dbUserAtRevision = (seconds: number, nanoseconds: number): AppUserInterface => ({
+            uid: 'u1',
+            claimsUpdatedAt: {
+                seconds,
+                nanoseconds,
+                toDate: () => new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000)),
+            } as any,
+        } as AppUserInterface);
+        const firstRevision = dbUserAtRevision(100, 1);
+        mockAuth.currentUser.getIdToken.mockImplementationOnce(async () => {
+            // Mirrors onIdTokenChanged re-entering the merge while the forced refresh is pending.
+            await mergeClaims(mockAuth.currentUser, firstRevision);
+            return 'test-token';
+        });
+
+        await mergeClaims(mockAuth.currentUser, firstRevision);
+        await mergeClaims(mockAuth.currentUser, firstRevision);
+
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(1);
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenLastCalledWith(true);
+
+        await mergeClaims(mockAuth.currentUser, dbUserAtRevision(100, 2));
+
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(2);
+    });
+
     it('should classify terminal, timed-out, and repeatedly failing profile reads as actionable', () => {
         expect(isActionableProfileReadState({ status: 'error', uid: 'u1', code: 'permission-denied' })).toBe(true);
         expect(isActionableProfileReadState({

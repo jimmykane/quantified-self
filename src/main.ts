@@ -9,6 +9,11 @@ import * as Sentry from '@sentry/angular';
 import { registerAppLocales } from './app/shared/adapters/date-locale.config';
 import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
+import { assertEnvironmentSafety } from './environments/environment-safety';
+
+// Fail before telemetry, redirects, or Firebase providers can initialize if a
+// build ever mixes hosted and emulator settings.
+assertEnvironmentSafety(environment);
 
 // Register locales immediately
 registerAppLocales();
@@ -16,8 +21,8 @@ registerAppLocales();
 redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
 
 
-// Only initialize Sentry in non-localhost environments
-if (!environment.localhost) {
+// Only initialize Sentry when the selected environment explicitly enables it.
+if (environment.observabilityEnabled) {
   Sentry.init({
     dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
     environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',

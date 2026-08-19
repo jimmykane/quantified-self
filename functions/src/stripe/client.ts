@@ -27,6 +27,8 @@
 
 import type Stripe from 'stripe';
 
+const LOCAL_EMULATOR_DISABLED_SECRET = 'LOCAL_EMULATOR_DISABLED';
+
 /**
  * Cached Stripe client instance.
  * Initialized lazily on first call to `getStripe()`.
@@ -63,7 +65,7 @@ let stripeInstance: Stripe | undefined;
 export async function getStripe() {
     if (!stripeInstance) {
         const stripeKey = process.env.STRIPE_SECRET_KEY;
-        if (!stripeKey) {
+        if (!stripeKey || stripeKey === LOCAL_EMULATOR_DISABLED_SECRET) {
             throw new Error('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
         }
 

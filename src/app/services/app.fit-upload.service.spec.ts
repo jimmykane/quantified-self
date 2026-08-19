@@ -16,10 +16,12 @@ describe('AppFitUploadService', () => {
   let fetchMock: any;
   let originalLocalhost: boolean;
   let originalUseFunctionsEmulator: boolean;
+  let originalBackendMode: typeof environment.backendMode;
 
   beforeEach(() => {
     originalLocalhost = environment.localhost;
     originalUseFunctionsEmulator = environment.useFunctionsEmulator;
+    originalBackendMode = environment.backendMode;
   });
 
   beforeEach(() => {
@@ -55,9 +57,10 @@ describe('AppFitUploadService', () => {
   afterEach(() => {
     environment.localhost = originalLocalhost;
     environment.useFunctionsEmulator = originalUseFunctionsEmulator;
+    environment.backendMode = originalBackendMode;
   });
 
-  it('should upload activity bytes with auth, app check, and extension headers', async () => {
+  it('should upload activity bytes locally without requesting a hosted App Check token', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -73,9 +76,9 @@ describe('AppFitUploadService', () => {
     const result = await service.uploadActivityFile(payload, 'gpx.gz', 'run.gpx');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
-    expect(appCheckReadinessMock.getToken).toHaveBeenCalledWith();
+    expect(appCheckReadinessMock.getToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:5001/quantified-self-io/europe-west2/uploadActivity',
+      'http://127.0.0.1:5001/quantified-self-io/europe-west2/uploadActivity',
       expect.objectContaining({
         method: 'POST',
         body: payload,
@@ -85,7 +88,7 @@ describe('AppFitUploadService', () => {
     const fetchOptions = fetchMock.mock.calls[0][1];
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer id-token');
-    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
+    expect(headers.get('X-Firebase-AppCheck')).toBeNull();
     expect(headers.get('X-File-Extension')).toBe('gpx.gz');
     expect(headers.get('X-Original-Filename')).toBe('run.gpx');
     expect(headers.get('X-Original-Filename-Encoded')).toBe('run.gpx');
@@ -210,6 +213,8 @@ describe('AppFitUploadService', () => {
   });
 
   it('should throw when app check token cannot be retrieved', async () => {
+    environment.backendMode = 'hosted';
+    environment.useFunctionsEmulator = false;
     appCheckReadinessMock.getToken = vi.fn().mockRejectedValueOnce(new Error('Could not retrieve App Check token.'));
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -226,6 +231,8 @@ describe('AppFitUploadService', () => {
   });
 
   it('should throw when app check service is not configured', async () => {
+    environment.backendMode = 'hosted';
+    environment.useFunctionsEmulator = false;
     TestBed.resetTestingModule();
     const missingAppCheckReadiness = {
       getToken: vi.fn().mockRejectedValue(new Error('App Check is not configured for this app.')),
@@ -276,5 +283,7 @@ describe('AppFitUploadService', () => {
       'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivity',
       expect.any(Object),
     );
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
   });
 });
