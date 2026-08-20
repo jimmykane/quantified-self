@@ -16,6 +16,9 @@ export const TOKEN_REFRESH_LEASE_MS = 90_000;
  */
 export const TOKEN_REFRESH_REQUEST_TIMEOUT_MS = 60_000;
 
+/** Root field that identifies the currently authorized OAuth credential. */
+export const ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD = 'activeOAuthCredentialGeneration';
+
 export interface TokenCredentialSnapshot {
   accessToken: string;
   refreshToken: string;
@@ -33,7 +36,7 @@ export interface TokenCredentialGuard {
 export interface DocumentGenerationGuard {
   documentRef: admin.firestore.DocumentReference;
   fieldName: string;
-  expectedGeneration: string;
+  expectedGeneration: string | null;
 }
 
 export interface TokenRefreshCompanionWrite {

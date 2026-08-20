@@ -25,6 +25,8 @@ import {
   type DocumentGenerationGuard,
   type TokenCredentialSnapshot,
 } from './token-refresh-coordinator';
+import { getServiceTokenRootDocumentRef } from './service-token-store';
+import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
 
 export const WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD = 3;
 const WAHOO_OPAQUE_REFRESH_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -239,6 +241,8 @@ export interface MarkServiceReconnectRequiredOptions {
   requireEmptyTokenCollection?: admin.firestore.CollectionReference;
   /** A failed deletion may only mark the still-current credential generation. */
   expectedTokenCredential?: TokenCredentialGuard;
+  /** Also bind fallback cleanup to the provider token root's OAuth generation. */
+  expectedTokenRootCredentialGeneration?: DocumentGenerationGuard;
 }
 
 export async function markServiceReconnectRequired(
@@ -257,6 +261,7 @@ export async function markServiceReconnectRequired(
     'expectedConnectionStateGeneration',
   );
   const expectedTokenCredential = options.expectedTokenCredential;
+  const expectedTokenRootCredentialGeneration = options.expectedTokenRootCredentialGeneration;
   const didWrite = await db.runTransaction(async transaction => {
     let deletionGuard;
     try {
@@ -271,13 +276,21 @@ export async function markServiceReconnectRequired(
       return false;
     }
 
-    const [metaSnapshot, tokenSnapshot, expectedTokenSnapshot] = await Promise.all([
+    const [
+      metaSnapshot,
+      tokenSnapshot,
+      expectedTokenSnapshot,
+      expectedTokenRootSnapshot,
+    ] = await Promise.all([
       transaction.get(ref),
       options.requireEmptyTokenCollection
         ? transaction.get(options.requireEmptyTokenCollection)
         : Promise.resolve(null),
       expectedTokenCredential
         ? transaction.get(expectedTokenCredential.tokenRef)
+        : Promise.resolve(null),
+      expectedTokenRootCredentialGeneration
+        ? transaction.get(expectedTokenRootCredentialGeneration.documentRef)
         : Promise.resolve(null),
     ]);
     const currentGeneration = typeof metaSnapshot.data()?.connectionStateGeneration === 'string'
@@ -293,6 +306,11 @@ export async function markServiceReconnectRequired(
           getTokenCredentialSnapshot(expectedTokenSnapshot.data() as Record<string, unknown> | undefined),
           expectedTokenCredential.credential,
         )
+      ))
+      || (expectedTokenRootCredentialGeneration && expectedTokenRootSnapshot && (
+        (typeof expectedTokenRootSnapshot.data()?.[expectedTokenRootCredentialGeneration.fieldName] === 'string'
+          ? expectedTokenRootSnapshot.data()?.[expectedTokenRootCredentialGeneration.fieldName]
+          : null) !== expectedTokenRootCredentialGeneration.expectedGeneration
       ))
     ) {
       return false;
@@ -353,23 +371,51 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
   serviceName: ServiceNames,
   input: ServiceDisconnectPendingMetaInput,
 ): Promise<boolean> {
-  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
-    connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
-    connectionStateGeneration: input.generation,
-    disconnectGeneration: input.generation,
-    routeRestorePending: FieldValue.delete(),
-    routeRestoreConnectionGeneration: FieldValue.delete(),
-    routeRestoreLastAttemptAt: FieldValue.delete(),
-    routeRestoreAttemptCount: FieldValue.delete(),
-    disconnectReason: input.reason,
-    disconnectAttemptCount: input.attemptCount,
-    disconnectNextAttemptAt: input.nextAttemptAt,
-    disconnectLastAttemptAt: input.lastAttemptAt || null,
-    disconnectRetryExpiresAt: input.retryExpiresAt,
-    disconnectLastStatusCode: input.lastStatusCode ?? null,
-    disconnectLastErrorMessage: input.lastErrorMessage || null,
-    disconnectManualReviewRequired: input.manualReviewRequired === true,
-    lastDisconnectedAt: Date.now(),
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  const tokenRootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  const didWrite = await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_disconnect_pending_mirror:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    // The token root is authoritative. OAuth recovery may clear the pending
+    // episode before this denormalized mirror runs, so only publish the exact
+    // still-current pending generation.
+    const rootSnapshot = await transaction.get(tokenRootRef);
+    const rootData = rootSnapshot.data() as Record<string, unknown> | undefined;
+    if (
+      !rootSnapshot.exists
+      || !isServiceDisconnectPendingData(rootData)
+      || rootData?.disconnectGeneration !== input.generation
+      || Number(rootData?.disconnectAttemptCount || 0) !== input.attemptCount
+    ) {
+      return false;
+    }
+
+    transaction.set(ref, {
+      connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
+      connectionStateGeneration: input.generation,
+      disconnectGeneration: input.generation,
+      routeRestorePending: FieldValue.delete(),
+      routeRestoreConnectionGeneration: FieldValue.delete(),
+      routeRestoreLastAttemptAt: FieldValue.delete(),
+      routeRestoreAttemptCount: FieldValue.delete(),
+      disconnectReason: input.reason,
+      disconnectAttemptCount: input.attemptCount,
+      disconnectNextAttemptAt: input.nextAttemptAt,
+      disconnectLastAttemptAt: input.lastAttemptAt || null,
+      disconnectRetryExpiresAt: input.retryExpiresAt,
+      disconnectLastStatusCode: input.lastStatusCode ?? null,
+      disconnectLastErrorMessage: input.lastErrorMessage || null,
+      disconnectManualReviewRequired: input.manualReviewRequired === true,
+      lastDisconnectedAt: Date.now(),
+    }, { merge: true });
+    return true;
   });
   if (!didWrite) {
     return false;

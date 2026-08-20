@@ -277,6 +277,24 @@ async function getPendingDisconnectServiceForRoute(
     return null;
 }
 
+async function getWahooReconnectRequiredServiceForRoute(
+    userID: string,
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+): Promise<ServiceNames.WahooAPI | null> {
+    if (
+        sourceServiceName !== ServiceNames.WahooAPI
+        && destinationServiceName !== ServiceNames.WahooAPI
+    ) {
+        return null;
+    }
+
+    const wahooMeta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
+    return isReconnectRequiredServiceConnection(wahooMeta)
+        ? ServiceNames.WahooAPI
+        : null;
+}
+
 type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending' | 'reconnect_required';
 
 async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
@@ -1324,7 +1342,6 @@ export async function processActivitySyncQueueItem(
         }
 
         if (!shouldResumePersistedDestinationUpload) {
-            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             const isManualRun = queueItem.manual === true;
             const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
             if (pendingDisconnectService) {
@@ -1333,6 +1350,18 @@ export async function processActivitySyncQueueItem(
                     bulkWriter,
                     routeMeta,
                     pendingDisconnectService,
+                );
+            }
+            const reconnectRequiredService = await getWahooReconnectRequiredServiceForRoute(
+                queueItem.userID,
+                queueItem.sourceServiceName,
+                queueItem.destinationServiceName,
+            );
+            if (reconnectRequiredService) {
+                return deferActivitySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
                 );
             }
 
@@ -1365,6 +1394,7 @@ export async function processActivitySyncQueueItem(
                 });
             }
 
+            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             if (!enabled && !isManualRun) {
                 await setActivitySyncSkippedMetadata({
                     ...routeMeta,

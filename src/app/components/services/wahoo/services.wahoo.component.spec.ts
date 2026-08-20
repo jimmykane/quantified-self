@@ -93,6 +93,8 @@ describe('ServicesWahooComponent', () => {
 
     expect(component.wahooAccountId()).toBe('60462');
     expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(fixture.nativeElement.textContent).toContain('retained account ID');
+    expect(fixture.nativeElement.textContent).not.toContain('OAuth credentials are stored');
     expect(functionsService.call).not.toHaveBeenCalled();
   });
 
@@ -103,6 +105,7 @@ describe('ServicesWahooComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(fixture.nativeElement.textContent).toContain('OAuth credentials are stored securely on the server.');
     expect(fixture.nativeElement.textContent).not.toContain('Wahoo account connected');
     expect(functionsService.call).not.toHaveBeenCalled();
   });

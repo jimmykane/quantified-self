@@ -26,6 +26,7 @@ import {
   isWahooReconnectRequiredError,
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
+import { isTerminalServiceAuthError } from '../shared/provider-operation-error';
 
 const PAGE_SIZE = 100;
 const HISTORY_LEASE_MS = 15 * 60 * 1000;
@@ -48,7 +49,7 @@ export interface WahooHistoryImportResult extends HistoryImportResult {
 }
 
 export function toWahooHistoryCallableError(error: unknown): HttpsError | null {
-  if (isWahooReconnectRequiredError(error)) {
+  if (isWahooReconnectRequiredError(error) || isTerminalServiceAuthError(error)) {
     return new HttpsError('unauthenticated', 'Reconnect Wahoo before importing history.');
   }
   if (isWahooRefreshBackoffError(error)) {

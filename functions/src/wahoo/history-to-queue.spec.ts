@@ -130,6 +130,18 @@ describe('toWahooHistoryCallableError', () => {
       message: 'Reconnect Wahoo before importing history.',
     });
   });
+
+  it('translates a named terminal refresh failure after lifecycle cleanup', () => {
+    const terminalError = Object.assign(new Error('invalid_grant'), {
+      name: 'TerminalServiceAuthError',
+      providerErrorCode: 'invalid_grant',
+    });
+
+    expect(toWahooHistoryCallableError(terminalError)).toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect Wahoo before importing history.',
+    });
+  });
 });
 
 describe('finishWahooHistoryLease', () => {

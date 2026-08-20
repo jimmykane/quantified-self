@@ -223,15 +223,6 @@ async function releaseDeferredDocsForQuery(
                 if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
                     return false;
                 }
-                if (
-                    deferredReason === QUEUE_DEFERRED_REASONS.ServiceDisconnectPending
-                    && expectedGeneration
-                    && currentData.serviceDisconnectPendingGeneration
-                    && currentData.serviceDisconnectPendingGeneration !== expectedGeneration
-                ) {
-                    return false;
-                }
-
                 transaction.update(doc.ref, updateData);
                 return true;
             });

@@ -124,11 +124,14 @@ export const requestAndSetGarminAPIAccessToken = functions
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
     return; // Success (return void/empty)
   } catch (e: any) {
     logger.error('Error exchanging Garmin token:', e);
     const status = e.statusCode || 500;
+    if (status === 403) {
+      throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
+    }
     if (status === 502) {
       throw new functions.https.HttpsError('unavailable', 'Garmin service is temporarily unavailable');
     }

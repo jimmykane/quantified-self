@@ -286,13 +286,20 @@ describe('OAuth2', () => {
     beforeEach(() => {
         mockTransactionDocumentData = undefined;
         mockDelete.mockReset().mockResolvedValue({});
+        mockGet.mockReset().mockResolvedValue({
+            data: () => ({}),
+            exists: true,
+            empty: true,
+            size: 0,
+            docs: [],
+        } as any);
         mockDocInstance.set.mockReset().mockResolvedValue({});
-        mockGetUserDeletionGuardState.mockResolvedValue({
+        mockGetUserDeletionGuardState.mockReset().mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
             shouldSkip: false,
         });
-        mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+        mockGetUserDeletionGuardStateInTransaction.mockReset().mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
             shouldSkip: false,
@@ -1309,13 +1316,17 @@ describe('OAuth2', () => {
                 empty: true,
                 docs: [],
             } as any);
+            mockTransactionDocumentData = {
+                state: 'some-state',
+                codeVerifier: 'some-verifier',
+            };
         });
 
         it('should throw error when getToken returns no results', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue(null as any);
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toThrow(/No results when geting token/);
         });
 
@@ -1323,7 +1334,7 @@ describe('OAuth2', () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({ token: {} } as any);
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toThrow(/No results when geting token/);
         });
     });
@@ -1366,7 +1377,7 @@ describe('OAuth2', () => {
             // Mock permissions fetch (non-fatal but good to have)
             (requestPromise.get as any).mockResolvedValueOnce({ permissions: [] });
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state');
 
             expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
@@ -1381,7 +1392,7 @@ describe('OAuth2', () => {
                 expired: () => false,
             } as any);
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
             expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(
                 userID,
@@ -1413,7 +1424,7 @@ describe('OAuth2', () => {
             } as any);
             mockGetWahooUserID.mockResolvedValueOnce('60462');
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.WahooAPI, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.WahooAPI, redirectUri, code, 'some-state');
 
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(
                 userID,
@@ -1433,7 +1444,7 @@ describe('OAuth2', () => {
                 expired: () => false,
             } as any);
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
             expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
                 accessToken: 'mock-token',
@@ -1464,6 +1475,7 @@ describe('OAuth2', () => {
                 ServiceNames.WahooAPI,
                 redirectUri,
                 code,
+                'some-state',
             )).rejects.toMatchObject({
                 phase: `oauth_mark_connected:${ServiceNames.WahooAPI}`,
             });
@@ -1497,6 +1509,7 @@ describe('OAuth2', () => {
                 ServiceNames.WahooAPI,
                 redirectUri,
                 code,
+                'some-state',
             )).rejects.toMatchObject({
                 phase: `oauth_mark_connected:${ServiceNames.WahooAPI}`,
             });
@@ -1533,10 +1546,6 @@ describe('OAuth2', () => {
             };
             mockGet
                 .mockResolvedValueOnce({
-                    exists: true,
-                    data: () => ({ state: 'some-state', codeVerifier: 'some-verifier' }),
-                } as any)
-                .mockResolvedValueOnce({
                     empty: false,
                     size: 1,
                     docs: [tokenDoc],
@@ -1559,7 +1568,7 @@ describe('OAuth2', () => {
             });
             (requestPromise.get as Mock).mockResolvedValueOnce({});
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
             expect(mockClearServiceDisconnectPending).not.toHaveBeenCalled();
             expect(mockMarkServiceConnected).not.toHaveBeenCalled();
@@ -1607,10 +1616,6 @@ describe('OAuth2', () => {
             };
             mockGet
                 .mockResolvedValueOnce({
-                    exists: true,
-                    data: () => ({ state: 'some-state', codeVerifier: 'some-verifier' }),
-                } as any)
-                .mockResolvedValueOnce({
                     empty: false,
                     size: 1,
                     docs: [tokenDoc],
@@ -1630,7 +1635,7 @@ describe('OAuth2', () => {
                 statusCode: 504,
             }));
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
             expect(mockClearServiceDisconnectPending).not.toHaveBeenCalled();
             expect(mockMarkServiceConnected).not.toHaveBeenCalled();
@@ -1653,7 +1658,7 @@ describe('OAuth2', () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockRejectedValue(new Error('Exchange failed'));
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state'))
                 .rejects.toThrow('Exchange failed');
 
             expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
@@ -1662,9 +1667,10 @@ describe('OAuth2', () => {
             }));
         });
 
-        it('does not delete state or PKCE context created by a newer OAuth attempt', async () => {
+        it('rejects an older callback before it can consume a newer OAuth context', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
-            vi.spyOn(MockAuthCode.prototype, 'getToken').mockRejectedValue(new Error('Exchange failed'));
+            const getTokenSpy = vi.spyOn(MockAuthCode.prototype, 'getToken')
+                .mockRejectedValue(new Error('Exchange should not run'));
             mockTransactionDocumentData = {
                 state: 'newer-state',
                 codeVerifier: 'newer-verifier',
@@ -1675,8 +1681,10 @@ describe('OAuth2', () => {
                 ServiceNames.GarminAPI,
                 redirectUri,
                 code,
-            )).rejects.toThrow('Exchange failed');
+                'some-state',
+            )).rejects.toMatchObject({ name: 'OAuthFlowContextMismatchError' });
 
+            expect(getTokenSpy).not.toHaveBeenCalled();
             expect(mockUpdate).not.toHaveBeenCalled();
         });
 
@@ -1698,7 +1706,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1707,11 +1715,14 @@ describe('OAuth2', () => {
 
             expect(getTokenSpy).not.toHaveBeenCalled();
             expect(mockDocInstance.set).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
-            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
+            expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }));
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
         });
 
-        it('should preserve existing service tokens without updating the root when deletion-active OAuth cleanup did not persist this callback token', async () => {
+        it('does not touch token documents when deletion begins after the callback context claim', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             const getTokenSpy = vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
                 token: { user: 'test-external-user', access_token: 'mock-token' },
@@ -1738,7 +1749,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1748,16 +1759,18 @@ describe('OAuth2', () => {
             expect(getTokenSpy).not.toHaveBeenCalled();
             expect(mockDocInstance.set).not.toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }));
         });
 
-        it('should not update OAuth root if deletion-active cleanup recursive delete fails', async () => {
+        it('consumes the callback context without attempting recursive cleanup when deletion starts', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             const getTokenSpy = vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
                 token: { user: 'test-external-user', access_token: 'mock-token' },
                 expired: () => false,
             } as any);
-            mockRecursiveDelete.mockRejectedValueOnce(new Error('recursive delete failed'));
             mockGetUserDeletionGuardState
                 .mockResolvedValueOnce({
                     userExists: true,
@@ -1770,7 +1783,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1778,8 +1791,11 @@ describe('OAuth2', () => {
                 });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }));
         });
 
         it('should deauthorize exchanged OAuth token when account deletion starts before token persistence', async () => {
@@ -1788,11 +1804,17 @@ describe('OAuth2', () => {
                 token: { user: 'test-external-user', access_token: 'mock-token' },
                 expired: () => false,
             } as any);
-            mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
-                userExists: true,
-                deletionInProgress: true,
-                shouldSkip: true,
-            });
+            mockGetUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
             mockGetUserDeletionGuardState
                 .mockResolvedValueOnce({
                     userExists: true,
@@ -1810,7 +1832,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1818,14 +1840,14 @@ describe('OAuth2', () => {
                 });
 
             expect(mockDocInstance.set).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
                 headers: expect.objectContaining({
                     Authorization: 'Bearer mock-token',
                 }),
                 url: expect.stringContaining('/oauth/deauthorize'),
             }));
-            expect(mockRecursiveDelete).toHaveBeenCalledWith(mockDocInstance);
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
         });
 
         it('should preserve existing service tokens when account deletion starts before new OAuth token persistence', async () => {
@@ -1843,11 +1865,17 @@ describe('OAuth2', () => {
                     empty: false,
                     docs: [{ id: 'existing-token' }],
                 } as any);
-            mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
-                userExists: true,
-                deletionInProgress: true,
-                shouldSkip: true,
-            });
+            mockGetUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
             mockGetUserDeletionGuardState
                 .mockResolvedValueOnce({
                     userExists: true,
@@ -1865,7 +1893,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1873,7 +1901,7 @@ describe('OAuth2', () => {
                 });
 
             expect(mockDocInstance.set).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
                 headers: expect.objectContaining({
@@ -1897,11 +1925,17 @@ describe('OAuth2', () => {
                 expired: () => false,
             } as any);
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('deauth unavailable'));
-            mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
-                userExists: true,
-                deletionInProgress: true,
-                shouldSkip: true,
-            });
+            mockGetUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
             mockGetUserDeletionGuardState
                 .mockResolvedValueOnce({
                     userExists: true,
@@ -1919,7 +1953,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -1939,7 +1973,7 @@ describe('OAuth2', () => {
             );
         });
 
-        it('should preserve persisted service token root when account deletion starts before OAuth context cleanup', async () => {
+        it('does not perform a later context cleanup after the callback was claimed', async () => {
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
                 token: { user: 'test-external-user', access_token: 'mock-token' },
@@ -1962,11 +1996,11 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
             expect(mockDocInstance.set).toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalledTimes(1);
         });
 
         it('should not remove duplicate connections if account deletion blocks connected-state write after token persistence', async () => {
@@ -1993,7 +2027,7 @@ describe('OAuth2', () => {
                     shouldSkip: true,
                 });
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state'))
                 .rejects.toMatchObject({
                     name: 'OAuthServiceConnectionSkippedForDeletedUserError',
                     userID,
@@ -2004,7 +2038,7 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).toHaveBeenCalled();
             expect(mockWhere).not.toHaveBeenCalled();
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
-            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockUpdate).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -2239,6 +2273,10 @@ describe('OAuth2', () => {
                 empty: true,
                 docs: [],
             } as any);
+            mockTransactionDocumentData = {
+                state: 'matches',
+                codeVerifier: 'mockVerifier',
+            };
         });
 
         it('should throw error when Garmin User ID fetch fails', async () => {
@@ -2259,7 +2297,7 @@ describe('OAuth2', () => {
             // We mock requestPromise.get to fail, which getGarminUserId uses
             (requestPromise.get as any).mockRejectedValue(new Error('Failed to fetch Garmin User ID'));
 
-            await expect(getAndSetServiceOAuth2AccessTokenForUser('u1', ServiceNames.GarminAPI, 'uri', 'code'))
+            await expect(getAndSetServiceOAuth2AccessTokenForUser('u1', ServiceNames.GarminAPI, 'uri', 'code', 'matches'))
                 .rejects.toThrow(/Failed to fetch Garmin User ID/);
         });
 

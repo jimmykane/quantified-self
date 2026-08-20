@@ -487,6 +487,59 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     });
   });
 
+  it('guards reconnect fallback with the failed token root generation when deletion fails', async () => {
+    const currentTokenSnapshot: any = {
+      exists: true,
+      id: 'suunto-user',
+      updateTime: makeTimestamp(1, 100_000),
+      ref: tokenRef,
+      data: () => ({
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        tokenCredentialGeneration: 'failed-generation',
+      }),
+    };
+    mockRunTransaction.mockRejectedValueOnce(new Error('firestore delete failed'));
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      currentTokenSnapshot,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'suunto-user',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'User no longer active/connected with the partner',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(resolution.kind).toBe('terminal_error');
+    expect(mockMarkServiceReconnectRequired).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'invalid_grant',
+      'User no longer active/connected with the partner',
+      expect.any(Number),
+      expect.objectContaining({
+        expectedTokenRootCredentialGeneration: {
+          documentRef: tokenRootRef,
+          fieldName: 'activeOAuthCredentialGeneration',
+          expectedGeneration: 'failed-generation',
+        },
+      }),
+    );
+  });
+
   it('recursively deletes the orphaned token doc when the Firebase user root cannot be resolved', async () => {
     const orphanRef = { id: 'orphan-token', parent: { parent: null } };
 
