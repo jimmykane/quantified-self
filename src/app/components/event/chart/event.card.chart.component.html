@@ -11,9 +11,17 @@
     [showSeriesMenu]="dataTypeLegendItems.length > 0"
     [seriesMenuSummary]="seriesMenuSummary"
     [seriesMenuItems]="dataTypeLegendItems"
+    [recommendedSeriesMenuItems]="recommendedDataTypeLegendItems"
+    [otherSeriesMenuItems]="otherDataTypeLegendItems"
+    [recommendedSeriesMenuLabel]="'Recommended for ' + sportProfile.label"
+    [showResetToSportDefaults]="visibilityMode === 'custom'"
+    [resetToSportDefaultsLabel]="resetToSportDefaultsLabel"
+    [allRecordedMetricsForced]="allRecordedMetricsForced"
+    [visibilityAnnouncement]="visibilityAnnouncement()"
     (xAxisTypeChange)="onXAxisTypeChange($event)"
     (seriesVisibilityToggle)="onDataTypeLegendSelectionChange($event.dataType, $event.visible)"
     (showAllSeries)="onShowAllDataTypes()"
+    (resetToSportDefaults)="onResetToSportDefaults()"
     (resetChartState)="onResetChartStateRequested()">
   </app-event-card-chart-actions>
 </app-event-section-header>

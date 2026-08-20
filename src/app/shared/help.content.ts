@@ -370,13 +370,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Maximum Depth** appears in both the Overall and Environment event-summary metrics when the source provides it. A maximum-depth statistic by itself cannot reconstruct a dive profile.
 - **Depth** is also available as an advanced chart metric in **Settings -> Charts**. Dive depth uses meters when the first Swim pace preference is per 100 meters and feet when it is per 100 yards.
 
-### Event chart x-axis fallback
+### Event chart defaults and controls
 
 - In Event details, if any selected activity does not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
-- **Default chart metrics** in **Settings -> Charts** control which available charts are shown initially.
-- The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It does not change which charts are currently visible.
-- Use **Visible charts** to show or hide individual charts, or **Show all charts** to display every available chart.
+- **Default chart metrics** in **Settings -> Charts** are your global allow-list for automatic chart visibility. Sport recommendations choose the first up to three relevant recorded metrics from those defaults; missing metrics are skipped without adding unrelated charts.
+- The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It adds choices but does not show them automatically. Merged events and benchmark comparisons always make all recorded chartable metrics available so every source can be inspected.
+- **Visible charts** groups sport recommendations before other available metrics. Its context note explains that recommendations combine the selected sport, recorded metrics, and your Default chart metrics. Showing or hiding a chart creates a custom override for that event and selected-sport combination.
+- **Show all charts** is an explicit custom choice that displays every currently available chart. Use **Reset to <sport> defaults** to discard the current custom override and return to the latest sport recommendation without changing Default chart metrics, Include all recorded metrics, overlays, or other chart options.
+- A specialized chart can own a metric without duplicating it automatically in the ordinary chart stack. For example, a pinned **Dive Profile** owns Depth, Temperature, and Heart Rate by default while those ordinary charts remain manually selectable when available.
 - When an event-chart zoom or selection is active, each chart panel shows a **Reset zoom or selection** button; using any one clears the shared chart state for the event.
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.

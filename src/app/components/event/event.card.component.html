@@ -71,7 +71,7 @@
         <app-event-card-chart [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
           [user]="activeUser" [waterMark]="activeUser.brandText ?? null" [event]="activeEvent"
           [darkTheme]="darkTheme()"
-          [excludedDataTypes]="hasDiveProfileFlag() ? diveProfileChartDataTypes : []">
+          [automaticExcludedDataTypes]="hasDiveProfileFlag() ? diveProfileChartDataTypes : []">
         </app-event-card-chart>
         }
         }

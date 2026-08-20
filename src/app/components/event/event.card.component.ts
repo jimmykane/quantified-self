@@ -198,7 +198,12 @@ export class EventCardComponent implements OnInit {
     'Calories'
   ];
 
-  public readonly diveProfileChartDataTypes = [DataDepth.type, DataDepthFeet.type];
+  public readonly diveProfileChartDataTypes = [
+    DataDepth.type,
+    DataDepthFeet.type,
+    DataTemperature.type,
+    DataHeartRate.type,
+  ];
 
   ngOnInit() {
     this.logger.log('[EventCard] ngOnInit: initializing event details subscriptions');

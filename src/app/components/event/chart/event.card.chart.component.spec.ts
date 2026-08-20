@@ -10,12 +10,18 @@ import {
   ActivityTypes,
   ChartCursorBehaviours,
   DataAltitude,
+  DataCadence,
   DataDepth,
   DataDistance,
   DataHeartRate,
+  DataPace,
   DataPower,
   DataSpeed,
+  DataSpeedKilometersPerHour,
+  DataSpeedMilesPerHour,
   DataStrydDistance,
+  DataSwimPace,
+  DataTemperature,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { EventCardChartComponent } from './event.card.chart.component';
@@ -57,7 +63,7 @@ describe('EventCardChartComponent', () => {
   };
 
   const mockUserService = {
-    getUserChartDataTypesToUse: vi.fn().mockReturnValue(['power']),
+    getUserChartDataTypesToUse: vi.fn().mockReturnValue([DataPower.type]),
   };
 
   const mockActivityCursorService = {
@@ -69,8 +75,12 @@ describe('EventCardChartComponent', () => {
   };
 
   const mockChartSettingsStorage = {
-    getDataTypeIDsToShow: vi.fn().mockReturnValue([]),
-    setDataTypeIDsToShow: vi.fn(),
+    getEventChartVisibilityPreference: vi.fn().mockReturnValue({
+      mode: 'automatic',
+      selectionKeys: [],
+    }),
+    setEventChartCustomVisibilityPreference: vi.fn(),
+    resetEventChartVisibilityPreference: vi.fn(),
   };
 
   const mockLogger = {
@@ -90,10 +100,15 @@ describe('EventCardChartComponent', () => {
     });
     mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
     mockUserService.getUserChartDataTypesToUse.mockReset();
-    mockUserService.getUserChartDataTypesToUse.mockReturnValue(['power']);
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
     mockActivityCursorService.setCursor.mockReset();
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
-    mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReset();
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'automatic',
+      selectionKeys: [],
+    });
+    mockChartSettingsStorage.setEventChartCustomVisibilityPreference.mockReset();
+    mockChartSettingsStorage.resetEventChartVisibilityPreference.mockReset();
     mockLogger.error.mockReset();
     mockLogger.warn.mockReset();
     mockLogger.info.mockReset();
@@ -126,12 +141,16 @@ describe('EventCardChartComponent', () => {
 
     component.user = { uid: 'u1' } as any;
     component.targetUserID = 'u1';
+    const defaultActivity = {
+      type: ActivityTypes.Cycling,
+      getID: () => 'activity-1',
+    } as any;
     component.event = {
       isMultiSport: () => false,
-      getActivities: () => [],
+      getActivities: () => [defaultActivity],
       getID: () => 'event-1',
     } as any;
-    component.selectedActivities = [];
+    component.selectedActivities = [defaultActivity];
   });
 
   afterEach(() => {
@@ -152,7 +171,7 @@ describe('EventCardChartComponent', () => {
   it('should create and rebuild chart panels', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -167,6 +186,9 @@ describe('EventCardChartComponent', () => {
 
     expect(component).toBeTruthy();
     expect(buildPanelsSpy).toHaveBeenCalled();
+    expect(component.sportProfile.profileID).toBe('cycling');
+    expect(component.allChartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+    expect((component as any).automaticDataTypeIDs).toEqual([DataPower.type]);
     expect(component.chartPanels).toHaveLength(1);
     expect(component.dataTypeLegendItems).toHaveLength(1);
     expect(component.xDomain).toEqual({ start: 0, end: 1 });
@@ -404,7 +426,10 @@ describe('EventCardChartComponent', () => {
         series: [],
       },
     ] as any);
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['pace']);
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: ['pace'],
+    });
 
     component.user = { uid: 'u1' } as any;
     component.targetUserID = 'u1';
@@ -723,10 +748,13 @@ describe('EventCardChartComponent', () => {
   });
 
   it('restores persisted datatype visibility when ids are valid', async () => {
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['speed']);
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: [DataSpeed.type],
+    });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -735,7 +763,7 @@ describe('EventCardChartComponent', () => {
         series: [],
       },
       {
-        dataType: 'speed',
+        dataType: DataSpeed.type,
         displayName: 'Speed',
         unit: 'km/h',
         colorGroupKey: 'Speed',
@@ -748,37 +776,34 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['speed']);
-    expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['speed']);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataSpeed.type]);
+    expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
 
-  it('falls back to showing all panels when persisted ids are stale', async () => {
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['legacy-id']);
-    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
-      {
-        dataType: 'power',
-        displayName: 'Power',
-        unit: 'W',
-        colorGroupKey: 'Power',
-        minX: 0,
-        maxX: 100,
-        series: [],
-      },
-      {
-        dataType: 'speed',
-        displayName: 'Speed',
-        unit: 'km/h',
-        colorGroupKey: 'Speed',
-        minX: 0,
-        maxX: 100,
-        series: [],
-      },
-    ] as any);
+  it('preserves custom visibility while its selected metric is unavailable', async () => {
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: [DataTemperature.type],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input) => (
+      input.showAllData
+        ? [chartPanel(DataTemperature.type)]
+        : []
+    ) as any);
 
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels).toEqual([]);
+
+    chartSettingsSignal.set({...chartSettingsSignal(), showAllData: true});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataTemperature.type]);
   });
 
   it('lists extra recorded metrics without showing them by default', async () => {
@@ -819,7 +844,236 @@ describe('EventCardChartComponent', () => {
     ]);
   });
 
-  it('excludes a pinned dive-profile metric from the ordinary chart stack', async () => {
+  it('orders a first-view Running stack by sport and caps it at three eligible charts', async () => {
+    chartSettingsSignal.set({...chartSettingsSignal(), showAllData: true});
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
+      DataHeartRate.type,
+      DataPace.type,
+      DataPower.type,
+      DataAltitude.type,
+    ]);
+    const runningActivity = {type: ActivityTypes.Running, getID: () => 'run-1'} as any;
+    component.selectedActivities = [runningActivity];
+    component.event = {
+      getID: () => 'event-running',
+      getActivities: () => [runningActivity],
+      isMultiSport: () => false,
+    } as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataTemperature.type),
+      chartPanel(DataAltitude.type),
+      chartPanel(DataPower.type),
+      chartPanel(DataPace.type),
+      chartPanel(DataHeartRate.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.visibilityMode).toBe('automatic');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataPace.type,
+      DataPower.type,
+    ]);
+    expect(component.recommendedDataTypeLegendItems.map((item) => item.dataType)).toEqual([
+      DataHeartRate.type,
+      DataPace.type,
+      DataPower.type,
+      DataAltitude.type,
+      DataTemperature.type,
+    ]);
+    expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
+  });
+
+  it('treats the global Pace preference as Swim Pace for swimming defaults', async () => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
+      DataHeartRate.type,
+      DataPace.type,
+    ]);
+    const swimmingActivity = {type: ActivityTypes.Swimming, getID: () => 'swim-1'} as any;
+    component.selectedActivities = [swimmingActivity];
+    component.event = {
+      getID: () => 'event-swimming',
+      getActivities: () => [swimmingActivity],
+      isMultiSport: () => false,
+    } as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataSwimPace.type),
+      chartPanel(DataHeartRate.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.sportProfile.profileID).toBe('pool-swimming');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataSwimPace.type,
+    ]);
+  });
+
+  it('switches automatic defaults when the selected sport signature changes', async () => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
+      DataHeartRate.type,
+      DataPace.type,
+      DataPower.type,
+      DataCadence.type,
+    ]);
+    let selectedActivity = {type: ActivityTypes.Running, getID: () => 'run-1'} as any;
+    component.selectedActivities = [selectedActivity];
+    component.event = {
+      getID: () => 'event-sport-switch',
+      getActivities: () => [selectedActivity],
+      isMultiSport: () => false,
+    } as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataCadence.type),
+      chartPanel(DataPower.type),
+      chartPanel(DataPace.type),
+      chartPanel(DataHeartRate.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataPace.type,
+      DataPower.type,
+    ]);
+
+    selectedActivity = {type: ActivityTypes.IndoorCycling, getID: () => 'bike-1'} as any;
+    component.selectedActivities = [selectedActivity];
+    component.ngOnChanges({selectedActivities: {} as any});
+    await fixture.whenStable();
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataPower.type,
+      DataCadence.type,
+    ]);
+  });
+
+  it('resets only custom visibility for the current sport signature', async () => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataPower.type),
+      chartPanel(DataSpeed.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.onDataTypeLegendSelectionChange(DataSpeed.type, true);
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
+
+    component.onResetToSportDefaults();
+
+    expect(mockChartSettingsStorage.resetEventChartVisibilityPreference).toHaveBeenCalledWith(
+      component.event,
+      component.sportProfile.signature,
+    );
+    expect(component.visibilityMode).toBe('automatic');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+    expect(component.visibilityAnnouncement()).toContain('Reset to Cycling defaults');
+  });
+
+  it('preserves an intentionally empty custom visibility selection', async () => {
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: [],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([chartPanel(DataPower.type)] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels).toEqual([]);
+    expect(component.dataTypeLegendItems).toEqual([
+      expect.objectContaining({dataType: DataPower.type, visible: false}),
+    ]);
+  });
+
+  it('preserves custom visibility when unit changes replace the rendered data type', async () => {
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: [DataSpeed.type],
+    });
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels')
+      .mockReturnValueOnce([chartPanel(DataSpeedKilometersPerHour.type)] as any)
+      .mockReturnValue([chartPanel(DataSpeedMilesPerHour.type)] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataSpeedKilometersPerHour.type,
+    ]);
+
+    mockUserSettingsQuery.unitSettings.set({speed: 'mph'} as any);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(2);
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataSpeedMilesPerHour.type,
+    ]);
+  });
+
+  it('makes every recorded chart selectable for benchmarks without changing the global setting', async () => {
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataPower.type),
+      chartPanel(DataTemperature.type),
+    ] as any);
+    component.event = {
+      hasBenchmark: true,
+      getID: () => 'event-benchmark',
+      getActivities: () => component.selectedActivities,
+      isMultiSport: () => false,
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({showAllData: true}));
+    expect(component.allRecordedMetricsForced).toBe(true);
+    expect(component.dataTypeLegendItems.map((item) => item.dataType)).toEqual([
+      DataPower.type,
+      DataTemperature.type,
+    ]);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+
+    component.onShowAllDataTypes();
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataPower.type,
+      DataTemperature.type,
+    ]);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalledWith({showAllData: true});
+  });
+
+  it('makes every recorded chart selectable for a merge-only event', async () => {
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataPower.type),
+    ] as any);
+    component.event = {
+      isMerge: true,
+      getID: () => 'event-merge',
+      getActivities: () => component.selectedActivities,
+      isMultiSport: () => false,
+    } as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({showAllData: true}));
+    expect(component.allRecordedMetricsForced).toBe(true);
+  });
+
+  it('keeps pinned dive-profile metrics selectable but excludes them from the automatic stack', async () => {
     const depthPanel = {
       dataType: DataDepth.type,
       displayName: 'Depth',
@@ -843,8 +1097,9 @@ describe('EventCardChartComponent', () => {
       heartRatePanel,
     ] as any);
 
-    component.excludedDataTypes = [DataDepth.type];
-    component.selectedActivities = [{ getID: () => 'dive-1' } as any];
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataDepth.type, DataHeartRate.type]);
+    component.automaticExcludedDataTypes = [DataDepth.type, DataHeartRate.type];
+    component.selectedActivities = [{ type: ActivityTypes.Diving, getID: () => 'dive-1' } as any];
     component.event = {
       getID: () => 'event-1',
       getActivities: () => component.selectedActivities,
@@ -854,13 +1109,15 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.allChartPanels.map((panel) => panel.dataType)).toEqual([DataHeartRate.type]);
+    expect(component.allChartPanels.map((panel) => panel.dataType)).toEqual([DataDepth.type, DataHeartRate.type]);
+    expect(component.chartPanels).toEqual([]);
+    expect(component.dataTypeLegendItems.map((item) => item.dataType)).toEqual([DataDepth.type, DataHeartRate.type]);
   });
 
   it('updates visible panels and persists when datatype selection changes', async () => {
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -869,7 +1126,7 @@ describe('EventCardChartComponent', () => {
         series: [],
       },
       {
-        dataType: 'speed',
+        dataType: DataSpeed.type,
         displayName: 'Speed',
         unit: 'km/h',
         colorGroupKey: 'Speed',
@@ -882,10 +1139,14 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    component.onDataTypeLegendSelectionChange('speed', false);
+    component.onDataTypeLegendSelectionChange(DataSpeed.type, true);
 
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power']);
-    expect(mockChartSettingsStorage.setDataTypeIDsToShow).toHaveBeenCalledWith(component.event, ['power']);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
+    expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).toHaveBeenCalledWith(
+      component.event,
+      expect.stringContaining('Cycling'),
+      [DataPower.type, DataSpeed.type],
+    );
   });
 
   it('builds panel overlay views from all available metrics including hidden panels', async () => {
@@ -895,7 +1156,10 @@ describe('EventCardChartComponent', () => {
         power: 'speed',
       },
     });
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue(['power']);
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: ['power'],
+    });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
         dataType: 'power',
@@ -940,12 +1204,12 @@ describe('EventCardChartComponent', () => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),
       eventChartOverlayDataTypeByPrimary: {
-        power: 'altitude',
+        [DataPower.type]: DataAltitude.type,
       },
     });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -1070,7 +1334,7 @@ describe('EventCardChartComponent', () => {
   it('skips panel rebuild when non-material settings change', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -1099,7 +1363,7 @@ describe('EventCardChartComponent', () => {
   it('persists visible datatype ids only when the selection actually changes', async () => {
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
-        dataType: 'power',
+        dataType: DataPower.type,
         displayName: 'Power',
         unit: 'W',
         colorGroupKey: 'Power',
@@ -1113,14 +1377,14 @@ describe('EventCardChartComponent', () => {
     await fixture.whenStable();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const baselineWrites = mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length;
-    component.onDataTypeLegendSelectionChange('power', true);
+    const baselineWrites = mockChartSettingsStorage.setEventChartCustomVisibilityPreference.mock.calls.length;
+    component.onDataTypeLegendSelectionChange(DataPower.type, true);
 
-    expect(mockChartSettingsStorage.setDataTypeIDsToShow.mock.calls.length).toBe(baselineWrites);
+    expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference.mock.calls.length).toBe(baselineWrites);
   });
 
   it('does not rebuild panels when datatype input order changes but enabled set stays the same', async () => {
-    let preferredDataTypes = ['power', 'speed'];
+    let preferredDataTypes = [DataPower.type, DataSpeed.type];
     mockUserService.getUserChartDataTypesToUse.mockImplementation(() => [...preferredDataTypes]);
 
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input: any) => {
@@ -1151,13 +1415,13 @@ describe('EventCardChartComponent', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
 
-    preferredDataTypes = ['speed', 'power'];
+    preferredDataTypes = [DataSpeed.type, DataPower.type];
     (component as any).rebuildPanels('order-change');
 
     expect(buildPanelsSpy).toHaveBeenCalledTimes(1);
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type, DataSpeed.type]);
   });
 
   it('normalizes full-domain zoom updates to null', () => {
@@ -1230,4 +1494,16 @@ describe('EventCardChartComponent', () => {
     expect(component.hasWaterMark).toBe(false);
     expect(component.waterMarkText).toBe('');
   });
+
+  function chartPanel(dataType: string) {
+    return {
+      dataType,
+      displayName: dataType,
+      unit: '',
+      colorGroupKey: dataType,
+      minX: 0,
+      maxX: 100,
+      series: [],
+    };
+  }
 });

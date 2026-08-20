@@ -18,12 +18,14 @@ import {
     XAxisTypes,
     DataPotentialStamina,
     DataDepth,
+    DataDepthFeet,
     DataHeartRate,
     DataSpeed,
     DataStamina,
     LapTypes,
     ActivityTypeGroups,
     DataPowerCurve,
+    DataTemperature,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -941,6 +943,15 @@ describe('EventCardComponent', () => {
             } finally {
                 mockUser.settings.chartSettings.xAxisType = previousXAxisType;
             }
+        });
+
+        it('marks Dive Profile time-series metrics as automatic ordinary-chart exclusions', () => {
+            expect(component.diveProfileChartDataTypes).toEqual([
+                DataDepth.type,
+                DataDepthFeet.type,
+                DataTemperature.type,
+                DataHeartRate.type,
+            ]);
         });
 
         it('should compute hasPowerCurveFlag as true when performance curve data exists', () => {
