@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => {
 
     const collections = new Map<string, StoredDoc[]>();
     const getFailures = new Map<string, Error>();
+    const beforeTransactionRead = new Map<string, () => void>();
     const deleteSentinel = { delete: true };
     const timestampFromDate = vi.fn((date: Date) => date);
 
@@ -43,6 +44,7 @@ const hoisted = vi.hoisted(() => {
                     ref: {
                         path: `${collectionName}/${doc.id}`,
                         update: doc.update,
+                        storedDoc: doc,
                     },
                 }));
 
@@ -59,9 +61,50 @@ const hoisted = vi.hoisted(() => {
     return {
         collections,
         getFailures,
+        beforeTransactionRead,
         deleteSentinel,
         timestampFromDate,
         collection: vi.fn((collectionName: string) => makeQuery(collectionName)),
+        runTransaction: vi.fn(async (runner: (transaction: {
+            get: (ref: { path: string; storedDoc?: StoredDoc }) => Promise<{ exists: boolean; data: () => Record<string, unknown> | undefined }>;
+            update: (ref: { path: string; storedDoc?: StoredDoc; update: ReturnType<typeof vi.fn> }, data: Record<string, unknown>) => void;
+        }) => unknown) => {
+            const pendingUpdates: Array<{
+                ref: { path: string; storedDoc?: StoredDoc; update: ReturnType<typeof vi.fn> };
+                data: Record<string, unknown>;
+                result: unknown;
+            }> = [];
+            const result = await runner({
+                get: async (ref) => {
+                    const hook = beforeTransactionRead.get(ref.path);
+                    if (hook) {
+                        beforeTransactionRead.delete(ref.path);
+                        hook();
+                    }
+                    const storedDoc = ref.storedDoc;
+                    return {
+                        exists: Boolean(storedDoc),
+                        data: () => storedDoc ? storedDoc.data : undefined,
+                    };
+                },
+                update: (ref, data) => {
+                    pendingUpdates.push({ ref, data, result: ref.update(data) });
+                },
+            });
+            await Promise.all(pendingUpdates.map(update => update.result));
+            for (const update of pendingUpdates) {
+                const storedDoc = update.ref.storedDoc;
+                if (!storedDoc) continue;
+                for (const [key, value] of Object.entries(update.data)) {
+                    if (value === deleteSentinel) {
+                        delete storedDoc.data[key];
+                    } else {
+                        storedDoc.data[key] = value;
+                    }
+                }
+            }
+            return result;
+        }),
         loggerInfo: vi.fn(),
         loggerError: vi.fn(),
     };
@@ -70,6 +113,7 @@ const hoisted = vi.hoisted(() => {
 vi.mock('firebase-admin', () => {
     const firestore = () => ({
         collection: hoisted.collection,
+        runTransaction: hoisted.runTransaction,
     });
 
     return {
@@ -102,6 +146,7 @@ describe('pending disconnect queue release', () => {
         vi.clearAllMocks();
         hoisted.collections.clear();
         hoisted.getFailures.clear();
+        hoisted.beforeTransactionRead.clear();
     });
 
     afterEach(() => {
@@ -122,6 +167,17 @@ describe('pending disconnect queue release', () => {
 
     function failCollectionGet(collectionName: string, error: Error): void {
         hoisted.getFailures.set(collectionName, error);
+    }
+
+    function advanceQueueItemBeforeReleaseTransaction(
+        collectionName: string,
+        id: string,
+        advance: (data: Record<string, unknown>) => void,
+    ): void {
+        hoisted.beforeTransactionRead.set(`${collectionName}/${id}`, () => {
+            const storedDoc = (hoisted.collections.get(collectionName) || []).find(doc => doc.id === id);
+            if (storedDoc) advance(storedDoc.data);
+        });
     }
 
     it('releases deferred queue items for the restored service without touching other services', async () => {
@@ -230,6 +286,27 @@ describe('pending disconnect queue release', () => {
         }
         expect(pendingDisconnectUpdate).not.toHaveBeenCalled();
         expect(otherServiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite a queue item claimed after a reconnect-release query was read', async () => {
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+            processed: true,
+            dispatchedToCloudTask: Number.MAX_SAFE_INTEGER,
+        });
+        advanceQueueItemBeforeReleaseTransaction(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', data => {
+            delete data.deferredReason;
+            delete data.deferredServiceName;
+            data.processed = false;
+            data.dispatchedToCloudTask = Number.MAX_SAFE_INTEGER - 1;
+            data.providerOperationStartedAt = 1_782_126_100_000;
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
     });
 
     it('releases legacy workout, sleep, and route queue items by provider identifier when local user fields are missing', async () => {

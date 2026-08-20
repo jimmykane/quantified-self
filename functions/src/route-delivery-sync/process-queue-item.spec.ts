@@ -889,6 +889,40 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
+  it('preserves a Wahoo route queued when reconnecting starts during context creation', async () => {
+    const reconnectError = Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      code: 'unauthenticated',
+      name: 'WahooReconnectRequiredError',
+    });
+    mockGetServiceConnectionMeta.mockResolvedValue(null);
+    mockGetRouteSendAdapter.mockReturnValue({
+      destinationServiceName: ServiceNames.WahooAPI,
+      createContext: vi.fn().mockRejectedValue(reconnectError),
+      sendRoute: vi.fn(),
+    });
+    mockIsWahooReconnectRequiredError.mockImplementation(error => error === reconnectError);
+    mockIsDestinationAuthRequiredError.mockImplementation(error => error === reconnectError);
+    const wahooQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(wahooQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem: wahooQueueItem,
+      phase: 'route_delivery_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ skippedReason: 'destination_not_connected' }),
+    );
+  });
+
   it('defers when destination token use becomes blocked by pending disconnect during context creation', async () => {
     const pendingDisconnectError = Object.assign(new Error('Garmin disconnect is pending.'), {
       name: 'TokenUseSkippedForPendingDisconnectError',

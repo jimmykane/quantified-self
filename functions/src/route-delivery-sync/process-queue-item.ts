@@ -1012,6 +1012,15 @@ export async function processRouteDeliverySyncQueueItem(
         try {
             context = await adapter.createContext(queueItem.userID);
         } catch (error) {
+            // The connection can become reconnect-required after the state
+            // precheck above. Preserve the queue item instead of collapsing
+            // that named Wahoo outcome into a generic auth skip.
+            if (
+                queueItem.destinationServiceName === ServiceNames.WahooAPI
+                && isWahooReconnectRequiredError(error)
+            ) {
+                return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
+            }
             if (isDestinationAuthRequiredError(error)) {
                 await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'destination_not_connected', toErrorMessage(error)));
                 return updateToProcessed(queueItem, bulkWriter, {

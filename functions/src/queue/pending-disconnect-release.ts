@@ -167,9 +167,27 @@ async function releaseDeferredDocsForQuery(
         }
 
         try {
-            await doc.ref.update(updateData);
-            releasedQueueItemPaths.add(doc.ref.path);
-            return true;
+            // The broad query is necessarily non-transactional. Re-check the
+            // live row before reopening it: concurrent OAuth callbacks can
+            // otherwise apply a stale release after the scheduler has already
+            // dispatched the first released row to a provider worker.
+            const released = await admin.firestore().runTransaction(async transaction => {
+                const currentSnapshot = await transaction.get(doc.ref);
+                if (!currentSnapshot.exists) {
+                    return false;
+                }
+                const currentData = currentSnapshot.data() as QueueDocData;
+                if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
+                    return false;
+                }
+
+                transaction.update(doc.ref, updateData);
+                return true;
+            });
+            if (released) {
+                releasedQueueItemPaths.add(doc.ref.path);
+            }
+            return released;
         } catch (error) {
             logger.error('[PendingDisconnectQueueRelease] Failed to release deferred queue item.', {
                 ...logContext,
