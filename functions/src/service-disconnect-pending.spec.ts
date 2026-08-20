@@ -87,7 +87,7 @@ describe('service-disconnect-pending', () => {
       get: hoisted.transactionGet,
       set: hoisted.transactionSet,
     }));
-    hoisted.clearServiceConnectionState.mockResolvedValue(undefined);
+    hoisted.clearServiceConnectionState.mockResolvedValue(true);
     hoisted.mirrorServiceDisconnectPendingToUserMeta.mockResolvedValue(true);
     hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockResolvedValue(0);
   });
@@ -170,6 +170,28 @@ describe('service-disconnect-pending', () => {
       .toBeLessThan(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0]);
     expect(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0])
       .toBeLessThan(hoisted.releaseQueueItemsDeferredForPendingDisconnect.mock.invocationCallOrder[0]);
+  });
+
+  it('does not let a stale OAuth credential clear a newer connection lifecycle', async () => {
+    const staleTokenRef = { path: 'suuntoAppAccessTokens/user-1/tokens/provider-1' };
+    hoisted.transactionGet.mockImplementation(async (target: unknown) => target === staleTokenRef
+      ? {
+        exists: true,
+        data: () => ({
+          activeOAuthCredentialGeneration: 'new-generation',
+        }),
+      }
+      : { exists: true, data: () => ({ disconnectState: 'disconnect_pending' }) });
+
+    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp, {
+      documentRef: staleTokenRef as any,
+      fieldName: 'activeOAuthCredentialGeneration',
+      expectedGeneration: 'old-generation',
+    });
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
   });
 
   it('restores pending state when deferred queue release fails after clear', async () => {

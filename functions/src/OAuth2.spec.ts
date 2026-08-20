@@ -1365,8 +1365,23 @@ describe('OAuth2', () => {
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
 
-            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
-            expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
+            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.SuuntoApp,
+                expect.objectContaining({
+                    fieldName: 'activeOAuthCredentialGeneration',
+                    expectedGeneration: expect.any(String),
+                }),
+            );
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.SuuntoApp,
+                undefined,
+                expect.objectContaining({
+                    fieldName: 'activeOAuthCredentialGeneration',
+                    expectedGeneration: expect.any(String),
+                }),
+            );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
         });
@@ -1382,7 +1397,15 @@ describe('OAuth2', () => {
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.WahooAPI, redirectUri, code);
 
-            expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.WahooAPI, '60462');
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.WahooAPI,
+                '60462',
+                expect.objectContaining({
+                    fieldName: 'activeOAuthCredentialGeneration',
+                    expectedGeneration: expect.any(String),
+                }),
+            );
         });
 
         it('atomically assigns a new credential generation when OAuth replaces a token', async () => {
@@ -1398,6 +1421,9 @@ describe('OAuth2', () => {
                 accessToken: 'mock-token',
                 tokenCredentialGeneration: expect.any(String),
             }), undefined);
+            expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
+                activeOAuthCredentialGeneration: expect.any(String),
+            }), { merge: true });
         });
 
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {
