@@ -17,7 +17,10 @@ import {
   DataPace,
   DataPower,
   DataSpeed,
+  DataSpeedKilometersPerHour,
+  DataSpeedMilesPerHour,
   DataStrydDistance,
+  DataSwimPace,
   DataTemperature,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -898,6 +901,33 @@ describe('EventCardChartComponent', () => {
     expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
 
+  it('treats the global Pace preference as Swim Pace for swimming defaults', async () => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
+      DataHeartRate.type,
+      DataPace.type,
+    ]);
+    const swimmingActivity = {type: ActivityTypes.Swimming, getID: () => 'swim-1'} as any;
+    component.selectedActivities = [swimmingActivity];
+    component.event = {
+      getID: () => 'event-swimming',
+      getActivities: () => [swimmingActivity],
+      isMultiSport: () => false,
+    } as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataSwimPace.type),
+      chartPanel(DataHeartRate.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.sportProfile.profileID).toBe('pool-swimming');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataSwimPace.type,
+    ]);
+  });
+
   it('switches automatic defaults when the selected sport signature changes', async () => {
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([
       DataHeartRate.type,
@@ -978,6 +1008,36 @@ describe('EventCardChartComponent', () => {
     expect(component.chartPanels).toEqual([]);
     expect(component.dataTypeLegendItems).toEqual([
       expect.objectContaining({dataType: DataPower.type, visible: false}),
+    ]);
+  });
+
+  it('preserves custom visibility when unit changes replace the rendered data type', async () => {
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom',
+      selectionKeys: [DataSpeed.type],
+      source: 'signature',
+    });
+    const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels')
+      .mockReturnValueOnce([chartPanel(DataSpeedKilometersPerHour.type)] as any)
+      .mockReturnValue([chartPanel(DataSpeedMilesPerHour.type)] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataSpeedKilometersPerHour.type,
+    ]);
+
+    mockUserSettingsQuery.unitSettings.set({speed: 'mph'} as any);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(buildPanelsSpy).toHaveBeenCalledTimes(2);
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataSpeedMilesPerHour.type,
     ]);
   });
 

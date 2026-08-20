@@ -381,6 +381,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private pendingRebuild = false;
   private panelBuildRequestID = 0;
   private visibleDataTypeIDs = new Set<string>();
+  private customSelectionKeys = new Set<string>();
   private automaticDataTypeIDs: string[] = [];
   private recommendedDataTypeOrder: string[] = [];
   private visibilityOwnerKey: string | null = null;
@@ -476,6 +477,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.visibleDataTypeIDs.delete(dataType);
     }
 
+    this.customSelectionKeys = new Set(
+      [...this.visibleDataTypeIDs].map(getEventChartSelectionKey),
+    );
     this.visibilityMode = 'custom';
     this.applyDataTypeVisibility();
     this.persistCustomVisibleDataTypes();
@@ -485,6 +489,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   public onShowAllDataTypes(): void {
     this.visibleDataTypeIDs = new Set(this.allChartPanels.map((panel) => panel.dataType));
+    this.customSelectionKeys = new Set(
+      [...this.visibleDataTypeIDs].map(getEventChartSelectionKey),
+    );
     this.visibilityMode = 'custom';
     this.applyDataTypeVisibility();
     this.persistCustomVisibleDataTypes();
@@ -502,6 +509,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     );
     this.visibilityMode = 'automatic';
     this.visibleDataTypeIDs = new Set(this.automaticDataTypeIDs);
+    this.customSelectionKeys.clear();
     this.lastPersistedCustomVisibilityKey = null;
     this.applyDataTypeVisibility();
     this.visibilityAnnouncement.set(
@@ -823,6 +831,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     if (ownerChanged) {
       this.visibilityOwnerKey = visibilityOwnerKey;
       this.visibleDataTypeIDs.clear();
+      this.customSelectionKeys.clear();
       this.visibilityMode = 'automatic';
       this.lastPersistedCustomVisibilityKey = null;
     }
@@ -831,7 +840,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const recommendations = resolveEventChartRecommendations({
       profile: this.sportProfile,
       panels,
-      globallyAllowedDataTypes: resolveEventChartConfiguredDataTypes(this.dataTypesToUse, this.userUnitSettings),
+      globallyAllowedDataTypes: resolveEventChartConfiguredDataTypes(
+        this.dataTypesToUse,
+        this.userUnitSettings,
+        (this.selectedActivities || []).map((activity) => activity?.type),
+      ),
       automaticExcludedDataTypes: this.automaticExcludedDataTypes,
     });
     this.automaticDataTypeIDs = recommendations.automaticDataTypes;
@@ -843,9 +856,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     if (!ownerChanged && this.visibilityMode === 'custom') {
-      this.visibleDataTypeIDs = new Set(
-        [...this.visibleDataTypeIDs].filter((dataTypeID) => availableDataTypeIDs.has(dataTypeID)),
-      );
+      this.visibleDataTypeIDs = new Set(this.resolveAvailableDataTypeIDs(
+        [...this.customSelectionKeys],
+        panels,
+      ));
       return;
     }
 
@@ -858,11 +872,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     if (canRestorePreference) {
       this.visibilityMode = 'custom';
+      this.customSelectionKeys = new Set(
+        preference.selectionKeys.map(getEventChartSelectionKey),
+      );
       this.visibleDataTypeIDs = new Set(restoredDataTypeIDs);
       return;
     }
 
     this.visibilityMode = 'automatic';
+    this.customSelectionKeys.clear();
     this.visibleDataTypeIDs = new Set(this.automaticDataTypeIDs);
   }
 
@@ -963,7 +981,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     if (!eventID || !this.sportProfile.signature) {
       return;
     }
-    const selectionKeys = [...new Set([...this.visibleDataTypeIDs].map(getEventChartSelectionKey))]
+    const selectionKeys = [...this.customSelectionKeys]
       .sort((left, right) => left.localeCompare(right));
     const persistenceKey = `${eventID}|${this.sportProfile.signature}|${selectionKeys.join(',')}`;
     if (this.lastPersistedCustomVisibilityKey === persistenceKey) {

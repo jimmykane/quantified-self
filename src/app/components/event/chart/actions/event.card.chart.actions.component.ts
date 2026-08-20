@@ -63,7 +63,8 @@ export class EventCardChartActionsComponent {
   private analyticsService = inject(AppAnalyticsService);
 
   public get shouldShowAllSeriesAction(): boolean {
-    return this.seriesMenuItems.some((item) => !item.visible);
+    return !this.showResetToSportDefaults
+      || this.seriesMenuItems.some((item) => !item.visible);
   }
 
   public get visibleSeriesCount(): number {

@@ -265,7 +265,7 @@ describe('EventCardChartActionsComponent', () => {
     expect(component.seriesBadgeLabel).toBe('2/3');
   });
 
-  it('offers to show all charts whenever at least one available chart is hidden', () => {
+  it('offers to show all charts for automatic visibility or hidden custom charts', () => {
     component.seriesMenuItems = [
       { dataType: 'power', label: 'Power', color: '#111111', visible: true },
       { dataType: 'temperature', label: 'Temperature', color: '#222222', visible: false },
@@ -274,6 +274,10 @@ describe('EventCardChartActionsComponent', () => {
     expect(component.shouldShowAllSeriesAction).toBe(true);
 
     component.seriesMenuItems = component.seriesMenuItems.map((item) => ({ ...item, visible: true }));
+
+    expect(component.shouldShowAllSeriesAction).toBe(true);
+
+    component.showResetToSportDefaults = true;
 
     expect(component.shouldShowAllSeriesAction).toBe(false);
   });

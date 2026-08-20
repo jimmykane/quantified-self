@@ -36,7 +36,8 @@ import {
   buildEventChartPanelsFromSnapshot,
   createEventChartPanelBuildSnapshot,
   eventChartSeriesToPoints,
-  normalizeEventLapType
+  normalizeEventLapType,
+  resolveEventChartConfiguredDataTypes,
 } from './event-echarts-data.helper';
 import { AppDataColors } from '../services/color/app.data.colors';
 
@@ -827,6 +828,58 @@ describe('event-echarts-data.helper', () => {
       DataPace.type,
       DataTemperature.type,
     ]));
+  });
+
+  it('resolves configured Pace to Swim Pace for swimming in synchronous and snapshot builds', () => {
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [1, 1.1, 1.2],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: {name: 'Garmin'},
+      type: 'Swimming',
+      getID: () => 'swim-pace-activity',
+      getAllStreams: () => [speedStream, timeStream],
+      getStream: (type: string) => type === XAxisTypes.Time ? timeStream : null,
+    } as any;
+    const userUnitSettings = {
+      speedUnits: [SpeedUnits.KilometersPerHour],
+      paceUnits: [PaceUnits.MinutesPerKilometer],
+      swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
+      gradeAdjustedSpeedUnits: [],
+      gradeAdjustedPaceUnits: [],
+      verticalSpeedUnits: [],
+    } as any;
+    const input = {
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: false,
+      dataTypesToUse: [DataPace.type],
+      userUnitSettings,
+      eventColorService: {
+        getActivityColor: () => '#00aaff',
+      } as any,
+    };
+
+    expect(resolveEventChartConfiguredDataTypes([DataPace.type], userUnitSettings)).toEqual([
+      DataPace.type,
+    ]);
+    expect(resolveEventChartConfiguredDataTypes([DataPace.type], userUnitSettings, ['Swimming'])).toEqual([
+      DataPace.type,
+      DataSwimPace.type,
+    ]);
+
+    const synchronousPanels = buildEventChartPanels(input);
+    const snapshotPanels = buildEventChartPanelsFromSnapshot(createEventChartPanelBuildSnapshot(input));
+
+    expect(synchronousPanels.map((panel) => panel.dataType)).toEqual([DataSwimPace.type]);
+    expect(snapshotPanels.map((panel) => panel.dataType)).toEqual([DataSwimPace.type]);
   });
 
   it('skips distance-axis chart building when missing distance streams throw from provider', () => {

@@ -29,7 +29,8 @@ that same profile; otherwise they use Multisport.
 Metric recommendations operate on logical families. Unit variants such as pace per mile, speed in knots, and depth in
 feet resolve through existing Sports Lib unit groups. Power, Air Power, Right Power, and Left Power share one profile
 slot while remaining independently discoverable panels. Grade-adjusted pace and speed are not promoted by the primary
-Pace or Speed recommendation.
+Pace or Speed recommendation. For activities in Sports Lib's Swimming group, the global Pace preference also enables
+the activity-appropriate Swim Pace panel in synchronous and worker-backed chart builds.
 
 ## Automatic and custom provenance
 
