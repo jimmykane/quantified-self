@@ -4,8 +4,11 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const hoisted = vi.hoisted(() => ({
   metaSet: vi.fn().mockResolvedValue(undefined),
   metaGet: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+  refreshTokenRef: { path: 'wahooAPIAccessTokens/user-1/tokens/provider-1' },
+  refreshTokenGet: vi.fn(),
   disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
   restoreActivitySyncRoutesForPendingDisconnectClear: vi.fn().mockResolvedValue(undefined),
+  releaseQueueItemsDeferredForReconnectRequired: vi.fn().mockResolvedValue(0),
   getUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
     userExists: true,
     deletionInProgress: false,
@@ -43,6 +46,10 @@ vi.mock('./activity-sync/route-cleanup', () => ({
   restoreActivitySyncRoutesForPendingDisconnectClear: hoisted.restoreActivitySyncRoutesForPendingDisconnectClear,
 }));
 
+vi.mock('./queue/pending-disconnect-release', () => ({
+  releaseQueueItemsDeferredForReconnectRequired: hoisted.releaseQueueItemsDeferredForReconnectRequired,
+}));
+
 vi.mock('firebase-admin', () => {
   const firestore = Object.assign(() => ({
     collection: vi.fn(() => ({
@@ -76,21 +83,50 @@ import {
   markServiceConnected,
   markServiceReconnectRequired,
   mirrorServiceDisconnectPendingToUserMeta,
+  recordWahooOpaqueRefreshFailure,
   setServiceConnectionProviderUserId,
   pinServiceConnectionProviderUserIdIfUnset,
 } from './service-connection-meta';
+
+function getCurrentWahooRefreshClaim() {
+  return {
+    tokenRef: hoisted.refreshTokenRef as any,
+    leaseOwner: 'lease-1',
+    credential: {
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      expiresAt: 1_000,
+      dateCreated: 100,
+      dateRefreshed: 100,
+      credentialGeneration: null,
+    },
+  };
+}
 
 describe('service-connection-meta', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
       set: typeof hoisted.metaSet;
-      get: typeof hoisted.metaGet;
+      get: (target: unknown) => unknown;
     }) => unknown) => runner({
       set: hoisted.metaSet,
-      get: hoisted.metaGet,
+      get: (target: unknown) => target === hoisted.refreshTokenRef
+        ? hoisted.refreshTokenGet()
+        : hoisted.metaGet(),
     }));
     hoisted.metaGet.mockResolvedValue({ exists: false, data: () => undefined });
+    hoisted.refreshTokenGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+        expiresAt: 1_000,
+        dateCreated: 100,
+        dateRefreshed: 100,
+        tokenRefreshLeaseOwner: 'lease-1',
+      }),
+    });
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,
@@ -177,6 +213,88 @@ describe('service-connection-meta', () => {
       providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
       providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
+  });
+
+  it('keeps the first opaque Wahoo refresh failure retryable without disabling routes', async () => {
+    await expect(recordWahooOpaqueRefreshFailure('user-1', getCurrentWahooRefreshClaim(), 1_000)).resolves.toEqual({
+      failureCount: 1,
+      retryAt: 301_000,
+      reconnectRequired: false,
+      stale: false,
+    });
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      wahooRefreshFailureCount: 1,
+      wahooRefreshFailureLastAt: 1_000,
+      wahooRefreshRetryAt: 301_000,
+      lastAuthFailureCode: 'wahoo_opaque_refresh_400',
+      lastAuthFailureMessage: 'Wahoo could not refresh this connection. Retrying later.',
+    }), { merge: true });
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
+  it('requires Wahoo reconnection after the opaque-refresh failure threshold without changing routes', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        wahooRefreshFailureCount: 2,
+        wahooRefreshFailureLastAt: 1_000,
+      }),
+    });
+
+    await expect(recordWahooOpaqueRefreshFailure('user-1', getCurrentWahooRefreshClaim(), 2_000)).resolves.toEqual({
+      failureCount: 3,
+      retryAt: null,
+      reconnectRequired: true,
+      stale: false,
+    });
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      connectionState: 'reconnect_required',
+      wahooRefreshFailureCount: 3,
+      wahooRefreshRetryAt: null,
+      lastAuthFailureMessage: 'Reconnect Wahoo to resume sync.',
+    }), { merge: true });
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old Wahoo refresh mark a reauthorized connection as failed', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        accessToken: 'reauthorized-access',
+        refreshToken: 'reauthorized-refresh',
+        expiresAt: 2_000,
+        dateCreated: 200,
+        dateRefreshed: 200,
+        tokenCredentialGeneration: 'new-generation',
+      }),
+    });
+
+    await expect(recordWahooOpaqueRefreshFailure('user-1', getCurrentWahooRefreshClaim(), 2_000)).resolves.toEqual({
+      failureCount: 0,
+      retryAt: null,
+      reconnectRequired: false,
+      stale: true,
+    });
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('clears Wahoo recovery state and releases only reconnect-parked work after OAuth succeeds', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI, 'provider-1')).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      connectionState: 'connected',
+      providerUserId: 'provider-1',
+      wahooRefreshFailureCount: 'delete-sentinel',
+      wahooRefreshFailureLastAt: 'delete-sentinel',
+      wahooRefreshRetryAt: 'delete-sentinel',
+    }), { merge: true });
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.WahooAPI,
+    );
   });
 
   it('stores a normalized provider account ID without changing connection state', async () => {

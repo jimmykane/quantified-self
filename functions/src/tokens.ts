@@ -23,6 +23,19 @@ import {
   COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
   COROS_ACCESS_TOKEN_VALIDITY_MS,
 } from './coros/constants';
+import {
+  claimTokenRefresh,
+  getTokenCredentialSnapshot,
+  persistTokenRefresh,
+  releaseTokenRefreshClaim,
+  areTokenCredentialSnapshotsEqual,
+} from './token-refresh-coordinator';
+import {
+  assertWahooConnectionAvailable,
+  assertWahooRefreshAllowed,
+  isOpaqueWahooRefreshFailure,
+  toWahooRefreshFailureError,
+} from './wahoo/refresh-recovery';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -52,6 +65,34 @@ export class TokenUseSkippedForPendingDisconnectError extends Error {
     public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
   ) {
     super(`Skipping ${serviceName} token use for ${tokenDocumentID} because service disconnect is pending for user ${firebaseUserID}.`);
+  }
+}
+
+/** Another worker owns the current credential refresh; queue work must retry later. */
+export class TokenRefreshInProgressError extends Error {
+  public readonly name = 'TokenRefreshInProgressError';
+  public readonly code = 'unavailable';
+  public readonly statusCode = 503;
+
+  constructor(
+    public readonly serviceName: ServiceNames,
+    public readonly tokenDocumentID: string,
+  ) {
+    super(`${serviceName} token refresh is already in progress for ${tokenDocumentID}.`);
+  }
+}
+
+/** A reconnect, disconnect, or winning refresh replaced this worker's snapshot. */
+export class TokenRefreshSupersededError extends Error {
+  public readonly name = 'TokenRefreshSupersededError';
+  public readonly code = 'unavailable';
+  public readonly statusCode = 503;
+
+  constructor(
+    public readonly serviceName: ServiceNames,
+    public readonly tokenDocumentID: string,
+  ) {
+    super(`${serviceName} token changed while refresh was in progress for ${tokenDocumentID}.`);
   }
 }
 
@@ -130,6 +171,26 @@ async function assertTokenUseAllowedForUser(
     );
     throw new TokenUseSkippedForPendingDisconnectError(firebaseUserID, serviceName, doc.id, phase);
   }
+
+  if (serviceName === ServiceNames.WahooAPI) {
+    await assertWahooConnectionAvailable(firebaseUserID);
+  }
+}
+
+async function retryWithLatestTokenSnapshot(
+  latestSnapshot: DocumentSnapshot | null,
+  serviceName: ServiceNames,
+  originalTokenDocumentID: string,
+  options: GetTokenDataOptions,
+): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface | WahooAPIAuth2ServiceTokenInterface> {
+  if (!latestSnapshot?.exists || options.allowSupersededSnapshotRetry === false) {
+    throw new TokenRefreshSupersededError(serviceName, originalTokenDocumentID);
+  }
+
+  return getTokenData(latestSnapshot, serviceName, false, {
+    ...options,
+    allowSupersededSnapshotRetry: false,
+  });
 }
 
 export async function getTokenData(
@@ -213,143 +274,215 @@ export async function getTokenData(
     logger.info(`Token ${doc.id} has expired`);
   }
 
-  let responseToken;
-  const date = new Date();
   await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh', options);
+  const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
+  if (serviceName === ServiceNames.WahooAPI && firebaseUserID) {
+    await assertWahooRefreshAllowed(firebaseUserID);
+  }
+
+  const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
+  const claimResult = await claimTokenRefresh(doc.ref, initialCredential);
+  if (claimResult.kind === 'superseded') {
+    return retryWithLatestTokenSnapshot(
+      claimResult.snapshot as DocumentSnapshot | null,
+      serviceName,
+      doc.id,
+      options,
+    );
+  }
+  if (claimResult.kind === 'busy') {
+    const latestSnapshot = await doc.ref.get();
+    const latestData = latestSnapshot.data() as Record<string, unknown> | undefined;
+    if (
+      latestSnapshot.exists
+      && !areTokenCredentialSnapshotsEqual(getTokenCredentialSnapshot(latestData), initialCredential)
+    ) {
+      return retryWithLatestTokenSnapshot(latestSnapshot, serviceName, doc.id, options);
+    }
+    throw new TokenRefreshInProgressError(serviceName, doc.id);
+  }
+
+  const refreshDoc = claimResult.snapshot;
+  const refreshTokenData = refreshDoc.data() as Auth2ServiceTokenInterface | undefined;
+  if (!refreshTokenData) {
+    await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
+    throw new TokenRefreshSupersededError(serviceName, doc.id);
+  }
+  const refreshToken = serviceConfig.getOAuth2Client(true).createToken({
+    'access_token': refreshTokenData.accessToken,
+    'refresh_token': refreshTokenData.refreshToken,
+    'expires_at': new Date(refreshTokenData.expiresAt),
+  });
+
+  let releaseClaim = true;
   try {
-    responseToken = await token.refresh();
-    if (serviceName === ServiceNames.COROSAPI) {
-      const resultCode = `${responseToken.token.result ?? ''}`.trim();
-      const message = `${responseToken.token.message ?? ''}`.trim();
-      if (!/^0+$/.test(resultCode) || message !== 'OK') {
-        throw new COROSTokenRefreshRejectedError(resultCode);
+    await assertTokenUseAllowedForUser(refreshDoc, serviceName, 'before_refresh', options);
+    if (serviceName === ServiceNames.WahooAPI && firebaseUserID) {
+      await assertWahooRefreshAllowed(firebaseUserID);
+    }
+
+    let responseToken: any;
+    try {
+      responseToken = await refreshToken.refresh();
+      if (serviceName === ServiceNames.COROSAPI) {
+        const resultCode = `${responseToken.token.result ?? ''}`.trim();
+        const message = `${responseToken.token.message ?? ''}`.trim();
+        if (!/^0+$/.test(resultCode) || message !== 'OK') {
+          throw new COROSTokenRefreshRejectedError(resultCode);
+        }
       }
-    }
-    logger.info(`Successfully refreshed token ${doc.id}`);
-  } catch (e: any) {
-    const failure = extractRefreshFailureDetails(e);
-    const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
-    const isTerminalAuthFailure = isTerminalRefreshFailureForService(serviceName, failure);
-    const isProviderDowngradedAuthFailure = failure.isTerminalAuthFailure && !isTerminalAuthFailure;
+      logger.info(`Successfully refreshed token ${refreshDoc.id}`);
+    } catch (e: any) {
+      const failure = extractRefreshFailureDetails(e);
+      const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
+      const isTerminalAuthFailure = isTerminalRefreshFailureForService(serviceName, failure);
+      const isProviderDowngradedAuthFailure = failure.isTerminalAuthFailure && !isTerminalAuthFailure;
 
-    if (isProviderDowngradedAuthFailure) {
-      logger.warn('[ServiceAuth] Provider token refresh rejected with a known non-terminal error.', {
-        serviceName,
-        phase: 'token_refresh',
-        providerStatus: failure.statusCode || undefined,
-        providerErrorCode: failure.isInvalidGrant ? 'invalid_grant' : undefined,
-        terminal: false,
-        outcome: 'retry',
-      });
-    } else if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
-      logger.warn(`Token refresh for user ${doc.id} failed`, getWahooErrorLogDetails(e));
-    } else if (failure.isTransientError) {
-      // Do not log the full stack trace for these known errors during cleanup
-      logger.warn(`Token refresh for user ${doc.id} failed (${failure.statusCode || 'unknown'}): ${failure.logMessage}`);
-    } else if (serviceName === ServiceNames.WahooAPI) {
-      logger.error(`Could not refresh token for user ${doc.id}`, getWahooErrorLogDetails(e));
-    } else {
-      logger.error(`Could not refresh token for user ${doc.id}`, e);
-    }
-
-    if (isTerminalAuthFailure) {
-      if (recoverTerminalAuthFailure) {
-        const resolution: TerminalServiceAuthFailureResolution = await handleTerminalServiceAuthFailure(
-          doc,
+      if (isProviderDowngradedAuthFailure) {
+        logger.warn('[ServiceAuth] Provider token refresh rejected with a known non-terminal error.', {
           serviceName,
-          serviceTokenData,
-          failure,
+          phase: 'token_refresh',
+          providerStatus: failure.statusCode || undefined,
+          providerErrorCode: failure.isInvalidGrant ? 'invalid_grant' : undefined,
+          terminal: false,
+          outcome: 'retry',
+        });
+      } else if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
+        logger.warn(`Token refresh for user ${refreshDoc.id} failed`, getWahooErrorLogDetails(e));
+      } else if (failure.isTransientError) {
+        // Do not log the full stack trace for these known errors during cleanup
+        logger.warn(`Token refresh for user ${refreshDoc.id} failed (${failure.statusCode || 'unknown'}): ${failure.logMessage}`);
+      } else if (serviceName === ServiceNames.WahooAPI) {
+        logger.error(`Could not refresh token for user ${refreshDoc.id}`, getWahooErrorLogDetails(e));
+      } else {
+        logger.error(`Could not refresh token for user ${refreshDoc.id}`, e);
+      }
+
+      if (serviceName === ServiceNames.WahooAPI && firebaseUserID && isOpaqueWahooRefreshFailure(failure)) {
+        throw await toWahooRefreshFailureError(firebaseUserID, {
+          tokenRef: doc.ref,
+          leaseOwner: claimResult.leaseOwner,
+          credential: claimResult.credential,
+        });
+      }
+
+      if (isTerminalAuthFailure) {
+        if (recoverTerminalAuthFailure) {
+          const resolution: TerminalServiceAuthFailureResolution = await handleTerminalServiceAuthFailure(
+            refreshDoc,
+            serviceName,
+            refreshTokenData,
+            failure,
+            serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
+          );
+          if (resolution.kind === 'retry_with_latest_snapshot') {
+            logger.info(`Retrying ${serviceName} token ${refreshDoc.id} with a newer stored snapshot after terminal auth failure.`);
+            return retryWithLatestTokenSnapshot(resolution.latestSnapshot, serviceName, doc.id, options);
+          }
+          throw resolution.error;
+        }
+        throw new TerminalServiceAuthError(
+          serviceName,
+          getFirebaseUserIDForTokenDocument(refreshDoc),
+          refreshDoc.id,
+          failure.statusCode,
+          failure.providerErrorCode,
+          failure.providerErrorMessage,
           serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
         );
-        if (resolution.kind === 'retry_with_latest_snapshot' && options.allowSupersededSnapshotRetry !== false) {
-          logger.info(`Retrying ${serviceName} token ${doc.id} with a newer stored snapshot after terminal auth failure.`);
-          return getTokenData(resolution.latestSnapshot, serviceName, forceRefreshAndSave, {
-            ...options,
-            allowSupersededSnapshotRetry: false,
-          });
-        }
-        if (resolution.kind === 'retry_with_latest_snapshot') {
-          logger.warn(`Token ${doc.id} for ${serviceName} changed again while recovering from terminal auth failure. Retrying this work item later with the newest stored token.`);
-          throw new Error(`${serviceName} token changed during terminal auth recovery`);
-        }
-        throw resolution.error;
       }
-      throw new TerminalServiceAuthError(
-        serviceName,
-        getFirebaseUserIDForTokenDocument(doc),
-        doc.id,
-        failure.statusCode,
-        failure.providerErrorCode,
-        failure.providerErrorMessage,
-        serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
-      );
+      throw e;
     }
-    throw e;
-  }
 
-  let newToken;
-  const refreshCompletedAtMs = Date.now();
-  switch (serviceName) {
-    default:
-      throw new Error('Not implemented');
-    case ServiceNames.SuuntoApp:
-      newToken = <SuuntoAPIAuth2ServiceTokenInterface>{
-        serviceName: serviceName,
-        accessToken: responseToken.token.access_token,
-        refreshToken: responseToken.token.refresh_token || serviceTokenData.refreshToken,
-        expiresAt: (responseToken.token as any).expires_at.getTime() - 600000, // 600 seconds buffer per Garmin recommendation
-        scope: responseToken.token.scope,
-        tokenType: responseToken.token.token_type,
-        userName: (responseToken.token as any).user,
-        dateRefreshed: date.getTime(),
-        dateCreated: serviceTokenData.dateCreated,
-      };
-      break;
-    case ServiceNames.GarminAPI:
-      newToken = <GarminAPIAuth2ServiceTokenInterface>{
-        serviceName: serviceName,
-        accessToken: responseToken.token.access_token,
-        refreshToken: responseToken.token.refresh_token || serviceTokenData.refreshToken,
-        expiresAt: (responseToken.token as any).expires_at.getTime() - 600000, // 600 seconds buffer per Garmin recommendation
-        scope: responseToken.token.scope,
-        tokenType: responseToken.token.token_type,
-        userID: (serviceTokenData as any).userID, // Preserve User ID
-        permissions: (serviceTokenData as any).permissions, // Preserve persist permissions
-        dateRefreshed: date.getTime(),
-        dateCreated: serviceTokenData.dateCreated,
-      };
-      break;
-    case ServiceNames.COROSAPI:
-      newToken = <COROSAPIAuth2ServiceTokenInterface>{
-        ...serviceTokenData,
-        serviceName,
-        accessToken: serviceTokenData.accessToken,
-        refreshToken: serviceTokenData.refreshToken,
-        expiresAt: refreshCompletedAtMs
-          + COROS_ACCESS_TOKEN_VALIDITY_MS
-          - COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
-        dateRefreshed: refreshCompletedAtMs,
-      };
-      break;
-    case ServiceNames.WahooAPI:
-      newToken = <WahooAPIAuth2ServiceTokenInterface>{
-        serviceName,
-        accessToken: `${responseToken.token.access_token || ''}`,
-        refreshToken: `${responseToken.token.refresh_token || serviceTokenData.refreshToken}`,
-        expiresAt: (responseToken.token as any).expires_at.getTime(),
-        scope: `${responseToken.token.scope || serviceTokenData.scope}`,
-        tokenType: `${responseToken.token.token_type || serviceTokenData.tokenType || 'bearer'}`,
-        wahooUserID: (serviceTokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
-        dateRefreshed: date.getTime(),
-        dateCreated: serviceTokenData.dateCreated,
-      };
-      break;
-  }
+    let newToken;
+    const date = new Date();
+    const refreshCompletedAtMs = Date.now();
+    switch (serviceName) {
+      default:
+        throw new Error('Not implemented');
+      case ServiceNames.SuuntoApp:
+        newToken = <SuuntoAPIAuth2ServiceTokenInterface>{
+          serviceName,
+          accessToken: responseToken.token.access_token,
+          refreshToken: responseToken.token.refresh_token || refreshTokenData.refreshToken,
+          expiresAt: (responseToken.token as any).expires_at.getTime() - 600000,
+          scope: responseToken.token.scope,
+          tokenType: responseToken.token.token_type,
+          userName: (responseToken.token as any).user,
+          dateRefreshed: date.getTime(),
+          dateCreated: refreshTokenData.dateCreated,
+        };
+        break;
+      case ServiceNames.GarminAPI:
+        newToken = <GarminAPIAuth2ServiceTokenInterface>{
+          serviceName,
+          accessToken: responseToken.token.access_token,
+          refreshToken: responseToken.token.refresh_token || refreshTokenData.refreshToken,
+          expiresAt: (responseToken.token as any).expires_at.getTime() - 600000,
+          scope: responseToken.token.scope,
+          tokenType: responseToken.token.token_type,
+          userID: (refreshTokenData as any).userID,
+          permissions: (refreshTokenData as any).permissions,
+          dateRefreshed: date.getTime(),
+          dateCreated: refreshTokenData.dateCreated,
+        };
+        break;
+      case ServiceNames.COROSAPI:
+        newToken = <COROSAPIAuth2ServiceTokenInterface>{
+          ...refreshTokenData,
+          serviceName,
+          accessToken: refreshTokenData.accessToken,
+          refreshToken: refreshTokenData.refreshToken,
+          expiresAt: refreshCompletedAtMs
+            + COROS_ACCESS_TOKEN_VALIDITY_MS
+            - COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
+          dateRefreshed: refreshCompletedAtMs,
+        };
+        break;
+      case ServiceNames.WahooAPI:
+        newToken = <WahooAPIAuth2ServiceTokenInterface>{
+          serviceName,
+          accessToken: `${responseToken.token.access_token || ''}`,
+          refreshToken: `${responseToken.token.refresh_token || refreshTokenData.refreshToken}`,
+          expiresAt: (responseToken.token as any).expires_at.getTime(),
+          scope: `${responseToken.token.scope || refreshTokenData.scope}`,
+          tokenType: `${responseToken.token.token_type || refreshTokenData.tokenType || 'bearer'}`,
+          wahooUserID: (refreshTokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
+          dateRefreshed: date.getTime(),
+          dateCreated: refreshTokenData.dateCreated,
+        };
+        break;
+    }
 
-  await assertTokenUseAllowedForUser(doc, serviceName, 'before_persist', options);
-  await doc.ref.update(newToken as any);
-  logger.info(`Successfully saved refreshed token ${doc.id}`);
-  return newToken;
+    await assertTokenUseAllowedForUser(refreshDoc, serviceName, 'before_persist', options);
+    const persistResult = await persistTokenRefresh(
+      doc.ref,
+      claimResult.leaseOwner,
+      claimResult.credential,
+      newToken as unknown as Record<string, unknown>,
+    );
+    if (persistResult.kind === 'persisted') {
+      releaseClaim = false;
+      logger.info(`Successfully saved refreshed token ${refreshDoc.id}`);
+      return newToken;
+    }
+    return retryWithLatestTokenSnapshot(
+      persistResult.snapshot as DocumentSnapshot | null,
+      serviceName,
+      doc.id,
+      options,
+    );
+  } finally {
+    if (releaseClaim) {
+      try {
+        await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
+      } catch (releaseError) {
+        logger.warn(`Could not release ${serviceName} token refresh lease for ${doc.id}.`, {
+          errorName: releaseError instanceof Error ? releaseError.name : 'UnknownError',
+        });
+      }
+    }
+  }
 }
 
 /**

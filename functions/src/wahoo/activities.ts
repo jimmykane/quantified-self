@@ -31,6 +31,10 @@ import {
   ProviderOperationError,
 } from '../shared/provider-operation-error';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import {
+  isWahooReconnectRequiredError,
+  isWahooRefreshBackoffError,
+} from './refresh-recovery';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
@@ -217,6 +221,17 @@ async function assertWahooActivityUploadProviderActionAllowed(userID: string, ph
 }
 
 function toWahooHttpsError(error: unknown): never {
+  if (isWahooReconnectRequiredError(error)) {
+    throw Object.assign(
+      new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.'),
+      { name: 'WahooReconnectRequiredError' },
+    );
+  }
+  if (isWahooRefreshBackoffError(error)) {
+    throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
+      retryAt: error.retryAt,
+    });
+  }
   if (isTerminalServiceAuthError(error)) {
     throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
   }

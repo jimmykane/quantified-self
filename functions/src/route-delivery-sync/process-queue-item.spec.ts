@@ -12,6 +12,7 @@ const {
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive,
   mockMarkQueueItemSkipped,
   mockIncreaseRetryCount,
   mockMoveToDLQ,
@@ -29,6 +30,7 @@ const {
   mockIsDestinationAuthRequiredError,
   mockIsDestinationPermissionRequiredError,
   mockIsDeliveryMetadataPersistenceError,
+  mockIsWahooReconnectRequiredError,
   MockRouteSendItemError,
 } = vi.hoisted(() => ({
   mockHasProAccess: vi.fn(),
@@ -39,6 +41,7 @@ const {
   mockUpdateToProcessed: vi.fn(),
   mockDeferQueueItemForPendingDisconnect: vi.fn(),
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive: vi.fn(),
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive: vi.fn(),
   mockMarkQueueItemSkipped: vi.fn(),
   mockIncreaseRetryCount: vi.fn(),
   mockMoveToDLQ: vi.fn(),
@@ -56,6 +59,7 @@ const {
   mockIsDestinationAuthRequiredError: vi.fn(),
   mockIsDestinationPermissionRequiredError: vi.fn(),
   mockIsDeliveryMetadataPersistenceError: vi.fn(),
+  mockIsWahooReconnectRequiredError: vi.fn(),
   MockRouteSendItemError: class MockRouteSendItemError extends Error {
     constructor(
       public readonly reason: string,
@@ -114,6 +118,9 @@ vi.mock('../queue-utils', () => ({
   deferQueueItemForPendingDisconnectIfCurrentUserActive: (params: any) => (
     mockDeferQueueItemForPendingDisconnectIfCurrentUserActive(params)
   ),
+  deferQueueItemForReconnectRequiredIfCurrentUserActive: (params: any) => (
+    mockDeferQueueItemForReconnectRequiredIfCurrentUserActive(params)
+  ),
   markQueueItemSkipped: (...args: any[]) => mockMarkQueueItemSkipped(...args),
   increaseRetryCountForQueueItem: (...args: any[]) => mockIncreaseRetryCount(...args),
   increaseRetryCountIfCurrentUserActive: (params: any) => {
@@ -137,6 +144,10 @@ vi.mock('../queue-utils', () => ({
 
 vi.mock('../service-connection-meta', () => ({
   getServiceConnectionMeta: (...args: any[]) => mockGetServiceConnectionMeta(...args),
+}));
+
+vi.mock('../wahoo/refresh-recovery', () => ({
+  isWahooReconnectRequiredError: mockIsWahooReconnectRequiredError,
 }));
 
 vi.mock('../queue/dispatch-marker', () => ({
@@ -245,6 +256,7 @@ function mockSuccessfulPrerequisites(): void {
   mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
   mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
   mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
   mockIncreaseRetryCount.mockResolvedValue(QueueResult.RetryIncremented);
   mockMoveToDLQ.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -252,6 +264,7 @@ function mockSuccessfulPrerequisites(): void {
   mockIsDestinationAuthRequiredError.mockReturnValue(false);
   mockIsDestinationPermissionRequiredError.mockReturnValue(false);
   mockIsDeliveryMetadataPersistenceError.mockReturnValue(false);
+  mockIsWahooReconnectRequiredError.mockReturnValue(false);
 }
 
 describe('route-delivery-sync/process-queue-item', () => {
@@ -849,6 +862,31 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
     expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+  });
+
+  it('parks Wahoo route delivery when the destination requires reconnecting', async () => {
+    mockGetServiceConnectionMeta
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ connectionState: 'reconnect_required' });
+
+    const wahooQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(wahooQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem: wahooQueueItem,
+      phase: 'route_delivery_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+      additionalData: { deferredServiceName: ServiceNames.WahooAPI },
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
   it('defers when destination token use becomes blocked by pending disconnect during context creation', async () => {

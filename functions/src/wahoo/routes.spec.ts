@@ -440,6 +440,19 @@ describe('Wahoo route uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
+  it('preserves the reconnect-required marker so saved-route delivery is parked', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      name: 'WahooReconnectRequiredError',
+    }));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'WahooReconnectRequiredError',
+        code: 'unauthenticated',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
   it('preserves transient token setup failures for the route queue retry policy', async () => {
     const firestoreError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
     mocks.getTokenData.mockRejectedValueOnce(firestoreError);

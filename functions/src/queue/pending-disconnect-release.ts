@@ -8,7 +8,9 @@ import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-syn
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
-    isPendingDisconnectQueueItemDeferred,
+    isQueueItemDeferredForReason,
+    QUEUE_DEFERRED_REASONS,
+    type QueueDeferredReason,
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
@@ -46,6 +48,7 @@ function buildDeferredQueueReleaseUpdate(): Record<string, unknown> {
         deferredServiceName: deleteField,
         serviceDisconnectPendingDeferredAt: deleteField,
         serviceDisconnectPendingNextDispatchAt: deleteField,
+        serviceReconnectRequiredDeferredAt: deleteField,
     };
 }
 
@@ -145,6 +148,7 @@ async function releaseDeferredDocsForQuery(
     matchesService: (data: QueueDocData) => boolean,
     logContext: Record<string, unknown>,
     releasedQueueItemPaths: Set<string>,
+    deferredReason: QueueDeferredReason,
 ): Promise<number> {
     const snapshot = await query.get();
     if (snapshot.empty) {
@@ -154,7 +158,7 @@ async function releaseDeferredDocsForQuery(
     const updateData = buildDeferredQueueReleaseUpdate();
     const results = await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data() as QueueDocData;
-        if (!isPendingDisconnectQueueItemDeferred(data) || !matchesService(data)) {
+        if (!isQueueItemDeferredForReason(data, deferredReason) || !matchesService(data)) {
             return false;
         }
 
@@ -187,6 +191,7 @@ async function releaseDeferredDocsForQuery(
 async function releaseDeferredDocsForQueries(
     specs: ReleaseQuerySpec[],
     releasedQueueItemPaths: Set<string>,
+    deferredReason: QueueDeferredReason,
 ): Promise<number> {
     let releasedCount = 0;
     for (const spec of specs) {
@@ -195,6 +200,7 @@ async function releaseDeferredDocsForQueries(
             spec.matchesService,
             spec.logContext,
             releasedQueueItemPaths,
+            deferredReason,
         );
     }
     return releasedCount;
@@ -203,6 +209,30 @@ async function releaseDeferredDocsForQueries(
 export async function releaseQueueItemsDeferredForPendingDisconnect(
     userID: string,
     serviceName: ServiceNames,
+): Promise<number> {
+    return releaseQueueItemsDeferredForServiceState(
+        userID,
+        serviceName,
+        QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+    );
+}
+
+/** Releases work parked while a service was waiting for the user to reconnect it. */
+export async function releaseQueueItemsDeferredForReconnectRequired(
+    userID: string,
+    serviceName: ServiceNames,
+): Promise<number> {
+    return releaseQueueItemsDeferredForServiceState(
+        userID,
+        serviceName,
+        QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+    );
+}
+
+async function releaseQueueItemsDeferredForServiceState(
+    userID: string,
+    serviceName: ServiceNames,
+    deferredReason: QueueDeferredReason,
 ): Promise<number> {
     const db = admin.firestore();
     const sleepProvider = getSleepProviderForService(serviceName);
@@ -278,21 +308,23 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
     ];
 
     const [workoutCount, activitySyncCount, routeDeliverySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
-        releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths),
+        releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths, deferredReason),
         releaseDeferredDocsForQuery(
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
             (data) => isActivitySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'activity_sync' },
             releasedQueueItemPaths,
+            deferredReason,
         ),
         releaseDeferredDocsForQuery(
             routeDeliverySyncQueue.where('userID', '==', userID),
             (data) => isRouteDeliverySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'route_delivery_sync' },
             releasedQueueItemPaths,
+            deferredReason,
         ),
-        releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths),
-        releaseDeferredDocsForQueries(routeSyncQueries, releasedQueueItemPaths),
+        releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(routeSyncQueries, releasedQueueItemPaths, deferredReason),
     ]);
 
     const releasedCount = workoutCount + activitySyncCount + routeDeliverySyncCount + sleepSyncCount + routeSyncCount;

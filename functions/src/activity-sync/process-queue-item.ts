@@ -13,6 +13,7 @@ import {
     PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
     deferQueueItemForPendingDisconnect,
     deferQueueItemForPendingDisconnectIfCurrentUserActive,
+    deferQueueItemForReconnectRequiredIfCurrentUserActive,
     increaseRetryCountIfCurrentUserActive,
     isProviderOperationInFlightLeaseActive,
     markQueueItemSkipped,
@@ -25,6 +26,7 @@ import { isActivitySyncRouteEnabledForUser } from './settings';
 import { getServiceConnectionMeta } from '../service-connection-meta';
 import {
     isDisconnectPendingServiceConnection,
+    isReconnectRequiredServiceConnection,
     isServiceUnavailableForSyncConnection,
 } from '../../../shared/service-connection';
 import {
@@ -47,6 +49,7 @@ import {
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
+import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
@@ -272,7 +275,7 @@ async function getPendingDisconnectServiceForRoute(
     return null;
 }
 
-type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending';
+type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending' | 'reconnect_required';
 
 async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
     switch (destinationServiceName) {
@@ -296,6 +299,9 @@ async function getDestinationConnectionStatus(userID: string, destinationService
             const meta = await getServiceConnectionMeta(userID, destinationServiceName);
             if (isDisconnectPendingServiceConnection(meta)) {
                 return 'disconnect_pending';
+            }
+            if (isReconnectRequiredServiceConnection(meta)) {
+                return 'reconnect_required';
             }
             if (isServiceUnavailableForSyncConnection(meta)) {
                 return 'not_connected';
@@ -1165,6 +1171,28 @@ async function deferActivitySyncQueueItemForPendingDisconnect(
     });
 }
 
+async function deferActivitySyncQueueItemForReconnectRequired(
+    queueItem: ActivitySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    routeMeta: ActivitySyncRouteMeta,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    const error = new Error('Reconnect Wahoo to resume this activity delivery.');
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
+        ...routeMeta,
+        error: toActivitySyncMetadataError(error),
+    }));
+    return deferQueueItemForReconnectRequiredIfCurrentUserActive({
+        queueItem,
+        additionalData: { deferredServiceName: `${ServiceNames.WahooAPI}` },
+        bulkWriter,
+        userID: queueItem.userID,
+        serviceName: ServiceNames.WahooAPI,
+        phase: 'activity_sync_reconnect_required_transition',
+        logPrefix: 'ActivitySync',
+        isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
+    });
+}
+
 function markActivitySyncQueueItemSkippedForDeletedUser(
     queueItem: ActivitySyncQueueItemInterface,
     bulkWriter?: admin.firestore.BulkWriter,
@@ -1315,6 +1343,13 @@ export async function processActivitySyncQueueItem(
                     bulkWriter,
                     routeMeta,
                     queueItem.destinationServiceName,
+                );
+            }
+            if (destinationConnectionStatus === 'reconnect_required') {
+                return deferActivitySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
                 );
             }
             if (destinationConnectionStatus === 'not_connected') {
@@ -1543,6 +1578,21 @@ export async function processActivitySyncQueueItem(
                     providerUserId: error.providerUserId,
                 },
                 error.originalError,
+                bulkWriter,
+                routeMeta,
+            );
+        }
+
+        // The Wahoo opaque-refresh circuit breaker becomes an explicit
+        // reconnect state. It must take precedence over generic destination
+        // authentication handling so work is parked (and resumed after OAuth)
+        // rather than being skipped or reconciled as a failed upload.
+        if (
+            queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isWahooReconnectRequiredError(error)
+        ) {
+            return deferActivitySyncQueueItemForReconnectRequired(
+                queueItem,
                 bulkWriter,
                 routeMeta,
             );

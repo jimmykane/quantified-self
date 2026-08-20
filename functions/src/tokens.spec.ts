@@ -5,6 +5,7 @@ import {
     refreshTokens,
     refreshStaleTokens,
     TerminalServiceAuthError,
+    TokenRefreshInProgressError,
     TokenRefreshSkippedForDeletedUserError,
     TokenUseSkippedForPendingDisconnectError,
 } from './tokens';
@@ -21,6 +22,13 @@ const hoisted = vi.hoisted(() => ({
         info: vi.fn(),
         warn: vi.fn(),
     },
+    claimTokenRefresh: vi.fn(),
+    persistTokenRefresh: vi.fn(),
+    releaseTokenRefreshClaim: vi.fn(),
+    assertWahooConnectionAvailable: vi.fn(),
+    assertWahooRefreshAllowed: vi.fn(),
+    toWahooRefreshFailureError: vi.fn(),
+    isOpaqueWahooRefreshFailure: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => hoisted.logger);
@@ -160,6 +168,28 @@ vi.mock('./service-disconnect-pending', () => ({
     isServiceDisconnectPendingForUser: hoisted.isServiceDisconnectPendingForUser,
 }));
 
+vi.mock('./token-refresh-coordinator', () => ({
+    claimTokenRefresh: hoisted.claimTokenRefresh,
+    persistTokenRefresh: hoisted.persistTokenRefresh,
+    releaseTokenRefreshClaim: hoisted.releaseTokenRefreshClaim,
+    getTokenCredentialSnapshot: vi.fn((data: any) => ({
+        accessToken: data?.accessToken || '',
+        refreshToken: data?.refreshToken || '',
+        expiresAt: Number(data?.expiresAt || 0),
+        dateCreated: Number(data?.dateCreated || 0),
+        dateRefreshed: Number(data?.dateRefreshed || 0),
+        credentialGeneration: data?.tokenCredentialGeneration || null,
+    })),
+    areTokenCredentialSnapshotsEqual: vi.fn((left: any, right: any) => JSON.stringify(left) === JSON.stringify(right)),
+}));
+
+vi.mock('./wahoo/refresh-recovery', () => ({
+    assertWahooConnectionAvailable: hoisted.assertWahooConnectionAvailable,
+    assertWahooRefreshAllowed: hoisted.assertWahooRefreshAllowed,
+    isOpaqueWahooRefreshFailure: hoisted.isOpaqueWahooRefreshFailure,
+    toWahooRefreshFailureError: hoisted.toWahooRefreshFailureError,
+}));
+
 import { getServiceAdapter } from './auth/factory';
 import { handleTerminalServiceAuthFailure } from './service-auth-lifecycle';
 
@@ -177,6 +207,10 @@ describe('tokens', () => {
             shouldSkip: false,
         });
         hoisted.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+        hoisted.assertWahooConnectionAvailable.mockResolvedValue(undefined);
+        hoisted.assertWahooRefreshAllowed.mockResolvedValue(undefined);
+        hoisted.toWahooRefreshFailureError.mockResolvedValue(new Error('Wahoo refresh unavailable'));
+        hoisted.isOpaqueWahooRefreshFailure.mockReturnValue(false);
         (handleTerminalServiceAuthFailure as any).mockReset().mockImplementation(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
             kind: 'terminal_error',
             error: new TerminalServiceAuthError(
@@ -203,10 +237,12 @@ describe('tokens', () => {
             }),
             ref: {
                 update: vi.fn(() => Promise.resolve()),
+                get: vi.fn(() => Promise.resolve(mockDoc)),
                 delete: vi.fn(() => Promise.resolve()),
                 parent: { parent: { id: 'firebase-user-123' } },
             },
         };
+        mockDoc.ref.__snapshot = mockDoc;
 
         mockToken = {
             expired: vi.fn().mockReturnValue(false),
@@ -233,6 +269,17 @@ describe('tokens', () => {
             getOAuth2Client: vi.fn().mockReturnValue(mockOAuthClient),
             tokenCollectionName: 'test-collection',
         });
+        hoisted.claimTokenRefresh.mockImplementation(async (ref: any, credential: any) => ({
+            kind: 'owner',
+            leaseOwner: 'refresh-lease',
+            snapshot: ref.__snapshot,
+            credential,
+        }));
+        hoisted.persistTokenRefresh.mockImplementation(async (ref: any, _leaseOwner: string, _credential: any, tokenData: any) => {
+            await ref.update(tokenData);
+            return { kind: 'persisted' };
+        });
+        hoisted.releaseTokenRefreshClaim.mockResolvedValue(undefined);
     });
 
     describe('refreshStaleTokens', () => {
@@ -329,7 +376,7 @@ describe('tokens', () => {
             expect(mockToken.refresh).toHaveBeenCalled();
             expect(result.accessToken).toBe('new-access');
             expect(mockDoc.ref.update).toHaveBeenCalled();
-            expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(2);
+            expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(3);
         });
 
         it('should not call provider refresh when user deletion is in progress before refresh', async () => {
@@ -350,6 +397,11 @@ describe('tokens', () => {
         it('should not persist a refreshed token when user deletion starts before save', async () => {
             mockToken.expired.mockReturnValue(true);
             hoisted.getUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
                 .mockResolvedValueOnce({
                     userExists: true,
                     deletionInProgress: false,
@@ -398,6 +450,81 @@ describe('tokens', () => {
 
             expect(mockToken.refresh).toHaveBeenCalled();
             expect(result.accessToken).toBe('new-access-exp');
+        });
+
+        it('defers a competing refresh while the stored credential is unchanged', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'busy' });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenRefreshInProgressError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.get).toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('uses the newer credential snapshot when guarded refresh persistence is superseded', async () => {
+            const latestDoc = {
+                id: 'user-123',
+                exists: true,
+                data: vi.fn().mockReturnValue({
+                    accessToken: 'reauthorized-access',
+                    refreshToken: 'reauthorized-refresh',
+                    expiresAt: Date.now() + 3600000,
+                    serviceName: ServiceNames.SuuntoApp,
+                    userName: 'suunto-user',
+                    dateCreated: 2_000,
+                    dateRefreshed: 2_000,
+                    tokenCredentialGeneration: 'generation-2',
+                }),
+                ref: { parent: { parent: { id: 'firebase-user-123' } } },
+            } as any;
+            mockToken.expired.mockReturnValueOnce(true).mockReturnValue(false);
+            hoisted.persistTokenRefresh.mockResolvedValueOnce({
+                kind: 'superseded',
+                snapshot: latestDoc,
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
+
+            expect(result.accessToken).toBe('reauthorized-access');
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalled();
+        });
+
+        it('turns an opaque Wahoo refresh 400 into durable per-account recovery state', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-wahoo',
+                refreshToken: 'old-wahoo-refresh',
+                serviceName: ServiceNames.WahooAPI,
+                wahooUserID: 'wahoo-user',
+                expiresAt: 1_000,
+                dateCreated: 500,
+                dateRefreshed: 500,
+            });
+            mockToken.expired.mockReturnValue(true);
+            const providerError = Object.assign(new Error('Bad request'), { statusCode: 400 });
+            const recoveryError = Object.assign(new Error('Wahoo token refresh is temporarily paused.'), {
+                name: 'WahooRefreshBackoffError',
+            });
+            mockToken.refresh.mockRejectedValueOnce(providerError);
+            hoisted.isOpaqueWahooRefreshFailure.mockReturnValueOnce(true);
+            hoisted.toWahooRefreshFailureError.mockResolvedValueOnce(recoveryError);
+
+            await expect(getTokenData(mockDoc, ServiceNames.WahooAPI, false)).rejects.toBe(recoveryError);
+
+            expect(hoisted.toWahooRefreshFailureError).toHaveBeenCalledWith('firebase-user-123', expect.objectContaining({
+                tokenRef: mockDoc.ref,
+                leaseOwner: 'refresh-lease',
+                credential: expect.objectContaining({
+                    accessToken: 'old-wahoo',
+                    refreshToken: 'old-wahoo-refresh',
+                }),
+            }));
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.error.mock.calls)).not.toContain('old-wahoo-refresh');
         });
 
         it('should apply 600s buffer to expiresAt for Suunto tokens', async () => {
@@ -671,6 +798,7 @@ describe('tokens', () => {
 
             const replacementDoc = {
                 id: 'user-123',
+                exists: true,
                 data: vi.fn().mockReturnValue({
                     accessToken: 'replacement-access',
                     refreshToken: 'replacement-refresh',
@@ -686,6 +814,7 @@ describe('tokens', () => {
                     parent: { parent: { id: 'firebase-user-123' } },
                 },
             };
+            (replacementDoc.ref as any).__snapshot = replacementDoc;
 
             mockToken.refresh
                 .mockRejectedValueOnce(error)

@@ -92,7 +92,10 @@ vi.mock('firebase-functions/logger', () => ({
     error: hoisted.loggerError,
 }));
 
-import { releaseQueueItemsDeferredForPendingDisconnect } from './pending-disconnect-release';
+import {
+    releaseQueueItemsDeferredForPendingDisconnect,
+    releaseQueueItemsDeferredForReconnectRequired,
+} from './pending-disconnect-release';
 
 describe('pending disconnect queue release', () => {
     beforeEach(() => {
@@ -190,6 +193,43 @@ describe('pending disconnect queue release', () => {
         expect(otherRouteDeliveryUpdate).not.toHaveBeenCalled();
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
         expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
+    });
+
+    it('releases only Wahoo work parked for reconnect after a successful OAuth callback', async () => {
+        const reconnectReason = QUEUE_DEFERRED_REASONS.ServiceReconnectRequired;
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const routeDeliveryUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-wahoo', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const pendingDisconnectUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-pending-disconnect', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const otherServiceUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-other', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(2);
+
+        for (const update of [activityUpdate, routeDeliveryUpdate]) {
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: false,
+                dispatchedToCloudTask: null,
+                deferredReason: hoisted.deleteSentinel,
+                serviceReconnectRequiredDeferredAt: hoisted.deleteSentinel,
+            }));
+        }
+        expect(pendingDisconnectUpdate).not.toHaveBeenCalled();
+        expect(otherServiceUpdate).not.toHaveBeenCalled();
     });
 
     it('releases legacy workout, sleep, and route queue items by provider identifier when local user fields are missing', async () => {
