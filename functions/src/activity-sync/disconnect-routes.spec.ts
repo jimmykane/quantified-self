@@ -399,6 +399,24 @@ describe('activity-sync/disconnect-routes', () => {
     }), { merge: true });
   });
 
+  it('does not let a stale reconnect incident disable routes after OAuth wins', async () => {
+    mockMetaGet.mockResolvedValueOnce({
+      data: () => ({
+        connectionState: 'connected',
+        connectionStateGeneration: 'oauth-generation',
+      }),
+    });
+
+    await disableActivitySyncRoutesForDisconnectedService('user-1', ServiceNames.WahooAPI, {
+      trackPendingDisconnectRestore: true,
+      expectedConnectionStateGeneration: 'terminal-failure-generation',
+      requiredConnectionState: 'reconnect_required',
+    });
+
+    expect(mockSettingsGet).not.toHaveBeenCalled();
+    expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
+
   it('reconstructs pending restore state when Firestore retries the disable transaction', async () => {
     mockRunTransaction.mockImplementationOnce(async (runner: (transaction: {
       get: (ref: { __mockType?: string; serviceName?: string }) => unknown;
@@ -525,5 +543,27 @@ describe('activity-sync/disconnect-routes', () => {
     });
 
     expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
+
+  it('clears a route-repair marker atomically with the matching generation restore', async () => {
+    mockMetaGet.mockImplementation(async (serviceName: string) => ({
+      data: () => serviceName === ServiceNames.SuuntoApp
+        ? { connectionState: 'connected', connectionStateGeneration: 'connection-generation-1' }
+        : {},
+    }));
+    mockSettingsGet.mockResolvedValueOnce({ data: () => ({}) });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp, {
+      requireServiceConnected: true,
+      expectedConnectionStateGeneration: 'connection-generation-1',
+      clearRouteRestoreMarker: true,
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.objectContaining({ __mockType: 'meta' }), {
+      routeRestorePending: 'DELETE_SENTINEL',
+      routeRestoreConnectionGeneration: 'DELETE_SENTINEL',
+      routeRestoreLastAttemptAt: 'DELETE_SENTINEL',
+      routeRestoreAttemptCount: 'DELETE_SENTINEL',
+    }, { merge: true });
   });
 });

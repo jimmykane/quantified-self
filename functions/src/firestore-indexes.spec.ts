@@ -130,6 +130,22 @@ describe('firestore indexes', () => {
             ttl: true,
             indexes: [],
         });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'wahooReconnectReleasePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'routeRestorePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
         expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
             collectionGroup: 'tokens',
             fieldPath: 'wahooUserID',

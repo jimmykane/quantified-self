@@ -24,6 +24,7 @@ import {
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
+import { getTokenCredentialSnapshot } from './token-refresh-coordinator';
 
 type StoredServiceToken =
   | Auth2ServiceTokenInterface
@@ -559,6 +560,7 @@ async function fallbackRecursiveDeleteTokenRoot(
 }
 
 interface DeleteCurrentTerminalAuthTokenResult {
+  connectionStateGeneration: string | null;
   latestSnapshot: DocumentSnapshot | null;
   remainingTokenCount: number;
   skippedBecauseTokenChanged: boolean;
@@ -595,6 +597,7 @@ async function deleteCurrentTerminalAuthToken(
     const currentTokenSnapshot = await transaction.get(tokenSnapshot.ref);
     if (!currentTokenSnapshot.exists) {
       return {
+        connectionStateGeneration: null,
         latestSnapshot: null,
         remainingTokenCount: 0,
         skippedBecauseTokenChanged: true,
@@ -607,6 +610,7 @@ async function deleteCurrentTerminalAuthToken(
     if (expectedUpdateTime && currentTokenSnapshot.updateTime
       && !areFirestoreTimestampsEqual(currentTokenSnapshot.updateTime, expectedUpdateTime)) {
       return {
+        connectionStateGeneration: null,
         latestSnapshot: currentTokenSnapshot,
         remainingTokenCount: 1,
         skippedBecauseTokenChanged: true,
@@ -616,10 +620,18 @@ async function deleteCurrentTerminalAuthToken(
       };
     }
 
-    const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
+    const [tokenQuerySnapshot, tokenRootSnapshot, serviceMetaSnapshot] = await Promise.all([
+      transaction.get(tokenCollectionRef),
+      transaction.get(tokenRootRef),
+      transaction.get(
+        admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName),
+      ),
+    ]);
     const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenSnapshot.id).length;
-    const tokenRootSnapshot = await transaction.get(tokenRootRef);
     const preserveTokenRootForOAuthFlow = remainingTokenCount === 0 && hasPendingOAuthFlowContext(tokenRootSnapshot);
+    const connectionStateGeneration = typeof serviceMetaSnapshot.data()?.connectionStateGeneration === 'string'
+      ? `${serviceMetaSnapshot.data()?.connectionStateGeneration}`
+      : null;
 
     transaction.delete(tokenSnapshot.ref);
     if (remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow) {
@@ -629,6 +641,7 @@ async function deleteCurrentTerminalAuthToken(
     }
 
     return {
+      connectionStateGeneration,
       latestSnapshot: currentTokenSnapshot,
       remainingTokenCount,
       skippedBecauseTokenChanged: false,
@@ -722,8 +735,13 @@ async function cleanupTerminalAuthToken(
     fallbackTokenRootCleanupPerformed: false,
   };
 
+  const tokenDataAtFailure = typeof tokenSnapshot.data === 'function'
+    ? tokenSnapshot.data() as Record<string, unknown> | undefined
+    : undefined;
+  let deleteResult: DeleteCurrentTerminalAuthTokenResult | null = null;
+
   try {
-    const deleteResult = await deleteCurrentTerminalAuthToken(tokenSnapshot, serviceName);
+    deleteResult = await deleteCurrentTerminalAuthToken(tokenSnapshot, serviceName);
     if (deleteResult.skippedBecauseTokenChanged) {
       outcome.preservedTokenCount = Math.max(deleteResult.remainingTokenCount, 1);
       return {
@@ -754,13 +772,20 @@ async function cleanupTerminalAuthToken(
 
     if (deleteResult.remainingTokenCount === 0) {
       try {
-        await markServiceReconnectRequired(
+        const didMarkReconnectRequired = await markServiceReconnectRequired(
           userID,
           serviceName,
           terminalAuthFailure.providerErrorCode,
           terminalAuthFailure.providerErrorMessage,
+          Date.now(),
+          {
+            expectedConnectionStateGeneration: deleteResult.connectionStateGeneration,
+            requireEmptyTokenCollection: tokenSnapshot.ref.parent,
+          },
         );
-        outcome.connectionStateUpdate = 'reconnect_required';
+        if (didMarkReconnectRequired) {
+          outcome.connectionStateUpdate = 'reconnect_required';
+        }
       } catch (metaError) {
         logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
       }
@@ -775,13 +800,32 @@ async function cleanupTerminalAuthToken(
     logger.error(`Failed to delete terminal auth token ${tokenSnapshot.id} for ${serviceName} user ${userID}`, error);
     outcome.localCleanupStatus = 'partial';
     try {
-      await markServiceReconnectRequired(
+      if (!deleteResult && !tokenDataAtFailure) {
+        throw new Error('Could not prove the failed credential generation after terminal token cleanup failed.');
+      }
+      const didMarkReconnectRequired = await markServiceReconnectRequired(
         userID,
         serviceName,
         terminalAuthFailure.providerErrorCode,
         terminalAuthFailure.providerErrorMessage,
+        Date.now(),
+        {
+          ...(deleteResult ? {
+            expectedConnectionStateGeneration: deleteResult.connectionStateGeneration,
+            ...(deleteResult.remainingTokenCount === 0 ? {
+              requireEmptyTokenCollection: tokenSnapshot.ref.parent,
+            } : {}),
+          } : {
+            expectedTokenCredential: {
+              tokenRef: tokenSnapshot.ref,
+              credential: getTokenCredentialSnapshot(tokenDataAtFailure),
+            },
+          }),
+        },
       );
-      outcome.connectionStateUpdate = 'reconnect_required';
+      if (didMarkReconnectRequired) {
+        outcome.connectionStateUpdate = 'reconnect_required';
+      }
     } catch (metaError) {
       logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
     }
@@ -1098,13 +1142,24 @@ export async function handleTerminalServiceAuthFailure(
       fallbackTokenRootCleanupPerformed: false,
     };
     try {
-      await markServiceReconnectRequired(
+      const didMarkReconnectRequired = await markServiceReconnectRequired(
         firebaseUserID,
         serviceName,
         failure.providerErrorCode,
         failure.providerErrorMessage,
+        Date.now(),
+        {
+          expectedTokenCredential: {
+            tokenRef: doc.ref,
+            credential: getTokenCredentialSnapshot(
+              serviceTokenData as unknown as Record<string, unknown>,
+            ),
+          },
+        },
       );
-      cleanupOutcome.connectionStateUpdate = 'reconnect_required';
+      if (didMarkReconnectRequired) {
+        cleanupOutcome.connectionStateUpdate = 'reconnect_required';
+      }
     } catch (metaError) {
       logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${firebaseUserID}`, metaError);
     }

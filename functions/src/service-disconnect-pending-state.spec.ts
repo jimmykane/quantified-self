@@ -192,6 +192,7 @@ describe('service-disconnect-pending-state', () => {
     const retryExpiresAt = timestamp(NOW_MS + 2 * DAY_MS);
 
     expect(buildPendingDisconnectMetaInputFromRootData({
+      disconnectGeneration: 'pending-generation-1',
       disconnectReason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
       disconnectAttemptCount: 4,
       disconnectNextAttemptAt: nextAttemptAt,
@@ -201,6 +202,7 @@ describe('service-disconnect-pending-state', () => {
       disconnectLastErrorMessage: 'rate limited',
       disconnectManualReviewRequired: true,
     }, NOW_MS)).toEqual({
+      generation: 'pending-generation-1',
       reason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
       attemptCount: 4,
       nextAttemptAt,

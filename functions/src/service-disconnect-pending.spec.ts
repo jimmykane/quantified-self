@@ -140,12 +140,19 @@ describe('service-disconnect-pending', () => {
   it('clears pending fields before releasing deferred queue items when the user is active', async () => {
     hoisted.transactionGet.mockResolvedValue({
       exists: true,
-      data: () => ({ disconnectState: 'disconnect_pending' }),
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'pending-generation-1',
+      }),
     });
 
     await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
 
-    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-1',
+    );
     expect(hoisted.transactionSet).toHaveBeenCalledWith(
       hoisted.rootRef,
       expect.objectContaining({
@@ -157,6 +164,7 @@ describe('service-disconnect-pending', () => {
     );
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      expectedPendingDisconnectGeneration: 'pending-generation-1',
     });
     expect(hoisted.transactionSet.mock.invocationCallOrder[0])
       .toBeLessThan(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0]);
@@ -169,6 +177,7 @@ describe('service-disconnect-pending', () => {
       exists: true,
       data: () => ({
         disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'pending-generation-2',
         disconnectReason: 'subscription_enforcement',
         disconnectAttemptCount: 2,
         disconnectNextAttemptAt: 'next-attempt',
@@ -187,9 +196,14 @@ describe('service-disconnect-pending', () => {
     await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
       .rejects.toThrow('release failed');
 
-    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-2',
+    );
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      expectedPendingDisconnectGeneration: 'pending-generation-2',
     });
     expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
       1,
@@ -298,6 +312,31 @@ describe('service-disconnect-pending', () => {
         lastStatusCode: 504,
         manualReviewRequired: false,
       }),
+    );
+  });
+
+  it('starts a new generation for a new pending-disconnect episode', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        disconnectState: 'connected',
+        disconnectGeneration: 'stale-generation',
+      }),
+    });
+
+    await markServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      { tokenID: 'token-1', statusCode: 504, errorMessage: 'gateway timeout' },
+    );
+
+    const persistedRoot = hoisted.transactionSet.mock.calls[0][1] as Record<string, unknown>;
+    expect(persistedRoot.disconnectGeneration).toEqual(expect.any(String));
+    expect(persistedRoot.disconnectGeneration).not.toBe('stale-generation');
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({ generation: persistedRoot.disconnectGeneration }),
     );
   });
 

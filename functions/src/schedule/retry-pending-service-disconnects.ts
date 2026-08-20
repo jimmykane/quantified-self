@@ -12,7 +12,10 @@ import {
   cleanupServiceConnectionForUser,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
-import { retryWahooReconnectQueueRelease } from '../service-connection-meta';
+import {
+  retryPendingServiceRouteRestore,
+  retryWahooReconnectQueueRelease,
+} from '../service-connection-meta';
 import {
   clearServiceDisconnectPending,
   isServiceDisconnectPendingData,
@@ -372,6 +375,35 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
   return repairedCount;
 }
 
+async function retryPendingServiceRouteRestorations(): Promise<number> {
+  const snapshot = await admin.firestore()
+    .collectionGroup('meta')
+    .where('routeRestorePending', '==', true)
+    .get();
+  const knownServiceNames = new Set<string>(Object.values(ServiceNames));
+  let repairedCount = 0;
+
+  for (const metaSnapshot of snapshot.docs) {
+    if (!knownServiceNames.has(metaSnapshot.id)) continue;
+    const userID = metaSnapshot.ref.parent.parent?.id;
+    if (!userID) continue;
+
+    try {
+      if (await retryPendingServiceRouteRestore(userID, metaSnapshot.id as ServiceNames)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair route restoration.', {
+        userID,
+        serviceName: metaSnapshot.id,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  }
+
+  return repairedCount;
+}
+
 export const retryPendingServiceDisconnects = onSchedule({
   region: 'europe-west2',
   secrets: FUNCTION_SECRET_BINDINGS.retryPendingServiceDisconnects,
@@ -412,6 +444,11 @@ export const retryPendingServiceDisconnects = onSchedule({
     serviceName: ServiceNames.WahooAPI,
     repairedCount: repairedWahooReconnectReleaseCount,
   });
+
+  const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
+    repairedCount: repairedRouteRestoreCount,
+  });
 });
 
 export const retryPendingServiceDisconnectsTestInternals = {
@@ -420,6 +457,7 @@ export const retryPendingServiceDisconnectsTestInternals = {
   getDuePendingDisconnectRoots,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
+  retryPendingServiceRouteRestorations,
   retryPendingWahooReconnectQueueReleases,
   shouldKeepConnectionForCurrentEntitlement,
 };

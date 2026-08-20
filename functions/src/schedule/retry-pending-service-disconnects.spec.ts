@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
   clearServiceDisconnectPending: vi.fn(),
   recordServiceDisconnectRetryFailure: vi.fn(),
   retryWahooReconnectQueueRelease: vi.fn(),
+  retryPendingServiceRouteRestore: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -58,6 +59,7 @@ vi.mock('../service-auth-lifecycle', () => ({
 
 vi.mock('../service-connection-meta', () => ({
   retryWahooReconnectQueueRelease: hoisted.retryWahooReconnectQueueRelease,
+  retryPendingServiceRouteRestore: hoisted.retryPendingServiceRouteRestore,
 }));
 
 vi.mock('../service-disconnect-pending', () => ({
@@ -127,6 +129,7 @@ describe('retry-pending-service-disconnects', () => {
     hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
     hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
+    hoisted.retryPendingServiceRouteRestore.mockResolvedValue(true);
     hoisted.collectionGroup.mockReturnValue({
       where: vi.fn().mockReturnThis(),
       get: vi.fn().mockResolvedValue({ docs: [] }),
@@ -205,6 +208,33 @@ describe('retry-pending-service-disconnects', () => {
     expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
     expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-1');
     expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-2');
+  });
+
+  it('retries provider-neutral route restoration markers', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.SuuntoApp,
+            ref: { parent: { parent: { id: 'user-1' } } },
+          },
+          {
+            id: 'not-a-service',
+            ref: { parent: { parent: { id: 'user-2' } } },
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingServiceRouteRestorations())
+      .resolves.toBe(1);
+
+    expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
+    expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledTimes(1);
   });
 
   it('records retry failure when local cleanup remains partial without a retryable partner failure', async () => {

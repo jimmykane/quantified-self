@@ -37,6 +37,12 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 vi.mock('./refresh-recovery', () => ({
   assertWahooConnectionAvailable: vi.fn(),
+  isWahooReconnectRequiredError: (error: unknown) => (
+    error instanceof Error && error.name === 'WahooReconnectRequiredError'
+  ),
+  isWahooRefreshBackoffError: (error: unknown) => (
+    error instanceof Error && error.name === 'WahooRefreshBackoffError'
+  ),
 }));
 vi.mock('../tokens', () => ({ getTokenData: vi.fn() }));
 vi.mock('../utils', () => ({
@@ -52,7 +58,11 @@ vi.mock('./auth/api', () => ({
 }));
 vi.mock('./queue-store', () => ({ upsertWahooWorkoutQueueItem: vi.fn() }));
 
-import { finishWahooHistoryLease, selectWahooHistoryPage } from './history-to-queue';
+import {
+  finishWahooHistoryLease,
+  selectWahooHistoryPage,
+  toWahooHistoryCallableError,
+} from './history-to-queue';
 
 function workout(id: number, starts: string, options: { file?: boolean; fitnessAppID?: number } = {}) {
   return {
@@ -94,6 +104,31 @@ describe('selectWahooHistoryPage', () => {
     expect(result.items.map(item => item.workoutID)).toEqual(['3']);
     expect(result.skippedCount).toBe(2);
     expect(result.reachedStart).toBe(false);
+  });
+});
+
+describe('toWahooHistoryCallableError', () => {
+  it('preserves the Wahoo refresh retry time for callable clients', () => {
+    const refreshError = Object.assign(new Error('backoff'), {
+      name: 'WahooRefreshBackoffError',
+      retryAt: 1_800_000_000_000,
+    });
+
+    expect(toWahooHistoryCallableError(refreshError)).toMatchObject({
+      code: 'unavailable',
+      details: { retryAt: 1_800_000_000_000 },
+    });
+  });
+
+  it('tells callable clients to reconnect for terminal Wahoo recovery state', () => {
+    const reconnectError = Object.assign(new Error('reconnect'), {
+      name: 'WahooReconnectRequiredError',
+    });
+
+    expect(toWahooHistoryCallableError(reconnectError)).toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect Wahoo before importing history.',
+    });
   });
 });
 

@@ -1354,6 +1354,28 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "meta",
+      "fieldPath": "wahooReconnectReleasePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "routeRestorePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "fieldPath": "expireAt",
       "ttl": true,

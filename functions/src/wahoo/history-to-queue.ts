@@ -21,7 +21,11 @@ import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { assertWahooConnectionAvailable } from './refresh-recovery';
+import {
+  assertWahooConnectionAvailable,
+  isWahooReconnectRequiredError,
+  isWahooRefreshBackoffError,
+} from './refresh-recovery';
 
 const PAGE_SIZE = 100;
 const HISTORY_LEASE_MS = 15 * 60 * 1000;
@@ -41,6 +45,20 @@ interface WahooWorkoutsResponse {
 export interface WahooHistoryImportResult extends HistoryImportResult {
   skippedCount: number;
   pagesFetched: number;
+}
+
+export function toWahooHistoryCallableError(error: unknown): HttpsError | null {
+  if (isWahooReconnectRequiredError(error)) {
+    return new HttpsError('unauthenticated', 'Reconnect Wahoo before importing history.');
+  }
+  if (isWahooRefreshBackoffError(error)) {
+    return new HttpsError(
+      'unavailable',
+      'Wahoo token refresh is temporarily paused. Please retry later.',
+      { retryAt: error.retryAt },
+    );
+  }
+  return null;
 }
 
 /** Recheck mutable lifecycle state immediately before each Wahoo history page. */
@@ -266,6 +284,13 @@ export const addWahooAPIHistoryToQueue = onCall({
   if (nextAllowedDate && nextAllowedDate > new Date()) {
     throw new HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
   }
-  const stats = await importWahooHistory(request.auth.uid, startDate, endDate);
+  let stats: WahooHistoryImportResult;
+  try {
+    stats = await importWahooHistory(request.auth.uid, startDate, endDate);
+  } catch (error) {
+    const callableError = toWahooHistoryCallableError(error);
+    if (callableError) throw callableError;
+    throw error;
+  }
   return { result: 'Wahoo history items added to queue', stats };
 });

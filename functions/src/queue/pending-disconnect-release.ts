@@ -15,7 +15,8 @@ import {
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { getServiceTokenCollectionRef } from '../service-token-store';
+import { getServiceTokenCollectionRef, getServiceTokenRootDocumentRef } from '../service-token-store';
+import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
 import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
@@ -52,6 +53,7 @@ function buildDeferredQueueReleaseUpdate(): Record<string, unknown> {
         deferredContext: deleteField,
         deferredServiceName: deleteField,
         serviceDisconnectPendingDeferredAt: deleteField,
+        serviceDisconnectPendingGeneration: deleteField,
         serviceDisconnectPendingNextDispatchAt: deleteField,
         serviceReconnectRequiredDeferredAt: deleteField,
     };
@@ -156,6 +158,7 @@ async function releaseDeferredDocsForQuery(
     logContext: Record<string, unknown>,
     releasedQueueItemPaths: Set<string>,
     deferredReason: QueueDeferredReason,
+    expectedGeneration?: string,
 ): Promise<number> {
     const snapshot = await query.get();
     if (snapshot.empty) {
@@ -198,9 +201,18 @@ async function releaseDeferredDocsForQuery(
                     const serviceMetaSnapshot = await transaction.get(
                         db.collection('users').doc(userID).collection('meta').doc(serviceName),
                     );
-                    if (serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+                    if (
+                        serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+                        || (expectedGeneration
+                            && serviceMetaSnapshot.data()?.connectionStateGeneration !== expectedGeneration)
+                    ) {
                         return false;
                     }
+                } else {
+                    const pendingRootSnapshot = await transaction.get(
+                        getServiceTokenRootDocumentRef(userID, serviceName),
+                    );
+                    if (isServiceDisconnectPendingData(pendingRootSnapshot.data())) return false;
                 }
 
                 const currentSnapshot = await transaction.get(doc.ref);
@@ -209,6 +221,14 @@ async function releaseDeferredDocsForQuery(
                 }
                 const currentData = currentSnapshot.data() as QueueDocData;
                 if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
+                    return false;
+                }
+                if (
+                    deferredReason === QUEUE_DEFERRED_REASONS.ServiceDisconnectPending
+                    && expectedGeneration
+                    && currentData.serviceDisconnectPendingGeneration
+                    && currentData.serviceDisconnectPendingGeneration !== expectedGeneration
+                ) {
                     return false;
                 }
 
@@ -243,6 +263,7 @@ async function releaseDeferredDocsForQueries(
     specs: ReleaseQuerySpec[],
     releasedQueueItemPaths: Set<string>,
     deferredReason: QueueDeferredReason,
+    expectedGeneration?: string,
 ): Promise<number> {
     let releasedCount = 0;
     for (const spec of specs) {
@@ -254,6 +275,7 @@ async function releaseDeferredDocsForQueries(
             spec.logContext,
             releasedQueueItemPaths,
             deferredReason,
+            expectedGeneration,
         );
     }
     return releasedCount;
@@ -262,11 +284,13 @@ async function releaseDeferredDocsForQueries(
 export async function releaseQueueItemsDeferredForPendingDisconnect(
     userID: string,
     serviceName: ServiceNames,
+    pendingDisconnectGeneration?: string,
 ): Promise<number> {
     return releaseQueueItemsDeferredForServiceState(
         userID,
         serviceName,
         QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+        pendingDisconnectGeneration,
     );
 }
 
@@ -274,11 +298,13 @@ export async function releaseQueueItemsDeferredForPendingDisconnect(
 export async function releaseQueueItemsDeferredForReconnectRequired(
     userID: string,
     serviceName: ServiceNames,
+    connectionStateGeneration?: string,
 ): Promise<number> {
     return releaseQueueItemsDeferredForServiceState(
         userID,
         serviceName,
         QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+        connectionStateGeneration,
     );
 }
 
@@ -286,6 +312,7 @@ async function releaseQueueItemsDeferredForServiceState(
     userID: string,
     serviceName: ServiceNames,
     deferredReason: QueueDeferredReason,
+    expectedGeneration?: string,
 ): Promise<number> {
     const db = admin.firestore();
     const sleepProvider = getSleepProviderForService(serviceName);
@@ -361,7 +388,7 @@ async function releaseQueueItemsDeferredForServiceState(
     ];
 
     const [workoutCount, activitySyncCount, routeDeliverySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
-        releaseDeferredDocsForQueries(userID, serviceName, workoutQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(userID, serviceName, workoutQueries, releasedQueueItemPaths, deferredReason, expectedGeneration),
         releaseDeferredDocsForQuery(
             userID,
             serviceName,
@@ -370,6 +397,7 @@ async function releaseQueueItemsDeferredForServiceState(
             { userID, serviceName, queueType: 'activity_sync' },
             releasedQueueItemPaths,
             deferredReason,
+            expectedGeneration,
         ),
         releaseDeferredDocsForQuery(
             userID,
@@ -379,9 +407,10 @@ async function releaseQueueItemsDeferredForServiceState(
             { userID, serviceName, queueType: 'route_delivery_sync' },
             releasedQueueItemPaths,
             deferredReason,
+            expectedGeneration,
         ),
-        releaseDeferredDocsForQueries(userID, serviceName, sleepQueries, releasedQueueItemPaths, deferredReason),
-        releaseDeferredDocsForQueries(userID, serviceName, routeSyncQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(userID, serviceName, sleepQueries, releasedQueueItemPaths, deferredReason, expectedGeneration),
+        releaseDeferredDocsForQueries(userID, serviceName, routeSyncQueries, releasedQueueItemPaths, deferredReason, expectedGeneration),
     ]);
 
     const releasedCount = workoutCount + activitySyncCount + routeDeliverySyncCount + sleepSyncCount + routeSyncCount;

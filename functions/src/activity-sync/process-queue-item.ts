@@ -1160,13 +1160,17 @@ async function deferActivitySyncQueueItemForPendingDisconnect(
     }));
     const additionalData = { deferredServiceName: `${serviceName}` };
     if (!requireCurrentProviderState) {
-        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData);
+        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
+            userID: queueItem.userID,
+            serviceName,
+        });
     }
     return deferQueueItemForPendingDisconnectIfCurrentUserActive({
         queueItem,
         additionalData,
         bulkWriter,
         userID: queueItem.userID,
+        serviceName,
         phase: 'activity_sync_pending_disconnect_transition',
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
@@ -1332,19 +1336,6 @@ export async function processActivitySyncQueueItem(
                 );
             }
 
-            if (!enabled && !isManualRun) {
-                await setActivitySyncSkippedMetadata({
-                    ...routeMeta,
-                    skippedReason: 'route_disabled',
-                    detail: 'Route is disabled in user settings.',
-                });
-                return updateToProcessed(queueItem, bulkWriter, {
-                    skippedReason: 'route_disabled',
-                    destinationUploadContinuation: null,
-                    resultStatus: 'skipped',
-                });
-            }
-
             const destinationConnectionStatus = await getDestinationConnectionStatus(queueItem.userID, queueItem.destinationServiceName);
             if (destinationConnectionStatus === 'disconnect_pending') {
                 return deferActivitySyncQueueItemForPendingDisconnect(
@@ -1369,6 +1360,19 @@ export async function processActivitySyncQueueItem(
                 });
                 return updateToProcessed(queueItem, bulkWriter, {
                     skippedReason: 'destination_not_connected',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
+
+            if (!enabled && !isManualRun) {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'route_disabled',
+                    detail: 'Route is disabled in user settings.',
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'route_disabled',
                     destinationUploadContinuation: null,
                     resultStatus: 'skipped',
                 });

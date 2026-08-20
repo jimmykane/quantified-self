@@ -80,6 +80,7 @@ vi.mock('firebase-admin/firestore', () => ({
 import * as logger from 'firebase-functions/logger';
 import {
   clearServiceConnectionState,
+  type MarkServiceReconnectRequiredOptions,
   markServiceConnected,
   markServiceReconnectRequired,
   mirrorServiceDisconnectPendingToUserMeta,
@@ -138,16 +139,21 @@ describe('service-connection-meta', () => {
     await markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect required', 123);
 
     expect(hoisted.getUserDeletionGuardStateInTransaction).toHaveBeenCalled();
-    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       connectionState: 'reconnect_required',
+      connectionStateGeneration: expect.any(String),
       lastAuthFailureCode: 'invalid_grant',
       lastAuthFailureMessage: 'Reconnect required',
       lastDisconnectedAt: 123,
-    }, { merge: true });
+    }), { merge: true });
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.SuuntoApp,
-      { trackPendingDisconnectRestore: true },
+      expect.objectContaining({
+        trackPendingDisconnectRestore: true,
+        expectedConnectionStateGeneration: expect.any(String),
+        requiredConnectionState: 'reconnect_required',
+      }),
     );
   });
 
@@ -155,7 +161,7 @@ describe('service-connection-meta', () => {
     hoisted.disableActivitySyncRoutesForDisconnectedService.mockRejectedValueOnce(new Error('settings write failed'));
 
     await expect(markServiceReconnectRequired('user-1', ServiceNames.SuuntoApp, 'invalid_grant', 'Reconnect required', 123))
-      .resolves.toBeUndefined();
+      .resolves.toBe(true);
 
     expect(hoisted.metaSet).toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
@@ -176,8 +182,57 @@ describe('service-connection-meta', () => {
     expect(hoisted.metaSet).not.toHaveBeenCalled();
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
-      '[ServiceConnectionMeta] Skipping suuntoApp meta write for user user-1 because the user is missing or deletion is in progress.',
+      '[ServiceConnectionMeta] Skipping suuntoApp reconnect-required transition for user user-1 because the user is missing or deletion is in progress.',
     );
+  });
+
+  it('does not let stale terminal cleanup overwrite a newer connection generation', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ connectionStateGeneration: 'oauth-generation' }),
+    });
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      { expectedConnectionStateGeneration: 'failed-token-generation' },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
+  it('does not let terminal cleanup overwrite a fresh OAuth credential', async () => {
+    const tokenCollection = { path: 'wahooAPIAccessTokens/user-1/tokens' };
+    hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      set: typeof hoisted.metaSet;
+      get: (target: unknown) => unknown;
+    }) => unknown) => runner({
+      set: hoisted.metaSet,
+      get: (target: unknown) => target === tokenCollection
+        ? Promise.resolve({ empty: false })
+        : hoisted.metaGet(),
+    }));
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      {
+        expectedConnectionStateGeneration: null,
+        requireEmptyTokenCollection: tokenCollection as unknown as NonNullable<
+          MarkServiceReconnectRequiredOptions['requireEmptyTokenCollection']
+        >,
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
   });
 
   it('skips connected-state writes when the user document is missing', async () => {
@@ -297,16 +352,23 @@ describe('service-connection-meta', () => {
     expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.WahooAPI,
+      expect.any(String),
     );
     expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear.mock.invocationCallOrder[0])
       .toBeLessThan(hoisted.releaseQueueItemsDeferredForReconnectRequired.mock.invocationCallOrder[0]);
   });
 
   it('records a durable repair marker when reconnect queue release is only partially completed', async () => {
-    hoisted.metaGet.mockResolvedValue({
+    hoisted.metaGet.mockImplementation(async () => ({
       exists: true,
-      data: () => ({ connectionState: 'connected' }),
-    });
+      data: () => {
+        const connectedPayload = hoisted.metaSet.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+        return {
+          connectionState: 'connected',
+          connectionStateGeneration: connectedPayload?.connectionStateGeneration,
+        };
+      },
+    }));
     hoisted.releaseQueueItemsDeferredForReconnectRequired.mockRejectedValueOnce(new Error('one queue write failed'));
 
     await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
@@ -385,6 +447,7 @@ describe('service-connection-meta', () => {
 
   it('tracks route restore state when mirroring pending disconnect metadata', async () => {
     await mirrorServiceDisconnectPendingToUserMeta('user-1', ServiceNames.SuuntoApp, {
+      generation: 'pending-generation-1',
       reason: 'subscription_enforcement',
       attemptCount: 0,
       nextAttemptAt: 'next-attempt',
@@ -395,7 +458,11 @@ describe('service-connection-meta', () => {
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.SuuntoApp,
-      { trackPendingDisconnectRestore: true },
+      {
+        trackPendingDisconnectRestore: true,
+        expectedConnectionStateGeneration: 'pending-generation-1',
+        requiredConnectionState: 'disconnect_pending',
+      },
     );
   });
 
@@ -407,6 +474,10 @@ describe('service-connection-meta', () => {
     expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        expectedConnectionStateGeneration: expect.any(String),
+        clearRouteRestoreMarker: true,
+      }),
     );
   });
 });
