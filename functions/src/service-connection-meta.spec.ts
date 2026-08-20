@@ -157,6 +157,41 @@ describe('service-connection-meta', () => {
     );
   });
 
+  it('pins the retained provider account while marking reconnect-required', async () => {
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      { providerUserId: ' wahoo-account-a ' },
+    )).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      connectionState: 'reconnect_required',
+      providerUserId: 'wahoo-account-a',
+    }), { merge: true });
+  });
+
+  it('does not replace another pinned provider account while marking reconnect-required', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ providerUserId: 'wahoo-account-b' }),
+    });
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      { providerUserId: 'wahoo-account-a' },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
   it('does not fail reconnect-required writes when activity sync route disable fails', async () => {
     hoisted.disableActivitySyncRoutesForDisconnectedService.mockRejectedValueOnce(new Error('settings write failed'));
 
@@ -503,6 +538,47 @@ describe('service-connection-meta', () => {
     )).resolves.toBe('conflict');
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('does not pin a legacy provider account after its selected token was removed', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    await expect(pinServiceConnectionProviderUserIdIfUnset(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'wahoo-account-a',
+      {
+        expectedProviderToken: {
+          documentRef: hoisted.refreshTokenRef as any,
+          providerUserIdField: 'wahooUserID',
+        },
+      },
+    )).resolves.toBe('token_unavailable');
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('pins a legacy provider account while its selected token still matches', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ wahooUserID: 'wahoo-account-a' }),
+    });
+
+    await expect(pinServiceConnectionProviderUserIdIfUnset(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'wahoo-account-a',
+      {
+        expectedProviderToken: {
+          documentRef: hoisted.refreshTokenRef as any,
+          providerUserIdField: 'wahooUserID',
+        },
+      },
+    )).resolves.toBe('pinned');
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+      providerUserId: 'wahoo-account-a',
+    }, { merge: true });
   });
 
   it('skips clear-state writes when user deletion is in progress', async () => {

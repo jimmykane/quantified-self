@@ -63,6 +63,13 @@ function snapshotMatchesWahooUserID(snapshot: WahooTokenSnapshot, wahooUserID: s
   return snapshot.id === wahooUserID && tokenUserID === wahooUserID;
 }
 
+function getWahooTokenCollection(userID: string): admin.firestore.CollectionReference {
+  return admin.firestore()
+    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
+    .doc(userID)
+    .collection('tokens');
+}
+
 export class WahooOAuthAccountMismatchError extends Error {
   public readonly name = 'WahooOAuthAccountMismatchError';
   public readonly statusCode = 409;
@@ -95,7 +102,16 @@ export async function assertWahooOAuthAccountCompatible(
   }
 
   const meta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
-  const expectedProviderUserId = normalizeWahooUserID(meta?.providerUserId);
+  let expectedProviderUserId = normalizeWahooUserID(meta?.providerUserId);
+  if (!expectedProviderUserId) {
+    const retainedTokens = await getWahooTokenCollection(userID).get();
+    const retainedActiveToken = selectActiveWahooTokenSnapshot(retainedTokens.docs);
+    expectedProviderUserId = retainedActiveToken
+      ? normalizeWahooUserID(
+        (retainedActiveToken.data() as Record<string, unknown> | undefined)?.wahooUserID,
+      )
+      : null;
+  }
   if (expectedProviderUserId && expectedProviderUserId !== receivedProviderUserId) {
     throw new WahooOAuthAccountMismatchError(expectedProviderUserId, receivedProviderUserId);
   }
@@ -106,10 +122,7 @@ export async function getActiveWahooTokenSnapshot(
   userID: string,
   expectedProviderUserId?: string,
 ): Promise<WahooTokenSnapshot> {
-  const tokenCollection = admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens');
+  const tokenCollection = getWahooTokenCollection(userID);
   const meta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
   if (isDisconnectPendingServiceConnection(meta)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, 'active_account_lookup');
@@ -159,6 +172,12 @@ export async function getActiveWahooTokenSnapshot(
     userID,
     ServiceNames.WahooAPI,
     selectedUserID,
+    {
+      expectedProviderToken: {
+        documentRef: selectedSnapshot.ref,
+        providerUserIdField: 'wahooUserID',
+      },
+    },
   );
   if (pinResult === 'conflict') {
     throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');

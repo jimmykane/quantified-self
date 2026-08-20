@@ -50,6 +50,7 @@ function tokenSnapshot(
   return {
     exists: true,
     id,
+    ref: { path: `wahooAPIAccessTokens/user-1/tokens/${id}` },
     data: () => data,
   };
 }
@@ -83,6 +84,12 @@ describe('Wahoo active account resolution', () => {
       'user-1',
       ServiceNames.WahooAPI,
       'account-b',
+      {
+        expectedProviderToken: {
+          documentRef: { path: 'wahooAPIAccessTokens/user-1/tokens/account-b' },
+          providerUserIdField: 'wahooUserID',
+        },
+      },
     );
   });
 
@@ -118,5 +125,18 @@ describe('Wahoo active account resolution', () => {
     });
 
     await expect(assertWahooOAuthAccountCompatible('user-1', 'account-a')).resolves.toBeUndefined();
+  });
+
+  it('derives a missing legacy pin from retained tokens before accepting OAuth recovery', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ connectionState: 'reconnect_required' });
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100));
+    mocks.tokenDocs.set('account-b', tokenSnapshot('account-b', 200));
+
+    await expect(assertWahooOAuthAccountCompatible('user-1', 'account-a')).rejects.toMatchObject({
+      name: 'WahooOAuthAccountMismatchError',
+      expectedProviderUserId: 'account-b',
+      receivedProviderUserId: 'account-a',
+    });
+    await expect(assertWahooOAuthAccountCompatible('user-1', 'account-b')).resolves.toBeUndefined();
   });
 });

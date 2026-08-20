@@ -872,6 +872,7 @@ async function cleanupTerminalAuthToken(
           {
             expectedConnectionStateGeneration: deleteResult.connectionStateGeneration,
             requireEmptyTokenCollection: tokenSnapshot.ref.parent,
+            providerUserId: terminalAuthFailure.providerUserId,
           },
         );
         if (didMarkReconnectRequired) {
@@ -903,10 +904,12 @@ async function cleanupTerminalAuthToken(
         {
           ...(deleteResult ? {
             expectedConnectionStateGeneration: deleteResult.connectionStateGeneration,
+            providerUserId: terminalAuthFailure.providerUserId,
             ...(deleteResult.remainingTokenCount === 0 ? {
               requireEmptyTokenCollection: tokenSnapshot.ref.parent,
             } : {}),
           } : {
+            providerUserId: terminalAuthFailure.providerUserId,
             expectedTokenCredential: {
               tokenRef: tokenSnapshot.ref,
               credential: getTokenCredentialSnapshot(tokenDataAtFailure),
@@ -984,6 +987,8 @@ export async function cleanupServiceConnectionForUser(
         serviceName,
         options.terminalAuthFailure.providerErrorCode,
         options.terminalAuthFailure.providerErrorMessage,
+        Date.now(),
+        { providerUserId: options.terminalAuthFailure.providerUserId },
       );
       outcome.connectionStateUpdate = 'reconnect_required';
     } catch (metaError) {
@@ -1330,6 +1335,7 @@ export async function handleTerminalServiceAuthFailure(
         failure.providerErrorMessage,
         Date.now(),
         {
+          providerUserId,
           expectedTokenCredential: {
             tokenRef: doc.ref,
             credential: getTokenCredentialSnapshot(
