@@ -962,6 +962,7 @@ async function clearPendingDestinationUploadForRestart(
         && !queueItem.destinationWorkoutKey
         && !queueItem.destinationInfoCode
         && !queueItem.destinationUploadContinuation
+        && queueItem.destinationExpectedWorkoutTypeID === undefined
     ) {
         return true;
     }
@@ -974,6 +975,7 @@ async function clearPendingDestinationUploadForRestart(
     const expectedProviderUserID = queueItem.destinationProviderUserID;
     const expectedWorkoutKey = queueItem.destinationWorkoutKey;
     const expectedInfoCode = queueItem.destinationInfoCode;
+    const expectedWahooWorkoutTypeID = queueItem.destinationExpectedWorkoutTypeID;
     const expectedContinuation = queueItem.destinationUploadContinuation;
     const expectedProviderOperationStartedAt = queueItem.providerOperationStartedAt;
 
@@ -988,6 +990,8 @@ async function clearPendingDestinationUploadForRestart(
             destinationWorkoutKey: null,
             destinationInfoCode: null,
             destinationUploadContinuation: null,
+            // null means deliberately unmapped; a restart must derive a fresh type from the event.
+            destinationExpectedWorkoutTypeID: FieldValue.delete(),
             dispatchedToCloudTask: null,
             providerOperationStartedAt: null,
         },
@@ -1003,6 +1007,7 @@ async function clearPendingDestinationUploadForRestart(
             && areEquivalentOptionalStrings(currentQueueItem.destinationProviderUserID, expectedProviderUserID)
             && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedWorkoutKey)
             && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedInfoCode)
+            && currentQueueItem.destinationExpectedWorkoutTypeID === expectedWahooWorkoutTypeID
             && isSameUploadContinuation(currentQueueItem.destinationUploadContinuation, expectedContinuation)
             && isSameActivitySyncQueueItem(currentQueueItem, queueItem),
     });
@@ -1015,6 +1020,7 @@ async function clearPendingDestinationUploadForRestart(
     queueItem.destinationWorkoutKey = undefined;
     queueItem.destinationInfoCode = undefined;
     queueItem.destinationUploadContinuation = null;
+    queueItem.destinationExpectedWorkoutTypeID = undefined;
     queueItem.dispatchedToCloudTask = null;
     queueItem.providerOperationStartedAt = null;
     return true;

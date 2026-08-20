@@ -1899,9 +1899,11 @@ describe('activity-sync/process-queue-item', () => {
         destinationWorkoutKey: null,
         destinationInfoCode: null,
         destinationUploadContinuation: null,
+        destinationExpectedWorkoutTypeID: mockFieldValueDelete,
       }),
     }));
     expect(queueItem.destinationUploadID).toBeNull();
+    expect(queueItem.destinationExpectedWorkoutTypeID).toBeUndefined();
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
@@ -1921,7 +1923,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
       queueItem.userID,
       Buffer.from('FITDATA'),
-      expect.any(Object),
+      expect.objectContaining({ expectedWorkoutTypeId: 9 }),
     );
   });
 

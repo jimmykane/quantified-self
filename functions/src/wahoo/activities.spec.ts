@@ -100,9 +100,12 @@ import { ActivitySyncOutboundFingerprintSkippedForDeletedUserError } from '../ac
 import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
+const WAHOO_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY = 'test-wahoo-activity-upload-resume-signing-key';
+
 describe('Wahoo activity uploads', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY = WAHOO_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY;
     mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
     mocks.isDisconnectPendingForUser.mockResolvedValue(false);
     mocks.hasProAccess.mockResolvedValue(true);
@@ -153,7 +156,7 @@ describe('Wahoo activity uploads', () => {
     } as never)).resolves.toMatchObject({
       status: 'pending',
       uploadId: 'upload-1',
-      expectedWorkoutTypeId: 9,
+      resumeToken: expect.any(String),
     });
 
     expect(mocks.recordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
@@ -163,6 +166,21 @@ describe('Wahoo activity uploads', () => {
     });
     expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.requestWahooAPI.mock.invocationCallOrder[0]);
+  });
+
+  it('does not post a direct FIT when the continuation signing key is unavailable', async () => {
+    process.env.WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY = '';
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+
+    expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
   it('corrects a completed mapped activity before returning upload success', async () => {
@@ -187,7 +205,7 @@ describe('Wahoo activity uploads', () => {
     expect(correctionPath).toBe('/v1/workouts/485861650');
     expect(correctionRequest.method).toBe('PUT');
     expect(correctionRequest.form.get('workout[workout_type_id]')).toBe('9');
-    expect(correctionRequest.form.get('workout[name]')).toBe('HIKING');
+    expect(correctionRequest.form.get('workout[name]')).toBeNull();
   });
 
   it('retains the accepted upload when disconnect begins before type correction', async () => {
@@ -229,7 +247,7 @@ describe('Wahoo activity uploads', () => {
       details: {
         retryMode: 'resume',
         resumeUploadId: 'upload-direct-disconnect',
-        expectedWorkoutTypeId: 9,
+        resumeToken: expect.any(String),
       },
     });
 
@@ -316,23 +334,118 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
-  it('returns resumable correction details from the manual status callable', async () => {
+  it('uses the signed server-derived type during a manual status correction', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-status-resume', status: 'pending' },
+    });
+    const pendingResult = await importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never);
+    const resumeToken = (pendingResult as { resumeToken?: string }).resumeToken;
+    expect(resumeToken).toEqual(expect.any(String));
+    expect(pendingResult).not.toHaveProperty('expectedWorkoutTypeId');
+
     mocks.requestWahooAPI
       .mockResolvedValueOnce({
         data: { token: 'upload-status-resume', status: 'complete', workout_id: 485861654 },
+      })
+      .mockResolvedValueOnce({ data: { id: 485861654 } });
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: {
+        uploadId: 'upload-status-resume',
+        resumeToken,
+        // This must be ignored: the signed continuation owns the selected type.
+        expectedWorkoutTypeId: 0,
+      },
+    } as never)).resolves.toMatchObject({ status: 'success' });
+
+    const [, correctionPath, correctionRequest] = mocks.requestWahooAPI.mock.calls[2];
+    expect(correctionPath).toBe('/v1/workouts/485861654');
+    expect(correctionRequest.form.get('workout[workout_type_id]')).toBe('9');
+    expect(correctionRequest.form.get('workout[name]')).toBeNull();
+  });
+
+  it('rejects missing or tampered manual status continuations before querying Wahoo', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-signed-status', status: 'pending' },
+    });
+    const pendingResult = await importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never);
+    const resumeToken = (pendingResult as { resumeToken?: string }).resumeToken as string;
+    const tamperedResumeToken = `${resumeToken.slice(0, -1)}${resumeToken.endsWith('A') ? 'B' : 'A'}`;
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { uploadId: 'upload-signed-status', expectedWorkoutTypeId: 0 },
+    } as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { retryMode: 'restart' },
+    });
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'other-user' },
+      app: { appId: 'test-app' },
+      data: {
+        uploadId: 'upload-signed-status',
+        resumeToken,
+      },
+    } as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { retryMode: 'restart' },
+    });
+
+    await expect(getWahooAPIWorkoutFileUploadStatus({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: {
+        uploadId: 'upload-signed-status',
+        resumeToken: tamperedResumeToken,
+        expectedWorkoutTypeId: 0,
+      },
+    } as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { retryMode: 'restart' },
+    });
+
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a signed continuation when a manual correction needs another status poll', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: { token: 'upload-correction-resume', status: 'pending' },
+    });
+    const pendingResult = await importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never);
+    const resumeToken = (pendingResult as { resumeToken?: string }).resumeToken;
+
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({
+        data: { token: 'upload-correction-resume', status: 'complete', workout_id: 485861654 },
       })
       .mockRejectedValueOnce(new WahooAPIRequestError('temporary', 503));
 
     await expect(getWahooAPIWorkoutFileUploadStatus({
       auth: { uid: 'user-1' },
       app: { appId: 'test-app' },
-      data: { uploadId: 'upload-status-resume', expectedWorkoutTypeId: 9 },
+      data: { uploadId: 'upload-correction-resume', resumeToken },
     } as never)).rejects.toMatchObject({
       code: 'unavailable',
       details: {
         retryMode: 'resume',
-        resumeUploadId: 'upload-status-resume',
-        expectedWorkoutTypeId: 9,
+        resumeUploadId: 'upload-correction-resume',
+        resumeToken: expect.any(String),
       },
     });
   });
@@ -353,7 +466,7 @@ describe('Wahoo activity uploads', () => {
       details: {
         retryMode: 'resume',
         resumeUploadId: 'upload-permission',
-        expectedWorkoutTypeId: 9,
+        resumeToken: expect.any(String),
       },
     });
   });
