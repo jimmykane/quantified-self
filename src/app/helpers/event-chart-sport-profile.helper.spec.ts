@@ -47,10 +47,18 @@ describe('event chart sport profiles', () => {
     expect(resolution.candidateFamilies.slice(0, firstFamilies.length)).toEqual(firstFamilies);
   });
 
-  it('uses canonical Sports Lib groups for homogeneous multi-activity profiles', () => {
+  it('prefers shared registered profiles before homogeneous Sports Lib groups', () => {
     const oneRun = resolveEventChartSportProfile([ActivityTypes.Running]);
     const repeatedRun = resolveEventChartSportProfile([ActivityTypes.Running, ActivityTypes.Running]);
     const cyclingAliases = resolveEventChartSportProfile([ActivityTypes.Cycling, ActivityTypes.EBiking]);
+    const crossGroupCyclingAliases = resolveEventChartSportProfile([
+      ActivityTypes.Cycling,
+      ActivityTypes.Handcycle,
+    ]);
+    const crossCountryAliases = resolveEventChartSportProfile([
+      ActivityTypes.CrosscountrySkiing,
+      ActivityTypes.NordicSki,
+    ]);
     const mixedCycling = resolveEventChartSportProfile([ActivityTypes.Cycling, ActivityTypes.IndoorCycling]);
     const mixedRunning = resolveEventChartSportProfile([ActivityTypes.Running, ActivityTypes.Treadmill]);
     const mixedMountainBiking = resolveEventChartSportProfile([
@@ -64,6 +72,11 @@ describe('event chart sport profiles', () => {
     expect(repeatedRun.signature).toBe(oneRun.signature);
     expect(cyclingAliases.profileID).toBe('cycling');
     expect(cyclingAliases.source).toBe('shared-profile');
+    expect(crossGroupCyclingAliases.profileID).toBe('cycling');
+    expect(crossGroupCyclingAliases.source).toBe('shared-profile');
+    expect(crossCountryAliases.profileID).toBe('cross-country-skiing');
+    expect(crossCountryAliases.source).toBe('shared-profile');
+    expect(crossCountryAliases.candidateFamilies).toContain('power');
     expect(mixedCycling.profileID).toBe('cycling');
     expect(mixedCycling.source).toBe('shared-profile');
     expect(mixedRunning.profileID).toBe('running');
@@ -74,8 +87,8 @@ describe('event chart sport profiles', () => {
     expect(mixedSwimming.source).toBe('shared-profile');
     expect(heterogeneous.profileID).toBe('multisport');
     expect(heterogeneous.source).toBe('multisport');
-    expect(sharedProfileAcrossGroups.profileID).toBe('multisport');
-    expect(sharedProfileAcrossGroups.source).toBe('multisport');
+    expect(sharedProfileAcrossGroups.profileID).toBe('fitness');
+    expect(sharedProfileAcrossGroups.source).toBe('shared-profile');
   });
 
   it('maps every broader Sports Lib group to a deliberate shared presentation profile', () => {

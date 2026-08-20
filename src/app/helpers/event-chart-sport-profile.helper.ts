@@ -267,24 +267,25 @@ export function resolveEventChartSportProfile(activityTypes: readonly unknown[])
     ACTIVITY_TYPE_PROFILE.get(activityType) || PROFILE_IDS.GeneralFallback
   ));
   const uniqueProfileIDs = [...new Set(registeredProfileIDs)];
+  const hasMultipleActivityTypes = normalizedTypes.length > 1;
+  const sharedRegisteredProfileID = hasMultipleActivityTypes && uniqueProfileIDs.length === 1
+    ? uniqueProfileIDs[0]
+    : null;
   const uniqueActivityGroups = [...new Set(normalizedTypes.map((activityType) => (
     ActivityTypesHelper.getActivityGroupForActivityType(activityType)
   )))];
-  const hasMultipleActivityTypes = normalizedTypes.length > 1;
-  const sharedActivityGroup = hasMultipleActivityTypes && uniqueActivityGroups.length === 1
+  const sharedActivityGroup = hasMultipleActivityTypes
+    && !sharedRegisteredProfileID
+    && uniqueActivityGroups.length === 1
     ? uniqueActivityGroups[0]
     : null;
   const sharedGroupProfileID = sharedActivityGroup && sharedActivityGroup !== ActivityTypeGroups.UnspecifiedGroup
     ? ACTIVITY_GROUP_PROFILE[sharedActivityGroup]
     : null;
-  const sharedUnspecifiedProfileID = sharedActivityGroup === ActivityTypeGroups.UnspecifiedGroup
-    && uniqueProfileIDs.length === 1
-    ? uniqueProfileIDs[0]
-    : null;
-  const isMixedProfile = hasMultipleActivityTypes && !sharedGroupProfileID && !sharedUnspecifiedProfileID;
+  const isMixedProfile = hasMultipleActivityTypes && !sharedRegisteredProfileID && !sharedGroupProfileID;
   const profileID = !hasMultipleActivityTypes
     ? registeredProfileIDs[0]
-    : sharedGroupProfileID || sharedUnspecifiedProfileID || PROFILE_IDS.Multisport;
+    : sharedRegisteredProfileID || sharedGroupProfileID || PROFILE_IDS.Multisport;
   const profileDefinition = PROFILES[profileID];
   const singleActivityType = normalizedTypes.length === 1 ? normalizedTypes[0] : null;
   const source = resolveProfileSource(singleActivityType, profileID, isMixedProfile, normalizedTypes.length);
