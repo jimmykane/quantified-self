@@ -285,6 +285,8 @@ import { clearServiceConnectionState } from './service-connection-meta';
 describe('OAuth2', () => {
     beforeEach(() => {
         mockTransactionDocumentData = undefined;
+        mockDelete.mockReset().mockResolvedValue({});
+        mockDocInstance.set.mockReset().mockResolvedValue({});
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -1440,6 +1442,66 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
+        });
+
+        it('deletes only the stale token document when a newer OAuth callback wins', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { access_token: 'stale-access-token', refresh_token: 'stale-refresh-token' },
+                expired: () => false,
+            } as any);
+            mockGetWahooUserID.mockResolvedValueOnce('stale-wahoo-account');
+            mockMarkServiceConnected.mockResolvedValueOnce(false);
+            mockDocInstance.set.mockImplementation(async (data: Record<string, unknown>) => {
+                if (typeof data.tokenCredentialGeneration === 'string') {
+                    mockTransactionDocumentData = { ...data };
+                }
+                return {};
+            });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.WahooAPI,
+                redirectUri,
+                code,
+            )).rejects.toMatchObject({
+                phase: `oauth_mark_connected:${ServiceNames.WahooAPI}`,
+            });
+
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+        });
+
+        it('preserves the winning credential when the same token document was replaced', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { access_token: 'stale-access-token', refresh_token: 'stale-refresh-token' },
+                expired: () => false,
+            } as any);
+            mockGetWahooUserID.mockResolvedValueOnce('shared-wahoo-account');
+            mockDocInstance.set.mockImplementation(async (data: Record<string, unknown>) => {
+                if (typeof data.tokenCredentialGeneration === 'string') {
+                    mockTransactionDocumentData = { ...data };
+                }
+                return {};
+            });
+            mockMarkServiceConnected.mockImplementationOnce(async () => {
+                mockTransactionDocumentData = {
+                    ...mockTransactionDocumentData,
+                    tokenCredentialGeneration: 'winning-generation',
+                };
+                return false;
+            });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.WahooAPI,
+                redirectUri,
+                code,
+            )).rejects.toMatchObject({
+                phase: `oauth_mark_connected:${ServiceNames.WahooAPI}`,
+            });
+
+            expect(mockDelete).not.toHaveBeenCalled();
         });
 
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {

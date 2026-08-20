@@ -42,6 +42,12 @@ interface OAuthFlowContextGuard {
   codeVerifier: unknown;
 }
 
+interface PersistedOAuthCredentialGuard {
+  rootGenerationGuard: DocumentGenerationGuard;
+  tokenRef: admin.firestore.DocumentReference;
+  tokenCredentialGeneration: string;
+}
+
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
   public readonly code = 'failed-precondition';
@@ -103,7 +109,7 @@ async function setOAuthTokenIfUserActive(
   tokenCollectionName: string,
   tokenID: string,
   tokenData: Record<string, unknown>,
-): Promise<DocumentGenerationGuard> {
+): Promise<PersistedOAuthCredentialGuard> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
   const tokenDocRef = tokenRootRef.collection('tokens').doc(tokenID);
@@ -131,10 +137,58 @@ async function setOAuthTokenIfUserActive(
     transaction.set(tokenDocRef, persistedTokenData);
   });
   return {
-    documentRef: tokenRootRef,
-    fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
-    expectedGeneration: persistedTokenData.tokenCredentialGeneration,
+    rootGenerationGuard: {
+      documentRef: tokenRootRef,
+      fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+      expectedGeneration: persistedTokenData.tokenCredentialGeneration,
+    },
+    tokenRef: tokenDocRef,
+    tokenCredentialGeneration: persistedTokenData.tokenCredentialGeneration,
   };
+}
+
+/**
+ * Removes only the credential written by a callback that lost to a newer OAuth
+ * generation. If the same provider account reused the token document, the
+ * winning callback's generation makes this a no-op.
+ */
+async function deleteSupersededOAuthCredentialIfCurrent(
+  userID: string,
+  serviceName: ServiceNames,
+  guard: PersistedOAuthCredentialGuard,
+): Promise<boolean> {
+  const db = admin.firestore();
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        userID,
+        `oauth_superseded_credential_cleanup:${serviceName}`,
+        error,
+      );
+    }
+    if (deletionGuard.shouldSkip) {
+      // Account deletion owns provider deauthorization and recursive cleanup.
+      return false;
+    }
+
+    const tokenSnapshot = await transaction.get(guard.tokenRef);
+    if (
+      !tokenSnapshot.exists
+      || tokenSnapshot.data()?.tokenCredentialGeneration !== guard.tokenCredentialGeneration
+    ) {
+      return false;
+    }
+
+    transaction.delete(guard.tokenRef);
+    return true;
+  });
 }
 
 async function cleanupOAuthFlowContext(
@@ -363,7 +417,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const adapter = getServiceAdapter(serviceName);
   let tokenPersisted = false;
-  let persistedOAuthGenerationGuard: DocumentGenerationGuard | null = null;
+  let persistedOAuthCredentialGuard: PersistedOAuthCredentialGuard | null = null;
   let shouldCleanupOAuthContext = true;
 
   // Retrieve stored flow context (state, PKCE verifier, etc)
@@ -397,7 +451,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
       const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
 
-      persistedOAuthGenerationGuard = await setOAuthTokenIfUserActive(
+      persistedOAuthCredentialGuard = await setOAuthTokenIfUserActive(
         userID,
         serviceName,
         adapter.tokenCollectionName,
@@ -413,15 +467,27 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     }
 
     if (await hasProAccess(userID)) {
-      if (!persistedOAuthGenerationGuard) {
+      if (!persistedOAuthCredentialGuard) {
         throw new Error(`Missing persisted ${serviceName} credential guard after OAuth token write.`);
       }
-      await clearServiceDisconnectPending(userID, serviceName, persistedOAuthGenerationGuard);
+      await clearServiceDisconnectPending(
+        userID,
+        serviceName,
+        persistedOAuthCredentialGuard.rootGenerationGuard,
+      );
       const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
-        ? await markServiceConnected(userID, serviceName, uniqueId, persistedOAuthGenerationGuard)
-        : await markServiceConnected(userID, serviceName, undefined, persistedOAuthGenerationGuard);
+        ? await markServiceConnected(userID, serviceName, uniqueId, persistedOAuthCredentialGuard.rootGenerationGuard)
+        : await markServiceConnected(userID, serviceName, undefined, persistedOAuthCredentialGuard.rootGenerationGuard);
       if (!didMarkConnected) {
         logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because a newer credential or account lifecycle transition won after token persistence.`);
+        const deletedSupersededCredential = await deleteSupersededOAuthCredentialIfCurrent(
+          userID,
+          serviceName,
+          persistedOAuthCredentialGuard,
+        );
+        if (deletedSupersededCredential) {
+          await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
+        }
         throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
       }
     } else {
