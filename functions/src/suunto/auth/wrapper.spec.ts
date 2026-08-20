@@ -170,7 +170,8 @@ describe('Suunto Auth Wrapper', () => {
                 'testUserID',
                 ServiceNames.SuuntoApp,
                 'https://app.com/callback',
-                'validCode'
+                'validCode',
+                'validState',
             );
         });
 

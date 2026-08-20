@@ -2468,25 +2468,48 @@ describe('activity-sync/process-queue-item', () => {
       destinationServiceName: ServiceNames.WahooAPI,
     };
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
-    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
-      serviceName === ServiceNames.WahooAPI
-        ? { connectionState: 'reconnect_required' }
-        : null
-    ));
+    mockGetServiceConnectionMeta.mockResolvedValue({ connectionState: 'reconnect_required' });
 
     const result = await processActivitySyncQueueItem(queueItem);
 
-    expect(result).toBe(QueueResult.Deferred);
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(queueItem.userID, ServiceNames.WahooAPI);
     expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
       queueItem,
       serviceName: ServiceNames.WahooAPI,
       phase: 'activity_sync_reconnect_required_transition',
     }));
+    expect(result).toBe(QueueResult.Deferred);
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
       skippedReason: 'route_disabled',
     }));
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+  });
+
+  it('parks a route-disabled delivery when its Wahoo source requires reconnecting', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.WahooAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+    };
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    mockGetServiceConnectionMeta.mockResolvedValue({ connectionState: 'reconnect_required' });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(queueItem.userID, ServiceNames.WahooAPI);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem,
+      serviceName: ServiceNames.WahooAPI,
+      phase: 'activity_sync_reconnect_required_transition',
+    }));
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
   it('processes manual queue items when route is disabled at worker time', async () => {

@@ -78,10 +78,48 @@ import {
 describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
     mocks.setServiceConnectionProviderUserId.mockResolvedValue(true);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
     mocks.hasServiceOAuthConnectAccess.mockResolvedValue(true);
     mocks.validateOAuth2State.mockResolvedValue(true);
+  });
+
+  it('passes the validated callback state into the atomic OAuth context claim', async () => {
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toBeUndefined();
+
+    expect(mocks.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'https://localhost/callback',
+      'oauth-code',
+      'oauth-state',
+    );
+  });
+
+  it('reports an OAuth context race as an invalid state', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue({ statusCode: 403 });
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'Invalid OAuth state.',
+    });
   });
 
   it('returns and safely mirrors only the Wahoo account ID for an authenticated user', async () => {

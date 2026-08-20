@@ -122,7 +122,8 @@ describe('COROS Auth Wrapper', () => {
                 'testUserID',
                 SERVICE_NAME,
                 'https://app.com/callback',
-                'validCode'
+                'validCode',
+                'validState',
             );
         });
 

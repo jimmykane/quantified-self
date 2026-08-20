@@ -166,7 +166,7 @@ describe('Garmin Auth Wrapper', () => {
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');
-            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode');
+            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode', 'validState');
         });
 
         it('should throw permission-denied if state is invalid', async () => {

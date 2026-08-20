@@ -24,7 +24,10 @@ import {
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
-import { getTokenCredentialSnapshot } from './token-refresh-coordinator';
+import {
+  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+  getTokenCredentialSnapshot,
+} from './token-refresh-coordinator';
 
 type StoredServiceToken =
   | Auth2ServiceTokenInterface
@@ -818,6 +821,11 @@ async function cleanupTerminalAuthToken(
             expectedTokenCredential: {
               tokenRef: tokenSnapshot.ref,
               credential: getTokenCredentialSnapshot(tokenDataAtFailure),
+            },
+            expectedTokenRootCredentialGeneration: {
+              documentRef: getServiceTokenRootDocumentRef(userID, serviceName),
+              fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+              expectedGeneration: getTokenCredentialSnapshot(tokenDataAtFailure).credentialGeneration,
             },
           }),
         },

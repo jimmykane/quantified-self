@@ -369,7 +369,7 @@ describe('pending disconnect queue release', () => {
         expect(activityUpdate).not.toHaveBeenCalled();
     });
 
-    it('does not release a row parked for a different pending-disconnect generation', async () => {
+    it('releases older parked generations after the authoritative pending root is clear', async () => {
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
             userID: 'user-1',
             deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
@@ -381,9 +381,9 @@ describe('pending disconnect queue release', () => {
             'user-1',
             ServiceNames.SuuntoApp,
             'pending-generation-1',
-        )).resolves.toBe(0);
+        )).resolves.toBe(1);
 
-        expect(activityUpdate).not.toHaveBeenCalled();
+        expect(activityUpdate).toHaveBeenCalled();
     });
 
     it('does not release reconnect-parked work after a concurrent Wahoo disconnect', async () => {

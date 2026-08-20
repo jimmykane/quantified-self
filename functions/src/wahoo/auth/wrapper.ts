@@ -57,10 +57,13 @@ export const requestAndSetWahooAPIAccessToken = onCall({
     throw new HttpsError('permission-denied', 'Invalid OAuth state');
   }
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (error) {
     logger.error('Wahoo authorization code flow failed', getWahooErrorLogDetails(error));
     const statusCode = (error as { statusCode?: number })?.statusCode;
+    if (statusCode === 403) {
+      throw new HttpsError('permission-denied', 'Invalid OAuth state.');
+    }
     if (statusCode === 429 || (statusCode && statusCode >= 500)) {
       throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable.');
     }

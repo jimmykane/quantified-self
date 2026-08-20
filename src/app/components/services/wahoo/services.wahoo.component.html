@@ -42,10 +42,18 @@
           <div class="connected-account-copy">
             @if (wahooAccountId()) {
             <div class="connected-account-title">Wahoo account ID: {{ wahooAccountId() }}</div>
+            @if (isReconnectRequired) {
+            <div class="connected-account-line">This retained account ID identifies the Wahoo account that needs reconnection.</div>
+            } @else {
             <div class="connected-account-line">OAuth credentials are stored securely on the server.</div>
+            }
             } @else if (isLoadingWahooAccountId()) {
             <div class="connected-account-title">Loading Wahoo account ID…</div>
+            @if (isReconnectRequired) {
+            <div class="connected-account-line">Loading the retained account identifier for this connection.</div>
+            } @else {
             <div class="connected-account-line">OAuth credentials stay securely on the server.</div>
+            }
             } @else {
             <div class="connected-account-title">Wahoo account ID unavailable</div>
             <div class="connected-account-line">Reconnect Wahoo if this account ID remains unavailable.</div>

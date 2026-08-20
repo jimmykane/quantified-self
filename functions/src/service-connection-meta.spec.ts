@@ -235,6 +235,40 @@ describe('service-connection-meta', () => {
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
   });
 
+  it('does not let fallback cleanup cross a newer OAuth root generation', async () => {
+    const tokenRoot = { path: 'wahooAPIAccessTokens/user-1' };
+    hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      set: typeof hoisted.metaSet;
+      get: (target: unknown) => unknown;
+    }) => unknown) => runner({
+      set: hoisted.metaSet,
+      get: (target: unknown) => target === tokenRoot
+        ? Promise.resolve({
+          exists: true,
+          data: () => ({ activeOAuthCredentialGeneration: 'new-oauth-generation' }),
+        })
+        : hoisted.metaGet(),
+    }));
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      {
+        expectedTokenRootCredentialGeneration: {
+          documentRef: tokenRoot as any,
+          fieldName: 'activeOAuthCredentialGeneration',
+          expectedGeneration: 'failed-generation',
+        },
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
   it('skips connected-state writes when the user document is missing', async () => {
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: false,
@@ -497,6 +531,14 @@ describe('service-connection-meta', () => {
   });
 
   it('tracks route restore state when mirroring pending disconnect metadata', async () => {
+    hoisted.metaGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'pending-generation-1',
+      }),
+    });
+
     await mirrorServiceDisconnectPendingToUserMeta('user-1', ServiceNames.SuuntoApp, {
       generation: 'pending-generation-1',
       reason: 'subscription_enforcement',
@@ -515,6 +557,24 @@ describe('service-connection-meta', () => {
         requiredConnectionState: 'disconnect_pending',
       },
     );
+  });
+
+  it('does not mirror an obsolete pending generation after OAuth clears the root', async () => {
+    hoisted.metaGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'oauth-generation-2' }),
+    });
+
+    await expect(mirrorServiceDisconnectPendingToUserMeta('user-1', ServiceNames.SuuntoApp, {
+      generation: 'pending-generation-1',
+      reason: 'subscription_enforcement',
+      attemptCount: 0,
+      nextAttemptAt: 'next-attempt',
+      retryExpiresAt: 'expires-at',
+    })).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
   });
 
   it('restores pending-disconnect activity sync routes when requested after clearing state', async () => {
