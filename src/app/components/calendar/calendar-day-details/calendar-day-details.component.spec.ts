@@ -14,6 +14,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
 describe('CalendarDayDetailsComponent', () => {
@@ -25,8 +26,33 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe('/user/user-1/event/event-1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim()).toBe('Running');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')?.getAttribute('href'))
+      .toBe('/user/user-1/event/event-1');
     expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
       .toEqual(['Activities', 'Activity details']);
+  });
+
+  it('keeps a family summary non-clickable when it contains multiple events', async () => {
+    const fixture = await renderDayDetails([
+      createEvent('Morning run', undefined, 'Running', {}, 'event-1'),
+      createEvent('Evening run', undefined, 'Running', {}, 'event-2'),
+    ]);
+
+    expect(fixture.componentInstance.familyVolumeRows[0].route).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-event-item')).toHaveLength(2);
+  });
+
+  it('records the calendar day before opening an event and dismisses the sheet', async () => {
+    const fixture = await renderDayDetails(createEvent());
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const bottomSheetRef = TestBed.inject(MatBottomSheetRef);
+    const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
+
+    fixture.componentInstance.prepareEventNavigation(['/user', 'user-1', 'event', 'event-1']);
+
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
   });
 
   it('replaces generic timestamp names without repeating the activity type', async () => {
@@ -119,8 +145,9 @@ describe('CalendarDayDetailsComponent', () => {
   });
 });
 
-async function renderDayDetails(event: EventInterface) {
-  const model = buildActivityCalendarViewModel([event], {
+async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]) {
+  const events = Array.isArray(eventOrEvents) ? eventOrEvents : [eventOrEvents];
+  const model = buildActivityCalendarViewModel(events, {
     view: 'month',
     anchorDate: new Date(2026, 7, 3),
     startOfWeek: DaysOfTheWeek.Monday,
@@ -156,6 +183,7 @@ function createEvent(
   description?: string,
   activityType = 'Running',
   metricOverrides: Partial<Record<string, number | null>> = {},
+  eventId = 'event-1',
 ): EventInterface {
   const metrics: Record<string, number | null> = {
     [DataDuration.type]: 3600,
@@ -165,7 +193,7 @@ function createEvent(
     name,
     description,
     startDate: new Date(2026, 7, 3, 8, 30),
-    getID: () => 'event-1',
+    getID: () => eventId,
     getActivityTypesAsArray: () => [activityType === 'Downhill Cycling' ? ActivityTypes.DownhillCycling : ActivityTypes.Running],
     getActivityTypesAsString: () => activityType,
     getStat: (type: string) => {

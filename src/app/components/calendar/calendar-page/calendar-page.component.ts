@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
@@ -9,6 +9,7 @@ import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import {
   type ActivityCalendarDayViewModel,
   type ActivityCalendarRouteState,
@@ -70,6 +71,7 @@ export class CalendarPageComponent {
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
@@ -176,6 +178,25 @@ export class CalendarPageComponent {
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
   readonly emptyStateLabel = computed(() => `No activities in ${this.calendarModel().periodLabel}`);
+  private readonly restoreDayDetailsEffect = effect(() => {
+    const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
+    if (!restoration || this.eventState().status !== 'ready') {
+      return;
+    }
+
+    const day = this.calendarModel().months
+      .flatMap(month => month.days)
+      .find(candidate => candidate.dateKey === restoration.dateKey);
+    if (restoration.deletedEventId && day?.events.some(event => event.getID() === restoration.deletedEventId)) {
+      return;
+    }
+    if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
+      return;
+    }
+    if (day?.eventCount) {
+      this.openDay(day);
+    }
+  });
 
   @HostListener('window:focus')
   refreshToday(): void {

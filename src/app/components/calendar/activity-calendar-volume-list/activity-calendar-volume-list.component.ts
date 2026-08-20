@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { ActivityCalendarFamilyVolumeRow } from '../../../helpers/activity-calendar-volume.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarVolumeStatsComponent } from './activity-calendar-volume-stats.component';
@@ -13,4 +13,12 @@ import { ActivityCalendarVolumeStatsComponent } from './activity-calendar-volume
 })
 export class ActivityCalendarVolumeListComponent {
   readonly rows = input<readonly ActivityCalendarFamilyVolumeRow[]>([]);
+  readonly rowSelected = output<ActivityCalendarFamilyVolumeRow>();
+
+  selectRow(row: ActivityCalendarFamilyVolumeRow): void {
+    if (!row.route) {
+      return;
+    }
+    this.rowSelected.emit(row);
+  }
 }

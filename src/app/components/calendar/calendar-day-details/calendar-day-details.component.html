@@ -13,7 +13,8 @@
 
     <section aria-labelledby="calendar-day-family-title">
       <h3 id="calendar-day-family-title">Activities</h3>
-      <app-activity-calendar-volume-list [rows]="familyVolumeRows"></app-activity-calendar-volume-list>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows"
+        (rowSelected)="prepareEventNavigation($event.route)"></app-activity-calendar-volume-list>
     </section>
 
     <mat-divider></mat-divider>
@@ -25,7 +26,7 @@
           @if (event.route) {
           <a mat-list-item class="calendar-day-event-item"
             [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
-            (click)="dismiss()">
+            (click)="prepareEventNavigation(event.route)">
             <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>

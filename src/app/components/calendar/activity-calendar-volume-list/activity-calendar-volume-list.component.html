@@ -1,6 +1,9 @@
 <div class="calendar-family-volume-list">
   @for (family of rows(); track family.id) {
-  <div class="calendar-family-volume-row" role="group" [attr.aria-label]="family.ariaLabel">
+  <a class="calendar-family-volume-row" [class.calendar-family-volume-row--link]="!!family.route"
+    [routerLink]="family.route || null" [attr.role]="family.route ? null : 'group'"
+    [attr.aria-label]="family.route ? family.ariaLabel + '. Open activity' : family.ariaLabel"
+    matRipple [matRippleDisabled]="!family.route" (click)="selectRow(family)">
     <div class="calendar-family-volume-identity">
       <mat-icon aria-hidden="true" [style.color]="family.color">{{ family.icon }}</mat-icon>
       <span class="calendar-family-volume-copy">
@@ -23,7 +26,10 @@
     @if (family.stats.length) {
     <app-activity-calendar-volume-stats [stats]="family.stats"></app-activity-calendar-volume-stats>
     }
-  </div>
+    @if (family.route) {
+    <mat-icon class="calendar-family-volume-row-meta" aria-hidden="true">chevron_right</mat-icon>
+    }
+  </a>
   @if (!$last) {
   <mat-divider></mat-divider>
   }

@@ -242,6 +242,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
+    expect(calendarSection?.content).toContain('activity group containing exactly one activity opens that activity directly');
+    expect(calendarSection?.content).toContain('Browser **Back** restores the same day\'s details sheet');
+    expect(calendarSection?.content).toContain('Deleting an activity from its details page returns to the previous in-app page');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');

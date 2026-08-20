@@ -33,6 +33,7 @@ export interface ActivityCalendarFamilyVolumeRow {
   label: string;
   icon: string;
   color: string;
+  route?: string[] | null;
   eventCountLabel: string;
   value: number;
   maximumValue: number;
