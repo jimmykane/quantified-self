@@ -76,7 +76,11 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(template).toContain('Include all recorded metrics');
     expect(template).toContain('Visible charts');
+    expect(template).toContain('recommendedSeriesMenuLabel');
+    expect(template).toContain('Other available');
     expect(template).toContain('Show all charts');
+    expect(template).toContain('resetToSportDefaultsLabel');
+    expect(template).toContain('aria-live="polite"');
     expect(template).not.toContain('Show All Data');
     expect(template).not.toContain('Show all data types');
   });
@@ -137,6 +141,20 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(emitSpy).toHaveBeenCalledWith(true);
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showAllData' });
+  });
+
+  it('forces benchmark metric availability without mutating showAllData', async () => {
+    component.showAllData = false;
+    component.allRecordedMetricsForced = true;
+    const emitSpy = vi.spyOn(component.showAllDataChange, 'emit');
+
+    expect(component.effectiveShowAllData).toBe(true);
+    expect(component.includeAllRecordedMetricsTooltip).toContain('Benchmark comparisons');
+
+    await component.onShowAllDataToggle(false);
+
+    expect(component.showAllData).toBe(false);
+    expect(emitSpy).not.toHaveBeenCalled();
   });
 
   it('should emit showLaps changes and log analytics', async () => {
@@ -214,6 +232,18 @@ describe('EventCardChartActionsComponent', () => {
     component.onShowAllSeries();
 
     expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should emit sport-default reset requests and log analytics', () => {
+    const emitSpy = vi.spyOn(component.resetToSportDefaults, 'emit');
+
+    component.onResetToSportDefaults();
+
+    expect(emitSpy).toHaveBeenCalledTimes(1);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith(
+      'event_chart_settings_change',
+      { property: 'resetToSportDefaults' },
+    );
   });
 
   it('should emit reset chart state requests and log analytics', () => {

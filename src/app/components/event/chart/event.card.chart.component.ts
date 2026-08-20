@@ -13,6 +13,7 @@ import {
   effect,
   inject,
   Injector,
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
@@ -32,7 +33,10 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
-import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
+import {
+  AppChartSettingsLocalStorageService,
+  EventChartVisibilityMode,
+} from '../../../services/storage/app.chart.settings.local.storage.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import {
@@ -56,7 +60,7 @@ import {
   normalizeEventRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
-import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { isBenchmarkEvent, isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   areEventChartOverlayMapsEqual,
   normalizeEventChartOverlayDataTypeByPrimary,
@@ -64,6 +68,12 @@ import {
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
 import { hasVisibleSwimLengths } from '../../../helpers/event-swim-length.helper';
 import { EventChartPanelWorkerService } from '../../../services/event-chart-panel-worker.service';
+import {
+  EventChartSportProfileResolution,
+  getEventChartSelectionKey,
+  resolveEventChartRecommendations,
+  resolveEventChartSportProfile,
+} from '../../../helpers/event-chart-sport-profile.helper';
 
 interface EventDataTypeLegendItem {
   dataType: string;
@@ -93,7 +103,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() targetUserID!: string;
   @Input() user!: User;
   @Input() selectedActivities: ActivityInterface[] = [];
-  @Input() excludedDataTypes: string[] = [];
+  @Input() automaticExcludedDataTypes: string[] = [];
   @Input() isVisible!: boolean;
   @Input() waterMark?: string;
   @Input() darkTheme = false;
@@ -105,6 +115,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public chartPanels: EventChartPanelModel[] = [];
   public chartPanelViews: EventChartPanelViewModel[] = [];
   public dataTypeLegendItems: EventDataTypeLegendItem[] = [];
+  public recommendedDataTypeLegendItems: EventDataTypeLegendItem[] = [];
+  public otherDataTypeLegendItems: EventDataTypeLegendItem[] = [];
+  public visibilityMode: EventChartVisibilityMode = 'automatic';
+  public sportProfile: EventChartSportProfileResolution = resolveEventChartSportProfile([]);
+  public visibilityAnnouncement = signal('');
   public lapMarkers: EventChartLapMarker[] = [];
   public swimLengthMarkers: EventChartSwimLengthMarker[] = [];
   public hasSelectedSwimLengths = false;
@@ -286,6 +301,20 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return isMergeOrBenchmarkEvent(this.event);
   }
 
+  public get allRecordedMetricsForced(): boolean {
+    return isBenchmarkEvent(this.event);
+  }
+
+  public get effectiveShowAllData(): boolean {
+    return this.allRecordedMetricsForced || this.showAllData;
+  }
+
+  public get resetToSportDefaultsLabel(): string {
+    return this.sportProfile.usesGenericResetLabel
+      ? 'Reset to recommended defaults'
+      : `Reset to ${this.sportProfile.label} defaults`;
+  }
+
   public get userUnitSettings() {
     return this.userSettingsQuery.unitSettings();
   }
@@ -352,11 +381,13 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private pendingRebuild = false;
   private panelBuildRequestID = 0;
   private visibleDataTypeIDs = new Set<string>();
-  private visibilityEventID: string | null = null;
+  private automaticDataTypeIDs: string[] = [];
+  private recommendedDataTypeOrder: string[] = [];
+  private visibilityOwnerKey: string | null = null;
   private lastPanelRebuildKey: string | null = null;
   private lastLapMarkersKey: string | null = null;
   private lastSwimLengthMarkersKey: string | null = null;
-  private lastPersistedVisibleDataTypeKey: string | null = null;
+  private lastPersistedCustomVisibilityKey: string | null = null;
   private zoomRangeOwnerEventID: string | null = null;
 
   constructor() {
@@ -405,7 +436,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     if (
       simpleChanges.event
       || simpleChanges.selectedActivities
-      || simpleChanges.excludedDataTypes
+      || simpleChanges.automaticExcludedDataTypes
       || simpleChanges.targetUserID
       || simpleChanges.user
       || simpleChanges.darkTheme
@@ -434,20 +465,48 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
+    const wasVisible = this.visibleDataTypeIDs.has(dataType);
+    if (wasVisible === visible) {
+      return;
+    }
+
     if (visible) {
       this.visibleDataTypeIDs.add(dataType);
     } else {
       this.visibleDataTypeIDs.delete(dataType);
     }
 
+    this.visibilityMode = 'custom';
     this.applyDataTypeVisibility();
-    this.persistVisibleDataTypes();
+    this.persistCustomVisibleDataTypes();
+    const itemLabel = this.dataTypeLegendItems.find((item) => item.dataType === dataType)?.label || dataType;
+    this.visibilityAnnouncement.set(`${itemLabel} chart ${visible ? 'shown' : 'hidden'}. Custom visibility is active.`);
   }
 
   public onShowAllDataTypes(): void {
     this.visibleDataTypeIDs = new Set(this.allChartPanels.map((panel) => panel.dataType));
+    this.visibilityMode = 'custom';
     this.applyDataTypeVisibility();
-    this.persistVisibleDataTypes();
+    this.persistCustomVisibleDataTypes();
+    this.visibilityAnnouncement.set(`All ${this.allChartPanels.length} available charts shown. Custom visibility is active.`);
+  }
+
+  public onResetToSportDefaults(): void {
+    if (!this.event?.getID?.() || !this.sportProfile.signature) {
+      return;
+    }
+
+    this.chartSettingsLocalStorageService.resetEventChartVisibilityPreference(
+      this.event,
+      this.sportProfile.signature,
+    );
+    this.visibilityMode = 'automatic';
+    this.visibleDataTypeIDs = new Set(this.automaticDataTypeIDs);
+    this.lastPersistedCustomVisibilityKey = null;
+    this.applyDataTypeVisibility();
+    this.visibilityAnnouncement.set(
+      `${this.resetToSportDefaultsLabel}. ${this.visibleDataTypeIDs.size} charts visible.`,
+    );
   }
 
   public onPanelOverlayDataTypeChange(primaryDataType: string, overlayDataType: string | null): void {
@@ -616,7 +675,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           selectedActivities,
           allActivities,
           xAxisType: effectiveXAxisType,
-          showAllData: this.showAllData,
+          showAllData: this.effectiveShowAllData,
           dataTypesToUse: this.dataTypesToUse,
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
@@ -632,13 +691,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           return;
         }
 
-        const excludedDataTypeSet = new Set(this.excludedDataTypes || []);
-        this.allChartPanels = nextChartPanels.filter((panel) => !excludedDataTypeSet.has(panel.dataType));
+        this.allChartPanels = nextChartPanels;
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
         this.applyDataTypeVisibility();
-        this.persistVisibleDataTypes();
       }
 
       if (shouldRebuildLaps) {
@@ -685,6 +742,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.chartPanels = [];
       this.chartPanelViews = [];
       this.dataTypeLegendItems = [];
+      this.recommendedDataTypeLegendItems = [];
+      this.otherDataTypeLegendItems = [];
       this.lapMarkers = [];
       this.swimLengthMarkers = [];
       this.hasSelectedSwimLengths = false;
@@ -697,7 +756,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.lastPanelRebuildKey = null;
       this.lastLapMarkersKey = null;
       this.lastSwimLengthMarkersKey = null;
-      this.lastPersistedVisibleDataTypeKey = null;
+      this.lastPersistedCustomVisibilityKey = null;
     } finally {
       if (rebuildRequestID === this.panelBuildRequestID) {
         this.loaded();
@@ -756,53 +815,66 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   private syncVisibleDataTypes(panels: EventChartPanelModel[]): void {
     const eventID = this.event?.getID?.() || null;
-    if (this.visibilityEventID !== eventID) {
-      this.visibilityEventID = eventID;
+    this.sportProfile = resolveEventChartSportProfile(
+      (this.selectedActivities || []).map((activity) => activity?.type),
+    );
+    const visibilityOwnerKey = eventID ? `${eventID}|${this.sportProfile.signature}` : null;
+    const ownerChanged = this.visibilityOwnerKey !== visibilityOwnerKey;
+    if (ownerChanged) {
+      this.visibilityOwnerKey = visibilityOwnerKey;
       this.visibleDataTypeIDs.clear();
-      this.lastPersistedVisibleDataTypeKey = null;
+      this.visibilityMode = 'automatic';
+      this.lastPersistedCustomVisibilityKey = null;
     }
 
     const availableDataTypeIDs = new Set(panels.map((panel) => panel.dataType));
+    const recommendations = resolveEventChartRecommendations({
+      profile: this.sportProfile,
+      panels,
+      globallyAllowedDataTypes: resolveEventChartConfiguredDataTypes(this.dataTypesToUse, this.userUnitSettings),
+      automaticExcludedDataTypes: this.automaticExcludedDataTypes,
+    });
+    this.automaticDataTypeIDs = recommendations.automaticDataTypes;
+    this.recommendedDataTypeOrder = recommendations.recommendedDataTypes;
+
     if (!availableDataTypeIDs.size) {
       this.visibleDataTypeIDs.clear();
       return;
     }
 
-    let nextVisibleDataTypeIDs = new Set<string>();
-
-    if (this.visibleDataTypeIDs.size > 0) {
-      this.visibleDataTypeIDs.forEach((dataTypeID) => {
-        if (availableDataTypeIDs.has(dataTypeID)) {
-          nextVisibleDataTypeIDs.add(dataTypeID);
-        }
-      });
+    if (!ownerChanged && this.visibilityMode === 'custom') {
+      this.visibleDataTypeIDs = new Set(
+        [...this.visibleDataTypeIDs].filter((dataTypeID) => availableDataTypeIDs.has(dataTypeID)),
+      );
+      return;
     }
 
-    if (nextVisibleDataTypeIDs.size === 0) {
-      this.getPersistedVisibleDataTypeIDs().forEach((dataTypeID) => {
-        if (availableDataTypeIDs.has(dataTypeID)) {
-          nextVisibleDataTypeIDs.add(dataTypeID);
-        }
-      });
+    const preference = eventID
+      ? this.chartSettingsLocalStorageService.getEventChartVisibilityPreference(this.event, this.sportProfile.signature)
+      : {mode: 'automatic' as const, selectionKeys: [], source: 'default' as const};
+    const restoredDataTypeIDs = this.resolveAvailableDataTypeIDs(preference.selectionKeys, panels);
+    const canRestorePreference = preference.mode === 'custom'
+      && (preference.source === 'signature' || restoredDataTypeIDs.length > 0);
+
+    if (canRestorePreference) {
+      this.visibilityMode = 'custom';
+      this.visibleDataTypeIDs = new Set(restoredDataTypeIDs);
+      return;
     }
 
-    if (nextVisibleDataTypeIDs.size === 0) {
-      const configuredAvailableDataTypeIDs = this.showAllData
-        ? resolveEventChartConfiguredDataTypes(this.dataTypesToUse, this.userUnitSettings)
-          .filter((dataTypeID) => availableDataTypeIDs.has(dataTypeID))
-        : [];
-      nextVisibleDataTypeIDs = configuredAvailableDataTypeIDs.length > 0
-        ? new Set(configuredAvailableDataTypeIDs)
-        : new Set(availableDataTypeIDs);
-    }
-
-    this.visibleDataTypeIDs = nextVisibleDataTypeIDs;
+    this.visibilityMode = 'automatic';
+    this.visibleDataTypeIDs = new Set(this.automaticDataTypeIDs);
   }
 
   private applyDataTypeVisibility(): void {
     const visibleDataTypeIDs = this.visibleDataTypeIDs;
-    this.chartPanels = this.allChartPanels.filter((panel) => visibleDataTypeIDs.has(panel.dataType));
-    this.dataTypeLegendItems = this.allChartPanels.map((panel) => ({
+    const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
+    this.chartPanels = this.visibilityMode === 'automatic'
+      ? this.automaticDataTypeIDs
+        .map((dataType) => panelByDataType.get(dataType))
+        .filter((panel): panel is EventChartPanelModel => !!panel && visibleDataTypeIDs.has(panel.dataType))
+      : this.allChartPanels.filter((panel) => visibleDataTypeIDs.has(panel.dataType));
+    const legendItems = this.allChartPanels.map((panel) => ({
       dataType: panel.dataType,
       label: panel.displayName,
       color: visibleDataTypeIDs.has(panel.dataType)
@@ -810,6 +882,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         : LEGEND_MUTED_DOT_COLOR,
       visible: visibleDataTypeIDs.has(panel.dataType),
     }));
+    const legendItemByDataType = new Map(legendItems.map((item) => [item.dataType, item]));
+    this.recommendedDataTypeLegendItems = this.sportProfile.candidateFamilies.length
+      ? this.recommendedDataTypeOrder
+        .map((dataType) => legendItemByDataType.get(dataType))
+        .filter((item): item is EventDataTypeLegendItem => !!item)
+      : [];
+    const recommendedDataTypeSet = new Set(this.recommendedDataTypeLegendItems.map((item) => item.dataType));
+    this.otherDataTypeLegendItems = legendItems.filter((item) => !recommendedDataTypeSet.has(item.dataType));
+    this.dataTypeLegendItems = [...this.recommendedDataTypeLegendItems, ...this.otherDataTypeLegendItems];
     this.chartPanelViews = this.buildChartPanelViews();
     this.updateZoomBarOverviewData();
   }
@@ -877,31 +958,34 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.zoomBarOverviewData = buildEventZoomOverviewData(this.chartPanels, domain);
   }
 
-  private getPersistedVisibleDataTypeIDs(): string[] {
-    if (!this.event?.getID?.()) {
-      return [];
+  private persistCustomVisibleDataTypes(): void {
+    const eventID = this.event?.getID?.();
+    if (!eventID || !this.sportProfile.signature) {
+      return;
     }
-    return this.chartSettingsLocalStorageService
-      .getDataTypeIDsToShow(this.event)
-      .filter((dataTypeID) => !!dataTypeID);
+    const selectionKeys = [...new Set([...this.visibleDataTypeIDs].map(getEventChartSelectionKey))]
+      .sort((left, right) => left.localeCompare(right));
+    const persistenceKey = `${eventID}|${this.sportProfile.signature}|${selectionKeys.join(',')}`;
+    if (this.lastPersistedCustomVisibilityKey === persistenceKey) {
+      return;
+    }
+
+    this.chartSettingsLocalStorageService.setEventChartCustomVisibilityPreference(
+      this.event,
+      this.sportProfile.signature,
+      selectionKeys,
+    );
+    this.lastPersistedCustomVisibilityKey = persistenceKey;
   }
 
-  private persistVisibleDataTypes(): void {
-    const eventID = this.event?.getID?.();
-    if (!eventID) {
-      return;
-    }
-    const sortedDataTypeIDs = [...this.visibleDataTypeIDs].sort((left, right) => left.localeCompare(right));
-    const persistenceKey = `${eventID}|${sortedDataTypeIDs.join(',')}`;
-    if (this.lastPersistedVisibleDataTypeKey === persistenceKey) {
-      return;
-    }
-
-    this.chartSettingsLocalStorageService.setDataTypeIDsToShow(
-      this.event,
-      sortedDataTypeIDs,
-    );
-    this.lastPersistedVisibleDataTypeKey = persistenceKey;
+  private resolveAvailableDataTypeIDs(
+    selectionKeys: readonly string[],
+    panels: readonly EventChartPanelModel[],
+  ): string[] {
+    const selectedKeySet = new Set(selectionKeys.map(getEventChartSelectionKey));
+    return panels
+      .filter((panel) => selectedKeySet.has(getEventChartSelectionKey(panel.dataType)))
+      .map((panel) => panel.dataType);
   }
 
   private buildPanelRebuildKey(
@@ -913,7 +997,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     const selectedActivityKey = this.buildActivitiesKey(selectedActivities);
     const allActivitiesKey = this.buildActivitiesKey(allActivities);
     const dataTypesKey = [...(this.dataTypesToUse || [])].sort((left, right) => left.localeCompare(right)).join(',');
-    const excludedDataTypesKey = [...(this.excludedDataTypes || [])]
+    const automaticExcludedDataTypesKey = [...(this.automaticExcludedDataTypes || [])]
       .sort((left, right) => left.localeCompare(right))
       .join(',');
     const unitSettingsKey = this.buildUnitSettingsKey(this.userUnitSettings);
@@ -923,11 +1007,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return [
       eventID,
       `${xAxisType}`,
-      this.showAllData ? '1' : '0',
+      this.effectiveShowAllData ? '1' : '0',
       selectedActivityKey,
       allActivitiesKey,
       dataTypesKey,
-      excludedDataTypesKey,
+      automaticExcludedDataTypesKey,
       unitSettingsKey,
       intensityZoneColoringKey,
       intensityZoneBoundariesKey,
@@ -989,7 +1073,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   private buildActivitiesKey(activities: ActivityInterface[]): string {
     return (activities || [])
-      .map((activity) => `${activity?.getID?.() || ''}`)
+      .map((activity) => `${activity?.getID?.() || ''}:${activity?.type || ''}`)
       .join(',');
   }
 

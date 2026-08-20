@@ -48,22 +48,45 @@
   </span>
 </section>
 
+<span class="cdk-visually-hidden" aria-live="polite">{{ visibilityAnnouncement }}</span>
+
 <mat-menu #seriesMenu="matMenu" xPosition="before" class="qs-menu-panel">
   <div class="series-menu" (click)="$event.stopPropagation()">
     <p class="series-menu__header">Visible charts</p>
-    @for (item of seriesMenuItems; track item.dataType) {
+    @if (recommendedSeriesMenuItems.length > 0) {
+    <p class="series-menu__section-label">{{ recommendedSeriesMenuLabel }}</p>
+    @for (item of recommendedSeriesMenuItems; track item.dataType) {
     <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"
       (click)="$event.stopPropagation(); onSeriesVisibilityToggle(item.dataType, !item.visible)">
       <span class="series-menu__swatch" [style.background]="item.color"></span>
       <span class="series-menu__label">{{ item.label }}</span>
     </button>
     }
+    }
 
-    @if (shouldShowAllSeriesAction) {
+    @if (otherSeriesMenuItems.length > 0) {
+    <p class="series-menu__section-label">Other available</p>
+    @for (item of otherSeriesMenuItems; track item.dataType) {
+    <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"
+      (click)="$event.stopPropagation(); onSeriesVisibilityToggle(item.dataType, !item.visible)">
+      <span class="series-menu__swatch" [style.background]="item.color"></span>
+      <span class="series-menu__label">{{ item.label }}</span>
+    </button>
+    }
+    }
+
+    @if (shouldShowAllSeriesAction || showResetToSportDefaults) {
     <div class="series-menu__actions">
+      @if (showResetToSportDefaults) {
+      <button mat-stroked-button type="button" (click)="$event.stopPropagation(); onResetToSportDefaults()">
+        {{ resetToSportDefaultsLabel }}
+      </button>
+      }
+      @if (shouldShowAllSeriesAction) {
       <button mat-stroked-button type="button" (click)="$event.stopPropagation(); onShowAllSeries()">
         Show all charts
       </button>
+      }
     </div>
     }
   </div>
@@ -120,9 +143,8 @@
   </section>
   }
 
-  <section mat-menu-item>
-    <mat-slide-toggle [checked]="showAllData" [disabled]="!user"
-      matTooltip="Adds every chartable metric recorded by the activity to Visible charts without changing which charts are visible."
+  <section mat-menu-item [matTooltip]="includeAllRecordedMetricsTooltip">
+    <mat-slide-toggle [checked]="effectiveShowAllData" [disabled]="!user || allRecordedMetricsForced"
       (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
       Include all recorded metrics
     </mat-slide-toggle>

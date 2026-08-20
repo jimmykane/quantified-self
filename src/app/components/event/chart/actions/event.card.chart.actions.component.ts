@@ -38,6 +38,13 @@ export class EventCardChartActionsComponent {
   @Input() showAltitudeGradeColorToggle = false;
   @Input() seriesMenuSummary = '';
   @Input() seriesMenuItems: ChartSeriesMenuItem[] = [];
+  @Input() recommendedSeriesMenuItems: ChartSeriesMenuItem[] = [];
+  @Input() otherSeriesMenuItems: ChartSeriesMenuItem[] = [];
+  @Input() recommendedSeriesMenuLabel = 'Recommended';
+  @Input() showResetToSportDefaults = false;
+  @Input() resetToSportDefaultsLabel = 'Reset to recommended defaults';
+  @Input() allRecordedMetricsForced = false;
+  @Input() visibilityAnnouncement = '';
   @Input() showResetChartState = false;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
@@ -49,6 +56,7 @@ export class EventCardChartActionsComponent {
   @Output() colorAltitudeByGradeChange = new EventEmitter<boolean>();
   @Output() seriesVisibilityToggle = new EventEmitter<{ dataType: string; visible: boolean }>();
   @Output() showAllSeries = new EventEmitter<void>();
+  @Output() resetToSportDefaults = new EventEmitter<void>();
   @Output() resetChartState = new EventEmitter<void>();
 
   public xAxisTypes = XAxisTypes;
@@ -71,6 +79,16 @@ export class EventCardChartActionsComponent {
       return '';
     }
     return `${this.visibleSeriesCount}/${this.totalSeriesCount}`;
+  }
+
+  public get effectiveShowAllData(): boolean {
+    return this.allRecordedMetricsForced || this.showAllData;
+  }
+
+  public get includeAllRecordedMetricsTooltip(): string {
+    return this.allRecordedMetricsForced
+      ? 'Benchmark comparisons always make every recorded chartable metric available for selection.'
+      : 'Adds every chartable metric recorded by the activity to Visible charts without changing which charts are visible.';
   }
 
   public get xAxisOptions(): MenuRadioListOption<XAxisTypes>[] {
@@ -109,6 +127,9 @@ export class EventCardChartActionsComponent {
   }
 
   async onShowAllDataToggle(checked: boolean) {
+    if (this.allRecordedMetricsForced) {
+      return;
+    }
     this.showAllData = checked;
     await this.somethingChanged('showAllData');
   }
@@ -193,6 +214,11 @@ export class EventCardChartActionsComponent {
 
   onShowAllSeries(): void {
     this.showAllSeries.emit();
+  }
+
+  onResetToSportDefaults(): void {
+    this.resetToSportDefaults.emit();
+    this.analyticsService.logEvent('event_chart_settings_change', { property: 'resetToSportDefaults' });
   }
 
   get fillOpacityPercentLabel(): string {

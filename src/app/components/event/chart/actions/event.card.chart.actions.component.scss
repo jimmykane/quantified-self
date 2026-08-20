@@ -51,6 +51,13 @@ section.container {
   font: var(--mat-sys-label-medium);
 }
 
+.series-menu__section-label {
+  margin: 4px 0 0;
+  padding: 4px 8px 0;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+}
+
 .series-menu__item:hover {
   background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
 }
@@ -71,6 +78,9 @@ section.container {
 }
 
 .series-menu__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   padding-top: 4px;
 }
 
