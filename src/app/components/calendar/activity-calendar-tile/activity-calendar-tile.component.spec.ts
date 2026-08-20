@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
@@ -122,6 +124,18 @@ describe('ActivityCalendarTileComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('constrains the compact grid to the tile content area', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-tile/activity-calendar-tile.component.scss'),
+      'utf8',
+    );
+    const gridRule = styles.match(/app-activity-calendar-grid\s*\{([^}]*)\}/)?.[1];
+
+    expect(gridRule).toContain('min-height: 0;');
+    expect(gridRule).toContain('flex: 1 1 0;');
+    expect(gridRule).toContain('overflow: hidden;');
   });
 });
 
