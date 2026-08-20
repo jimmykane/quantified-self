@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
   const loggerWarn = vi.fn();
   const hasProAccess = vi.fn();
   const recordActivitySyncOutboundFingerprint = vi.fn();
+  const getActiveWahooTokenSnapshot = vi.fn();
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
     constructor(
       _message: string,
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => {
     loggerWarn,
     hasProAccess,
     recordActivitySyncOutboundFingerprint,
+    getActiveWahooTokenSnapshot,
     WahooAPIRequestError,
   };
 });
@@ -97,6 +99,10 @@ vi.mock('./auth/api', () => ({
   WahooAPIRequestError: mocks.WahooAPIRequestError,
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
+vi.mock('./account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
+}));
 
 import { getWahooActivityUploadStatus, importActivityToWahooAPI, uploadActivityFileToWahoo } from './activities';
 import { ActivitySyncOutboundFingerprintSkippedForDeletedUserError } from '../activity-sync/outbound-fingerprint';
@@ -116,9 +122,16 @@ describe('Wahoo activity uploads', () => {
     });
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true, id: 'wahoo-user' });
+    mocks.getActiveWahooTokenSnapshot.mockResolvedValue({
+      exists: true,
+      id: 'wahoo-user',
+      ref: mocks.tokenRef,
+      data: () => ({ wahooUserID: 'wahoo-user' }),
+    });
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write offline_data',
     });
   });
@@ -181,7 +194,9 @@ describe('Wahoo activity uploads', () => {
   });
 
   it('does not write a direct-upload echo receipt without a connected Wahoo account', async () => {
-    mocks.tokenQueryGet.mockResolvedValueOnce({ docs: [] });
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(
+      Object.assign(new Error('Connect Wahoo before sending data.'), { code: 'unauthenticated' }),
+    );
 
     await expect(importActivityToWahooAPI({
       auth: { uid: 'user-1' },
@@ -346,6 +361,7 @@ describe('Wahoo activity uploads', () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read offline_data',
     });
 

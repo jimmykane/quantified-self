@@ -43,6 +43,7 @@ const {
 
   const tokenRootRef = {
     id: 'firebase-user-123',
+    get: vi.fn(),
     collection: vi.fn((name: string) => {
       if (name !== 'tokens') {
         throw new Error(`Unexpected subcollection ${name}`);
@@ -208,6 +209,10 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     tokenCollectionRef.get.mockReset();
     tokenCollectionRef.limit.mockReset().mockReturnValue({
       get: vi.fn().mockResolvedValue({ empty: false }),
+    });
+    tokenRootRef.get.mockReset().mockResolvedValue({
+      exists: false,
+      data: () => undefined,
     });
   });
 
@@ -1321,6 +1326,10 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         tokenID: 'suunto-token-id',
         statusCode: 504,
         errorMessage: 'gateway timeout',
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: null,
+        },
       },
     ]);
     expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
@@ -1373,7 +1382,11 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       'firebase-user-123',
       ServiceNames.SuuntoApp,
       'suunto-token-id',
-      { preserveOAuthFlowContext: false },
+      expect.objectContaining({
+        preserveOAuthFlowContext: false,
+        preserveTokenRootWhenEmpty: true,
+        shouldDeleteInTransaction: expect.any(Function),
+      }),
     );
   });
 
@@ -1421,7 +1434,11 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       'firebase-user-123',
       ServiceNames.SuuntoApp,
       'suunto-token-id',
-      { preserveOAuthFlowContext: false },
+      expect.objectContaining({
+        preserveOAuthFlowContext: false,
+        preserveTokenRootWhenEmpty: true,
+        shouldDeleteInTransaction: expect.any(Function),
+      }),
     );
   });
 
@@ -1461,8 +1478,188 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         tokenID: 'suunto-token-id',
         statusCode: null,
         errorMessage: expect.stringContaining('local cleanup failed after subscription-enforcement deauthorization'),
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: null,
+        },
       },
     ]);
+  });
+
+  it('does not deauthorize or delete after OAuth replaces the disconnect episode', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'suunto-token-id',
+          data: () => ({
+            serviceName: ServiceNames.SuuntoApp,
+            accessToken: 'valid-access-token',
+            refreshToken: 'stored-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            userName: 'suunto-user-id',
+          }),
+        },
+      ],
+    });
+    const originalGuard = {
+      disconnectGeneration: 'disconnect-generation-a',
+      oauthCredentialGeneration: 'credential-generation-a',
+    };
+    tokenRootRef.get
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          disconnectGeneration: originalGuard.disconnectGeneration,
+          activeOAuthCredentialGeneration: originalGuard.oauthCredentialGeneration,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          disconnectGeneration: originalGuard.disconnectGeneration,
+          activeOAuthCredentialGeneration: originalGuard.oauthCredentialGeneration,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          activeOAuthCredentialGeneration: 'credential-generation-b',
+        }),
+      });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      {
+        disconnectLifecycleGuard: originalGuard,
+        tokenResolver: vi.fn().mockResolvedValue({
+          serviceName: ServiceNames.SuuntoApp,
+          accessToken: 'valid-access-token',
+        }),
+      },
+    );
+
+    expect(outcome.skippedByCondition).toBe(true);
+    expect(mockAdapterDeauthorize).not.toHaveBeenCalled();
+    expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
+  });
+
+  it('does not delete an empty token root after OAuth replaces the disconnect episode', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: true,
+      size: 0,
+      docs: [],
+    });
+    const originalGuard = {
+      disconnectGeneration: 'disconnect-generation-a',
+      oauthCredentialGeneration: 'credential-generation-a',
+    };
+    tokenRootRef.get.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: originalGuard.disconnectGeneration,
+        activeOAuthCredentialGeneration: originalGuard.oauthCredentialGeneration,
+      }),
+    });
+    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ activeOAuthCredentialGeneration: 'credential-generation-b' }),
+        })
+        .mockResolvedValueOnce({ empty: true, docs: [] }),
+      delete: vi.fn(),
+    }));
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      {
+        disconnectLifecycleGuard: originalGuard,
+        missingTokensBehavior: 'ignore',
+      },
+    );
+
+    expect(outcome.skippedByCondition).toBe(true);
+    expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+  });
+
+  it('clears pending metadata before deleting the generation-bearing empty token root', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [{
+        id: 'suunto-token-id',
+        data: () => ({
+          serviceName: ServiceNames.SuuntoApp,
+          accessToken: 'valid-access-token',
+          refreshToken: 'stored-refresh-token',
+          expiresAt: Date.now() + 120_000,
+          userName: 'suunto-user-id',
+        }),
+      }],
+    });
+    const guard = {
+      disconnectGeneration: 'disconnect-generation-a',
+      oauthCredentialGeneration: 'credential-generation-a',
+    };
+    const guardedRootSnapshot = {
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: guard.disconnectGeneration,
+        activeOAuthCredentialGeneration: guard.oauthCredentialGeneration,
+      }),
+    };
+    tokenRootRef.get.mockResolvedValue(guardedRootSnapshot);
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: false,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+      skippedByCondition: false,
+    });
+    mockClearServiceConnectionState.mockResolvedValueOnce(true);
+    const transactionDelete = vi.fn();
+    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
+      get: vi.fn()
+        .mockResolvedValueOnce(guardedRootSnapshot)
+        .mockResolvedValueOnce({ empty: true, docs: [] }),
+      delete: transactionDelete,
+    }));
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      { disconnectLifecycleGuard: guard },
+    );
+
+    expect(outcome.connectionStateUpdate).toBe('cleared');
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      'suunto-token-id',
+      expect.objectContaining({ preserveTokenRootWhenEmpty: true }),
+    );
+    expect(mockClearServiceConnectionState).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      expect.objectContaining({
+        expectedPendingDisconnectGeneration: guard.disconnectGeneration,
+        expectedTokenCredentialGeneration: expect.objectContaining({
+          expectedGeneration: guard.oauthCredentialGeneration,
+        }),
+      }),
+    );
+    expect(transactionDelete).toHaveBeenCalledWith(tokenRootRef);
+    expect(mockClearServiceConnectionState.mock.invocationCallOrder[0])
+      .toBeLessThan(transactionDelete.mock.invocationCallOrder[0]);
   });
 
   it('archives stored account-deletion token material when partner deauthorization fails without a status before refresh', async () => {

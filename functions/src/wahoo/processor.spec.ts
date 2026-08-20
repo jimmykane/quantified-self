@@ -4,7 +4,6 @@ import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/a
 
 const mocks = vi.hoisted(() => {
   return {
-    tokenGet: vi.fn(),
     parseFIT: vi.fn(),
     downloadFIT: vi.fn(),
     deletionSkip: vi.fn(),
@@ -14,6 +13,9 @@ const mocks = vi.hoisted(() => {
     hasProAccess: vi.fn(),
     markSkipped: vi.fn().mockResolvedValue('skipped'),
     deferPending: vi.fn().mockResolvedValue('deferred'),
+    deferPendingGuarded: vi.fn().mockResolvedValue('deferred'),
+    deferReconnectGuarded: vi.fn().mockResolvedValue('deferred'),
+    getActiveWahooTokenSnapshot: vi.fn(),
     retry: vi.fn().mockResolvedValue('retry'),
     processed: vi.fn().mockResolvedValue('processed'),
     claimRevision: vi.fn().mockResolvedValue('claimed'),
@@ -24,16 +26,6 @@ const mocks = vi.hoisted(() => {
     isActivitySyncOutboundEcho: vi.fn(),
   };
 });
-
-vi.mock('firebase-admin', () => ({
-  firestore: () => ({
-    collection: () => ({
-      doc: () => ({
-        collection: () => ({ doc: () => ({ get: mocks.tokenGet }) }),
-      }),
-    }),
-  }),
-}));
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
@@ -59,7 +51,17 @@ vi.mock('../activity-sync/outbound-fingerprint', () => ({
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
   deferQueueItemForPendingDisconnect: mocks.deferPending,
+  deferQueueItemForPendingDisconnectIfCurrentUserActive: mocks.deferPendingGuarded,
+  deferQueueItemForReconnectRequiredIfCurrentUserActive: mocks.deferReconnectGuarded,
   QueueResult: { Processed: 'processed' },
+}));
+vi.mock('./account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+}));
+vi.mock('./refresh-recovery', () => ({
+  isWahooReconnectRequiredError: (error: unknown) => (
+    (error as { name?: unknown } | null)?.name === 'WahooReconnectRequiredError'
+  ),
 }));
 vi.mock('./queue-store', () => ({
   claimWahooWorkoutQueueRevision: mocks.claimRevision,
@@ -93,7 +95,11 @@ describe('processWahooWorkoutQueueItem', () => {
     vi.clearAllMocks();
     mocks.deletionSkip.mockResolvedValue(false);
     mocks.disconnectPending.mockResolvedValue(false);
-    mocks.tokenGet.mockResolvedValue({ exists: true, data: () => ({ serviceName: ServiceNames.WahooAPI }) });
+    mocks.getActiveWahooTokenSnapshot.mockResolvedValue({
+      exists: true,
+      id: 'wahoo-1',
+      data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: 'wahoo-1' }),
+    });
     mocks.downloadFIT.mockResolvedValue(Buffer.from('valid-fit'));
     mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
     mocks.resolveEventID.mockResolvedValue('event-1');
@@ -128,6 +134,7 @@ describe('processWahooWorkoutQueueItem', () => {
       providerEventSecondaryIDField: 'serviceUserID',
       preferProviderIdentityEventID: true,
     });
+    expect(mocks.getActiveWahooTokenSnapshot).toHaveBeenCalledWith('firebase-1', 'wahoo-1');
     expect(mocks.setEvent).toHaveBeenCalledWith(
       'firebase-1',
       'event-1',
@@ -159,6 +166,37 @@ describe('processWahooWorkoutQueueItem', () => {
       sourceFileData: Buffer.from('valid-fit'),
     });
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+  });
+
+  it('skips an inbound row that belongs to a different retained Wahoo account', async () => {
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(
+      Object.assign(new Error('The selected Wahoo account changed.'), { code: 'unauthenticated' }),
+    );
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'provider_not_connected',
+    });
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+  });
+
+  it('parks a claimed inbound row when Wahoo becomes reconnect-required', async () => {
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(
+      Object.assign(new Error('Reconnect Wahoo to resume sync.'), { name: 'WahooReconnectRequiredError' }),
+    );
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('deferred');
+
+    expect(mocks.deferReconnectGuarded).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem,
+      userID: 'firebase-1',
+      serviceName: ServiceNames.WahooAPI,
+      phase: 'wahoo_workout_reconnect_required_transition',
+      isCurrent: expect.any(Function),
+    }));
+    expect(mocks.failRevision).not.toHaveBeenCalled();
   });
 
   it('does not queue activity delivery when deletion starts after the activity was stored', async () => {
@@ -213,7 +251,9 @@ describe('processWahooWorkoutQueueItem', () => {
   });
 
   it('skips work if the server-side Wahoo credential is no longer present', async () => {
-    mocks.tokenGet.mockResolvedValue({ exists: false });
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(
+      Object.assign(new Error('Reconnect Wahoo before sending data.'), { code: 'unauthenticated' }),
+    );
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
     expect(mocks.downloadFIT).not.toHaveBeenCalled();
@@ -227,7 +267,7 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.hasProAccess.mockResolvedValue(false);
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
-    expect(mocks.tokenGet).not.toHaveBeenCalled();
+    expect(mocks.getActiveWahooTokenSnapshot).not.toHaveBeenCalled();
     expect(mocks.downloadFIT).not.toHaveBeenCalled();
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
       resultStatus: 'skipped',
@@ -236,7 +276,7 @@ describe('processWahooWorkoutQueueItem', () => {
   });
 
   it('releases the claimed revision through retry handling when the token read fails', async () => {
-    mocks.tokenGet.mockRejectedValue(new Error('firestore unavailable'));
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(new Error('firestore unavailable'));
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('retry');
     expect(mocks.downloadFIT).not.toHaveBeenCalled();

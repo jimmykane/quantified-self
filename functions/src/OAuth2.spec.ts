@@ -218,6 +218,10 @@ vi.mock('./wahoo/auth/api', () => ({
     deauthorizeWahooUser: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('./wahoo/account', () => ({
+    assertWahooOAuthAccountCompatible: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('./service-connection-meta', () => ({
     markServiceConnected: mockMarkServiceConnected,
     clearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
@@ -225,6 +229,12 @@ vi.mock('./service-connection-meta', () => ({
 
 vi.mock('./service-disconnect-pending', () => ({
     clearServiceDisconnectPending: mockClearServiceDisconnectPending,
+    getServiceDisconnectLifecycleGuardFromRootData: (data: Record<string, unknown> | null | undefined) => ({
+        disconnectGeneration: data?.disconnectState === 'disconnect_pending'
+            ? `${data.disconnectGeneration || ''}`.trim() || null
+            : null,
+        oauthCredentialGeneration: `${data?.activeOAuthCredentialGeneration || ''}`.trim() || null,
+    }),
     isRetryableSubscriptionEnforcementDisconnectStatus: (statusCode: number | null) => statusCode === null
         || statusCode === 408
         || statusCode === 429
@@ -884,6 +894,22 @@ describe('OAuth2', () => {
             expect(transactionDeleteSpy).toHaveBeenCalledWith(userDocRef);
             expect(result).toEqual({
                 tokenRootDeleted: true,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 0,
+                skippedByCondition: false,
+            });
+        });
+
+        it('should preserve an empty token root for a later generation-guarded lifecycle transition', async () => {
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID, {
+                preserveOAuthFlowContext: false,
+                preserveTokenRootWhenEmpty: true,
+            });
+
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).not.toHaveBeenCalledWith(userDocRef);
+            expect(result).toEqual({
+                tokenRootDeleted: false,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 0,
                 skippedByCondition: false,
@@ -1584,7 +1610,15 @@ describe('OAuth2', () => {
             expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
                 url: expect.stringContaining('/oauth/deauthorize'),
             }));
-            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.SuuntoApp,
+                expect.objectContaining({
+                    expectedTokenCredentialGeneration: expect.objectContaining({
+                        fieldName: 'activeOAuthCredentialGeneration',
+                    }),
+                }),
+            );
         });
 
         it('resumes pending disconnect retries when non-Pro OAuth recovery deauthorization fails retryably', async () => {
@@ -1646,6 +1680,10 @@ describe('OAuth2', () => {
                     tokenID: 'test-external-user',
                     statusCode: 504,
                     errorMessage: 'gateway timeout',
+                    lifecycleGuard: {
+                        disconnectGeneration: null,
+                        oauthCredentialGeneration: null,
+                    },
                 },
             );
             expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({

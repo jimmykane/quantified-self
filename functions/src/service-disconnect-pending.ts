@@ -17,6 +17,7 @@ import {
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import {
+  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   type DocumentGenerationGuard,
 } from './token-refresh-coordinator';
 import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
@@ -31,6 +32,7 @@ import {
   timestampToISOString,
   type PendingServiceDisconnectFailure,
   type PendingServiceDisconnectRootData,
+  type ServiceDisconnectLifecycleGuard,
   type ServiceDisconnectPendingReason,
 } from './service-disconnect-pending-state';
 
@@ -47,8 +49,35 @@ export {
 export type {
   PendingServiceDisconnectFailure,
   PendingServiceDisconnectRootData,
+  ServiceDisconnectLifecycleGuard,
   ServiceDisconnectPendingReason,
 } from './service-disconnect-pending-state';
+
+function normalizeGeneration(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || null;
+}
+
+export function getServiceDisconnectLifecycleGuardFromRootData(
+  data: Record<string, unknown> | null | undefined,
+): ServiceDisconnectLifecycleGuard {
+  return {
+    disconnectGeneration: isServiceDisconnectPendingData(data as PendingServiceDisconnectRootData | null)
+      ? normalizeGeneration(data?.disconnectGeneration)
+      : null,
+    oauthCredentialGeneration: normalizeGeneration(data?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]),
+  };
+}
+
+function doesRootMatchServiceDisconnectLifecycleGuard(
+  data: Record<string, unknown> | null | undefined,
+  guard: ServiceDisconnectLifecycleGuard | undefined,
+): boolean {
+  if (!guard) return true;
+  const current = getServiceDisconnectLifecycleGuardFromRootData(data);
+  return current.disconnectGeneration === guard.disconnectGeneration
+    && current.oauthCredentialGeneration === guard.oauthCredentialGeneration;
+}
 
 function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
   return {
@@ -134,7 +163,7 @@ async function isExpectedOAuthCredentialGenerationCurrent(
   if (!expectedOAuthCredentialGeneration) return true;
   const generationSnapshot = await transaction.get(expectedOAuthCredentialGeneration.documentRef);
   return generationSnapshot.exists
-    && generationSnapshot.data()?.[expectedOAuthCredentialGeneration.fieldName]
+    && (generationSnapshot.data()?.[expectedOAuthCredentialGeneration.fieldName] ?? null)
       === expectedOAuthCredentialGeneration.expectedGeneration;
 }
 
@@ -178,6 +207,12 @@ export async function markServiceDisconnectPending(
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
+    if (!doesRootMatchServiceDisconnectLifecycleGuard(
+      snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+      failure.lifecycleGuard,
+    )) {
+      return null;
+    }
     const nextState = buildPendingDisconnectMarkState(existing, failure, reason, nowMs);
     const rootData = withPendingDisconnectGeneration(nextState.rootData, existing);
 
@@ -213,6 +248,12 @@ export async function recordServiceDisconnectRetryFailure(
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
+    if (!doesRootMatchServiceDisconnectLifecycleGuard(
+      snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+      failure.lifecycleGuard,
+    )) {
+      return null;
+    }
     const nextTransition = buildPendingDisconnectRetryFailureTransition(existing, failure, nowMs);
     nextTransition.rootData = withPendingDisconnectGeneration(nextTransition.rootData, existing);
     nextTransition.finalData = {
@@ -258,6 +299,12 @@ export async function recordServiceDisconnectRetryFailure(
       }
 
       const current = snapshot.data() as PendingServiceDisconnectRootData;
+      if (!doesRootMatchServiceDisconnectLifecycleGuard(
+        snapshot.data() as Record<string, unknown>,
+        failure.lifecycleGuard,
+      )) {
+        return false;
+      }
       if (current.disconnectManualReviewRequired === true) {
         return true;
       }
@@ -309,6 +356,12 @@ export async function resumeServiceDisconnectRetryAfterRecoveryFailure(
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
+    if (!doesRootMatchServiceDisconnectLifecycleGuard(
+      snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+      failure.lifecycleGuard,
+    )) {
+      return null;
+    }
     const nextData = withPendingDisconnectGeneration(
       buildPendingDisconnectRecoveryRetryData(existing, failure, nowMs),
       existing,

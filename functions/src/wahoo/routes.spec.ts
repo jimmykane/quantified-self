@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
   const tokenRefGet = vi.fn();
   const tokenQueryGet = vi.fn();
   const loggerWarn = vi.fn();
+  const getActiveWahooTokenSnapshot = vi.fn();
   const tokenRef = { get: tokenRefGet };
   let onCallOptions: unknown = null;
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
@@ -36,6 +37,7 @@ const mocks = vi.hoisted(() => {
     tokenQueryGet,
     tokenRef,
     loggerWarn,
+    getActiveWahooTokenSnapshot,
     WahooAPIRequestError,
     getOnCallOptions: () => onCallOptions,
     setOnCallOptions: (options: unknown) => {
@@ -98,6 +100,10 @@ vi.mock('./auth/api', () => ({
   WahooAPIRequestError: mocks.WahooAPIRequestError,
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
+vi.mock('./account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
+}));
 
 import {
   createWahooRouteSendContext,
@@ -134,9 +140,16 @@ describe('Wahoo route uploads', () => {
     mocks.assertWahooConnectionAvailable.mockResolvedValue(undefined);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true });
+    mocks.getActiveWahooTokenSnapshot.mockResolvedValue({
+      exists: true,
+      id: 'wahoo-user',
+      ref: mocks.tokenRef,
+      data: () => ({ wahooUserID: 'wahoo-user' }),
+    });
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write routes_read routes_write offline_data',
     });
     mocks.parseRoutePayload.mockResolvedValue(routeFile());
@@ -356,6 +369,7 @@ describe('Wahoo route uploads', () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write offline_data',
     });
 
@@ -369,6 +383,7 @@ describe('Wahoo route uploads', () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write offline_data',
     });
 

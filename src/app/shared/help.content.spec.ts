@@ -886,6 +886,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('authorize the same Wahoo account');
+    expect(serviceConnectionsSection?.content).toContain('disconnect the retained account first');
     expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
     expect(serviceConnectionsSection?.content).toContain('COROS activity upload, activity delivery, and route delivery are available to all eligible connected Pro users');
     expect(serviceConnectionsSection?.content).not.toMatch(/COROS[^.]*\bpilot\b|\bpilot\b[^.]*COROS/i);

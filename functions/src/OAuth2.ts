@@ -33,6 +33,7 @@ import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   type DocumentGenerationGuard,
 } from './token-refresh-coordinator';
+import { assertWahooOAuthAccountCompatible } from './wahoo/account';
 export { deleteLocalServiceToken } from './service-token-store';
 
 interface PersistedOAuthCredentialGuard {
@@ -55,13 +56,18 @@ class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   }
 }
 
-class OAuthFlowContextMismatchError extends Error {
+export class OAuthFlowContextMismatchError extends Error {
   public readonly name = 'OAuthFlowContextMismatchError';
   public readonly statusCode = 403;
 
   constructor(serviceName: ServiceNames) {
     super(`The ${serviceName} OAuth callback does not match the active authorization flow.`);
   }
+}
+
+export function isOAuthFlowContextMismatchError(error: unknown): error is OAuthFlowContextMismatchError {
+  return error instanceof OAuthFlowContextMismatchError
+    || (error instanceof Error && error.name === 'OAuthFlowContextMismatchError');
 }
 
 async function assertOAuthUserCanWriteServiceState(
@@ -431,6 +437,10 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
     const processedTokenData = await adapter.processNewToken(results, userID);
     uniqueId = processedTokenData.uniqueId;
+
+    if (serviceName === ServiceNames.WahooAPI) {
+      await assertWahooOAuthAccountCompatible(userID, `${uniqueId || ''}`);
+    }
 
     const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
 

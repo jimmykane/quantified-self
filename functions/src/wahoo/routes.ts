@@ -36,7 +36,6 @@ import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import {
   SERVICE_NAME,
-  WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_ROUTES_READ_SCOPE,
   WAHOO_API_ROUTES_WRITE_SCOPE,
 } from './constants';
@@ -49,6 +48,7 @@ import {
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
 
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
@@ -150,30 +150,24 @@ async function withWahooRouteAccessToken<T>(
 ): Promise<T> {
   await assertWahooRouteUploadProviderActionAllowed(userID, 'before_token_lookup');
 
-  const initialTokenSnapshots = await admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens')
-    .limit(1)
-    .get();
-  const initialTokenSnapshot = initialTokenSnapshots.docs[0];
-  if (!initialTokenSnapshot) {
-    throw new HttpsError('unauthenticated', 'Connect Wahoo before sending routes.');
-  }
+  const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
+  const providerUserId = initialTokenSnapshot.id;
 
   const execute = async (forceRefresh: boolean): Promise<T> => {
-    const currentTokenSnapshot = await initialTokenSnapshot.ref.get();
-    if (!currentTokenSnapshot.exists) {
-      throw new HttpsError('unauthenticated', 'Connect Wahoo before sending routes.');
-    }
+    const currentTokenSnapshot = await getActiveWahooTokenSnapshot(userID, providerUserId);
     const token = await getTokenData(
       currentTokenSnapshot,
       ServiceNames.WahooAPI,
       forceRefresh,
     ) as WahooAPIAuth2ServiceTokenInterface;
+    if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.');
+    }
     if (!hasScope(token.scope, WAHOO_API_ROUTES_READ_SCOPE) || !hasScope(token.scope, WAHOO_API_ROUTES_WRITE_SCOPE)) {
       throw new WahooRouteWriteScopeRequiredError();
     }
+    await assertWahooRouteUploadProviderActionAllowed(userID, 'before_provider_request');
+    await getActiveWahooTokenSnapshot(userID, providerUserId);
     return operation(token.accessToken);
   };
 
@@ -357,7 +351,7 @@ async function updateWahooRoute(
 }
 
 function toWahooRouteHttpsError(error: unknown): never {
-  if (isWahooReconnectRequiredError(error)) {
+  if (isWahooReconnectRequiredError(error) || isTerminalServiceAuthError(error)) {
     throw Object.assign(
       new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.'),
       { name: 'WahooReconnectRequiredError' },
@@ -367,9 +361,6 @@ function toWahooRouteHttpsError(error: unknown): never {
     throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
       retryAt: error.retryAt,
     });
-  }
-  if (isTerminalServiceAuthError(error)) {
-    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.');
   }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');

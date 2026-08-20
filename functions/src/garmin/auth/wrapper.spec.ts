@@ -80,6 +80,7 @@ vi.mock('../../OAuth2', () => ({
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     deauthorizeServiceForUser: vi.fn(),
     disconnectServiceForUser: vi.fn(),
+    isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
     validateOAuth2State: vi.fn(),
 }));
 
