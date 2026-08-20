@@ -59,10 +59,14 @@ const hoisted = vi.hoisted(() => {
                 docs,
             };
         }),
-        doc: vi.fn((docID: string) => ({
-            path: `${collectionName}/${docID}`,
-            collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
-        })),
+        doc: vi.fn((docID: string) => {
+            const storedDoc = (collections.get(collectionName) || []).find(doc => doc.id === docID);
+            return {
+                path: `${collectionName}/${docID}`,
+                storedDoc,
+                collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
+            };
+        }),
     });
 
     return {
@@ -340,6 +344,44 @@ describe('pending disconnect queue release', () => {
         });
 
         await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release an older pending-disconnect generation into a newer pending episode', async () => {
+        addDoc('suuntoAppAccessTokens', 'user-1', {
+            disconnectState: 'disconnect_pending',
+            disconnectGeneration: 'pending-generation-2',
+        });
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+            serviceDisconnectPendingGeneration: 'pending-generation-1',
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release a row parked for a different pending-disconnect generation', async () => {
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+            serviceDisconnectPendingGeneration: 'pending-generation-2',
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
 
         expect(activityUpdate).not.toHaveBeenCalled();
     });

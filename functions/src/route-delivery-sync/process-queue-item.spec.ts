@@ -831,6 +831,10 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.sourceServiceName}`,
       }),
+      {
+        userID: manualQueueItem.userID,
+        serviceName: suuntoToGarminRoute.sourceServiceName,
+      },
     );
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
@@ -858,6 +862,10 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
       }),
+      {
+        userID: manualQueueItem.userID,
+        serviceName: suuntoToGarminRoute.destinationServiceName,
+      },
     );
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
@@ -939,6 +947,10 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
       }),
+      {
+        userID: baseQueueItem.userID,
+        serviceName: suuntoToGarminRoute.destinationServiceName,
+      },
     );
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'destination_not_connected',

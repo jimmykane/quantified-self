@@ -793,13 +793,17 @@ async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const additionalData = { deferredServiceName: `${serviceName}` };
     if (!requireCurrentProviderState) {
-        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData);
+        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
+            userID: queueItem.userID,
+            serviceName,
+        });
     }
     return deferQueueItemForPendingDisconnectIfCurrentUserActive({
         queueItem,
         additionalData,
         bulkWriter,
         userID: queueItem.userID,
+        serviceName,
         phase: 'route_delivery_sync_pending_disconnect_transition',
         logPrefix: 'RouteDeliverySync',
         isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),

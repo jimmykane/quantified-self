@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -82,6 +83,7 @@ async function setServiceMetaIfUserActive(
 
 async function setWahooReconnectReleasePendingIfConnected(
   userID: string,
+  connectionStateGeneration: string,
   nowMs = Date.now(),
 ): Promise<boolean> {
   const db = admin.firestore();
@@ -97,19 +99,26 @@ async function setWahooReconnectReleasePendingIfConnected(
 
     const snapshot = await transaction.get(ref);
     const data = snapshot.data() as ServiceConnectionMetaFields | undefined;
-    if (data?.connectionState !== SERVICE_CONNECTION_STATES.Connected) return false;
+    if (
+      data?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+      || data.connectionStateGeneration !== connectionStateGeneration
+    ) return false;
 
     const attemptCount = Math.max(0, Number(data?.wahooReconnectReleaseAttemptCount) || 0) + 1;
     transaction.set(ref, {
       wahooReconnectReleasePending: true,
       wahooReconnectReleaseLastAttemptAt: nowMs,
       wahooReconnectReleaseAttemptCount: attemptCount,
+      wahooReconnectReleaseConnectionGeneration: connectionStateGeneration,
     }, { merge: true });
     return true;
   });
 }
 
-async function clearWahooReconnectReleasePendingIfConnected(userID: string): Promise<boolean> {
+async function clearWahooReconnectReleasePendingIfConnected(
+  userID: string,
+  connectionStateGeneration: string,
+): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, ServiceNames.WahooAPI);
   return db.runTransaction(async transaction => {
@@ -122,12 +131,18 @@ async function clearWahooReconnectReleasePendingIfConnected(userID: string): Pro
     if (deletionGuard.shouldSkip) return false;
 
     const snapshot = await transaction.get(ref);
-    if (snapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected) return false;
+    const data = snapshot.data() as ServiceConnectionMetaFields | undefined;
+    if (
+      data?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+      || data.connectionStateGeneration !== connectionStateGeneration
+      || data.wahooReconnectReleaseConnectionGeneration !== connectionStateGeneration
+    ) return false;
 
     transaction.set(ref, {
       wahooReconnectReleasePending: FieldValue.delete(),
       wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
       wahooReconnectReleaseAttemptCount: FieldValue.delete(),
+      wahooReconnectReleaseConnectionGeneration: FieldValue.delete(),
     }, { merge: true });
     return true;
   });
@@ -138,16 +153,28 @@ async function clearWahooReconnectReleasePendingIfConnected(userID: string): Pro
  * reconnect-required queue rows. A failed partial release is marked durably
  * so the scheduled repair path retries it after the OAuth callback returns.
  */
-async function releaseWahooReconnectQueueItemsWithRepair(userID: string): Promise<boolean> {
+async function releaseWahooReconnectQueueItemsWithRepair(
+  userID: string,
+  connectionStateGeneration: string,
+): Promise<boolean> {
   try {
     await restoreActivitySyncRoutesForPendingDisconnectClear(userID, ServiceNames.WahooAPI, {
       requireServiceConnected: true,
+      expectedConnectionStateGeneration: connectionStateGeneration,
+      clearRouteRestoreMarker: true,
     });
-    await releaseQueueItemsDeferredForReconnectRequired(userID, ServiceNames.WahooAPI);
+    await releaseQueueItemsDeferredForReconnectRequired(
+      userID,
+      ServiceNames.WahooAPI,
+      connectionStateGeneration,
+    );
   } catch (error) {
     let retryRecorded = false;
     try {
-      retryRecorded = await setWahooReconnectReleasePendingIfConnected(userID);
+      retryRecorded = await setWahooReconnectReleasePendingIfConnected(
+        userID,
+        connectionStateGeneration,
+      );
     } catch (retryError) {
       logger.error(
         `[ServiceConnectionMeta] Failed to persist reconnect-release repair for Wahoo user ${userID}.`,
@@ -162,7 +189,7 @@ async function releaseWahooReconnectQueueItemsWithRepair(userID: string): Promis
   }
 
   try {
-    await clearWahooReconnectReleasePendingIfConnected(userID);
+    await clearWahooReconnectReleasePendingIfConnected(userID, connectionStateGeneration);
   } catch (error) {
     // The release is already complete; retaining the marker only causes an
     // idempotent repair pass, so do not make a successful OAuth callback fail.
@@ -180,10 +207,27 @@ export async function retryWahooReconnectQueueRelease(userID: string): Promise<b
   if (
     meta?.connectionState !== SERVICE_CONNECTION_STATES.Connected
     || meta.wahooReconnectReleasePending !== true
+    || !meta.wahooReconnectReleaseConnectionGeneration
+    || meta.wahooReconnectReleaseConnectionGeneration !== meta.connectionStateGeneration
   ) {
     return false;
   }
-  return releaseWahooReconnectQueueItemsWithRepair(userID);
+  return releaseWahooReconnectQueueItemsWithRepair(
+    userID,
+    meta.wahooReconnectReleaseConnectionGeneration,
+  );
+}
+
+export interface MarkServiceReconnectRequiredOptions {
+  /** Abort when OAuth or another lifecycle transition already won. */
+  expectedConnectionStateGeneration?: string | null;
+  /** Terminal cleanup can prove no replacement credential exists. */
+  requireEmptyTokenCollection?: admin.firestore.CollectionReference;
+  /** A failed deletion may only mark the still-current credential generation. */
+  expectedTokenCredential?: {
+    tokenRef: admin.firestore.DocumentReference;
+    credential: TokenCredentialSnapshot;
+  };
 }
 
 export async function markServiceReconnectRequired(
@@ -192,20 +236,79 @@ export async function markServiceReconnectRequired(
   failureCode: string | null | undefined,
   failureMessage: string | null | undefined,
   nowMs = Date.now(),
-): Promise<void> {
-  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
-    connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
-    lastAuthFailureCode: failureCode || null,
-    lastAuthFailureMessage: failureMessage || null,
-    lastDisconnectedAt: nowMs,
+  options: MarkServiceReconnectRequiredOptions = {},
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  const connectionStateGeneration = crypto.randomUUID();
+  const guardsConnectionGeneration = Object.prototype.hasOwnProperty.call(
+    options,
+    'expectedConnectionStateGeneration',
+  );
+  const expectedTokenCredential = options.expectedTokenCredential;
+  const didWrite = await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_reconnect_required:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      logger.warn(
+        `[ServiceConnectionMeta] Skipping ${serviceName} reconnect-required transition for user ${userID} because the user is missing or deletion is in progress.`,
+      );
+      return false;
+    }
+
+    const [metaSnapshot, tokenSnapshot, expectedTokenSnapshot] = await Promise.all([
+      transaction.get(ref),
+      options.requireEmptyTokenCollection
+        ? transaction.get(options.requireEmptyTokenCollection)
+        : Promise.resolve(null),
+      expectedTokenCredential
+        ? transaction.get(expectedTokenCredential.tokenRef)
+        : Promise.resolve(null),
+    ]);
+    const currentGeneration = typeof metaSnapshot.data()?.connectionStateGeneration === 'string'
+      ? `${metaSnapshot.data()?.connectionStateGeneration}`
+      : null;
+    if (
+      (guardsConnectionGeneration
+        && currentGeneration !== (options.expectedConnectionStateGeneration || null))
+      || (tokenSnapshot && !tokenSnapshot.empty)
+      || (expectedTokenCredential && expectedTokenSnapshot && (
+        !expectedTokenSnapshot.exists
+        || !areTokenCredentialSnapshotsEqual(
+          getTokenCredentialSnapshot(expectedTokenSnapshot.data() as Record<string, unknown> | undefined),
+          expectedTokenCredential.credential,
+        )
+      ))
+    ) {
+      return false;
+    }
+
+    transaction.set(ref, {
+      connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
+      connectionStateGeneration,
+      routeRestorePending: FieldValue.delete(),
+      routeRestoreConnectionGeneration: FieldValue.delete(),
+      routeRestoreLastAttemptAt: FieldValue.delete(),
+      routeRestoreAttemptCount: FieldValue.delete(),
+      lastAuthFailureCode: failureCode || null,
+      lastAuthFailureMessage: failureMessage || null,
+      lastDisconnectedAt: nowMs,
+    }, { merge: true });
+    return true;
   });
   if (!didWrite) {
-    return;
+    return false;
   }
 
   try {
     await disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
       trackPendingDisconnectRestore: true,
+      expectedConnectionStateGeneration: connectionStateGeneration,
+      requiredConnectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
     });
   } catch (error) {
     logger.error(
@@ -213,9 +316,11 @@ export async function markServiceReconnectRequired(
       error,
     );
   }
+  return true;
 }
 
 export interface ServiceDisconnectPendingMetaInput {
+  generation: string;
   reason: string;
   attemptCount: number;
   nextAttemptAt: unknown;
@@ -228,6 +333,7 @@ export interface ServiceDisconnectPendingMetaInput {
 
 interface ClearServiceConnectionStateOptions {
   restorePendingDisconnectActivitySyncRoutes?: boolean;
+  expectedPendingDisconnectGeneration?: string;
 }
 
 export async function mirrorServiceDisconnectPendingToUserMeta(
@@ -237,6 +343,12 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
 ): Promise<boolean> {
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
+    connectionStateGeneration: input.generation,
+    disconnectGeneration: input.generation,
+    routeRestorePending: FieldValue.delete(),
+    routeRestoreConnectionGeneration: FieldValue.delete(),
+    routeRestoreLastAttemptAt: FieldValue.delete(),
+    routeRestoreAttemptCount: FieldValue.delete(),
     disconnectReason: input.reason,
     disconnectAttemptCount: input.attemptCount,
     disconnectNextAttemptAt: input.nextAttemptAt,
@@ -254,6 +366,8 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
   try {
     await disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
       trackPendingDisconnectRestore: true,
+      expectedConnectionStateGeneration: input.generation,
+      requiredConnectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
     });
   } catch (error) {
     logger.error(
@@ -270,8 +384,16 @@ export async function markServiceConnected(
   providerUserId?: string | null,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+  const connectionStateGeneration = crypto.randomUUID();
+  const nowMs = Date.now();
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
+    connectionStateGeneration,
+    disconnectGeneration: FieldValue.delete(),
+    routeRestorePending: true,
+    routeRestoreConnectionGeneration: connectionStateGeneration,
+    routeRestoreLastAttemptAt: nowMs,
+    routeRestoreAttemptCount: 0,
     ...(normalizedProviderUserId ? { providerUserId: normalizedProviderUserId } : {}),
     lastAuthFailureCode: FieldValue.delete(),
     lastAuthFailureMessage: FieldValue.delete(),
@@ -283,12 +405,14 @@ export async function markServiceConnected(
       // Persist before the multi-collection release begins. If this callback
       // stops at any later point, the scheduled repair path owns the retry.
       wahooReconnectReleasePending: true,
-      wahooReconnectReleaseLastAttemptAt: Date.now(),
+      wahooReconnectReleaseLastAttemptAt: nowMs,
       wahooReconnectReleaseAttemptCount: 0,
+      wahooReconnectReleaseConnectionGeneration: connectionStateGeneration,
     } : {
       wahooReconnectReleasePending: FieldValue.delete(),
       wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
       wahooReconnectReleaseAttemptCount: FieldValue.delete(),
+      wahooReconnectReleaseConnectionGeneration: FieldValue.delete(),
     }),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
@@ -309,15 +433,18 @@ export async function markServiceConnected(
   }
 
   if (serviceName === ServiceNames.WahooAPI) {
-    await releaseWahooReconnectQueueItemsWithRepair(userID);
+    await releaseWahooReconnectQueueItemsWithRepair(userID, connectionStateGeneration);
     return true;
   }
 
   try {
-    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName);
+    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName, {
+      expectedConnectionStateGeneration: connectionStateGeneration,
+      clearRouteRestoreMarker: true,
+    });
   } catch (error) {
     // OAuth has still succeeded; route restoration is independently guarded
-    // and can be safely retried by a later connection update.
+    // and the durable marker lets the lifecycle scheduler retry it.
     logger.error(
       `[ServiceConnectionMeta] Failed to restore activity sync routes for reconnected ${serviceName} user ${userID}.`,
       error,
@@ -466,43 +593,104 @@ export async function clearServiceConnectionState(
   serviceName: ServiceNames,
   options: ClearServiceConnectionStateOptions = {},
 ): Promise<void> {
-  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
-    connectionState: FieldValue.delete(),
-    providerUserId: FieldValue.delete(),
-    lastAuthFailureCode: FieldValue.delete(),
-    lastAuthFailureMessage: FieldValue.delete(),
-    lastDisconnectedAt: FieldValue.delete(),
-    wahooRefreshFailureCount: FieldValue.delete(),
-    wahooRefreshFailureLastAt: FieldValue.delete(),
-    wahooRefreshRetryAt: FieldValue.delete(),
-    wahooReconnectReleasePending: FieldValue.delete(),
-    wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
-    wahooReconnectReleaseAttemptCount: FieldValue.delete(),
-    disconnectReason: FieldValue.delete(),
-    disconnectAttemptCount: FieldValue.delete(),
-    disconnectNextAttemptAt: FieldValue.delete(),
-    disconnectRetryExpiresAt: FieldValue.delete(),
-    disconnectLastStatusCode: FieldValue.delete(),
-    disconnectLastErrorMessage: FieldValue.delete(),
-    disconnectManualReviewRequired: FieldValue.delete(),
-    providerBindingState: FieldValue.delete(),
-    providerBindingCheckedAt: FieldValue.delete(),
-    providerBindingCheckLeaseId: FieldValue.delete(),
-    providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
-    providerBindingCheckNextRetryAt: FieldValue.delete(),
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  const connectionStateGeneration = crypto.randomUUID();
+  const nowMs = Date.now();
+  const didWrite = await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `service_connection_clear:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    if (options.expectedPendingDisconnectGeneration) {
+      const metaSnapshot = await transaction.get(ref);
+      const meta = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+      if (
+        meta?.connectionState !== SERVICE_CONNECTION_STATES.DisconnectPending
+        || meta.disconnectGeneration !== options.expectedPendingDisconnectGeneration
+      ) {
+        return false;
+      }
+    }
+
+    transaction.set(ref, {
+      connectionState: FieldValue.delete(),
+      connectionStateGeneration,
+      disconnectGeneration: FieldValue.delete(),
+      ...(options.restorePendingDisconnectActivitySyncRoutes ? {
+        routeRestorePending: true,
+        routeRestoreConnectionGeneration: connectionStateGeneration,
+        routeRestoreLastAttemptAt: nowMs,
+        routeRestoreAttemptCount: 0,
+      } : {
+        routeRestorePending: FieldValue.delete(),
+        routeRestoreConnectionGeneration: FieldValue.delete(),
+        routeRestoreLastAttemptAt: FieldValue.delete(),
+        routeRestoreAttemptCount: FieldValue.delete(),
+      }),
+      providerUserId: FieldValue.delete(),
+      lastAuthFailureCode: FieldValue.delete(),
+      lastAuthFailureMessage: FieldValue.delete(),
+      lastDisconnectedAt: FieldValue.delete(),
+      wahooRefreshFailureCount: FieldValue.delete(),
+      wahooRefreshFailureLastAt: FieldValue.delete(),
+      wahooRefreshRetryAt: FieldValue.delete(),
+      wahooReconnectReleasePending: FieldValue.delete(),
+      wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
+      wahooReconnectReleaseAttemptCount: FieldValue.delete(),
+      wahooReconnectReleaseConnectionGeneration: FieldValue.delete(),
+      disconnectReason: FieldValue.delete(),
+      disconnectAttemptCount: FieldValue.delete(),
+      disconnectNextAttemptAt: FieldValue.delete(),
+      disconnectRetryExpiresAt: FieldValue.delete(),
+      disconnectLastStatusCode: FieldValue.delete(),
+      disconnectLastErrorMessage: FieldValue.delete(),
+      disconnectManualReviewRequired: FieldValue.delete(),
+      providerBindingState: FieldValue.delete(),
+      providerBindingCheckedAt: FieldValue.delete(),
+      providerBindingCheckLeaseId: FieldValue.delete(),
+      providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
+      providerBindingCheckNextRetryAt: FieldValue.delete(),
+    }, { merge: true });
+    return true;
   });
   if (!didWrite || !options.restorePendingDisconnectActivitySyncRoutes) {
     return;
   }
 
   try {
-    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName);
+    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName, {
+      expectedConnectionStateGeneration: connectionStateGeneration,
+      clearRouteRestoreMarker: true,
+    });
   } catch (error) {
     logger.error(
       `[ServiceConnectionMeta] Failed to restore activity sync routes for recovered pending-disconnect ${serviceName} user ${userID}.`,
       error,
     );
   }
+}
+
+/** Retries a provider-neutral route restoration marker after a partial transition. */
+export async function retryPendingServiceRouteRestore(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  const meta = await getServiceConnectionMeta(userID, serviceName);
+  const generation = `${meta?.routeRestoreConnectionGeneration || ''}`.trim();
+  if (meta?.routeRestorePending !== true || !generation) return false;
+  if (isServiceUnavailableForSyncConnection(meta)) return false;
+
+  await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName, {
+    requireServiceConnected: meta.connectionState === SERVICE_CONNECTION_STATES.Connected,
+    expectedConnectionStateGeneration: generation,
+    clearRouteRestoreMarker: true,
+  });
+  return true;
 }
 
 export async function getServiceConnectionMeta(

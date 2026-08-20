@@ -106,9 +106,14 @@ function markWorkoutQueueItemSkippedForDeletedUser(
 
 function deferWorkoutQueueItemForPendingDisconnect(
   queueItem: QueueItemInterface,
+  firebaseUserID: string,
+  serviceName: ServiceNames,
   bulkWriter?: admin.firestore.BulkWriter,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
-  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
+  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, {}, {
+    userID: firebaseUserID,
+    serviceName,
+  });
 }
 
 function markWorkoutQueueItemSkippedForInactiveProviderAccount(
@@ -794,6 +799,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let sawRetryableFailure = false;
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
+  let pendingDisconnectFirebaseUserID: string | null = null;
   let sawInactiveProviderAccount = false;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
@@ -834,6 +840,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       } catch (error) {
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
           sawPendingDisconnectSkip = true;
+          pendingDisconnectFirebaseUserID = parentID;
           logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect is pending.`);
           continue;
         }
@@ -859,6 +866,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       }
       if (isTokenUseSkippedForPendingDisconnectError(e)) {
         sawPendingDisconnectSkip = true;
+        pendingDisconnectFirebaseUserID = parentID;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because service disconnect is pending.`);
         continue;
       }
@@ -893,6 +901,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       } catch (error) {
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
           sawPendingDisconnectSkip = true;
+          pendingDisconnectFirebaseUserID = parentID;
           logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before the FIT download.`);
           continue;
         }
@@ -961,6 +970,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           } catch (retryError: unknown) {
             if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
               sawPendingDisconnectSkip = true;
+              pendingDisconnectFirebaseUserID = parentID;
               continue;
             }
             if (isTokenRefreshSkippedForDeletedUserError(retryError)) {
@@ -1036,6 +1046,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         } catch (retryError: any) {
           if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
             sawPendingDisconnectSkip = true;
+            pendingDisconnectFirebaseUserID = parentID;
             logger.info(`Deferring ${serviceName} queue item ${queueItem.id} because service disconnect started before the refreshed FIT download.`);
             continue;
           }
@@ -1125,6 +1136,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         } catch (error) {
           if (isTokenUseSkippedForPendingDisconnectError(error)) {
             sawPendingDisconnectSkip = true;
+            pendingDisconnectFirebaseUserID = parentID;
             logger.info(`Deferring COROS queue item ${queueItem.id} because service disconnect started before event persistence.`);
             continue;
           }
@@ -1333,7 +1345,12 @@ async function parseWorkoutQueueItemForServiceNameInternal(
 
   if (sawPendingDisconnectSkip && !sawRetryableFailure) {
     logger.warn(`Deferring ${serviceName} queue item ${queueItem.id} because at least one matching token is pending disconnect and no token succeeded.`);
-    return deferWorkoutQueueItemForPendingDisconnect(queueItem, bulkWriter);
+    return deferWorkoutQueueItemForPendingDisconnect(
+      queueItem,
+      pendingDisconnectFirebaseUserID!,
+      serviceName,
+      bulkWriter,
+    );
   }
 
   if (terminalAuthError && !sawRetryableFailure) {

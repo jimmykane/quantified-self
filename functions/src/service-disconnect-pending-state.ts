@@ -15,6 +15,7 @@ export interface PendingServiceDisconnectFailure {
 }
 
 export interface PendingServiceDisconnectRootData {
+  disconnectGeneration?: string | null;
   disconnectState?: string | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
@@ -107,6 +108,7 @@ export function buildPendingDisconnectMetaInputFromRootData(
   nowMs = Date.now(),
 ): ServiceDisconnectPendingMetaInput {
   return {
+    generation: `${data.disconnectGeneration || ''}`.trim(),
     reason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     attemptCount: typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0,
     nextAttemptAt: data.disconnectNextAttemptAt || null,
@@ -125,6 +127,7 @@ export function buildRestoredPendingDisconnectData(
   const attemptCount = typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0;
   const manualReviewRequired = data.disconnectManualReviewRequired === true;
   return {
+    disconnectGeneration: data.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: attemptCount,
@@ -161,6 +164,7 @@ export function buildPendingDisconnectMarkState(
 
   return {
     rootData: {
+      disconnectGeneration: existing.disconnectGeneration || null,
       disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
       disconnectReason: reason,
       disconnectAttemptCount: attemptCount,
@@ -186,6 +190,7 @@ export function buildPendingDisconnectRecoveryRetryData(
   const attemptCount = 0;
 
   return {
+    disconnectGeneration: existing.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: attemptCount,
@@ -214,6 +219,7 @@ export function buildPendingDisconnectRetryFailureTransition(
   const retryableNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(nextAttemptCount, nowMs);
 
   const rootData: PendingServiceDisconnectRootData = {
+    disconnectGeneration: existing.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: nextAttemptCount,

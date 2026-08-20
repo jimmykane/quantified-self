@@ -16,6 +16,7 @@ const {
   tokenRef,
   tokenCollectionRef,
   tokenRootRef,
+  serviceMetaRef,
 } = vi.hoisted(() => {
   const tokenRef = {
     id: 'suunto-user',
@@ -49,9 +50,10 @@ const {
       return tokenCollectionRef;
     }),
   };
+  const serviceMetaRef = { id: 'suuntoApp', path: 'users/firebase-user-123/meta/suuntoApp' };
 
   return {
-    mockMarkServiceReconnectRequired: vi.fn().mockResolvedValue(undefined),
+    mockMarkServiceReconnectRequired: vi.fn().mockResolvedValue(true),
     mockClearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
     mockRunTransaction: vi.fn(),
     mockRecursiveDelete: vi.fn().mockResolvedValue(undefined),
@@ -69,6 +71,7 @@ const {
     tokenRef,
     tokenCollectionRef,
     tokenRootRef,
+    serviceMetaRef,
   };
 });
 
@@ -76,6 +79,16 @@ vi.mock('firebase-admin', () => {
   const firestore = () => ({
     runTransaction: mockRunTransaction,
     recursiveDelete: mockRecursiveDelete,
+    collection: vi.fn((name: string) => {
+      if (name !== 'users') throw new Error(`Unexpected collection ${name}`);
+      return {
+        doc: vi.fn(() => ({
+          collection: vi.fn(() => ({
+            doc: vi.fn(() => serviceMetaRef),
+          })),
+        })),
+      };
+    }),
   });
 
   return {
@@ -327,6 +340,9 @@ describe('service-auth-lifecycle terminal auth handling', () => {
             data: () => ({}),
           };
         }
+        if (ref === serviceMetaRef) {
+          return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
+        }
         throw new Error('Unexpected transaction get target');
       }),
       delete: transactionDelete,
@@ -369,6 +385,11 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       ServiceNames.SuuntoApp,
       'invalid_grant',
       'User no longer active/connected with the partner',
+      expect.any(Number),
+      {
+        expectedConnectionStateGeneration: 'connection-generation-1',
+        requireEmptyTokenCollection: tokenRef.parent,
+      },
     );
     expect(resolution.error.cleanupOutcome).toMatchObject({
       deletedTokenCount: 1,
@@ -406,6 +427,9 @@ describe('service-auth-lifecycle terminal auth handling', () => {
               codeVerifier: 'pkce-verifier',
             }),
           };
+        }
+        if (ref === serviceMetaRef) {
+          return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
         }
         throw new Error('Unexpected transaction get target');
       }),
@@ -449,6 +473,11 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       ServiceNames.SuuntoApp,
       'invalid_grant',
       'User no longer active/connected with the partner',
+      expect.any(Number),
+      {
+        expectedConnectionStateGeneration: 'connection-generation-1',
+        requireEmptyTokenCollection: tokenRef.parent,
+      },
     );
     expect(resolution.error.cleanupOutcome).toMatchObject({
       deletedTokenCount: 1,

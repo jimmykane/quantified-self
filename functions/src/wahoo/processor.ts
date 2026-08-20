@@ -41,7 +41,10 @@ export async function processWahooWorkoutQueueItem(
     return markQueueItemSkipped(queueItem, undefined, 'user_deleted_or_deleting');
   }
   if (await isServiceDisconnectPendingForUser(userID, ServiceNames.WahooAPI)) {
-    return deferQueueItemForPendingDisconnect(queueItem);
+    return deferQueueItemForPendingDisconnect(queueItem, undefined, {}, {
+      userID,
+      serviceName: ServiceNames.WahooAPI,
+    });
   }
   const processingOwner = crypto.randomUUID();
   const claimResult: WahooQueueClaimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -44,6 +45,7 @@ export type {
 
 function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
   return {
+    disconnectGeneration: FieldValue.delete(),
     disconnectState: FieldValue.delete(),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
@@ -53,6 +55,19 @@ function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
     disconnectLastStatusCode: FieldValue.delete(),
     disconnectLastErrorMessage: FieldValue.delete(),
     disconnectManualReviewRequired: FieldValue.delete(),
+  };
+}
+
+function withPendingDisconnectGeneration(
+  data: PendingServiceDisconnectRootData,
+  existing: PendingServiceDisconnectRootData,
+): PendingServiceDisconnectRootData {
+  const existingGeneration = isServiceDisconnectPendingData(existing)
+    ? `${existing.disconnectGeneration || ''}`.trim()
+    : '';
+  return {
+    ...data,
+    disconnectGeneration: existingGeneration || crypto.randomUUID(),
   };
 }
 
@@ -125,9 +140,10 @@ export async function markServiceDisconnectPending(
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
     const nextState = buildPendingDisconnectMarkState(existing, failure, reason, nowMs);
+    const rootData = withPendingDisconnectGeneration(nextState.rootData, existing);
 
-    transaction.set(rootRef, nextState.rootData, { merge: true });
-    return nextState.rootData;
+    transaction.set(rootRef, rootData, { merge: true });
+    return rootData;
   });
 
   if (!rootData) {
@@ -159,6 +175,11 @@ export async function recordServiceDisconnectRetryFailure(
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
     const nextTransition = buildPendingDisconnectRetryFailureTransition(existing, failure, nowMs);
+    nextTransition.rootData = withPendingDisconnectGeneration(nextTransition.rootData, existing);
+    nextTransition.finalData = {
+      ...nextTransition.finalData,
+      disconnectGeneration: nextTransition.rootData.disconnectGeneration,
+    };
 
     transaction.set(rootRef, nextTransition.rootData, { merge: true });
     return nextTransition;
@@ -249,7 +270,10 @@ export async function resumeServiceDisconnectRetryAfterRecoveryFailure(
 
     const snapshot = await transaction.get(rootRef);
     const existing = snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : {};
-    const nextData = buildPendingDisconnectRecoveryRetryData(existing, failure, nowMs);
+    const nextData = withPendingDisconnectGeneration(
+      buildPendingDisconnectRecoveryRetryData(existing, failure, nowMs),
+      existing,
+    );
 
     transaction.set(rootRef, nextData, { merge: true });
     return nextData;
@@ -275,7 +299,10 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  const restoredData = buildRestoredPendingDisconnectData(pendingData);
+  const restoredData = withPendingDisconnectGeneration(
+    buildRestoredPendingDisconnectData(pendingData),
+    pendingData,
+  );
 
   const didRestoreRoot = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'restore_after_clear_failure')) {
@@ -346,12 +373,22 @@ export async function clearServiceDisconnectPending(
   }
 
   try {
+    const pendingDisconnectGeneration = clearResult.status === 'pending_cleared'
+      ? `${clearResult.pendingData.disconnectGeneration || ''}`.trim() || undefined
+      : undefined;
     await clearServiceConnectionState(userID, serviceName, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      ...(pendingDisconnectGeneration ? {
+        expectedPendingDisconnectGeneration: pendingDisconnectGeneration,
+      } : {}),
     });
 
     if (clearResult.status === 'pending_cleared') {
-      await releaseQueueItemsDeferredForPendingDisconnect(userID, serviceName);
+      await releaseQueueItemsDeferredForPendingDisconnect(
+        userID,
+        serviceName,
+        pendingDisconnectGeneration,
+      );
     }
   } catch (error) {
     if (clearResult.status === 'pending_cleared') {

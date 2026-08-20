@@ -19,11 +19,18 @@ import {
 
 interface ActivitySyncRouteCleanupOptions {
   trackPendingDisconnectRestore?: boolean;
+  /** Ignore a stale disable after a newer connection transition wins. */
+  expectedConnectionStateGeneration?: string;
+  requiredConnectionState?: ServiceConnectionMetaFields['connectionState'];
 }
 
 interface ActivitySyncRouteRestoreOptions {
   /** Reconnect release must not re-enable routes after a concurrent disconnect. */
   requireServiceConnected?: boolean;
+  /** Ignore a stale restore after a newer connection transition wins. */
+  expectedConnectionStateGeneration?: string;
+  /** Clear the durable repair marker atomically with the settings update. */
+  clearRouteRestoreMarker?: boolean;
 }
 
 export interface DisabledServiceSyncSettingsUpdate {
@@ -182,6 +189,21 @@ export async function disableActivitySyncRoutesForDisconnectedService(
       return;
     }
 
+    if (options.expectedConnectionStateGeneration || options.requiredConnectionState) {
+      const serviceMetaSnapshot = await transaction.get(
+        getUserServiceMetaRef(db, userID, disconnectedServiceName),
+      );
+      const serviceMeta = asRecord(serviceMetaSnapshot.data());
+      if (
+        (options.expectedConnectionStateGeneration
+          && serviceMeta.connectionStateGeneration !== options.expectedConnectionStateGeneration)
+        || (options.requiredConnectionState
+          && serviceMeta.connectionState !== options.requiredConnectionState)
+      ) {
+        return;
+      }
+    }
+
     if (options.trackPendingDisconnectRestore) {
       const settingsSnapshot = await transaction.get(settingsRef);
       const settingsData = asRecord(settingsSnapshot.data());
@@ -226,7 +248,7 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
 ): Promise<void> {
   const affectedRoutes = getAffectedServiceSyncRoutes(serviceName);
 
-  if (affectedRoutes.length === 0) {
+  if (affectedRoutes.length === 0 && !options.clearRouteRestoreMarker) {
     return;
   }
 
@@ -247,10 +269,16 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
       return;
     }
 
-    if (options.requireServiceConnected) {
-      const serviceMetaSnapshot = await transaction.get(getUserServiceMetaRef(db, userID, serviceName));
-      const connectionState = asRecord(serviceMetaSnapshot.data()).connectionState;
-      if (connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+    const serviceMetaRef = getUserServiceMetaRef(db, userID, serviceName);
+    if (options.requireServiceConnected || options.expectedConnectionStateGeneration) {
+      const serviceMetaSnapshot = await transaction.get(serviceMetaRef);
+      const serviceMeta = asRecord(serviceMetaSnapshot.data());
+      if (
+        (options.requireServiceConnected
+          && serviceMeta.connectionState !== SERVICE_CONNECTION_STATES.Connected)
+        || (options.expectedConnectionStateGeneration
+          && serviceMeta.connectionStateGeneration !== options.expectedConnectionStateGeneration)
+      ) {
         return;
       }
     }
@@ -288,26 +316,37 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
       restoreMarkerUpdates[serviceRestoreKey] = FieldValue.delete();
     }
 
-    if (
+    const hasSettingsUpdate = (
       Object.keys(routeUpdates).length === 0 &&
       Object.keys(routeDeliveryUpdates).length === 0 &&
       Object.keys(restoreMarkerUpdates).length === 0
-    ) {
+    ) === false;
+    if (!hasSettingsUpdate && !options.clearRouteRestoreMarker) {
       return;
     }
 
-    const nextServiceSyncSettings: Record<string, unknown> = {
-      pendingDisconnectRouteRestore: restoreMarkerUpdates,
-    };
-    if (Object.keys(routeUpdates).length > 0) {
-      nextServiceSyncSettings.activitySyncRoutes = routeUpdates;
-    }
-    if (Object.keys(routeDeliveryUpdates).length > 0) {
-      nextServiceSyncSettings.routeDeliverySyncRoutes = routeDeliveryUpdates;
-    }
+    if (hasSettingsUpdate) {
+      const nextServiceSyncSettings: Record<string, unknown> = {
+        pendingDisconnectRouteRestore: restoreMarkerUpdates,
+      };
+      if (Object.keys(routeUpdates).length > 0) {
+        nextServiceSyncSettings.activitySyncRoutes = routeUpdates;
+      }
+      if (Object.keys(routeDeliveryUpdates).length > 0) {
+        nextServiceSyncSettings.routeDeliverySyncRoutes = routeDeliveryUpdates;
+      }
 
-    transaction.set(settingsRef, {
-      serviceSyncSettings: nextServiceSyncSettings,
-    }, { merge: true });
+      transaction.set(settingsRef, {
+        serviceSyncSettings: nextServiceSyncSettings,
+      }, { merge: true });
+    }
+    if (options.clearRouteRestoreMarker) {
+      transaction.set(serviceMetaRef, {
+        routeRestorePending: FieldValue.delete(),
+        routeRestoreConnectionGeneration: FieldValue.delete(),
+        routeRestoreLastAttemptAt: FieldValue.delete(),
+        routeRestoreAttemptCount: FieldValue.delete(),
+      }, { merge: true });
+    }
   });
 }
