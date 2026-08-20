@@ -25,6 +25,7 @@ import {
   DataSpeedAvg,
   DataStaminaAvg,
   DataStaminaMin,
+  DataStrokeRateMin,
   DataTemperatureMax,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -36,6 +37,7 @@ describe('getDefaultSummaryStatTypes', () => {
 
     expect(stats).toContain(DataPowerMax.type);
     expect(stats).toContain(DataCadenceMin.type);
+    expect(stats).toContain(DataStrokeRateMin.type);
     expect(stats).toContain(DataTemperatureMax.type);
     expect(stats).toContain(DataHeartRateMin.type);
     expect(stats).toContain(DataFeeling.type);

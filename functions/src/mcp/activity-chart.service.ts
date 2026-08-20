@@ -205,6 +205,9 @@ function isChartMetricSupportedForActivityType(
   metric: ChartMetricDefinition,
   activityType: ActivityTypes,
 ): boolean {
+  if (metric.streamType === DataCadence.type && ActivityTypesHelper.usesStrokeRate(activityType)) {
+    return false;
+  }
   if (metric.availability === 'always') {
     return true;
   }

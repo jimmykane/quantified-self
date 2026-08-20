@@ -36,6 +36,7 @@ import {
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
     DataRecoveryTime,
+    DataStrokeRateAvg,
     DataJumpCount,
     DataJumpDistanceMax,
     DataSwimDistance,
@@ -2809,9 +2810,12 @@ describe('buildTrainingSummaryMetricPayload', () => {
             createEvent(currentDay, ActivityTypes.Hiking, 'Garmin'),
             createEvent(currentDay, ActivityTypes.RollerSki, 'Garmin'),
             createEvent(currentDay, ActivityTypes.StrengthTraining, 'Garmin'),
-            createEvent(currentDay, ActivityTypes.Kayaking, 'Garmin'),
+            createEvent(currentDay, ActivityTypes.Kayaking, 'Garmin', {
+                [DataStrokeRateAvg.type]: 42,
+            }),
             createEvent(currentDay, ActivityTypes.Swimming, 'Garmin', {
                 [DataSwimDistance.type]: 1_500,
+                [DataCadenceAvg.type]: 30,
             }),
             createEvent(currentDay, ActivityTypes['Enduro MTB'], 'Garmin'),
             createEvent(currentDay, ActivityTypes.DownhillCycling, 'Garmin', {
@@ -2840,6 +2844,7 @@ describe('buildTrainingSummaryMetricPayload', () => {
             context: 'pool-swimming',
             metrics: expect.arrayContaining([
                 { metric: 'distance', value: 1_500, sourceActivityCount: 1 },
+                { metric: 'stroke-rate', value: 30, sourceActivityCount: 1 },
             ]),
         })]);
         expect(currentBySport.strength).toMatchObject({ activityCount: 1, durationSeconds: 3600, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0 });
@@ -2848,8 +2853,14 @@ describe('buildTrainingSummaryMetricPayload', () => {
             context: 'on-water-rowing',
             metrics: expect.arrayContaining([
                 { metric: 'pace-500m', value: 120, sourceActivityCount: 1 },
-                { metric: 'cadence', value: 28, sourceActivityCount: 1 },
+                { metric: 'stroke-rate', value: 28, sourceActivityCount: 1 },
                 { metric: 'stroke-distance', value: 10, sourceActivityCount: 1 },
+            ]),
+        })]);
+        expect(currentBySport.paddling.contexts).toEqual([expect.objectContaining({
+            context: 'kayaking',
+            metrics: expect.arrayContaining([
+                { metric: 'stroke-rate', value: 42, sourceActivityCount: 1 },
             ]),
         })]);
         expect(currentBySport.cycling.contexts).toEqual(expect.arrayContaining([

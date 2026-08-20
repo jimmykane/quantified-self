@@ -16,6 +16,7 @@ import {
   DataPowerRight,
   DataSeaLevelPressure,
   DataSpeed,
+  DataStrokeRate,
   DataStrydAltitude,
   DataStrydSpeed,
   DataSwimPace,
@@ -236,7 +237,7 @@ register(PROFILE_IDS.Unknown, ['Unknown Sport', 'Other', 'Generic']);
 register(PROFILE_IDS.GeneralFallback, ['Route'], 'fallback');
 register(PROFILE_IDS.Empty, ['Transition'], 'empty');
 
-const FAMILY_PRIMARY_TYPES: Record<Exclude<EventChartMetricFamily, 'stroke-rate' | 'swolf'>, string[]> = {
+const FAMILY_PRIMARY_TYPES: Record<Exclude<EventChartMetricFamily, 'swolf'>, string[]> = {
   'heart-rate': [DataHeartRate.type],
   depth: [DataDepth.type],
   pace: [DataPace.type],
@@ -246,6 +247,7 @@ const FAMILY_PRIMARY_TYPES: Record<Exclude<EventChartMetricFamily, 'stroke-rate'
   altitude: [DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type],
   'vertical-speed': [DataVerticalSpeed.type],
   cadence: [DataCadence.type],
+  'stroke-rate': [DataStrokeRate.type],
   temperature: [DataTemperature.type],
   'sea-level-pressure': [DataSeaLevelPressure.type],
   epoc: [DataEPOC.type],
@@ -296,7 +298,7 @@ export function resolveEventChartSportProfile(activityTypes: readonly unknown[])
     profileID,
     label: resolveProfileLabel(singleActivityType, profileDefinition, isMixedProfile),
     source,
-    candidateFamilies: profileDefinition.candidates,
+    candidateFamilies: resolveSportMetricSemantics(profileDefinition.candidates, normalizedTypes),
     usesGenericResetLabel: profileID === PROFILE_IDS.Multisport || isMixedProfile,
   };
 }
@@ -441,7 +443,7 @@ function resolveAvailableCandidateFamilies(
 }
 
 function compareFamilyPanels(family: EventChartMetricFamily, leftDataType: string, rightDataType: string): number {
-  const preferredTypes = family === 'stroke-rate' || family === 'swolf'
+  const preferredTypes = family === 'swolf'
     ? []
     : FAMILY_PRIMARY_TYPES[family];
   const leftSelectionKey = getEventChartSelectionKey(leftDataType);
@@ -455,6 +457,36 @@ function compareFamilyPanels(family: EventChartMetricFamily, leftDataType: strin
     return leftIndex - rightIndex;
   }
   return leftDataType.localeCompare(rightDataType);
+}
+
+function resolveSportMetricSemantics(
+  candidateFamilies: readonly EventChartMetricFamily[],
+  activityTypes: readonly ActivityTypes[],
+): EventChartMetricFamily[] {
+  const strokeRateTypeCount = activityTypes.filter((activityType) => (
+    ActivityTypesHelper.usesStrokeRate(activityType)
+  )).length;
+  if (strokeRateTypeCount === 0) {
+    return [...candidateFamilies];
+  }
+
+  const allUseStrokeRate = strokeRateTypeCount === activityTypes.length;
+  const resolvedFamilies: EventChartMetricFamily[] = [];
+  candidateFamilies.forEach((family) => {
+    if (family !== 'cadence' && family !== 'stroke-rate') {
+      appendUnique(resolvedFamilies, family);
+      return;
+    }
+
+    if (allUseStrokeRate) {
+      appendUnique(resolvedFamilies, 'stroke-rate');
+      return;
+    }
+
+    appendUnique(resolvedFamilies, family);
+    appendUnique(resolvedFamilies, family === 'cadence' ? 'stroke-rate' : 'cadence');
+  });
+  return resolvedFamilies;
 }
 
 function appendUnique(values: string[], value: string): void {

@@ -5,7 +5,7 @@ import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-shee
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataStrokeRate, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -744,8 +744,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         )?.text;
         return formattedDistance || `${this.formatNumber(value, 1)} m`;
       }
-      case 'cadence':
-        return `${this.formatNumber(value, 1)} /min`;
+      case 'stroke-rate': {
+        const strokeRate = new DataStrokeRate(value);
+        return `${strokeRate.getDisplayValue()} ${strokeRate.getDisplayUnit()}`.trim();
+      }
       case 'pace-500m': {
         const roundedSeconds = Math.max(0, Math.round(value));
         const minutes = Math.floor(roundedSeconds / 60);

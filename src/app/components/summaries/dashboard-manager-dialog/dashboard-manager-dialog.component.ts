@@ -27,6 +27,9 @@ import {
   DataPowerMax,
   DataPowerMin,
   DataRPE,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   DataTemperatureAvg,
   DataTemperatureMax,
   DataTemperatureMin,
@@ -2006,6 +2009,14 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
           DataCadenceMax.type,
           DataCadenceMin.type,
           DataCadenceAvg.type,
+        ],
+      },
+      {
+        name: 'Stroke Rate',
+        data: [
+          DataStrokeRateMax.type,
+          DataStrokeRateMin.type,
+          DataStrokeRateAvg.type,
         ],
       },
       {

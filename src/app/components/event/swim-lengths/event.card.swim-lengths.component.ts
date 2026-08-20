@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges
 import {
   ActivityInterface,
   convertSpeedToSwimPace,
-  DataCadence,
+  DataStrokeRate,
   DataDuration,
   DataEnergy,
   DataHeartRate,
@@ -26,7 +26,7 @@ interface SwimLengthTableRow {
   Stroke: string;
   Strokes: string;
   'Swim Pace': string;
-  'Average Cadence': string;
+  'Average Stroke Rate': string;
   'Average Heart Rate': string;
   SWOLF: string;
   Energy: string;
@@ -147,7 +147,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
       'Swim Pace': this.formatSwimPace(swimLength.avgSpeed),
-      'Average Cadence': this.formatCadence(swimLength.avgCadence),
+      'Average Stroke Rate': this.formatStrokeRate(swimLength.avgCadence),
       'Average Heart Rate': this.formatHeartRate(swimLength.avgHeartRate),
       SWOLF: this.formatDecimal(swimLength.swolf),
       Energy: this.formatEnergy(swimLength.calories),
@@ -244,7 +244,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Stroke: this.getGroupStrokeLabel(swimLengths),
       Strokes: this.formatOptionalInteger(totalStrokes),
       'Swim Pace': this.formatGroupSwimPace(totalDuration, totalDistance),
-      'Average Cadence': avgCadence === null ? '' : this.formatCadence(new DataCadence(avgCadence)),
+      'Average Stroke Rate': avgCadence === null ? '' : this.formatStrokeRate(new DataStrokeRate(avgCadence)),
       'Average Heart Rate': avgHeartRate === null ? '' : this.formatHeartRate(new DataHeartRate(avgHeartRate)),
       SWOLF: this.formatDecimal(avgSwolf),
       Energy: totalEnergy === null ? '' : this.formatUnitAwareStat(new DataEnergy(totalEnergy)),
@@ -309,12 +309,8 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     return this.formatUnitAwareStat(new DataSwimPace(convertSpeedToSwimPace(totalDistance / totalDuration)));
   }
 
-  private formatCadence(cadence: AppSwimLength['avgCadence']): string {
-    if (cadence === null) {
-      return '';
-    }
-
-    return `${cadence.getDisplayValue()} spm`;
+  private formatStrokeRate(strokeRate: AppSwimLength['avgCadence']): string {
+    return strokeRate === null ? '' : this.formatUnitAwareStat(strokeRate);
   }
 
   private formatHeartRate(heartRate: AppSwimLength['avgHeartRate']): string {
@@ -546,7 +542,7 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       'Stroke',
       'Strokes',
       'Swim Pace',
-      'Average Cadence',
+      'Average Stroke Rate',
       'Average Heart Rate',
       'SWOLF',
       'Energy',

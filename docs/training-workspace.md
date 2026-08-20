@@ -6,8 +6,8 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `17`
-- `@sports-alliance/sports-lib`: `18.1.4`
+- Quantified Self derived-metric schema: `18`
+- `@sports-alliance/sports-lib`: `19.0.0`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -83,6 +83,7 @@ The following rules are architectural constraints:
 | Concern | Owner | Source of truth |
 | --- | --- | --- |
 | Canonical activity types and activity groups | sports-lib | `src/activities/activity.types.ts` in sports-lib |
+| Sport-aware Cadence versus Stroke Rate semantics | sports-lib | `src/activities/activity.metric-semantics.ts` in sports-lib |
 | Activity-level durability input selection | sports-lib | `src/events/utilities/activity-durability.ts` |
 | Activity-level durability eligibility and formulas | sports-lib | `activity-durability.ts` and `data.durability-evidence.ts` |
 | Compact durability stat creation and invalidation | sports-lib | `activity.utilities.ts` and the durability source fingerprint |
@@ -369,7 +370,8 @@ Important behavior:
 
 The registry also declares context metrics and their aggregation semantics: additive distance/time/ascent/descent,
 descent time and jumps; the maximum recorded jump distance across contributing workouts; arithmetic-mean grit, flow,
-cadence, and stroke distance; and distance-weighted 500 m rowing pace. Each emitted metric carries its contributing
+stroke rate, and stroke distance; and distance-weighted 500 m rowing pace. Stroke rate is available to swimming,
+rowing, and paddling contexts. Each emitted metric carries its contributing
 activity count. A future family or context should be added to this registry with focused registry, builder, normalizer,
 presentation, and documentation tests; it must not require another set of family-specific accumulators or UI branches.
 
@@ -661,10 +663,12 @@ For every discipline:
 
 The summary and Best Build payloads also preserve each observed registered context. Contexts emit only the metrics
 declared by the shared registry: distance, moving/elapsed time, ascent/descent, descent time, jumps, longest jump,
-grit/flow, rowing 500 m pace, cadence, and stroke distance as applicable. Additive metrics are summed; longest jump is
-the maximum persisted `Maximum Jump Distance` across the window; grit, flow, cadence, and stroke distance are arithmetic
-activity means; rowing pace is distance-weighted. Elapsed time prefers a stored elapsed stat, then timestamps, then
-duration. Each metric includes its source-activity count.
+grit/flow, swimming/rowing/paddling stroke rate, rowing 500 m pace, and stroke distance as applicable. Additive metrics
+are summed; longest jump is the maximum persisted `Maximum Jump Distance` across the window; grit, flow, stroke rate,
+and stroke distance are arithmetic activity means; rowing pace is distance-weighted. Elapsed time prefers a stored
+elapsed stat, then timestamps, then duration. Stroke rate prefers canonical `Average Stroke Rate` and reads pre-19
+persisted `Average Cadence` only as a compatibility source for Sports Lib activity types that use stroke-rate
+semantics. Each metric includes its source-activity count.
 
 The 84-day summary baseline normalizes activity counts, additive metric values, and metric source counts by `28 / 84`.
 Maximum, mean, and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows
@@ -886,7 +890,8 @@ metrics generically, so adding a context metric to the registry does not require
 and Downhill comparisons can show reliable distance/time, ascent or descent, descent time, jump count, longest recorded
 jump, grit, and flow when recorded, but they do not synthesize run segments and do not show zone/TSS intensity as
 gravity evidence. Strength uses elapsed time and omits distance. Indoor and on-water rowing remain separate and can
-show distance-weighted 500 m pace, cadence, and stroke distance when those sources exist.
+show distance-weighted 500 m pace, stroke rate, and stroke distance when those sources exist. Pool and open-water
+swimming, plus canoeing, kayaking, paddling, and stand-up paddling, can also show stroke rate when recorded.
 
 Pool and open-water pace are never combined. Swimming distance uses swim units. Pace deltas are described as faster or
 slower, where lower seconds per 100 m/yd is better.
@@ -1786,17 +1791,23 @@ schema 17 adds their reusable maximum aggregation and longest-jump metric. The l
 Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
 require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
 still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
-events. The repository pins sports-lib `18.1.3`; its 18.1.2 companion
-gravity-durability policy emits explicit `unsupported-context` evidence for Enduro/Downhill activities. The Functions
+events. Sports-lib's 18.1.2 gravity-durability policy emits explicit `unsupported-context` evidence for
+Enduro/Downhill activities. The Functions
 aggregator also rejects legacy eligible Enduro/Downhill durability evidence defensively. Reparse affected existing
 activities through the targeted sports-lib reparse lifecycle so their persisted compact evidence adopts the corrected
 result. This is a policy correction within durability protocol v1, not a v2 migration.
 
 Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
 not join a curated Training discipline, change durability, or require a derived-schema bump or historical reparse.
-The repository now pins sports-lib 18.1.4, whose FIT record-depth mapping supports frontend Event Details dive profiles.
+Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details dive profiles.
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
 not require a Training rebuild or historical reparse.
+
+The repository now pins Sports Lib `19.0.0`. Schema 18 replaces the Training profile metric named `cadence` with
+`stroke-rate` for pool/open-water swimming, indoor/on-water rowing, canoeing, kayaking, paddling, and stand-up paddling.
+The builder prefers canonical `Average Stroke Rate` but accepts the pre-19 `Average Cadence` stat for those activity
+types, so existing derived snapshots rebuild from stored event/activity documents. No original-file reparse or
+historical Firestore rewrite is needed solely for this semantic transition.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

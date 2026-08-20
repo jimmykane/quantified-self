@@ -2,6 +2,7 @@ import {
   DataDepth,
   DataPotentialStamina,
   DataStamina,
+  DataStrokeRate,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -29,6 +30,11 @@ describe('app-chart-data-types.helper', () => {
   it('surfaces Sports Lib depth as an advanced generic chart metric', () => {
     expect(getAppAdvancedChartDataTypes()).toContain(DataDepth.type);
     expect(getAppCanonicalChartDataTypes()).toContain(DataDepth.type);
+  });
+
+  it('surfaces Sports Lib Stroke Rate through the automatic chart catalog', () => {
+    expect(DynamicDataLoader.getDataClassFromDataType(DataStrokeRate.type)).toBeTruthy();
+    expect(getAppCanonicalChartDataTypes()).toContain(DataStrokeRate.type);
   });
 
   it('includes stamina when resolving show-all stream requests', () => {

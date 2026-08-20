@@ -27,6 +27,7 @@ import {
   DataSpeedKnots,
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour,
+  DataStrokeRate,
   DataStrydSpeed,
   DataSwimPace,
   DataSwimPaceMaxMinutesPer100Yard,
@@ -90,6 +91,7 @@ const POWER_GROUP = new Set<string>([
 
 const CADENCE_GROUP = new Set<string>([
   DataCadence.type,
+  DataStrokeRate.type,
 ]);
 
 const PRIORITY_GROUPS: ReadonlyArray<ReadonlySet<string>> = [

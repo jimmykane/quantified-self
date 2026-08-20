@@ -2,6 +2,7 @@ import {
   DataActivityTypes,
   DataDistance,
   DataLatitudeDegrees,
+  DataStrokeRate,
   DynamicDataLoader,
   UnitSystem,
 } from '@sports-alliance/sports-lib';
@@ -25,6 +26,12 @@ describe('MCP Sports Lib metric catalog', () => {
       unitSystem: 'metric',
     }));
     expect(getSportsLibNumericMetricCatalog().length).toBeGreaterThan(300);
+    expect(resolveSportsLibNumericMetric(DataStrokeRate.type)).toEqual({
+      type: DataStrokeRate.type,
+      displayType: DataStrokeRate.type,
+      unit: 'spm',
+      unitSystem: 'metric',
+    });
   });
 
   it('canonicalizes Sports Lib aliases through DynamicDataLoader', () => {

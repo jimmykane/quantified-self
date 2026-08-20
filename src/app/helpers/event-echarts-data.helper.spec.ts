@@ -2050,7 +2050,7 @@ describe('event-echarts-data.helper', () => {
       { label: 'Stroke', value: 'Freestyle' },
       { label: 'Strokes', value: '9' },
       { label: 'Swim Pace', value: '01:40min/100m' },
-      { label: 'Avg Cadence', value: '22rpm' },
+      { label: 'Avg Stroke Rate', value: '22spm' },
       { label: 'Avg Heart Rate', value: '140bpm' },
       { label: 'SWOLF', value: '34' },
       { label: 'Energy', value: '4KCal' },

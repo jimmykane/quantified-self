@@ -14,6 +14,7 @@ import {
   DataSpeedAvg,
   DataSpeedMax,
   DataSpeedMin,
+  DataStrokeRateAvg,
   DataSwimPaceAvg,
   LapInterface,
   PaceUnits,
@@ -57,6 +58,7 @@ describe('event lap table columns helper', () => {
     expect(getDefaultEventLapMetricTypes('running')).not.toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('cycling')).toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataSwimPaceAvg.type);
+    expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataStrokeRateAvg.type);
     expect(getDefaultEventLapMetricTypes('other')).toContain(DataSpeedAvg.type);
     expect(EVENT_LAP_TABLE_FIXED_COLUMN).toBe('#');
   });

@@ -15,6 +15,7 @@ import {
   DataPowerRight,
   DataSpeed,
   DataSpeedKnots,
+  DataStrokeRate,
   DataSwimPace,
   DataTemperature,
 } from '@sports-alliance/sports-lib';
@@ -119,6 +120,61 @@ describe('event chart sport profiles', () => {
     expect(resolveEventChartSportProfile([ActivityTypes.Tactical]).profileID).toBe('fitness');
   });
 
+  it.each([
+    ActivityTypes.Swimming,
+    ActivityTypes.OpenWaterSwimming,
+    ActivityTypes.Rowing,
+    ActivityTypes.IndoorRowing,
+    ActivityTypes.Canoeing,
+    ActivityTypes.Kayaking,
+    ActivityTypes.Paddling,
+    ActivityTypes.StandUpPaddling,
+  ])('uses Stroke Rate instead of Cadence for %s', (activityType) => {
+    const resolution = resolveEventChartSportProfile([activityType]);
+
+    expect(resolution.candidateFamilies).toContain('stroke-rate');
+    expect(resolution.candidateFamilies).not.toContain('cadence');
+  });
+
+  it('keeps both rate semantics for a mixed water-sport profile', () => {
+    const resolution = resolveEventChartSportProfile([
+      ActivityTypes.Rowing,
+      ActivityTypes.Surfing,
+    ]);
+
+    expect(resolution.profileID).toBe('paddled-water');
+    expect(resolution.candidateFamilies).toContain('cadence');
+    expect(resolution.candidateFamilies).toContain('stroke-rate');
+  });
+
+  it('selects a recorded Stroke Rate panel for open-water swimming', () => {
+    const profile = resolveEventChartSportProfile([ActivityTypes.OpenWaterSwimming]);
+    const result = resolveEventChartRecommendations({
+      profile,
+      panels: [
+        panel(DataHeartRate.type),
+        panel(DataSwimPace.type),
+        panel(DataStrokeRate.type),
+      ],
+      globallyAllowedDataTypes: [
+        DataHeartRate.type,
+        DataSwimPace.type,
+        DataStrokeRate.type,
+      ],
+    });
+
+    expect(result.recommendedDataTypes).toEqual([
+      DataHeartRate.type,
+      DataSwimPace.type,
+      DataStrokeRate.type,
+    ]);
+    expect(result.automaticDataTypes).toEqual([
+      DataHeartRate.type,
+      DataSwimPace.type,
+      DataStrokeRate.type,
+    ]);
+  });
+
   it('selects up to three available and globally allowed families without padding', () => {
     const profile = resolveEventChartSportProfile([ActivityTypes.Running]);
     const result = resolveEventChartRecommendations({
@@ -195,6 +251,7 @@ describe('event chart sport profiles', () => {
     expect(getEventChartSelectionKey(DataDepthFeet.type)).toBe(DataDepth.type);
     expect(getEventChartMetricFamily(DataPaceMinutesPerMile.type)).toBe('pace');
     expect(getEventChartMetricFamily(DataSpeedKnots.type)).toBe('speed');
+    expect(getEventChartMetricFamily(DataStrokeRate.type)).toBe('stroke-rate');
   });
 
   it('applies automatic specialized-surface exclusions without removing recommendations', () => {

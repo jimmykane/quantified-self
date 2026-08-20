@@ -242,6 +242,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
             actual.ActivityTypesHelper.isIndoorActivityType.bind(
                 actual.ActivityTypesHelper,
             ),
+        usesStrokeRate:
+            actual.ActivityTypesHelper.usesStrokeRate.bind(
+                actual.ActivityTypesHelper,
+            ),
         getActivityTypesForActivityGroup: (group: string) => {
             switch (group) {
                 case 'cycling_group':

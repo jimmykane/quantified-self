@@ -2278,6 +2278,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.formatTrainingBuildFootnote('cycling')).toContain('Enduro and Downhill');
     expect(component.formatTrainingBuildFootnote('rowing')).toContain('durability is not available');
     expect((component as any).formatTrainingProfileMetric('stroke-distance', 10, 'rowing')).toBe('10.0 m');
+    expect((component as any).formatTrainingProfileMetric('stroke-rate', 28, 'rowing')).toBe('28 spm');
     expect((component as any).formatTrainingProfileMetric('descent', 4_000, 'cycling')).toMatch(/^4[,.]000 m$/);
     component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     expect((component as any).formatTrainingProfileMetric('max-jump-distance', 7.4, 'cycling')).toBe('24.3 ft');

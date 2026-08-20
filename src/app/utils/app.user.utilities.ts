@@ -49,7 +49,9 @@ import {
     DataPeakEPOC,
     DataDeviceNames,
     DataAltitude,
+    DataCadence,
     DataHeartRate,
+    DataStrokeRate,
     User,
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
@@ -459,10 +461,15 @@ export class AppUserUtilities {
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
         const appChartSettings = settings.chartSettings as unknown as AppChartSettingsInterface;
         const existingDataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserUtilities.getDefaultUserChartSettingsDataTypeSettings();
+        const shouldCarryCadenceVisibilityToStrokeRate = !Object.prototype.hasOwnProperty.call(
+            existingDataTypeSettings,
+            DataStrokeRate.type,
+        ) && existingDataTypeSettings[DataCadence.type]?.enabled === true;
         const normalizedDataTypeSettings: DataTypeSettings = {};
         let hasEnabledDataType = false;
         for (const dataType of allDataTypes) {
-            const enabled = existingDataTypeSettings[dataType]?.enabled === true;
+            const enabled = existingDataTypeSettings[dataType]?.enabled === true
+                || (dataType === DataStrokeRate.type && shouldCarryCadenceVisibilityToStrokeRate);
             normalizedDataTypeSettings[dataType] = { enabled };
             if (enabled) {
                 hasEnabledDataType = true;

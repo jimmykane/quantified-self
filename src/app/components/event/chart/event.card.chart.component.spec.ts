@@ -17,6 +17,7 @@ import {
   DataPace,
   DataPower,
   DataSpeed,
+  DataStrokeRate,
   DataSpeedKilometersPerHour,
   DataSpeedMilesPerHour,
   DataStrydDistance,
@@ -910,6 +911,36 @@ describe('EventCardChartComponent', () => {
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
       DataHeartRate.type,
       DataSwimPace.type,
+    ]);
+  });
+
+  it('selects recorded Stroke Rate automatically for open-water swimming', async () => {
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([
+      DataHeartRate.type,
+      DataSwimPace.type,
+      DataStrokeRate.type,
+    ]);
+    const swimmingActivity = {type: ActivityTypes.OpenWaterSwimming, getID: () => 'swim-1'} as any;
+    component.selectedActivities = [swimmingActivity];
+    component.event = {
+      getID: () => 'event-open-water-swimming',
+      getActivities: () => [swimmingActivity],
+      isMultiSport: () => false,
+    } as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(DataStrokeRate.type),
+      chartPanel(DataSwimPace.type),
+      chartPanel(DataHeartRate.type),
+    ] as any);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.sportProfile.profileID).toBe('open-water-swimming');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([
+      DataHeartRate.type,
+      DataSwimPace.type,
+      DataStrokeRate.type,
     ]);
   });
 

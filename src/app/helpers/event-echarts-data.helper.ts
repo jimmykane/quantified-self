@@ -27,6 +27,7 @@ import {
   DataDescent,
   DataDepth,
   DataSpeed,
+  DataStrokeRateAvg,
   DataStrydDistance,
   DataStrydAltitude,
   DataSwimPace,
@@ -1812,7 +1813,12 @@ function buildLapTooltipDetails(
   appendLapDetail(details, 'Avg Power', lap.getStat(DataPowerAvg.type));
   appendLapDetail(details, 'Ascent', lap.getStat(DataAscent.type), unitSettings);
   appendLapDetail(details, 'Descent', lap.getStat(DataDescent.type), unitSettings);
-  appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
+  const averageStrokeRate = lap.getStat(DataStrokeRateAvg.type);
+  if (averageStrokeRate) {
+    appendLapDetail(details, 'Avg Stroke Rate', averageStrokeRate);
+  } else {
+    appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
+  }
 
   return details;
 }
@@ -1830,7 +1836,12 @@ function buildSwimLengthTooltipDetails(
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
   appendLapDetail(details, 'Swim Pace', getSwimLengthPace(swimLength), unitSettings);
-  appendLapDetail(details, 'Avg Cadence', swimLength.avgCadence ?? undefined, unitSettings);
+  appendLapDetail(
+    details,
+    'Avg Stroke Rate',
+    swimLength.avgCadence ?? undefined,
+    unitSettings,
+  );
   appendLapDetail(details, 'Avg Heart Rate', swimLength.avgHeartRate ?? undefined, unitSettings);
   appendLapDetail(details, 'Max Heart Rate', swimLength.maxHeartRate ?? undefined, unitSettings);
   appendTextDetail(details, 'SWOLF', formatNullableNumber(swimLength.swolf));

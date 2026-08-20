@@ -23,6 +23,7 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 import {
   getActivityChartDataFromSources,
+  getUnsupportedActivityChartMetrics,
   listActivityChartMetrics,
   MCP_ACTIVITY_CHART_MAX_DECOMPRESSED_BYTES,
   MCP_ACTIVITY_CHART_MAX_RAW_BYTES,
@@ -110,6 +111,15 @@ describe('MCP on-demand activity charts', () => {
     const snorkelingCatalog = listActivityChartMetrics(ActivityTypes.Snorkeling);
     expect(snorkelingCatalog.metrics.map((metric) => metric.metric)).not.toContain('depth');
     expect(JSON.stringify(snorkelingCatalog)).not.toContain('Depth');
+
+    expect(listActivityChartMetrics(ActivityTypes.OpenWaterSwimming).metrics.map((metric) => metric.metric))
+      .not.toContain('cadence');
+    expect(listActivityChartMetrics(ActivityTypes.Rowing).metrics.map((metric) => metric.metric))
+      .not.toContain('cadence');
+    expect(listActivityChartMetrics(ActivityTypes.Cycling).metrics.map((metric) => metric.metric))
+      .toContain('cadence');
+    expect(getUnsupportedActivityChartMetrics(['cadence'], ActivityTypes.OpenWaterSwimming))
+      .toEqual(['cadence']);
   });
 
   it.each([

@@ -1,12 +1,12 @@
 import {
   ActivityInterface,
-  DataCadence,
   DataDuration,
   DataEnergy,
   DataHeartRate,
   DataInterface,
   DataPoolLength,
   DataSpeed,
+  DataStrokeRate,
   DataSwimDistance,
 } from '@sports-alliance/sports-lib';
 
@@ -23,7 +23,8 @@ export interface AppSwimLength {
   distance: DataSwimDistance | null;
   poolLength: DataPoolLength | null;
   avgSpeed: DataSpeed | null;
-  avgCadence: DataCadence | null;
+  /** Average stroke rate. The property name is retained by Sports Lib for JSON compatibility. */
+  avgCadence: DataStrokeRate | null;
   avgHeartRate: DataHeartRate | null;
   maxHeartRate: DataHeartRate | null;
   swolf: number | null;
@@ -119,7 +120,7 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     distance: normalizeDataNumber(getRecordValue(record, 'distance'), DataSwimDistance),
     poolLength: normalizeDataNumber(getRecordValue(record, 'poolLength'), DataPoolLength),
     avgSpeed: normalizeDataNumber(getRecordValue(record, 'avgSpeed'), DataSpeed),
-    avgCadence: normalizeDataNumber(getRecordValue(record, 'avgCadence'), DataCadence),
+    avgCadence: normalizeDataNumber(getRecordValue(record, 'avgCadence'), DataStrokeRate),
     avgHeartRate: normalizeDataNumber(getRecordValue(record, 'avgHeartRate'), DataHeartRate),
     maxHeartRate: normalizeDataNumber(getRecordValue(record, 'maxHeartRate'), DataHeartRate),
     swolf: normalizeNumber(getRecordValue(record, 'swolf')),

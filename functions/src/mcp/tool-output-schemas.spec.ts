@@ -51,6 +51,12 @@ const metricDescriptor = {
   unit: 'm',
   unitSystem: 'metric' as const,
 };
+const strokeRateMetricDescriptor = {
+  type: 'Stroke Rate',
+  displayType: 'Stroke Rate',
+  unit: 'spm',
+  unitSystem: 'metric' as const,
+};
 const activityStats = {
   durationSeconds: 3_600,
   distanceMeters: 10_000,
@@ -517,7 +523,7 @@ function createFixtureDataService(
       },
     }),
     listMetrics: vi.fn().mockResolvedValue({
-      eventMetrics: [metricDescriptor],
+      eventMetrics: [metricDescriptor, strokeRateMetricDescriptor],
       nextCursor: NEXT_CURSOR,
       scannedEventCount: 1,
       eventScanTruncated: false,
