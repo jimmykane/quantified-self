@@ -59,18 +59,16 @@ function parseOptions(): ScriptOptions {
 
 interface SafeWorkoutSummary {
   id: string | null;
-  name: string | null;
   workoutTypeId: number | null;
   workoutTypeName: string | null;
 }
 
-function safeWorkoutSummary(payload: WahooWorkoutPayload): SafeWorkoutSummary {
+export function safeWorkoutSummary(payload: WahooWorkoutPayload): SafeWorkoutSummary {
   const rawWorkoutTypeId = payload.workout_type_id ?? payload.workout_type?.id;
   const normalizedWorkoutTypeId = `${rawWorkoutTypeId ?? ''}`.trim();
   const workoutTypeId = normalizedWorkoutTypeId ? Number(normalizedWorkoutTypeId) : Number.NaN;
   return {
     id: `${payload.id ?? ''}` || null,
-    name: `${payload.name ?? ''}` || null,
     workoutTypeId: Number.isFinite(workoutTypeId) ? workoutTypeId : null,
     workoutTypeName: `${payload.workout_type?.name ?? ''}` || null,
   };

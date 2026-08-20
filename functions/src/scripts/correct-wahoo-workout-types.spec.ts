@@ -22,6 +22,7 @@ import {
   assertWahooCorrectionApplied,
   assertWahooCorrectionMutationAllowed,
   buildWahooWorkoutTypeUpdateForm,
+  safeWorkoutSummary,
 } from './correct-wahoo-workout-types';
 
 describe('Wahoo workout type correction script safety', () => {
@@ -54,18 +55,31 @@ describe('Wahoo workout type correction script safety', () => {
       .rejects.toThrow('disconnect is pending');
   });
 
+  it('omits the user-authored workout title from canary output', () => {
+    expect(safeWorkoutSummary({
+      id: '900000001',
+      name: 'Private workout title',
+      workout_type_id: 9,
+      workout_type: { id: 9, name: 'HIKING' },
+    })).toEqual({
+      id: '900000001',
+      workoutTypeId: 9,
+      workoutTypeName: 'HIKING',
+    });
+  });
+
   it('fails verification when Wahoo does not retain the requested type', () => {
     expect(() => assertWahooCorrectionApplied(
-      '485861650',
-      { id: '485861650', name: 'Cycling', workoutTypeId: 0, workoutTypeName: 'BIKING' },
+      '900000001',
+      { id: '900000001', workoutTypeId: 0, workoutTypeName: 'BIKING' },
       { id: 9, name: 'HIKING' },
     )).toThrow('did not retain the requested type');
   });
 
-  it('accepts a matching type while preserving Wahoo\'s existing title', () => {
+  it('accepts a matching type without exposing the Wahoo workout title', () => {
     expect(() => assertWahooCorrectionApplied(
-      '485861650',
-      { id: '485861650', name: 'Sunday in the hills', workoutTypeId: 9, workoutTypeName: 'HIKING' },
+      '900000001',
+      { id: '900000001', workoutTypeId: 9, workoutTypeName: 'HIKING' },
       { id: 9, name: 'HIKING' },
     )).not.toThrow();
   });

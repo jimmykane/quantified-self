@@ -168,23 +168,23 @@ describe('Wahoo activity uploads', () => {
   it('corrects a completed mapped activity before returning upload success', async () => {
     mocks.requestWahooAPI
       .mockResolvedValueOnce({
-        data: { token: 'upload-hike', status: 'complete', workout_id: 485861650 },
+        data: { token: 'upload-hike', status: 'complete', workout_id: 900000001 },
       })
-      .mockResolvedValueOnce({ data: { id: 485861650 } });
+      .mockResolvedValueOnce({ data: { id: 900000001 } });
 
     await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'), {
       expectedWorkoutTypeId: 9,
     })).resolves.toMatchObject({
       status: 'success',
       uploadId: 'upload-hike',
-      workoutKey: '485861650',
+      workoutKey: '900000001',
       expectedWorkoutTypeId: 9,
     });
 
     expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(2);
     expect(mocks.requestWahooAPI.mock.calls[0][1]).toBe('/v1/workout_file_uploads');
     const [, correctionPath, correctionRequest] = mocks.requestWahooAPI.mock.calls[1];
-    expect(correctionPath).toBe('/v1/workouts/485861650');
+    expect(correctionPath).toBe('/v1/workouts/900000001');
     expect(correctionRequest.method).toBe('PUT');
     expect(correctionRequest.form.get('workout[workout_type_id]')).toBe('9');
     expect(correctionRequest.form.get('workout[name]')).toBeNull();
@@ -192,7 +192,7 @@ describe('Wahoo activity uploads', () => {
 
   it('retains the accepted upload when disconnect begins before type correction', async () => {
     mocks.requestWahooAPI.mockResolvedValueOnce({
-      data: { token: 'upload-disconnect', status: 'complete', workout_id: 485861650 },
+      data: { token: 'upload-disconnect', status: 'complete', workout_id: 900000001 },
     });
     mocks.isDisconnectPendingForUser
       .mockResolvedValueOnce(false)
@@ -366,9 +366,9 @@ describe('Wahoo activity uploads', () => {
   it('corrects a mapped duplicate when Wahoo identifies the existing workout', async () => {
     mocks.requestWahooAPI
       .mockResolvedValueOnce({
-        data: { token: 'upload-duplicate-hike', status: 'duplicate', workout_id: 485861650 },
+        data: { token: 'upload-duplicate-hike', status: 'duplicate', workout_id: 900000001 },
       })
-      .mockResolvedValueOnce({ data: { id: 485861650 } });
+      .mockResolvedValueOnce({ data: { id: 900000001 } });
 
     await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'), {
       expectedWorkoutTypeId: 9,
@@ -376,7 +376,7 @@ describe('Wahoo activity uploads', () => {
       status: 'duplicate',
       code: 'ALREADY_EXISTS',
       uploadId: 'upload-duplicate-hike',
-      workoutKey: '485861650',
+      workoutKey: '900000001',
       expectedWorkoutTypeId: 9,
     });
 
@@ -385,14 +385,14 @@ describe('Wahoo activity uploads', () => {
       method: request?.method || 'GET',
     }))).toEqual([
       { path: '/v1/workout_file_uploads', method: 'POST' },
-      { path: '/v1/workouts/485861650', method: 'PUT' },
+      { path: '/v1/workouts/900000001', method: 'PUT' },
     ]);
   });
 
   it('fails closed when a duplicate type correction cannot be resumed without an upload ID', async () => {
     mocks.requestWahooAPI
       .mockResolvedValueOnce({
-        data: { status: 'duplicate', workout_id: 485861650 },
+        data: { status: 'duplicate', workout_id: 900000001 },
       })
       .mockRejectedValueOnce(new WahooAPIRequestError('temporary', 500));
 
