@@ -44,6 +44,7 @@ import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from '.
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import {
+  assertWahooConnectionAvailable,
   isWahooReconnectRequiredError,
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
@@ -140,6 +141,7 @@ async function assertWahooRouteUploadProviderActionAllowed(userID: string, phase
   if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, phase);
   }
+  await assertWahooConnectionAvailable(userID);
 }
 
 async function withWahooRouteAccessToken<T>(

@@ -80,6 +80,112 @@ async function setServiceMetaIfUserActive(
   });
 }
 
+async function setWahooReconnectReleasePendingIfConnected(
+  userID: string,
+  nowMs = Date.now(),
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, ServiceNames.WahooAPI);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'wahoo_reconnect_queue_release_retry', error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.data() as ServiceConnectionMetaFields | undefined;
+    if (data?.connectionState !== SERVICE_CONNECTION_STATES.Connected) return false;
+
+    const attemptCount = Math.max(0, Number(data?.wahooReconnectReleaseAttemptCount) || 0) + 1;
+    transaction.set(ref, {
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: nowMs,
+      wahooReconnectReleaseAttemptCount: attemptCount,
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function clearWahooReconnectReleasePendingIfConnected(userID: string): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, ServiceNames.WahooAPI);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'wahoo_reconnect_queue_release_complete', error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const snapshot = await transaction.get(ref);
+    if (snapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected) return false;
+
+    transaction.set(ref, {
+      wahooReconnectReleasePending: FieldValue.delete(),
+      wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
+      wahooReconnectReleaseAttemptCount: FieldValue.delete(),
+    }, { merge: true });
+    return true;
+  });
+}
+
+/**
+ * Restores only routes that were enabled before Wahoo was parked, then opens
+ * reconnect-required queue rows. A failed partial release is marked durably
+ * so the scheduled repair path retries it after the OAuth callback returns.
+ */
+async function releaseWahooReconnectQueueItemsWithRepair(userID: string): Promise<boolean> {
+  try {
+    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, ServiceNames.WahooAPI, {
+      requireServiceConnected: true,
+    });
+    await releaseQueueItemsDeferredForReconnectRequired(userID, ServiceNames.WahooAPI);
+  } catch (error) {
+    let retryRecorded = false;
+    try {
+      retryRecorded = await setWahooReconnectReleasePendingIfConnected(userID);
+    } catch (retryError) {
+      logger.error(
+        `[ServiceConnectionMeta] Failed to persist reconnect-release repair for Wahoo user ${userID}.`,
+        retryError,
+      );
+    }
+    logger.error(
+      `[ServiceConnectionMeta] Failed to release reconnect-required Wahoo queue items for user ${userID}.${retryRecorded ? ' A durable retry was scheduled.' : ''}`,
+      error,
+    );
+    return false;
+  }
+
+  try {
+    await clearWahooReconnectReleasePendingIfConnected(userID);
+  } catch (error) {
+    // The release is already complete; retaining the marker only causes an
+    // idempotent repair pass, so do not make a successful OAuth callback fail.
+    logger.error(
+      `[ServiceConnectionMeta] Failed to clear reconnect-release repair marker for Wahoo user ${userID}.`,
+      error,
+    );
+  }
+  return true;
+}
+
+/** Retries a durable Wahoo reconnect-release repair marker. */
+export async function retryWahooReconnectQueueRelease(userID: string): Promise<boolean> {
+  const meta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
+  if (
+    meta?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+    || meta.wahooReconnectReleasePending !== true
+  ) {
+    return false;
+  }
+  return releaseWahooReconnectQueueItemsWithRepair(userID);
+}
+
 export async function markServiceReconnectRequired(
   userID: string,
   serviceName: ServiceNames,
@@ -98,7 +204,9 @@ export async function markServiceReconnectRequired(
   }
 
   try {
-    await disableActivitySyncRoutesForDisconnectedService(userID, serviceName);
+    await disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
+      trackPendingDisconnectRestore: true,
+    });
   } catch (error) {
     logger.error(
       `[ServiceConnectionMeta] Failed to disable activity sync routes for reconnect-required ${serviceName} user ${userID}.`,
@@ -171,6 +279,17 @@ export async function markServiceConnected(
     wahooRefreshFailureCount: FieldValue.delete(),
     wahooRefreshFailureLastAt: FieldValue.delete(),
     wahooRefreshRetryAt: FieldValue.delete(),
+    ...(serviceName === ServiceNames.WahooAPI ? {
+      // Persist before the multi-collection release begins. If this callback
+      // stops at any later point, the scheduled repair path owns the retry.
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: Date.now(),
+      wahooReconnectReleaseAttemptCount: 0,
+    } : {
+      wahooReconnectReleasePending: FieldValue.delete(),
+      wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
+      wahooReconnectReleaseAttemptCount: FieldValue.delete(),
+    }),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
     disconnectNextAttemptAt: FieldValue.delete(),
@@ -185,18 +304,22 @@ export async function markServiceConnected(
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
   });
-  if (!didWrite || serviceName !== ServiceNames.WahooAPI) {
+  if (!didWrite) {
     return didWrite;
   }
 
+  if (serviceName === ServiceNames.WahooAPI) {
+    await releaseWahooReconnectQueueItemsWithRepair(userID);
+    return true;
+  }
+
   try {
-    await releaseQueueItemsDeferredForReconnectRequired(userID, serviceName);
+    await restoreActivitySyncRoutesForPendingDisconnectClear(userID, serviceName);
   } catch (error) {
-    // The connection is usable after the OAuth callback even if a parked item
-    // cannot be released immediately. Keep the reconnect successful and let a
-    // later callback or operator retry the durable release.
+    // OAuth has still succeeded; route restoration is independently guarded
+    // and can be safely retried by a later connection update.
     logger.error(
-      `[ServiceConnectionMeta] Failed to release reconnect-required ${serviceName} queue items for user ${userID}.`,
+      `[ServiceConnectionMeta] Failed to restore activity sync routes for reconnected ${serviceName} user ${userID}.`,
       error,
     );
   }
@@ -352,6 +475,9 @@ export async function clearServiceConnectionState(
     wahooRefreshFailureCount: FieldValue.delete(),
     wahooRefreshFailureLastAt: FieldValue.delete(),
     wahooRefreshRetryAt: FieldValue.delete(),
+    wahooReconnectReleasePending: FieldValue.delete(),
+    wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
+    wahooReconnectReleaseAttemptCount: FieldValue.delete(),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
     disconnectNextAttemptAt: FieldValue.delete(),

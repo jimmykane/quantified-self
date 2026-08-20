@@ -7,7 +7,11 @@ import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-allian
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getNextAllowedHistoryImportDate, HistoryImportResult } from '../history';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
-import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, generateIDFromParts, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { requestWahooAPI, WahooAPIRequestError } from './auth/api';
@@ -17,6 +21,7 @@ import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { assertWahooConnectionAvailable } from './refresh-recovery';
 
 const PAGE_SIZE = 100;
 const HISTORY_LEASE_MS = 15 * 60 * 1000;
@@ -36,6 +41,18 @@ interface WahooWorkoutsResponse {
 export interface WahooHistoryImportResult extends HistoryImportResult {
   skippedCount: number;
   pagesFetched: number;
+}
+
+/** Recheck mutable lifecycle state immediately before each Wahoo history page. */
+async function assertWahooHistoryProviderActionAllowed(userID: string): Promise<void> {
+  const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
+  if (deletionGuard.shouldSkip) {
+    throw new HttpsError('failed-precondition', 'Account deletion is in progress.');
+  }
+  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+    throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
+  }
+  await assertWahooConnectionAvailable(userID);
 }
 
 export function selectWahooHistoryPage(
@@ -173,6 +190,7 @@ export async function importWahooHistory(
           throw new HttpsError('failed-precondition', 'The Wahoo connection is no longer available.');
         }
         const token = await getTokenData(currentTokenSnapshot, ServiceNames.WahooAPI, false) as WahooAPIAuth2ServiceTokenInterface;
+        await assertWahooHistoryProviderActionAllowed(userID);
         let response: WahooWorkoutsResponse;
         try {
           response = (await requestWahooAPI<WahooWorkoutsResponse>(

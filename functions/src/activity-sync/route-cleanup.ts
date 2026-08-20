@@ -9,6 +9,7 @@ import {
 } from '../../../shared/route-delivery-sync-routes';
 import {
   isServiceUnavailableForSyncConnection,
+  SERVICE_CONNECTION_STATES,
   type ServiceConnectionMetaFields,
 } from '../../../shared/service-connection';
 import {
@@ -18,6 +19,11 @@ import {
 
 interface ActivitySyncRouteCleanupOptions {
   trackPendingDisconnectRestore?: boolean;
+}
+
+interface ActivitySyncRouteRestoreOptions {
+  /** Reconnect release must not re-enable routes after a concurrent disconnect. */
+  requireServiceConnected?: boolean;
 }
 
 export interface DisabledServiceSyncSettingsUpdate {
@@ -216,6 +222,7 @@ export async function disableActivitySyncRoutesForDisconnectedService(
 export async function restoreActivitySyncRoutesForPendingDisconnectClear(
   userID: string,
   serviceName: ServiceNames,
+  options: ActivitySyncRouteRestoreOptions = {},
 ): Promise<void> {
   const affectedRoutes = getAffectedServiceSyncRoutes(serviceName);
 
@@ -238,6 +245,14 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
         `[ActivitySyncRouteCleanup] Skipping route restore for ${serviceName} user ${userID} because the user is missing or deletion is in progress.`,
       );
       return;
+    }
+
+    if (options.requireServiceConnected) {
+      const serviceMetaSnapshot = await transaction.get(getUserServiceMetaRef(db, userID, serviceName));
+      const connectionState = asRecord(serviceMetaSnapshot.data()).connectionState;
+      if (connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+        return;
+      }
     }
 
     const settingsSnapshot = await transaction.get(settingsRef);

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   const requestWahooAPI = vi.fn();
   const getTokenData = vi.fn();
   const isDisconnectPendingForUser = vi.fn();
+  const assertWahooConnectionAvailable = vi.fn();
   const getUserDeletionGuardState = vi.fn();
   const parseRoutePayload = vi.fn();
   const exportRoutesToFit = vi.fn();
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => {
     requestWahooAPI,
     getTokenData,
     isDisconnectPendingForUser,
+    assertWahooConnectionAvailable,
     getUserDeletionGuardState,
     parseRoutePayload,
     exportRoutesToFit,
@@ -68,6 +70,11 @@ vi.mock('firebase-admin', () => ({
 vi.mock('../tokens', () => ({ getTokenData: mocks.getTokenData }));
 vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: mocks.isDisconnectPendingForUser,
+}));
+vi.mock('./refresh-recovery', () => ({
+  assertWahooConnectionAvailable: mocks.assertWahooConnectionAvailable,
+  isWahooReconnectRequiredError: (error: unknown) => (error as { name?: string } | null)?.name === 'WahooReconnectRequiredError',
+  isWahooRefreshBackoffError: () => false,
 }));
 vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: mocks.getUserDeletionGuardState,
@@ -124,6 +131,7 @@ describe('Wahoo route uploads', () => {
     vi.clearAllMocks();
     mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
     mocks.isDisconnectPendingForUser.mockResolvedValue(false);
+    mocks.assertWahooConnectionAvailable.mockResolvedValue(undefined);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true });
     mocks.getTokenData.mockResolvedValue({
@@ -450,6 +458,19 @@ describe('Wahoo route uploads', () => {
         name: 'WahooReconnectRequiredError',
         code: 'unauthenticated',
       });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('rechecks reconnect-required state immediately before looking up a route', async () => {
+    mocks.assertWahooConnectionAvailable
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('Reconnect Wahoo.'), {
+        name: 'WahooReconnectRequiredError',
+      }));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 

@@ -20,8 +20,14 @@ const hoisted = vi.hoisted(() => {
     const collections = new Map<string, StoredDoc[]>();
     const getFailures = new Map<string, Error>();
     const beforeTransactionRead = new Map<string, () => void>();
+    const serviceConnectionStates = new Map<string, string>();
     const deleteSentinel = { delete: true };
     const timestampFromDate = vi.fn((date: Date) => date);
+    const getUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
 
     const makeQuery = (collectionName: string, filters: Filter[] = []) => ({
         where: vi.fn((field: string, operator: string, value: unknown) => {
@@ -54,6 +60,7 @@ const hoisted = vi.hoisted(() => {
             };
         }),
         doc: vi.fn((docID: string) => ({
+            path: `${collectionName}/${docID}`,
             collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
         })),
     });
@@ -62,8 +69,10 @@ const hoisted = vi.hoisted(() => {
         collections,
         getFailures,
         beforeTransactionRead,
+        serviceConnectionStates,
         deleteSentinel,
         timestampFromDate,
+        getUserDeletionGuardStateInTransaction,
         collection: vi.fn((collectionName: string) => makeQuery(collectionName)),
         runTransaction: vi.fn(async (runner: (transaction: {
             get: (ref: { path: string; storedDoc?: StoredDoc }) => Promise<{ exists: boolean; data: () => Record<string, unknown> | undefined }>;
@@ -80,6 +89,13 @@ const hoisted = vi.hoisted(() => {
                     if (hook) {
                         beforeTransactionRead.delete(ref.path);
                         hook();
+                    }
+                    const serviceConnectionState = serviceConnectionStates.get(ref.path);
+                    if (serviceConnectionState) {
+                        return {
+                            exists: true,
+                            data: () => ({ connectionState: serviceConnectionState }),
+                        };
                     }
                     const storedDoc = ref.storedDoc;
                     return {
@@ -136,6 +152,13 @@ vi.mock('firebase-functions/logger', () => ({
     error: hoisted.loggerError,
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+    },
+}));
+
 import {
     releaseQueueItemsDeferredForPendingDisconnect,
     releaseQueueItemsDeferredForReconnectRequired,
@@ -147,6 +170,12 @@ describe('pending disconnect queue release', () => {
         hoisted.collections.clear();
         hoisted.getFailures.clear();
         hoisted.beforeTransactionRead.clear();
+        hoisted.serviceConnectionStates.clear();
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     afterEach(() => {
@@ -178,6 +207,10 @@ describe('pending disconnect queue release', () => {
             const storedDoc = (hoisted.collections.get(collectionName) || []).find(doc => doc.id === id);
             if (storedDoc) advance(storedDoc.data);
         });
+    }
+
+    function setServiceConnectionState(userID: string, serviceName: ServiceNames, connectionState: string): void {
+        hoisted.serviceConnectionStates.set(`users/${userID}/meta/${serviceName}`, connectionState);
     }
 
     it('releases deferred queue items for the restored service without touching other services', async () => {
@@ -252,6 +285,7 @@ describe('pending disconnect queue release', () => {
     });
 
     it('releases only Wahoo work parked for reconnect after a successful OAuth callback', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
         const reconnectReason = QUEUE_DEFERRED_REASONS.ServiceReconnectRequired;
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
             userID: 'user-1',
@@ -289,6 +323,7 @@ describe('pending disconnect queue release', () => {
     });
 
     it('does not overwrite a queue item claimed after a reconnect-release query was read', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
             userID: 'user-1',
             deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
@@ -302,6 +337,37 @@ describe('pending disconnect queue release', () => {
             data.processed = false;
             data.dispatchedToCloudTask = Number.MAX_SAFE_INTEGER - 1;
             data.providerOperationStartedAt = 1_782_126_100_000;
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release reconnect-parked work after a concurrent Wahoo disconnect', async () => {
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not recreate a deferred queue item when account deletion begins before the release transaction', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+            processed: true,
+        });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
         });
 
         await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);

@@ -77,6 +77,8 @@ describe('ServicesWahooComponent', () => {
     expect(component.connectionDescription).toContain('Reconnect Wahoo');
     expect(fixture.nativeElement.textContent).toContain('Wahoo rejected repeated token refreshes');
     expect(fixture.nativeElement.textContent).toContain('Reconnect');
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button'))
+      .some((button: HTMLButtonElement) => button.textContent?.includes('Disconnect'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeNull();
   });
 

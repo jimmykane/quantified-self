@@ -3,11 +3,13 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => ({
   collection: vi.fn(),
+  collectionGroup: vi.fn(),
   doc: vi.fn(),
   cleanupServiceConnectionForUser: vi.fn(),
   getTokenData: vi.fn(),
   clearServiceDisconnectPending: vi.fn(),
   recordServiceDisconnectRetryFailure: vi.fn(),
+  retryWahooReconnectQueueRelease: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -23,6 +25,7 @@ vi.mock('firebase-functions/logger', () => ({
 vi.mock('firebase-admin', () => {
   const firestore = () => ({
     collection: hoisted.collection,
+    collectionGroup: hoisted.collectionGroup,
     doc: hoisted.doc,
   });
 
@@ -51,6 +54,10 @@ vi.mock('../service-auth-lifecycle', () => ({
   SERVICE_AUTH_CLEANUP_REASONS: {
     SubscriptionEnforcement: 'subscription_enforcement',
   },
+}));
+
+vi.mock('../service-connection-meta', () => ({
+  retryWahooReconnectQueueRelease: hoisted.retryWahooReconnectQueueRelease,
 }));
 
 vi.mock('../service-disconnect-pending', () => ({
@@ -119,6 +126,11 @@ describe('retry-pending-service-disconnects', () => {
     hoisted.getTokenData.mockResolvedValue({ accessToken: 'pending-token' });
     hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
+    hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
+    hoisted.collectionGroup.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ docs: [] }),
+    });
   });
 
   it('clears pending disconnect without deauth when entitlement is active again', async () => {
@@ -169,6 +181,30 @@ describe('retry-pending-service-disconnects', () => {
       ServiceNames.SuuntoApp,
       failure,
     );
+  });
+
+  it('retries every durable Wahoo reconnect-release marker without paging starvation', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.WahooAPI,
+            ref: { parent: { parent: { id: 'user-1' } } },
+          },
+          {
+            id: ServiceNames.WahooAPI,
+            ref: { parent: { parent: { id: 'user-2' } } },
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingWahooReconnectQueueReleases()).resolves.toBe(2);
+
+    expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
+    expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-1');
+    expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-2');
   });
 
   it('records retry failure when local cleanup remains partial without a retryable partner failure', async () => {

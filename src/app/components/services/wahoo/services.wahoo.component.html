@@ -35,7 +35,7 @@
         </div>
       </div>
       }
-      @if (isConnectedToService()) {
+      @if (isConnectedToService() || isReconnectRequired) {
       <div class="connection-account-row">
         <div class="connection-account-info">
           <mat-icon class="connected-account-icon">account_circle</mat-icon>

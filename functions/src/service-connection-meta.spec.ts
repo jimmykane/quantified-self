@@ -147,6 +147,7 @@ describe('service-connection-meta', () => {
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.SuuntoApp,
+      { trackPendingDisconnectRestore: true },
     );
   });
 
@@ -290,11 +291,30 @@ describe('service-connection-meta', () => {
       wahooRefreshFailureCount: 'delete-sentinel',
       wahooRefreshFailureLastAt: 'delete-sentinel',
       wahooRefreshRetryAt: 'delete-sentinel',
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseAttemptCount: 0,
     }), { merge: true });
     expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.WahooAPI,
     );
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.releaseQueueItemsDeferredForReconnectRequired.mock.invocationCallOrder[0]);
+  });
+
+  it('records a durable repair marker when reconnect queue release is only partially completed', async () => {
+    hoisted.metaGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ connectionState: 'connected' }),
+    });
+    hoisted.releaseQueueItemsDeferredForReconnectRequired.mockRejectedValueOnce(new Error('one queue write failed'));
+
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseAttemptCount: 1,
+    }), { merge: true });
   });
 
   it('stores a normalized provider account ID without changing connection state', async () => {

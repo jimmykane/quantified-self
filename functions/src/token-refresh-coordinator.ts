@@ -1,12 +1,20 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
+import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
 
 /**
  * A provider refresh can take several seconds. Keep the ownership lease short
  * enough for crash recovery, while covering normal provider latency.
  */
 export const TOKEN_REFRESH_LEASE_MS = 90_000;
+
+/**
+ * Keep the provider request materially shorter than the durable lease. This
+ * leaves a recovery margin while ensuring one stalled HTTP request cannot
+ * outlive its ownership and race a rotating refresh credential.
+ */
+export const TOKEN_REFRESH_REQUEST_TIMEOUT_MS = 60_000;
 
 export interface TokenCredentialSnapshot {
   accessToken: string;
@@ -33,11 +41,15 @@ export type TokenRefreshClaimResult =
   | {
     kind: 'superseded';
     snapshot: TokenSnapshot | null;
+  }
+  | {
+    kind: 'skipped_user_deletion';
   };
 
 export type PersistTokenRefreshResult =
   | { kind: 'persisted' }
-  | { kind: 'superseded'; snapshot: TokenSnapshot | null };
+  | { kind: 'superseded'; snapshot: TokenSnapshot | null }
+  | { kind: 'skipped_user_deletion' };
 
 function normalizedString(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -93,12 +105,28 @@ function clearTokenRefreshLeaseUpdate(): Record<string, unknown> {
   };
 }
 
+async function isTokenRefreshWriteAllowed(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  ref: TokenReference,
+): Promise<boolean> {
+  const userID = ref.parent?.parent?.id || null;
+  if (!userID) {
+    // Every supported provider token is nested below the Firebase UID. An
+    // unscoped reference cannot prove that account deletion is inactive, so
+    // fail closed instead of writing a credential we cannot clean up safely.
+    return false;
+  }
+  const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+  return !deletionGuard.shouldSkip;
+}
+
 /**
  * Coordinates refreshes for one durable provider-token document. Credential
  * values stay in the token document and are never emitted in logs or errors.
  */
 export function createTokenRefreshCoordinator(
-  db: Pick<admin.firestore.Firestore, 'runTransaction'> = admin.firestore(),
+  db: Pick<admin.firestore.Firestore, 'runTransaction' | 'collection'> = admin.firestore(),
 ) {
   async function claim(
     ref: TokenReference,
@@ -106,6 +134,10 @@ export function createTokenRefreshCoordinator(
     nowMs = Date.now(),
   ): Promise<TokenRefreshClaimResult> {
     return db.runTransaction(async (transaction) => {
+      if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
+        return { kind: 'skipped_user_deletion' };
+      }
+
       const snapshot = await transaction.get(ref) as TokenSnapshot;
       if (!snapshot.exists) {
         return { kind: 'superseded', snapshot: null };
@@ -143,6 +175,10 @@ export function createTokenRefreshCoordinator(
     tokenData: Record<string, unknown>,
   ): Promise<PersistTokenRefreshResult> {
     return db.runTransaction(async (transaction) => {
+      if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
+        return { kind: 'skipped_user_deletion' };
+      }
+
       const snapshot = await transaction.get(ref) as TokenSnapshot;
       if (!snapshot.exists) {
         return { kind: 'superseded', snapshot: null };
@@ -173,6 +209,10 @@ export function createTokenRefreshCoordinator(
     expectedCredential: TokenCredentialSnapshot,
   ): Promise<void> {
     await db.runTransaction(async (transaction) => {
+      if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
+        return;
+      }
+
       const snapshot = await transaction.get(ref) as TokenSnapshot;
       if (!snapshot.exists) return;
 

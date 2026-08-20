@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
@@ -15,6 +16,10 @@ import {
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { getServiceTokenCollectionRef } from '../service-token-store';
+import {
+    getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 
 type QueueDocData = Record<string, unknown>;
 type ProviderIdentifierField = 'userName' | 'openId' | 'userID';
@@ -144,6 +149,8 @@ async function collectProviderQueueLookupsForUser(
 }
 
 async function releaseDeferredDocsForQuery(
+    userID: string,
+    serviceName: ServiceNames,
     query: admin.firestore.Query,
     matchesService: (data: QueueDocData) => boolean,
     logContext: Record<string, unknown>,
@@ -171,7 +178,31 @@ async function releaseDeferredDocsForQuery(
             // live row before reopening it: concurrent OAuth callbacks can
             // otherwise apply a stale release after the scheduler has already
             // dispatched the first released row to a provider worker.
-            const released = await admin.firestore().runTransaction(async transaction => {
+            const db = admin.firestore();
+            const released = await db.runTransaction(async transaction => {
+                let deletionGuard;
+                try {
+                    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+                } catch (error) {
+                    throw new UserDeletionGuardReadError(
+                        userID,
+                        `queue_release:${deferredReason}`,
+                        error,
+                    );
+                }
+                if (deletionGuard.shouldSkip) {
+                    return false;
+                }
+
+                if (deferredReason === QUEUE_DEFERRED_REASONS.ServiceReconnectRequired) {
+                    const serviceMetaSnapshot = await transaction.get(
+                        db.collection('users').doc(userID).collection('meta').doc(serviceName),
+                    );
+                    if (serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+                        return false;
+                    }
+                }
+
                 const currentSnapshot = await transaction.get(doc.ref);
                 if (!currentSnapshot.exists) {
                     return false;
@@ -207,6 +238,8 @@ async function releaseDeferredDocsForQuery(
 }
 
 async function releaseDeferredDocsForQueries(
+    userID: string,
+    serviceName: ServiceNames,
     specs: ReleaseQuerySpec[],
     releasedQueueItemPaths: Set<string>,
     deferredReason: QueueDeferredReason,
@@ -214,6 +247,8 @@ async function releaseDeferredDocsForQueries(
     let releasedCount = 0;
     for (const spec of specs) {
         releasedCount += await releaseDeferredDocsForQuery(
+            userID,
+            serviceName,
             spec.query,
             spec.matchesService,
             spec.logContext,
@@ -326,8 +361,10 @@ async function releaseQueueItemsDeferredForServiceState(
     ];
 
     const [workoutCount, activitySyncCount, routeDeliverySyncCount, sleepSyncCount, routeSyncCount] = await Promise.all([
-        releaseDeferredDocsForQueries(workoutQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(userID, serviceName, workoutQueries, releasedQueueItemPaths, deferredReason),
         releaseDeferredDocsForQuery(
+            userID,
+            serviceName,
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
             (data) => isActivitySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'activity_sync' },
@@ -335,14 +372,16 @@ async function releaseQueueItemsDeferredForServiceState(
             deferredReason,
         ),
         releaseDeferredDocsForQuery(
+            userID,
+            serviceName,
             routeDeliverySyncQueue.where('userID', '==', userID),
             (data) => isRouteDeliverySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'route_delivery_sync' },
             releasedQueueItemPaths,
             deferredReason,
         ),
-        releaseDeferredDocsForQueries(sleepQueries, releasedQueueItemPaths, deferredReason),
-        releaseDeferredDocsForQueries(routeSyncQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(userID, serviceName, sleepQueries, releasedQueueItemPaths, deferredReason),
+        releaseDeferredDocsForQueries(userID, serviceName, routeSyncQueries, releasedQueueItemPaths, deferredReason),
     ]);
 
     const releasedCount = workoutCount + activitySyncCount + routeDeliverySyncCount + sleepSyncCount + routeSyncCount;

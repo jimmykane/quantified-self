@@ -12,6 +12,7 @@ import {
   cleanupServiceConnectionForUser,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
+import { retryWahooReconnectQueueRelease } from '../service-connection-meta';
 import {
   clearServiceDisconnectPending,
   isServiceDisconnectPendingData,
@@ -335,6 +336,42 @@ async function retryPendingDisconnectRoot(
   });
 }
 
+/**
+ * Reconnect callbacks can release several independent queue collections. If
+ * one write fails after earlier rows succeeded, the Wahoo meta marker keeps
+ * the remainder durable until this scheduler finishes the idempotent release.
+ * These markers only exist after a partial operational failure, so process
+ * every matching row rather than repeatedly starving later accounts behind a
+ * fixed first page.
+ */
+async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
+  const snapshot = await admin.firestore()
+    .collectionGroup('meta')
+    .where('wahooReconnectReleasePending', '==', true)
+    .get();
+  let repairedCount = 0;
+
+  for (const metaSnapshot of snapshot.docs) {
+    if (metaSnapshot.id !== ServiceNames.WahooAPI) continue;
+    const userID = metaSnapshot.ref.parent.parent?.id;
+    if (!userID) continue;
+
+    try {
+      if (await retryWahooReconnectQueueRelease(userID)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a Wahoo reconnect queue release.', {
+        userID,
+        serviceName: ServiceNames.WahooAPI,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  }
+
+  return repairedCount;
+}
+
 export const retryPendingServiceDisconnects = onSchedule({
   region: 'europe-west2',
   secrets: FUNCTION_SECRET_BINDINGS.retryPendingServiceDisconnects,
@@ -369,6 +406,12 @@ export const retryPendingServiceDisconnects = onSchedule({
       }
     }
   }
+
+  const repairedWahooReconnectReleaseCount = await retryPendingWahooReconnectQueueReleases();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending Wahoo reconnect queue releases.', {
+    serviceName: ServiceNames.WahooAPI,
+    repairedCount: repairedWahooReconnectReleaseCount,
+  });
 });
 
 export const retryPendingServiceDisconnectsTestInternals = {
@@ -377,5 +420,6 @@ export const retryPendingServiceDisconnectsTestInternals = {
   getDuePendingDisconnectRoots,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
+  retryPendingWahooReconnectQueueReleases,
   shouldKeepConnectionForCurrentEntitlement,
 };

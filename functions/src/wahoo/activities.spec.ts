@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   const requestWahooAPI = vi.fn();
   const getTokenData = vi.fn();
   const isDisconnectPendingForUser = vi.fn();
+  const assertWahooConnectionAvailable = vi.fn();
   const getUserDeletionGuardState = vi.fn();
   const tokenRefGet = vi.fn();
   const tokenQueryGet = vi.fn();
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => {
     requestWahooAPI,
     getTokenData,
     isDisconnectPendingForUser,
+    assertWahooConnectionAvailable,
     getUserDeletionGuardState,
     tokenRefGet,
     tokenQueryGet,
@@ -77,6 +79,11 @@ vi.mock('../activity-sync/outbound-fingerprint', () => ({
 vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: mocks.isDisconnectPendingForUser,
 }));
+vi.mock('./refresh-recovery', () => ({
+  assertWahooConnectionAvailable: mocks.assertWahooConnectionAvailable,
+  isWahooReconnectRequiredError: (error: unknown) => (error as { name?: string } | null)?.name === 'WahooReconnectRequiredError',
+  isWahooRefreshBackoffError: () => false,
+}));
 vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: mocks.getUserDeletionGuardState,
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
@@ -101,6 +108,7 @@ describe('Wahoo activity uploads', () => {
     vi.clearAllMocks();
     mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
     mocks.isDisconnectPendingForUser.mockResolvedValue(false);
+    mocks.assertWahooConnectionAvailable.mockResolvedValue(undefined);
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
       exactFingerprintId: 'exact-v1-test',
@@ -439,6 +447,19 @@ describe('Wahoo activity uploads', () => {
         name: 'WahooReconnectRequiredError',
         code: 'unauthenticated',
       });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('rechecks reconnect-required state immediately before posting an activity', async () => {
+    mocks.assertWahooConnectionAvailable
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('Reconnect Wahoo.'), {
+        name: 'WahooReconnectRequiredError',
+      }));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 });
