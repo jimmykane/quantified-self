@@ -251,10 +251,17 @@ describe('retry-pending-service-disconnects', () => {
         : { path }
     ));
 
-    await expect(retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
+    const page = await retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
       'wahoo_reconnect_release',
       'wahooReconnectReleasePending',
-    )).resolves.toHaveLength(25);
+    );
+    expect(page).toHaveLength(25);
+    expect(cursorRef.set).not.toHaveBeenCalled();
+
+    await retryPendingServiceDisconnectsTestInternals.checkpointLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      page,
+    );
 
     expect(query.limit).toHaveBeenCalledWith(25);
     expect(query.get).toHaveBeenCalledTimes(1);
@@ -286,9 +293,13 @@ describe('retry-pending-service-disconnects', () => {
         : { path }
     ));
 
-    await retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
+    const page = await retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
       'wahoo_reconnect_release',
       'wahooReconnectReleasePending',
+    );
+    await retryPendingServiceDisconnectsTestInternals.checkpointLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      page,
     );
 
     expect(query.startAfter).toHaveBeenCalledWith({ path: cursorPath });

@@ -166,15 +166,22 @@ async function getLifecycleRepairPage(
     snapshot = await runQuery();
   }
 
-  if (snapshot.docs.length < LIFECYCLE_REPAIR_BATCH_LIMIT) {
+  return snapshot.docs;
+}
+
+async function checkpointLifecycleRepairPage(
+  scanType: LifecycleRepairScanType,
+  docs: readonly admin.firestore.QueryDocumentSnapshot[],
+): Promise<void> {
+  const cursorRef = getLifecycleRepairScanCursorRef(scanType);
+  if (docs.length < LIFECYCLE_REPAIR_BATCH_LIMIT) {
     // Reaching the end wraps the next scheduled run back to the first marker.
     await cursorRef.delete();
   } else {
     await cursorRef.set({
-      documentPath: snapshot.docs[snapshot.docs.length - 1].ref.path,
+      documentPath: docs[docs.length - 1].ref.path,
     }, { merge: true });
   }
-  return snapshot.docs;
 }
 
 async function processWithBoundedConcurrency<T>(
@@ -454,6 +461,7 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
       });
     }
   });
+  await checkpointLifecycleRepairPage('wahoo_reconnect_release', docs);
 
   return repairedCount;
 }
@@ -480,6 +488,7 @@ async function retryPendingServiceRouteRestorations(): Promise<number> {
       });
     }
   });
+  await checkpointLifecycleRepairPage('route_restore', docs);
 
   return repairedCount;
 }
@@ -492,6 +501,20 @@ export const retryPendingServiceDisconnects = onSchedule({
   memory: '512MiB',
 }, async () => {
   const now = Timestamp.now();
+
+  // Repair already-connected accounts first. Pending-disconnect scans can
+  // involve provider I/O, so putting these bounded pages first prevents a
+  // slow provider batch from starving queue release or route restoration.
+  const repairedWahooReconnectReleaseCount = await retryPendingWahooReconnectQueueReleases();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending Wahoo reconnect queue releases.', {
+    serviceName: ServiceNames.WahooAPI,
+    repairedCount: repairedWahooReconnectReleaseCount,
+  });
+
+  const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
+    repairedCount: repairedRouteRestoreCount,
+  });
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);
@@ -518,22 +541,12 @@ export const retryPendingServiceDisconnects = onSchedule({
       }
     }
   }
-
-  const repairedWahooReconnectReleaseCount = await retryPendingWahooReconnectQueueReleases();
-  logger.info('[RetryPendingServiceDisconnects] Repaired pending Wahoo reconnect queue releases.', {
-    serviceName: ServiceNames.WahooAPI,
-    repairedCount: repairedWahooReconnectReleaseCount,
-  });
-
-  const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
-  logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
-    repairedCount: repairedRouteRestoreCount,
-  });
 });
 
 export const retryPendingServiceDisconnectsTestInternals = {
   clearPendingDisconnectRootIfEntitled,
   clearPendingDisconnectsForRestoredEntitlements,
+  checkpointLifecycleRepairPage,
   getDuePendingDisconnectRoots,
   getLifecycleRepairPage,
   getPendingDisconnectRootsForEntitlementCheck,
