@@ -8,6 +8,7 @@ import {
 } from '../queue/queue-item.interface';
 import {
     QueueResult,
+    QUEUE_DEFERRED_REASONS,
     QUEUE_SKIPPED_REASONS,
     ProviderOperationStillInFlightError,
     PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
@@ -33,6 +34,7 @@ import {
     setActivitySyncFailedMetadata,
     setActivitySyncProcessingMetadata,
     setActivitySyncRetryingMetadata,
+    setActivitySyncRetryingMetadataIfQueueItemDeferred,
     setActivitySyncSkippedMetadata,
     setActivitySyncSuccessMetadata,
     toActivitySyncMetadataError,
@@ -1177,11 +1179,7 @@ async function deferActivitySyncQueueItemForReconnectRequired(
     routeMeta: ActivitySyncRouteMeta,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const error = new Error('Reconnect Wahoo to resume this activity delivery.');
-    await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
-        ...routeMeta,
-        error: toActivitySyncMetadataError(error),
-    }));
-    return deferQueueItemForReconnectRequiredIfCurrentUserActive({
+    const deferredResult = await deferQueueItemForReconnectRequiredIfCurrentUserActive({
         queueItem,
         additionalData: { deferredServiceName: `${ServiceNames.WahooAPI}` },
         bulkWriter,
@@ -1191,6 +1189,17 @@ async function deferActivitySyncQueueItemForReconnectRequired(
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
     });
+    if (deferredResult !== QueueResult.Deferred || !queueItem.ref) {
+        return deferredResult;
+    }
+
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadataIfQueueItemDeferred({
+        ...routeMeta,
+        queueItemRef: queueItem.ref!,
+        deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+        error: toActivitySyncMetadataError(error),
+    }).then(() => undefined));
+    return deferredResult;
 }
 
 function markActivitySyncQueueItemSkippedForDeletedUser(

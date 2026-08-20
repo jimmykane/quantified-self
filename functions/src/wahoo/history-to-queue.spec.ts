@@ -18,6 +18,7 @@ const firestoreMocks = vi.hoisted(() => {
 });
 
 const deletionGuardMocks = vi.hoisted(() => ({
+  getState: vi.fn(),
   getStateInTransaction: vi.fn(),
 }));
 
@@ -30,8 +31,12 @@ vi.mock('firebase-admin/firestore', () => ({
 vi.mock('../history', () => ({ getNextAllowedHistoryImportDate: vi.fn() }));
 vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: vi.fn() }));
 vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardState: deletionGuardMocks.getState,
   getUserDeletionGuardStateInTransaction: deletionGuardMocks.getStateInTransaction,
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
+}));
+vi.mock('./refresh-recovery', () => ({
+  assertWahooConnectionAvailable: vi.fn(),
 }));
 vi.mock('../tokens', () => ({ getTokenData: vi.fn() }));
 vi.mock('../utils', () => ({
@@ -95,6 +100,11 @@ describe('selectWahooHistoryPage', () => {
 describe('finishWahooHistoryLease', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    deletionGuardMocks.getState.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
     deletionGuardMocks.getStateInTransaction.mockResolvedValue({
       userExists: true,
       deletionInProgress: false,

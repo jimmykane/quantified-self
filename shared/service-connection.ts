@@ -26,6 +26,10 @@ export interface ServiceConnectionMetaFields {
   wahooRefreshFailureCount?: number | null;
   wahooRefreshFailureLastAt?: number | null;
   wahooRefreshRetryAt?: number | null;
+  /** Server-owned repair marker for a partially completed reconnect queue release. */
+  wahooReconnectReleasePending?: boolean | null;
+  wahooReconnectReleaseLastAttemptAt?: number | null;
+  wahooReconnectReleaseAttemptCount?: number | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
   disconnectNextAttemptAt?: unknown | null;

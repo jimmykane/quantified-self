@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockTransactionSet,
+  mockTransactionGet,
   mockRunTransaction,
   mockServerTimestamp,
   mockDelete,
@@ -9,10 +10,13 @@ const {
   mockGetUserDeletionGuardStateInTransaction,
 } = vi.hoisted(() => {
   const transactionSet = vi.fn();
+  const transactionGet = vi.fn();
   return {
     mockTransactionSet: transactionSet,
+    mockTransactionGet: transactionGet,
     mockRunTransaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback({
       set: transactionSet,
+      get: transactionGet,
     })),
     mockServerTimestamp: vi.fn(() => '__server_timestamp__'),
     mockDelete: vi.fn(() => '__delete__'),
@@ -85,6 +89,7 @@ import {
   setActivitySyncRequeuedMetadata,
   setActivitySyncSkippedMetadata,
   setActivitySyncSuccessMetadata,
+  setActivitySyncRetryingMetadataIfQueueItemDeferred,
 } from './metadata';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -96,6 +101,10 @@ describe('activity-sync/metadata', () => {
       userExists: true,
       deletionInProgress: false,
       shouldSkip: false,
+    });
+    mockTransactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ deferredReason: 'service_reconnect_required' }),
     });
   });
 
@@ -195,5 +204,26 @@ describe('activity-sync/metadata', () => {
       code: 'unavailable',
       statusCode: 503,
     });
+  });
+
+  it('does not overwrite success metadata after the queue item is no longer reconnect-deferred', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ processed: true, resultStatus: 'success' }),
+    });
+
+    await expect(setActivitySyncRetryingMetadataIfQueueItemDeferred({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      userID: 'user-1',
+      eventID: 'event-1',
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      manual: false,
+      queueItemRef: {} as never,
+      deferredReason: 'service_reconnect_required',
+      error: { code: 'unauthenticated', message: 'Reconnect Wahoo.', normalizedMessage: 'Reconnect Wahoo.' },
+    })).resolves.toBe(false);
+
+    expect(mockTransactionSet).not.toHaveBeenCalled();
   });
 });

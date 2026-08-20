@@ -29,6 +29,7 @@ import {
   persistTokenRefresh,
   releaseTokenRefreshClaim,
   areTokenCredentialSnapshotsEqual,
+  TOKEN_REFRESH_REQUEST_TIMEOUT_MS,
 } from './token-refresh-coordinator';
 import {
   assertWahooConnectionAvailable,
@@ -282,6 +283,13 @@ export async function getTokenData(
 
   const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
   const claimResult = await claimTokenRefresh(doc.ref, initialCredential);
+  if (claimResult.kind === 'skipped_user_deletion') {
+    const userID = getFirebaseUserIDForTokenDocument(doc);
+    if (userID) {
+      throw new TokenRefreshSkippedForDeletedUserError(userID, serviceName, doc.id, 'before_refresh');
+    }
+    throw new TokenRefreshSupersededError(serviceName, doc.id);
+  }
   if (claimResult.kind === 'superseded') {
     return retryWithLatestTokenSnapshot(
       claimResult.snapshot as DocumentSnapshot | null,
@@ -302,11 +310,23 @@ export async function getTokenData(
     throw new TokenRefreshInProgressError(serviceName, doc.id);
   }
 
-  const refreshDoc = claimResult.snapshot;
+  // Claiming itself advances Firestore's update time. Re-read the claimed
+  // document so terminal-auth cleanup compares against the lease-owning
+  // snapshot, not the pre-claim snapshot and so it can still detect a later
+  // OAuth replacement.
+  const refreshDoc = await doc.ref.get();
   const refreshTokenData = refreshDoc.data() as Auth2ServiceTokenInterface | undefined;
-  if (!refreshTokenData) {
+  if (
+    !refreshDoc.exists
+    || !refreshTokenData
+    || (refreshTokenData as unknown as Record<string, unknown>).tokenRefreshLeaseOwner !== claimResult.leaseOwner
+    || !areTokenCredentialSnapshotsEqual(
+      getTokenCredentialSnapshot(refreshTokenData as unknown as Record<string, unknown>),
+      claimResult.credential,
+    )
+  ) {
     await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
-    throw new TokenRefreshSupersededError(serviceName, doc.id);
+    return retryWithLatestTokenSnapshot(refreshDoc.exists ? refreshDoc : null, serviceName, doc.id, options);
   }
   const refreshToken = serviceConfig.getOAuth2Client(true).createToken({
     'access_token': refreshTokenData.accessToken,
@@ -323,7 +343,9 @@ export async function getTokenData(
 
     let responseToken: any;
     try {
-      responseToken = await refreshToken.refresh();
+      responseToken = await refreshToken.refresh({}, {
+        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT_MS,
+      });
       if (serviceName === ServiceNames.COROSAPI) {
         const resultCode = `${responseToken.token.result ?? ''}`.trim();
         const message = `${responseToken.token.message ?? ''}`.trim();
@@ -465,6 +487,13 @@ export async function getTokenData(
       releaseClaim = false;
       logger.info(`Successfully saved refreshed token ${refreshDoc.id}`);
       return newToken;
+    }
+    if (persistResult.kind === 'skipped_user_deletion') {
+      const userID = getFirebaseUserIDForTokenDocument(refreshDoc);
+      if (userID) {
+        throw new TokenRefreshSkippedForDeletedUserError(userID, serviceName, refreshDoc.id, 'before_persist');
+      }
+      throw new TokenRefreshSupersededError(serviceName, doc.id);
     }
     return retryWithLatestTokenSnapshot(
       persistResult.snapshot as DocumentSnapshot | null,

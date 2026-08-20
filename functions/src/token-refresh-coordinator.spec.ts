@@ -20,6 +20,9 @@ interface InMemoryTransaction {
 
 interface InMemoryFirestore {
   runTransaction: <T>(callback: (transaction: InMemoryTransaction) => T | Promise<T>) => Promise<T>;
+  collection: (collectionName: string) => {
+    doc: (id: string) => admin.firestore.DocumentReference;
+  };
 }
 
 function isDeleteTransform(value: unknown): boolean {
@@ -30,15 +33,39 @@ function isDeleteTransform(value: unknown): boolean {
 
 function createInMemoryCoordinator(initialToken: StoredToken) {
   let storedToken = initialToken ? { ...initialToken } : null;
+  let deletionInProgress = false;
   let transactionTail = Promise.resolve();
-  const ref = { path: 'tokens/user-1' } as unknown as admin.firestore.DocumentReference;
+  const userRef = { id: 'user-1', path: 'users/user-1' } as unknown as admin.firestore.DocumentReference;
+  const tombstoneRef = { id: 'user-1', path: 'userDeletionTombstones/user-1' } as unknown as admin.firestore.DocumentReference;
+  const ref = {
+    path: 'testTokens/user-1/tokens/token-1',
+    parent: { parent: userRef },
+  } as unknown as admin.firestore.DocumentReference;
   const db: InMemoryFirestore = {
+    collection: (collectionName: string) => ({
+      doc: (id: string) => {
+        if (collectionName === 'users' && id === 'user-1') return userRef;
+        if (collectionName === 'userDeletionTombstones' && id === 'user-1') return tombstoneRef;
+        throw new Error(`Unexpected document lookup: ${collectionName}/${id}`);
+      },
+    }),
     runTransaction: <T>(callback: (transaction: InMemoryTransaction) => T | Promise<T>) => {
       const execution = transactionTail.then(() => callback({
-        get: async () => ({
-          exists: storedToken !== null,
-          data: () => storedToken ? { ...storedToken } : undefined,
-        }),
+        get: async (requestedRef) => {
+          if (requestedRef === userRef) {
+            return { exists: true, data: () => ({}) };
+          }
+          if (requestedRef === tombstoneRef) {
+            return {
+              exists: deletionInProgress,
+              data: () => deletionInProgress ? { expireAt: Date.now() + 60_000 } : undefined,
+            };
+          }
+          return {
+            exists: storedToken !== null,
+            data: () => storedToken ? { ...storedToken } : undefined,
+          };
+        },
         update: (_ref: unknown, update: Record<string, unknown>) => {
           if (!storedToken) throw new Error('missing token');
           for (const [key, value] of Object.entries(update)) {
@@ -57,12 +84,15 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
 
   return {
     coordinator: createTokenRefreshCoordinator(
-      db as unknown as Pick<admin.firestore.Firestore, 'runTransaction'>,
+      db as unknown as Pick<admin.firestore.Firestore, 'runTransaction' | 'collection'>,
     ),
     ref,
     getStoredToken: () => storedToken ? { ...storedToken } : null,
     setStoredToken: (nextToken: StoredToken) => {
       storedToken = nextToken ? { ...nextToken } : null;
+    },
+    beginDeletion: () => {
+      deletionInProgress = true;
     },
   };
 }
@@ -141,6 +171,31 @@ describe('token refresh coordinator', () => {
 
     expect(result).toEqual({ kind: 'superseded', snapshot: null });
     expect(store.getStoredToken()).toBeNull();
+  });
+
+  it('does not claim, persist, or release a token after account deletion begins', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    const claim = await store.coordinator.claim(store.ref, credential, 1_000);
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+
+    store.beginDeletion();
+
+    await expect(store.coordinator.persist(store.ref, claim.leaseOwner, claim.credential, {
+      accessToken: 'rotated-access',
+      refreshToken: 'rotated-refresh',
+    })).resolves.toEqual({ kind: 'skipped_user_deletion' });
+    await store.coordinator.release(store.ref, claim.leaseOwner, claim.credential);
+
+    expect(store.getStoredToken()).toEqual(expect.objectContaining({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      tokenRefreshLeaseOwner: claim.leaseOwner,
+    }));
+
+    await expect(store.coordinator.claim(store.ref, claim.credential, 2_000))
+      .resolves.toEqual({ kind: 'skipped_user_deletion' });
   });
 
   it('allows crash recovery only after the previous refresh lease expires', async () => {

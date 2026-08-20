@@ -507,4 +507,23 @@ describe('activity-sync/disconnect-routes', () => {
 
     expect(mockSettingsSet).not.toHaveBeenCalled();
   });
+
+  it('does not restore reconnect-parked routes after Wahoo was disconnected concurrently', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: true,
+          },
+        },
+      }),
+    });
+    mockMetaGet.mockResolvedValueOnce({ data: () => ({}) });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.WahooAPI, {
+      requireServiceConnected: true,
+    });
+
+    expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
 });

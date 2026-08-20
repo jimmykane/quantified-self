@@ -208,6 +208,11 @@ interface ErrorMetadataParams extends BaseMetadataParams {
     error: ActivitySyncMetadataError;
 }
 
+interface DeferredRetryingMetadataParams extends ErrorMetadataParams {
+    queueItemRef: admin.firestore.DocumentReference;
+    deferredReason: string;
+}
+
 export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParams): Promise<void> {
     await setActivitySyncMetadata(params, 'retrying', {
         routeId: params.routeId,
@@ -217,6 +222,48 @@ export async function setActivitySyncRetryingMetadata(params: ErrorMetadataParam
         status: 'retrying' satisfies ActivitySyncStatus,
         lastError: params.error,
         updatedAt: FieldValue.serverTimestamp(),
+    });
+}
+
+/**
+ * Writes retrying metadata only while the queue item is still parked for the
+ * specified service state. Keeping the queue read and metadata write in one
+ * transaction prevents a stale worker from overwriting a later success.
+ */
+export async function setActivitySyncRetryingMetadataIfQueueItemDeferred(
+    params: DeferredRetryingMetadataParams,
+): Promise<boolean> {
+    const db = admin.firestore();
+    const metadataRef = getActivitySyncMetadataRef(db, params.userID, params.eventID, params.routeId);
+
+    return db.runTransaction(async (transaction) => {
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(params.userID, 'activity_sync_metadata:retrying_if_deferred', error);
+        }
+        if (deletionGuard.shouldSkip) {
+            logger.warn(`[ActivitySyncMetadata] Skipping guarded retrying metadata for user ${params.userID}, event ${params.eventID}, route ${params.routeId} because the user is missing or deletion is in progress.`);
+            return false;
+        }
+
+        const queueSnapshot = await transaction.get(params.queueItemRef);
+        const queueData = queueSnapshot.data() as Record<string, unknown> | undefined;
+        if (!queueSnapshot.exists || queueData?.deferredReason !== params.deferredReason) {
+            return false;
+        }
+
+        transaction.set(metadataRef, {
+            routeId: params.routeId,
+            sourceServiceName: params.sourceServiceName,
+            destinationServiceName: params.destinationServiceName,
+            manual: params.manual === true,
+            status: 'retrying' satisfies ActivitySyncStatus,
+            lastError: params.error,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return true;
     });
 }
 

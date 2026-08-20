@@ -169,6 +169,7 @@ vi.mock('./service-disconnect-pending', () => ({
 }));
 
 vi.mock('./token-refresh-coordinator', () => ({
+    TOKEN_REFRESH_REQUEST_TIMEOUT_MS: 60_000,
     claimTokenRefresh: hoisted.claimTokenRefresh,
     persistTokenRefresh: hoisted.persistTokenRefresh,
     releaseTokenRefreshClaim: hoisted.releaseTokenRefreshClaim,
@@ -269,12 +270,29 @@ describe('tokens', () => {
             getOAuth2Client: vi.fn().mockReturnValue(mockOAuthClient),
             tokenCollectionName: 'test-collection',
         });
-        hoisted.claimTokenRefresh.mockImplementation(async (ref: any, credential: any) => ({
-            kind: 'owner',
-            leaseOwner: 'refresh-lease',
-            snapshot: ref.__snapshot,
-            credential,
-        }));
+        hoisted.claimTokenRefresh.mockImplementation(async (ref: unknown, credential: unknown) => {
+            const tokenRef = ref as {
+                get?: ReturnType<typeof vi.fn>;
+                __snapshot: typeof mockDoc;
+            };
+            const get = tokenRef.get || vi.fn();
+            tokenRef.get = get;
+            get.mockResolvedValue({
+                id: tokenRef.__snapshot.id,
+                exists: true,
+                data: () => ({
+                    ...tokenRef.__snapshot.data(),
+                    tokenRefreshLeaseOwner: 'refresh-lease',
+                }),
+                ref: tokenRef,
+            });
+            return {
+                kind: 'owner',
+                leaseOwner: 'refresh-lease',
+                snapshot: tokenRef.__snapshot,
+                credential,
+            };
+        });
         hoisted.persistTokenRefresh.mockImplementation(async (ref: any, _leaseOwner: string, _credential: any, tokenData: any) => {
             await ref.update(tokenData);
             return { kind: 'persisted' };
@@ -374,6 +392,7 @@ describe('tokens', () => {
             const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, true);
 
             expect(mockToken.refresh).toHaveBeenCalled();
+            expect(mockToken.refresh).toHaveBeenCalledWith({}, { timeout: 60_000 });
             expect(result.accessToken).toBe('new-access');
             expect(mockDoc.ref.update).toHaveBeenCalled();
             expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(3);
@@ -656,7 +675,11 @@ describe('tokens', () => {
             await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
                 .rejects.toBeInstanceOf(TerminalServiceAuthError);
             expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
-                mockDoc,
+                expect.objectContaining({
+                    id: 'user-123',
+                    ref: mockDoc.ref,
+                    data: expect.any(Function),
+                }),
                 ServiceNames.COROSAPI,
                 expect.objectContaining({ openId: 'coros-user' }),
                 expect.objectContaining({
@@ -667,6 +690,8 @@ describe('tokens', () => {
                 expect.objectContaining({ name: 'COROSTokenRefreshRejectedError' }),
             );
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(vi.mocked(handleTerminalServiceAuthFailure).mock.calls[0][0].data())
+                .toEqual(expect.objectContaining({ tokenRefreshLeaseOwner: 'refresh-lease' }));
         });
 
         it('does not mark other COROS refresh rejections as terminal', async () => {

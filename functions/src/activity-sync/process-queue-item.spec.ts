@@ -23,6 +23,7 @@ const {
   mockSetActivitySyncSuccessMetadata,
   mockSetActivitySyncSkippedMetadata,
   mockSetActivitySyncRetryingMetadata,
+  mockSetActivitySyncRetryingMetadataIfQueueItemDeferred,
   mockSetActivitySyncFailedMetadata,
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
@@ -64,6 +65,7 @@ const {
     mockSetActivitySyncSuccessMetadata: vi.fn().mockResolvedValue(undefined),
     mockSetActivitySyncSkippedMetadata: vi.fn().mockResolvedValue(undefined),
     mockSetActivitySyncRetryingMetadata: vi.fn().mockResolvedValue(undefined),
+    mockSetActivitySyncRetryingMetadataIfQueueItemDeferred: vi.fn().mockResolvedValue(true),
     mockSetActivitySyncFailedMetadata: vi.fn().mockResolvedValue(undefined),
     mockToActivitySyncMetadataError: vi.fn((error: unknown) => ({
       code: `${(error as { code?: unknown } | undefined)?.code || 'unknown'}`,
@@ -172,6 +174,10 @@ vi.mock('../queue-utils', () => ({
     UserDeletedOrDeleting: 'user_deleted_or_deleting',
     WorkerReturnedSkipped: 'worker_returned_skipped',
   },
+  QUEUE_DEFERRED_REASONS: {
+    ServiceDisconnectPending: 'service_disconnect_pending',
+    ServiceReconnectRequired: 'service_reconnect_required',
+  },
 }));
 
 vi.mock('./settings', () => ({
@@ -188,6 +194,7 @@ vi.mock('./metadata', () => ({
   setActivitySyncSuccessMetadata: mockSetActivitySyncSuccessMetadata,
   setActivitySyncSkippedMetadata: mockSetActivitySyncSkippedMetadata,
   setActivitySyncRetryingMetadata: mockSetActivitySyncRetryingMetadata,
+  setActivitySyncRetryingMetadataIfQueueItemDeferred: mockSetActivitySyncRetryingMetadataIfQueueItemDeferred,
   setActivitySyncFailedMetadata: mockSetActivitySyncFailedMetadata,
   toActivitySyncMetadataError: mockToActivitySyncMetadataError,
 }));
@@ -774,11 +781,13 @@ describe('activity-sync/process-queue-item', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ connectionState: 'reconnect_required' });
 
-    const result = await processActivitySyncQueueItem({
+    const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-    });
+      ref: {} as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Deferred);
     expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
@@ -787,6 +796,11 @@ describe('activity-sync/process-queue-item', () => {
       serviceName: ServiceNames.WahooAPI,
       additionalData: { deferredServiceName: ServiceNames.WahooAPI },
     }));
+    expect(mockSetActivitySyncRetryingMetadataIfQueueItemDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      queueItemRef: queueItem.ref,
+      deferredReason: 'service_reconnect_required',
+    }));
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
   });
 
   it('parks a Wahoo reconnect-required error before generic authentication handling', async () => {

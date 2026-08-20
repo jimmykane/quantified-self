@@ -32,6 +32,7 @@ import {
 } from '../shared/provider-operation-error';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import {
+  assertWahooConnectionAvailable,
   isWahooReconnectRequiredError,
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
@@ -218,6 +219,7 @@ async function assertWahooActivityUploadProviderActionAllowed(userID: string, ph
   if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, phase);
   }
+  await assertWahooConnectionAvailable(userID);
 }
 
 function toWahooHttpsError(error: unknown): never {
