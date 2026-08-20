@@ -21,6 +21,7 @@ vi.mock('../service-disconnect-pending', () => ({
 import {
   assertWahooCorrectionApplied,
   assertWahooCorrectionMutationAllowed,
+  buildWahooWorkoutTypeUpdateForm,
 } from './correct-wahoo-workout-types';
 
 describe('Wahoo workout type correction script safety', () => {
@@ -53,19 +54,26 @@ describe('Wahoo workout type correction script safety', () => {
       .rejects.toThrow('disconnect is pending');
   });
 
-  it('fails verification when Wahoo does not retain the requested type and name', () => {
+  it('fails verification when Wahoo does not retain the requested type', () => {
     expect(() => assertWahooCorrectionApplied(
       '485861650',
       { id: '485861650', name: 'Cycling', workoutTypeId: 0, workoutTypeName: 'BIKING' },
       { id: 9, name: 'HIKING' },
-    )).toThrow('did not retain the requested type/name');
+    )).toThrow('did not retain the requested type');
   });
 
-  it('accepts a verified matching Wahoo response', () => {
+  it('accepts a matching type while preserving Wahoo\'s existing title', () => {
     expect(() => assertWahooCorrectionApplied(
       '485861650',
-      { id: '485861650', name: 'HIKING', workoutTypeId: 9, workoutTypeName: 'HIKING' },
+      { id: '485861650', name: 'Sunday in the hills', workoutTypeId: 9, workoutTypeName: 'HIKING' },
       { id: 9, name: 'HIKING' },
     )).not.toThrow();
+  });
+
+  it('builds a type-only update so the existing Wahoo title is preserved', () => {
+    const form = buildWahooWorkoutTypeUpdateForm(9);
+
+    expect(form.get('workout[workout_type_id]')).toBe('9');
+    expect(form.has('workout[name]')).toBe(false);
   });
 });

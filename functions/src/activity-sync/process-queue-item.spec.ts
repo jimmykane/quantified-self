@@ -387,7 +387,6 @@ describe('activity-sync/process-queue-item', () => {
     mockRecordActivitySyncOutboundFingerprint.mockResolvedValue({
       exactFingerprintId: 'exact-v1-new',
       fingerprintIds: ['exact-v1-new', 'semantic-v1-new'],
-      activityTypes: ['Hiking'],
     });
     mockEventGet.mockResolvedValue({
       exists: true,

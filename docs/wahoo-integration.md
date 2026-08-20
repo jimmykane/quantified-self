@@ -81,10 +81,10 @@ The canary admin script defaults to provider `GET` verification and never prints
 npm --prefix functions run correct-wahoo-workout-types -- --uid=xcsAolLDDTWTgtRN9eYF3lW2YKL2 --workout-ids=485861650,485861747 --expected-type-id=9
 ```
 
-Only after explicit production approval, add both guarded apply flags. Apply mode rechecks account deletion and pending disconnect state, then performs `GET`, idempotent `PUT`, and verification `GET` for each workout. A type/name mismatch fails the command:
+Only after explicit production approval, add both guarded apply flags. Apply mode rechecks account deletion and pending disconnect state, then performs `GET`, an idempotent type-only `PUT`, and verification `GET` for each workout. It preserves the existing Wahoo workout title; a type mismatch fails the command:
 
 ```bash
 npm --prefix functions run correct-wahoo-workout-types -- --uid=xcsAolLDDTWTgtRN9eYF3lW2YKL2 --workout-ids=485861650,485861747 --expected-type-id=9 --apply --confirm=UPDATE_WAHOO_WORKOUT_TYPES
 ```
 
-Verify both workouts in the Wahoo app before deploying automatic correction. If the app does not reflect the corrected type/name, do not deploy and do not change other historical workouts.
+Verify both workouts in the Wahoo app before deploying automatic correction. If the app does not reflect the corrected type, do not deploy and do not change other historical workouts.

@@ -113,7 +113,6 @@ describe('activity sync outbound fingerprints', () => {
     expect(first.exactFingerprintId).not.toBe(second.exactFingerprintId);
     expect(first.fingerprintIds).toHaveLength(2);
     expect(first.fingerprintIds[1]).toBe(second.fingerprintIds[1]);
-    expect(first.activityTypes).toEqual(['Running']);
   });
 
   it('writes receipts under the user root before provider delivery', async () => {

@@ -458,7 +458,7 @@ function toWahooActivityTypeCorrectionError(
 
 async function correctCompletedWahooActivityType(params: {
   userID: string;
-  uploadId: string;
+  uploadId?: string;
   workoutId: unknown;
   expectedWorkoutType: WahooWorkoutType | null;
 }): Promise<void> {
@@ -498,6 +498,17 @@ async function correctCompletedWahooActivityType(params: {
     });
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'status');
+    if (!params.uploadId) {
+      throw new ProviderOperationError({
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'activity_upload_status',
+        disposition: 'permanent',
+        retryMode: 'none',
+        code: 'failed-precondition',
+        message: `Wahoo accepted duplicate workout ${workoutId}, but did not return the upload identifier required to resume its type correction safely.`,
+        dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_DUPLICATE_NO_RESUME_ID',
+      });
+    }
     return toWahooActivityTypeCorrectionError(error, params.uploadId, expectedWorkoutType.id);
   }
 }
@@ -573,7 +584,7 @@ export async function uploadActivityFileToWahoo(
   ) {
     await correctCompletedWahooActivityType({
       userID,
-      uploadId: acceptedUpload.result.uploadId as string,
+      uploadId: acceptedUpload.result.uploadId,
       workoutId: acceptedUpload.workoutId,
       expectedWorkoutType: acceptedUpload.expectedWorkoutType,
     });

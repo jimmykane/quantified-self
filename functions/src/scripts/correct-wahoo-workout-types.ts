@@ -91,14 +91,17 @@ export function assertWahooCorrectionApplied(
   summary: SafeWorkoutSummary,
   expectedWorkoutType: { id: number; name: string },
 ): void {
-  if (
-    summary.workoutTypeId !== expectedWorkoutType.id
-    || summary.name !== expectedWorkoutType.name
-  ) {
+  if (summary.workoutTypeId !== expectedWorkoutType.id) {
     throw new Error(
-      `Wahoo workout ${workoutId} did not retain the requested type/name after update.`,
+      `Wahoo workout ${workoutId} did not retain the requested type after update.`,
     );
   }
+}
+
+export function buildWahooWorkoutTypeUpdateForm(workoutTypeId: number): URLSearchParams {
+  const form = new URLSearchParams();
+  form.set('workout[workout_type_id]', `${workoutTypeId}`);
+  return form;
 }
 
 async function getAccessToken(uid: string): Promise<string> {
@@ -145,13 +148,10 @@ export async function runWahooWorkoutTypeCorrectionScript(): Promise<void> {
 
     if (!options.apply) continue;
     await assertWahooCorrectionMutationAllowed(options.uid);
-    const form = new URLSearchParams();
-    form.set('workout[workout_type_id]', `${expectedWorkoutType.id}`);
-    form.set('workout[name]', expectedWorkoutType.name);
     await requestWahooAPI(
       accessToken,
       `/v1/workouts/${encodeURIComponent(workoutId)}`,
-      { method: 'PUT', form },
+      { method: 'PUT', form: buildWahooWorkoutTypeUpdateForm(expectedWorkoutType.id) },
     );
     const after = await requestWahooAPI<WahooWorkoutPayload>(
       accessToken,

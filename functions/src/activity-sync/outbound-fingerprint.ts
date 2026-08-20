@@ -19,7 +19,6 @@ const DESTINATION_NAMESPACE_VERSION = 'destination-v1';
 export interface ActivitySyncOutboundFingerprintRecord {
   exactFingerprintId: string;
   fingerprintIds: string[];
-  activityTypes: string[];
 }
 
 export class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
@@ -53,19 +52,10 @@ function epochSecond(value: unknown): number | null {
   return Number.isFinite(timestamp) ? Math.round(timestamp / 1000) : null;
 }
 
-interface SemanticFingerprintDescriptor {
-  fingerprintId: string | null;
-  activityTypes: string[];
-}
-
-async function buildSemanticFingerprintDescriptor(fileBuffer: Buffer): Promise<SemanticFingerprintDescriptor> {
+async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | null> {
   try {
     const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(fileBuffer), createParsingOptions());
-    const eventActivities = event.getActivities();
-    const activityTypes = Array.from(new Set(eventActivities
-      .map(activity => `${activity.type || ''}`.trim())
-      .filter(activityType => activityType.length > 0)));
-    const activities = eventActivities.map(activity => ({
+    const activities = event.getActivities().map(activity => ({
       start: epochSecond(activity.startDate),
       end: epochSecond(activity.endDate),
       type: `${activity.type || ''}`.trim().toLowerCase(),
@@ -73,7 +63,7 @@ async function buildSemanticFingerprintDescriptor(fileBuffer: Buffer): Promise<S
       distance: finiteRounded(activity.getDistance()?.getValue?.()),
     }));
     if (activities.length === 0 || activities.every(activity => activity.start === null)) {
-      return { fingerprintId: null, activityTypes };
+      return null;
     }
 
     const semanticDigest = sha256(`${SEMANTIC_FINGERPRINT_VERSION}\0${JSON.stringify({
@@ -81,29 +71,25 @@ async function buildSemanticFingerprintDescriptor(fileBuffer: Buffer): Promise<S
       eventEnd: epochSecond(event.endDate),
       activities,
     })}`);
-    return {
-      fingerprintId: `${SEMANTIC_FINGERPRINT_VERSION}-${semanticDigest}`,
-      activityTypes,
-    };
+    return `${SEMANTIC_FINGERPRINT_VERSION}-${semanticDigest}`;
   } catch (error) {
     // Exact-byte suppression remains available when an otherwise provider-
     // accepted FIT cannot be normalized by the local parser.
     logger.warn('[ActivitySync] Could not create a semantic outbound FIT fingerprint.', {
       errorName: error instanceof Error ? error.name : typeof error,
     });
-    return { fingerprintId: null, activityTypes: [] };
+    return null;
   }
 }
 
 export async function buildActivitySyncOutboundFingerprintIds(fileBuffer: Buffer): Promise<ActivitySyncOutboundFingerprintRecord> {
   const exactFingerprintId = `${EXACT_FINGERPRINT_VERSION}-${sha256(fileBuffer)}`;
-  const semanticFingerprint = await buildSemanticFingerprintDescriptor(fileBuffer);
+  const semanticFingerprintId = await buildSemanticFingerprintId(fileBuffer);
   return {
     exactFingerprintId,
-    fingerprintIds: semanticFingerprint.fingerprintId
-      ? [exactFingerprintId, semanticFingerprint.fingerprintId]
+    fingerprintIds: semanticFingerprintId
+      ? [exactFingerprintId, semanticFingerprintId]
       : [exactFingerprintId],
-    activityTypes: semanticFingerprint.activityTypes,
   };
 }
 

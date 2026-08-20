@@ -389,6 +389,25 @@ describe('Wahoo activity uploads', () => {
     ]);
   });
 
+  it('fails closed when a duplicate type correction cannot be resumed without an upload ID', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({
+        data: { status: 'duplicate', workout_id: 485861650 },
+      })
+      .mockRejectedValueOnce(new WahooAPIRequestError('temporary', 500));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'), {
+      expectedWorkoutTypeId: 9,
+    })).rejects.toMatchObject({
+      disposition: 'permanent',
+      retryMode: 'none',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_DUPLICATE_NO_RESUME_ID',
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
+      .toEqual(['POST', 'PUT']);
+  });
+
   it('treats an asynchronous Wahoo error marked as duplicate as an existing activity', async () => {
     mocks.requestWahooAPI.mockResolvedValue({
       data: { token: 'upload-3', status: 'error', error: 'This workout file is a duplicate.' },
