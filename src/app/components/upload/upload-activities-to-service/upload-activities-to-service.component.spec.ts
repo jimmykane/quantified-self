@@ -322,7 +322,11 @@ describe('UploadActivitiesToServiceComponent', () => {
     it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
         component.serviceName = ServiceNames.WahooAPI;
         mockFunctionsService.call.mockResolvedValueOnce({
-            data: { status: 'pending', uploadId: 'wahoo-upload-1', message: 'Wahoo is processing the activity.' },
+            data: {
+                status: 'pending',
+                uploadId: 'wahoo-upload-1',
+                message: 'Wahoo is processing the activity.',
+            },
         });
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
@@ -645,6 +649,41 @@ describe('UploadActivitiesToServiceComponent', () => {
             status: 'failed',
             uploadId: undefined,
         });
+    });
+
+    it('retains a Wahoo upload ID when an upload must resume', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/unavailable',
+            message: 'Wahoo is temporarily unavailable while processing the activity.',
+            details: {
+                retryMode: 'resume',
+                resumeUploadId: 'wahoo-correction-resume',
+            },
+        });
+
+        await component.getFiles(event);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'failed',
+            uploadId: 'wahoo-correction-resume',
+        });
+
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'success', message: 'Activity uploaded to Wahoo.' },
+        });
+        await component.retryUpload(component.uploadRows()[0]);
+
+        expect(mockFunctionsService.call).toHaveBeenLastCalledWith(
+            'getWahooAPIWorkoutFileUploadStatus',
+            { uploadId: 'wahoo-correction-resume' },
+        );
     });
 
     it('should reject non-fit files', async () => {

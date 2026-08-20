@@ -46,6 +46,11 @@ import {
 } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
+import {
+    getWahooWorkoutTypeById,
+    resolveCanonicalActivityTypes,
+    resolveWahooWorkoutType,
+} from '../../../shared/wahoo-activity-types';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
@@ -253,6 +258,14 @@ function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
     return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
 }
 
+function getAcceptedUploadIdFromPendingDisconnectError(error: unknown): string | null {
+    if (!isTokenUseSkippedForPendingDisconnectError(error)) {
+        return null;
+    }
+    const providerOperationId = `${(error as { providerOperationId?: unknown }).providerOperationId || ''}`.trim();
+    return providerOperationId || null;
+}
+
 async function getPendingDisconnectServiceForRoute(
     userID: string,
     route: typeof ACTIVITY_SYNC_ROUTES[keyof typeof ACTIVITY_SYNC_ROUTES],
@@ -369,6 +382,7 @@ interface ActivitySyncRouteMeta {
 async function uploadToDestination(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer?: Buffer,
+    expectedWahooWorkoutTypeId?: number,
 ): Promise<UploadActivityFileResult> {
     switch (queueItem.destinationServiceName) {
         case ServiceNames.SuuntoApp:
@@ -404,13 +418,18 @@ async function uploadToDestination(
             });
         case ServiceNames.WahooAPI:
             if (queueItem.destinationUploadID) {
-                return getWahooActivityUploadStatus(queueItem.userID, queueItem.destinationUploadID);
+                return getWahooActivityUploadStatus(
+                    queueItem.userID,
+                    queueItem.destinationUploadID,
+                    expectedWahooWorkoutTypeId,
+                );
             }
             if (!fileBuffer) {
                 throw new Error('Wahoo activity upload is missing its source file.');
             }
             return uploadActivityFileToWahoo(queueItem.userID, fileBuffer, {
                 filename: queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
+                expectedWorkoutTypeId: expectedWahooWorkoutTypeId,
             });
         case ServiceNames.COROSAPI:
             if (queueItem.destinationUploadID && queueItem.destinationProviderUserID) {
@@ -428,6 +447,63 @@ async function uploadToDestination(
         default:
             throw new Error(`Unsupported destination service ${queueItem.destinationServiceName}`);
     }
+}
+
+interface ExpectedWahooWorkoutTypeResolution {
+    workoutTypeId?: number;
+    persistedWorkoutTypeId?: number | null;
+}
+
+async function ensureExpectedWahooWorkoutTypeBeforeProviderUpload(
+    queueItem: ActivitySyncQueueItemInterface,
+): Promise<ExpectedWahooWorkoutTypeResolution> {
+    if (queueItem.destinationServiceName !== ServiceNames.WahooAPI) {
+        return {};
+    }
+    if (queueItem.destinationExpectedWorkoutTypeID !== undefined) {
+        if (queueItem.destinationExpectedWorkoutTypeID === null) {
+            return { persistedWorkoutTypeId: null };
+        }
+        const workoutType = getWahooWorkoutTypeById(queueItem.destinationExpectedWorkoutTypeID);
+        if (!workoutType) {
+            throw new ProviderOperationError({
+                serviceName: ServiceNames.WahooAPI,
+                operation: 'activity_upload_init',
+                disposition: 'permanent',
+                retryMode: 'none',
+                code: 'failed-precondition',
+                message: 'Activity sync contains an invalid persisted Wahoo workout type.',
+                dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_INVALID_TYPE',
+            });
+        }
+        return {
+            workoutTypeId: workoutType.id,
+            persistedWorkoutTypeId: workoutType.id,
+        };
+    }
+
+    const eventSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(queueItem.userID)
+        .collection('events')
+        .doc(queueItem.eventID)
+        .get();
+    const rawActivityTypes = eventSnapshot.data()?.stats?.['Activity Types'];
+    const canonicalActivityTypes = resolveCanonicalActivityTypes(rawActivityTypes);
+    const expectedWorkoutType = resolveWahooWorkoutType(canonicalActivityTypes);
+    if (!expectedWorkoutType) {
+        logger.info('[ActivitySync] Keeping Wahoo inferred workout type because the QS event type is unmapped.', {
+            queueItemId: queueItem.id,
+            userID: queueItem.userID,
+            eventID: queueItem.eventID,
+            canonicalActivityTypes,
+        });
+    }
+    const destinationExpectedWorkoutTypeID = expectedWorkoutType?.id ?? null;
+    return {
+        workoutTypeId: expectedWorkoutType?.id,
+        persistedWorkoutTypeId: destinationExpectedWorkoutTypeID,
+    };
 }
 
 function getSuuntoBlobContinuation(
@@ -552,6 +628,7 @@ function isSameActivitySyncProviderState(
         && areEquivalentOptionalStrings(currentQueueItem.destinationProviderUserID, expectedQueueItem.destinationProviderUserID)
         && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedQueueItem.destinationWorkoutKey)
         && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedQueueItem.destinationInfoCode)
+        && currentQueueItem.destinationExpectedWorkoutTypeID === expectedQueueItem.destinationExpectedWorkoutTypeID
         && areEquivalentOptionalStrings(currentQueueItem.outboundFingerprintID, expectedQueueItem.outboundFingerprintID)
         && isSameUploadContinuation(
             currentQueueItem.destinationUploadContinuation,
@@ -734,6 +811,7 @@ function buildUnresolvedDestinationProviderOperationError(
 
 async function markDestinationProviderOperationInFlight(
     queueItem: ActivitySyncQueueItemInterface,
+    expectedWahooWorkoutType: ExpectedWahooWorkoutTypeResolution,
 ): Promise<boolean> {
     if (!queueItem.ref) {
         throw new Error('Destination provider operation cannot start without a queue document reference.');
@@ -748,6 +826,9 @@ async function markDestinationProviderOperationInFlight(
         updateData: {
             dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
             providerOperationStartedAt,
+            ...(expectedWahooWorkoutType.persistedWorkoutTypeId !== undefined
+                ? { destinationExpectedWorkoutTypeID: expectedWahooWorkoutType.persistedWorkoutTypeId }
+                : {}),
         },
         logPrefix: 'ActivitySync',
         actionDescription: 'destination provider in-flight marker',
@@ -758,6 +839,9 @@ async function markDestinationProviderOperationInFlight(
     }
     queueItem.dispatchedToCloudTask = PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER;
     queueItem.providerOperationStartedAt = providerOperationStartedAt;
+    if (expectedWahooWorkoutType.persistedWorkoutTypeId !== undefined) {
+        queueItem.destinationExpectedWorkoutTypeID = expectedWahooWorkoutType.persistedWorkoutTypeId;
+    }
     return true;
 }
 
@@ -878,6 +962,7 @@ async function clearPendingDestinationUploadForRestart(
         && !queueItem.destinationWorkoutKey
         && !queueItem.destinationInfoCode
         && !queueItem.destinationUploadContinuation
+        && queueItem.destinationExpectedWorkoutTypeID === undefined
     ) {
         return true;
     }
@@ -890,6 +975,7 @@ async function clearPendingDestinationUploadForRestart(
     const expectedProviderUserID = queueItem.destinationProviderUserID;
     const expectedWorkoutKey = queueItem.destinationWorkoutKey;
     const expectedInfoCode = queueItem.destinationInfoCode;
+    const expectedWahooWorkoutTypeID = queueItem.destinationExpectedWorkoutTypeID;
     const expectedContinuation = queueItem.destinationUploadContinuation;
     const expectedProviderOperationStartedAt = queueItem.providerOperationStartedAt;
 
@@ -904,6 +990,8 @@ async function clearPendingDestinationUploadForRestart(
             destinationWorkoutKey: null,
             destinationInfoCode: null,
             destinationUploadContinuation: null,
+            // null means deliberately unmapped; a restart must derive a fresh type from the event.
+            destinationExpectedWorkoutTypeID: FieldValue.delete(),
             dispatchedToCloudTask: null,
             providerOperationStartedAt: null,
         },
@@ -919,6 +1007,7 @@ async function clearPendingDestinationUploadForRestart(
             && areEquivalentOptionalStrings(currentQueueItem.destinationProviderUserID, expectedProviderUserID)
             && areEquivalentOptionalStrings(currentQueueItem.destinationWorkoutKey, expectedWorkoutKey)
             && areEquivalentOptionalStrings(currentQueueItem.destinationInfoCode, expectedInfoCode)
+            && currentQueueItem.destinationExpectedWorkoutTypeID === expectedWahooWorkoutTypeID
             && isSameUploadContinuation(currentQueueItem.destinationUploadContinuation, expectedContinuation)
             && isSameActivitySyncQueueItem(currentQueueItem, queueItem),
     });
@@ -931,6 +1020,7 @@ async function clearPendingDestinationUploadForRestart(
     queueItem.destinationWorkoutKey = undefined;
     queueItem.destinationInfoCode = undefined;
     queueItem.destinationUploadContinuation = null;
+    queueItem.destinationExpectedWorkoutTypeID = undefined;
     queueItem.dispatchedToCloudTask = null;
     queueItem.providerOperationStartedAt = null;
     return true;
@@ -1378,13 +1468,22 @@ export async function processActivitySyncQueueItem(
             return QueueResult.Processed;
         }
 
-        const operationMarked = await markDestinationProviderOperationInFlight(queueItem);
+        const expectedWahooWorkoutType = await ensureExpectedWahooWorkoutTypeBeforeProviderUpload(queueItem);
+
+        const operationMarked = await markDestinationProviderOperationInFlight(
+            queueItem,
+            expectedWahooWorkoutType,
+        );
         if (!operationMarked) {
             return QueueResult.Processed;
         }
 
         duringDestinationUpload = true;
-        const uploadResult = await uploadToDestination(queueItem, fileBuffer);
+        const uploadResult = await uploadToDestination(
+            queueItem,
+            fileBuffer,
+            expectedWahooWorkoutType.workoutTypeId,
+        );
         if (uploadResult.status === 'pending') {
             const pendingError = buildPendingDestinationUploadError(queueItem, uploadResult);
             if (isProviderOperationError(pendingError)) {
@@ -1548,6 +1647,41 @@ export async function processActivitySyncQueueItem(
             );
         }
 
+        if (
+            duringDestinationUpload
+            && queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isProviderOperationError(error)
+            && error.serviceName === ServiceNames.WahooAPI
+            && error.providerOperationId
+            && !hasMatchingPersistedDestinationUpload(
+                queueItem,
+                error.providerOperationId,
+                error.providerUserId,
+            )
+        ) {
+            const acceptedUploadState = {
+                status: 'pending',
+                message: error.message,
+                uploadId: error.providerOperationId,
+                providerUserId: error.providerUserId,
+            } satisfies UploadActivityFileResult;
+            let persisted: boolean;
+            try {
+                persisted = await persistDestinationUploadState(queueItem, acceptedUploadState);
+            } catch (persistenceError) {
+                return moveUploadStatePersistenceFailureToDlq(
+                    queueItem,
+                    acceptedUploadState,
+                    persistenceError,
+                    bulkWriter,
+                    routeMeta,
+                );
+            }
+            if (!persisted) {
+                return QueueResult.Processed;
+            }
+        }
+
         if (duringDestinationUpload && isProviderOperationError(error) && error.disposition === 'auth_required') {
             const acceptedUploadResult = await moveAcceptedDestinationUploadConnectionFailureToDlq(
                 queueItem,
@@ -1651,6 +1785,31 @@ export async function processActivitySyncQueueItem(
         }
 
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
+            const acceptedUploadId = duringDestinationUpload
+                ? getAcceptedUploadIdFromPendingDisconnectError(error)
+                : null;
+            if (acceptedUploadId && queueItem.destinationUploadID !== acceptedUploadId) {
+                const acceptedUploadState = {
+                    status: 'pending',
+                    message: toError(error).message,
+                    uploadId: acceptedUploadId,
+                } satisfies UploadActivityFileResult;
+                let persisted: boolean;
+                try {
+                    persisted = await persistDestinationUploadState(queueItem, acceptedUploadState);
+                } catch (persistenceError) {
+                    return moveUploadStatePersistenceFailureToDlq(
+                        queueItem,
+                        acceptedUploadState,
+                        persistenceError,
+                        bulkWriter,
+                        routeMeta,
+                    );
+                }
+                if (!persisted) {
+                    return QueueResult.Processed;
+                }
+            }
             return deferActivitySyncQueueItemForPendingDisconnect(
                 queueItem,
                 bulkWriter,
@@ -1769,13 +1928,26 @@ export async function processActivitySyncQueueItem(
             ...routeMeta,
             error: metadataError,
         }));
+        const failedQueueItem = duringDestinationUpload
+            && isProviderOperationError(actionableError)
+            && actionableError.serviceName === ServiceNames.WahooAPI
+            && actionableError.providerOperationId
+            ? {
+                ...queueItem,
+                destinationUploadID: actionableError.providerOperationId,
+                destinationProviderUserID: actionableError.providerUserId
+                    || queueItem.destinationProviderUserID
+                    || null,
+            }
+            : queueItem;
         return moveActivitySyncQueueItemToDlqIfCurrent(
-            queueItem,
+            failedQueueItem,
             normalizedError,
             bulkWriter,
             isProviderOperationError(actionableError) && actionableError.dlqContext
                 ? actionableError.dlqContext
                 : getDeadLetterContext(normalizedError),
+            queueItem,
         );
     }
 }

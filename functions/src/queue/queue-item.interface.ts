@@ -107,6 +107,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   destinationProviderUserID?: string | null;
   destinationWorkoutKey?: string | null;
   destinationInfoCode?: string | null;
+  /** Wahoo type selected before upload and reused for every status/correction retry. */
+  destinationExpectedWorkoutTypeID?: number | null;
   destinationUploadCountedID?: string | null;
   destinationUploadCountedAt?: number;
   destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
