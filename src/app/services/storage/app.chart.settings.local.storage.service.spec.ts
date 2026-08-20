@@ -35,43 +35,6 @@ describe('AppChartSettingsLocalStorageService', () => {
     storage.clear();
   });
 
-  it('should persist and restore fully qualified series ids without normalization', () => {
-    const event = mockEvent('event-1');
-    const fullIds = [
-      'Average speed in kilometers per hour',
-      'Average speed in miles per hour',
-      'Average Power',
-    ];
-
-    service.setSeriesIDsToShow(event, fullIds);
-    expect(service.getSeriesIDsToShow(event)).toEqual(fullIds);
-  });
-
-  it('should add and remove exact series ids (no label transformation)', () => {
-    const event = mockEvent('event-2');
-    const fullId = 'Average speed in kilometers per hour';
-
-    service.showSeriesID(event, fullId);
-    expect(service.getSeriesIDsToShow(event)).toEqual([fullId]);
-
-    service.hideSeriesID(event, fullId);
-    expect(service.getSeriesIDsToShow(event)).toEqual([]);
-  });
-
-  it('should expose datatype id helpers over the same storage namespace', () => {
-    const event = mockEvent('event-3');
-    const ids = ['Power', 'Speed'];
-
-    service.setDataTypeIDsToShow(event, ids);
-    expect(service.getDataTypeIDsToShow(event)).toEqual(ids);
-
-    service.hideDataTypeID(event, 'Power');
-    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed']);
-
-    service.showDataTypeID(event, 'Power');
-    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed', 'Power']);
-  });
-
   it('persists custom visibility independently for each activity-type signature', () => {
     const event = mockEvent('event-v2-custom');
 
@@ -81,12 +44,10 @@ describe('AppChartSettingsLocalStorageService', () => {
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
       mode: 'custom',
       selectionKeys: [DataPace.type],
-      source: 'signature',
     });
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Cycling')).toEqual({
       mode: 'custom',
       selectionKeys: [DataPower.type],
-      source: 'signature',
     });
   });
 
@@ -98,59 +59,52 @@ describe('AppChartSettingsLocalStorageService', () => {
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
       mode: 'custom',
       selectionKeys: [],
-      source: 'signature',
     });
   });
 
-  it('migrates non-empty legacy selections without removing the legacy value', () => {
-    const event = mockEvent('event-legacy');
-    service.setDataTypeIDsToShow(event, [DataPaceMinutesPerMile.type, DataSpeed.type]);
+  it('ignores selections from the unversioned visibility store', () => {
+    const event = mockEvent('event-unversioned');
+    const unversionedKey = 'chart.settings.service.selectedDataTypesevent-unversioned';
+    const unversionedValue = [DataPaceMinutesPerMile.type, DataSpeed.type].join(',');
+    storage.setItem(unversionedKey, unversionedValue);
 
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
-      mode: 'custom',
-      selectionKeys: [DataPace.type, DataSpeed.type],
-      source: 'legacy',
+      mode: 'automatic',
+      selectionKeys: [],
     });
-    expect(service.getDataTypeIDsToShow(event)).toEqual([DataPaceMinutesPerMile.type, DataSpeed.type]);
-    expect(storage.getItem('chart.settings.service.selectedDataTypesV2event-legacy')).toContain('legacySelectionKeys');
+    expect(storage.getItem(unversionedKey)).toBe(unversionedValue);
+    expect(storage.getItem('chart.settings.service.selectedDataTypesV2event-unversioned')).toBeNull();
   });
 
-  it('lets a signature-specific selection override a migrated legacy selection', () => {
-    const event = mockEvent('event-legacy-override');
-    service.setDataTypeIDsToShow(event, [DataSpeed.type]);
+  it('resets only the current signature and removes empty versioned state', () => {
+    const event = mockEvent('event-v2-reset');
     service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPace.type]);
-
-    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
-      mode: 'custom',
-      selectionKeys: [DataPace.type],
-      source: 'signature',
-    });
-  });
-
-  it('records an automatic reset when a legacy selection still exists', () => {
-    const event = mockEvent('event-reset-legacy');
-    service.setDataTypeIDsToShow(event, [DataSpeed.type]);
-    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPace.type]);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Cycling', [DataPower.type]);
 
     service.resetEventChartVisibilityPreference(event, 'types-v1:Running');
 
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
       mode: 'automatic',
       selectionKeys: [],
-      source: 'signature',
     });
-    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Cycling').source).toBe('legacy');
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Cycling')).toEqual({
+      mode: 'custom',
+      selectionKeys: [DataPower.type],
+    });
+
+    service.resetEventChartVisibilityPreference(event, 'types-v1:Cycling');
+
+    expect(storage.getItem('chart.settings.service.selectedDataTypesV2event-v2-reset')).toBeNull();
   });
 
-  it('falls back safely from malformed v2 state to a valid legacy selection', () => {
+  it('falls back safely from malformed v2 state to automatic visibility', () => {
     const event = mockEvent('event-malformed');
-    service.setDataTypeIDsToShow(event, [DataSpeed.type]);
+    storage.setItem('chart.settings.service.selectedDataTypesevent-malformed', DataSpeed.type);
     storage.setItem('chart.settings.service.selectedDataTypesV2event-malformed', '{not-json');
 
     expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
-      mode: 'custom',
-      selectionKeys: [DataSpeed.type],
-      source: 'legacy',
+      mode: 'automatic',
+      selectionKeys: [],
     });
   });
 });

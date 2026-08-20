@@ -75,12 +75,9 @@ describe('EventCardChartComponent', () => {
   };
 
   const mockChartSettingsStorage = {
-    getDataTypeIDsToShow: vi.fn().mockReturnValue([]),
-    setDataTypeIDsToShow: vi.fn(),
     getEventChartVisibilityPreference: vi.fn().mockReturnValue({
       mode: 'automatic',
       selectionKeys: [],
-      source: 'default',
     }),
     setEventChartCustomVisibilityPreference: vi.fn(),
     resetEventChartVisibilityPreference: vi.fn(),
@@ -105,13 +102,10 @@ describe('EventCardChartComponent', () => {
     mockUserService.getUserChartDataTypesToUse.mockReset();
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
     mockActivityCursorService.setCursor.mockReset();
-    mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
-    mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReset();
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'automatic',
       selectionKeys: [],
-      source: 'default',
     });
     mockChartSettingsStorage.setEventChartCustomVisibilityPreference.mockReset();
     mockChartSettingsStorage.resetEventChartVisibilityPreference.mockReset();
@@ -435,7 +429,6 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: ['pace'],
-      source: 'signature',
     });
 
     component.user = { uid: 'u1' } as any;
@@ -758,7 +751,6 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: [DataSpeed.type],
-      source: 'signature',
     });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
@@ -788,11 +780,10 @@ describe('EventCardChartComponent', () => {
     expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
 
-  it('preserves migrated custom visibility while its selected metric is unavailable', async () => {
+  it('preserves custom visibility while its selected metric is unavailable', async () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: [DataTemperature.type],
-      source: 'legacy',
     });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input) => (
       input.showAllData
@@ -991,7 +982,6 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: [],
-      source: 'signature',
     });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([chartPanel(DataPower.type)] as any);
 
@@ -1009,7 +999,6 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: [DataSpeed.type],
-      source: 'signature',
     });
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels')
       .mockReturnValueOnce([chartPanel(DataSpeedKilometersPerHour.type)] as any)
@@ -1170,7 +1159,6 @@ describe('EventCardChartComponent', () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
       selectionKeys: ['power'],
-      source: 'signature',
     });
     vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {

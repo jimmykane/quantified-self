@@ -8,7 +8,6 @@ export type EventChartVisibilityMode = 'automatic' | 'custom';
 export interface EventChartVisibilityPreference {
   mode: EventChartVisibilityMode;
   selectionKeys: string[];
-  source: 'signature' | 'legacy' | 'default';
 }
 
 interface StoredEventChartVisibilityPreference {
@@ -18,7 +17,6 @@ interface StoredEventChartVisibilityPreference {
 
 interface EventChartVisibilityStateV2 {
   version: 2;
-  legacySelectionKeys?: string[];
   byActivityTypeSignature: Record<string, StoredEventChartVisibilityPreference>;
 }
 
@@ -29,54 +27,11 @@ interface EventChartVisibilityStateV2 {
 export class AppChartSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'chart.settings.service.';
 
-
-  // @todo perhaps make static
-  public getSeriesIDsToShow(event: EventInterface): string[] {
-    const stringValue = this.getItem(`selectedDataTypes${event.getID()}`);
-    return stringValue ? stringValue.split(',') : [];
-  }
-
-  public setSeriesIDsToShow(event: EventInterface, seriesIDs: string[]) {
-    this.setItem(`selectedDataTypes${event.getID()}`, seriesIDs.join(','));
-  }
-
-  public showSeriesID(event: EventInterface, seriesID: string) {
-    const seriesToShow = this.getSeriesIDsToShow(event);
-    if (seriesToShow.indexOf(seriesID) === -1) {
-      seriesToShow.push(seriesID);
-    }
-    this.setSeriesIDsToShow(event, seriesToShow);
-  }
-
-  public hideSeriesID(event: EventInterface, seriesID: string) {
-    const seriesToShow = this.getSeriesIDsToShow(event);
-    if (seriesToShow.indexOf(seriesID) !== -1) {
-      seriesToShow.splice(seriesToShow.indexOf(seriesID), 1);
-    }
-    this.setSeriesIDsToShow(event, seriesToShow);
-  }
-
-  public getDataTypeIDsToShow(event: EventInterface): string[] {
-    return this.getSeriesIDsToShow(event);
-  }
-
-  public setDataTypeIDsToShow(event: EventInterface, dataTypeIDs: string[]) {
-    this.setSeriesIDsToShow(event, dataTypeIDs);
-  }
-
-  public showDataTypeID(event: EventInterface, dataTypeID: string) {
-    this.showSeriesID(event, dataTypeID);
-  }
-
-  public hideDataTypeID(event: EventInterface, dataTypeID: string) {
-    this.hideSeriesID(event, dataTypeID);
-  }
-
   public getEventChartVisibilityPreference(
     event: EventInterface,
     activityTypeSignature: string,
   ): EventChartVisibilityPreference {
-    const state = this.getOrMigrateVisibilityState(event);
+    const state = this.readVisibilityState(event);
     const signaturePreference = state?.byActivityTypeSignature[activityTypeSignature];
 
     if (signaturePreference) {
@@ -85,19 +40,10 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
         selectionKeys: signaturePreference.mode === 'custom'
           ? normalizeSelectionKeys(signaturePreference.selectionKeys || [])
           : [],
-        source: 'signature',
       };
     }
 
-    if (state?.legacySelectionKeys?.length) {
-      return {
-        mode: 'custom',
-        selectionKeys: [...state.legacySelectionKeys],
-        source: 'legacy',
-      };
-    }
-
-    return {mode: 'automatic', selectionKeys: [], source: 'default'};
+    return {mode: 'automatic', selectionKeys: []};
   }
 
   public setEventChartCustomVisibilityPreference(
@@ -105,7 +51,7 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
     activityTypeSignature: string,
     dataTypeIDs: readonly string[],
   ): void {
-    const state = this.getOrMigrateVisibilityState(event) || createVisibilityState();
+    const state = this.readVisibilityState(event) || createVisibilityState();
     state.byActivityTypeSignature[activityTypeSignature] = {
       mode: 'custom',
       selectionKeys: normalizeSelectionKeys(dataTypeIDs),
@@ -117,14 +63,8 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
     event: EventInterface,
     activityTypeSignature: string,
   ): void {
-    const state = this.getOrMigrateVisibilityState(event);
+    const state = this.readVisibilityState(event);
     if (!state) {
-      return;
-    }
-
-    if (state.legacySelectionKeys?.length) {
-      state.byActivityTypeSignature[activityTypeSignature] = {mode: 'automatic'};
-      this.setVisibilityState(event, state);
       return;
     }
 
@@ -134,28 +74,6 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
     } else {
       this.setVisibilityState(event, state);
     }
-  }
-
-  private getOrMigrateVisibilityState(event: EventInterface): EventChartVisibilityStateV2 | null {
-    const storedState = this.readVisibilityState(event);
-    const legacySelectionKeys = normalizeSelectionKeys(this.getDataTypeIDsToShow(event));
-
-    if (storedState) {
-      if (!storedState.legacySelectionKeys?.length && legacySelectionKeys.length) {
-        storedState.legacySelectionKeys = legacySelectionKeys;
-        this.setVisibilityState(event, storedState);
-      }
-      return storedState;
-    }
-
-    if (!legacySelectionKeys.length) {
-      return null;
-    }
-
-    const migratedState = createVisibilityState();
-    migratedState.legacySelectionKeys = legacySelectionKeys;
-    this.setVisibilityState(event, migratedState);
-    return migratedState;
   }
 
   private readVisibilityState(event: EventInterface): EventChartVisibilityStateV2 | null {
@@ -171,7 +89,6 @@ export class AppChartSettingsLocalStorageService extends LocalStorageService {
       }
       return {
         version: 2,
-        legacySelectionKeys: normalizeSelectionKeys(value.legacySelectionKeys || []),
         byActivityTypeSignature: normalizePreferenceRecord(value.byActivityTypeSignature),
       };
     } catch {

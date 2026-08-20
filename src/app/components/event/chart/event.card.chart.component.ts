@@ -859,7 +859,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     const preference = eventID
       ? this.chartSettingsLocalStorageService.getEventChartVisibilityPreference(this.event, this.sportProfile.signature)
-      : {mode: 'automatic' as const, selectionKeys: [], source: 'default' as const};
+      : {mode: 'automatic' as const, selectionKeys: []};
     const restoredDataTypeIDs = this.resolveAvailableDataTypeIDs(preference.selectionKeys, panels);
     const canRestorePreference = preference.mode === 'custom';
 
