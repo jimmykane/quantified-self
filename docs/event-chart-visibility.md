@@ -25,11 +25,11 @@ The profile resolver is a pure helper in
 exposed by the pinned Sports Lib release. The exhaustive test must fail when a dependency update adds an unclassified
 canonical type. Activity counts, IDs, providers, and names do not affect the signature: it contains only sorted,
 unique canonical activity types. A single type uses its exact profile. Multiple types that already share one profile
-keep it only when they also share a Sports Lib activity group. Types in the same mapped Sports Lib activity group use
-the registry's deliberate presentation profile for that group; different groups use Multisport even if their exact
-entries happen to reuse the same presentation profile. Sports Lib's Unspecified group is not treated as a coherent
-family unless every selected type already shares one exact presentation profile, because it is the fallback for
-unrelated canonical types that have no group assignment.
+keep that deliberate exact or alias profile regardless of their Sports Lib groups. Only when the registered profiles
+differ does the resolver consult Sports Lib groups: types in the same mapped group use the registry's deliberate
+presentation profile for that group, while types in different groups use Multisport. Sports Lib's Unspecified group is
+not treated as a coherent family for differing profiles because it is the fallback for unrelated canonical types that
+have no group assignment.
 
 Metric recommendations operate on logical families. Unit variants such as pace per mile, speed in knots, and depth in
 feet resolve through existing Sports Lib unit groups. Power, Air Power, Right Power, and Left Power share one profile
@@ -57,31 +57,26 @@ laps, or swim-length settings.
 Visibility remains device-local browser state under the `chart.settings.service.` namespace. No activity document or
 cloud data is changed.
 
-The legacy key `selectedDataTypes<eventID>` is a comma-separated list. A non-empty legacy list is treated as custom for
-migration safety, normalized to stable selection keys, copied into v2 on read, and never deleted or rewritten by the
-v2 workflow.
+The former unversioned `selectedDataTypes<eventID>` value is intentionally ignored. The versioned workflow does not
+read, copy, rewrite, or delete it.
 
 The v2 key is `selectedDataTypesV2<eventID>` and stores JSON with this shape:
 
 ```json
 {
   "version": 2,
-  "legacySelectionKeys": ["Pace"],
   "byActivityTypeSignature": {
     "types-v1:Running": {
       "mode": "custom",
       "selectionKeys": ["Heart Rate", "Pace"]
-    },
-    "types-v1:Cycling": {
-      "mode": "automatic"
     }
   }
 }
 ```
 
-A `custom` entry may contain an empty list. An `automatic` marker is needed when reset must override a retained legacy
-fallback for that signature. When no legacy fallback exists, reset removes the signature entry and removes an empty v2
-state. Malformed v2 JSON is ignored safely; a valid non-empty legacy value can still be migrated.
+A `custom` entry may contain an empty list. Automatic visibility is represented by the absence of an entry for the
+event/signature. Reset removes that signature entry and removes the v2 state when its signature map becomes empty.
+Malformed v2 JSON is ignored safely and falls back to automatic visibility.
 
 Stored values use unit-independent selection keys where Sports Lib exposes a unit group. On restore, a key selects the
 currently rendered unit variant. Custom values for one signature never leak into another signature of the same event.
@@ -105,6 +100,6 @@ always reflects the current visible stack. Visibility changes and reset results 
 buttons, menu focus behavior, touch targets, scroll bounds, overlays, zoom, laps, swim lengths, and source-series
 rendering remain owned by their existing components.
 
-When changing this contract, update the pure resolver tests, storage migration/provenance tests, chart and action
+When changing this contract, update the pure resolver tests, storage persistence tests, chart and action
 component tests, app Help content, and this document together. Run the focused Vitest suites and an Angular production
 build before committing.
