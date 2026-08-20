@@ -60,7 +60,7 @@ import {
   normalizeEventRange,
   resolveEventChartXAxisType,
 } from '../../../helpers/event-echarts-xaxis.helper';
-import { isBenchmarkEvent, isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
+import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   areEventChartOverlayMapsEqual,
   normalizeEventChartOverlayDataTypeByPrimary,
@@ -302,7 +302,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get allRecordedMetricsForced(): boolean {
-    return isBenchmarkEvent(this.event);
+    return isMergeOrBenchmarkEvent(this.event);
   }
 
   public get effectiveShowAllData(): boolean {
@@ -836,7 +836,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.lastPersistedCustomVisibilityKey = null;
     }
 
-    const availableDataTypeIDs = new Set(panels.map((panel) => panel.dataType));
     const recommendations = resolveEventChartRecommendations({
       profile: this.sportProfile,
       panels,
@@ -850,11 +849,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.automaticDataTypeIDs = recommendations.automaticDataTypes;
     this.recommendedDataTypeOrder = recommendations.recommendedDataTypes;
 
-    if (!availableDataTypeIDs.size) {
-      this.visibleDataTypeIDs.clear();
-      return;
-    }
-
     if (!ownerChanged && this.visibilityMode === 'custom') {
       this.visibleDataTypeIDs = new Set(this.resolveAvailableDataTypeIDs(
         [...this.customSelectionKeys],
@@ -867,8 +861,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       ? this.chartSettingsLocalStorageService.getEventChartVisibilityPreference(this.event, this.sportProfile.signature)
       : {mode: 'automatic' as const, selectionKeys: [], source: 'default' as const};
     const restoredDataTypeIDs = this.resolveAvailableDataTypeIDs(preference.selectionKeys, panels);
-    const canRestorePreference = preference.mode === 'custom'
-      && (preference.source === 'signature' || restoredDataTypeIDs.length > 0);
+    const canRestorePreference = preference.mode === 'custom';
 
     if (canRestorePreference) {
       this.visibilityMode = 'custom';

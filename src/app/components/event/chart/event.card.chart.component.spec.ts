@@ -788,37 +788,31 @@ describe('EventCardChartComponent', () => {
     expect(mockChartSettingsStorage.setEventChartCustomVisibilityPreference).not.toHaveBeenCalled();
   });
 
-  it('falls back to sport recommendations when a migrated legacy selection is stale', async () => {
+  it('preserves migrated custom visibility while its selected metric is unavailable', async () => {
     mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
       mode: 'custom',
-      selectionKeys: ['legacy-id'],
+      selectionKeys: [DataTemperature.type],
       source: 'legacy',
     });
-    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
-      {
-        dataType: DataPower.type,
-        displayName: 'Power',
-        unit: 'W',
-        colorGroupKey: 'Power',
-        minX: 0,
-        maxX: 100,
-        series: [],
-      },
-      {
-        dataType: 'speed',
-        displayName: 'Speed',
-        unit: 'km/h',
-        colorGroupKey: 'Speed',
-        minX: 0,
-        maxX: 100,
-        series: [],
-      },
-    ] as any);
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockImplementation((input) => (
+      input.showAllData
+        ? [chartPanel(DataTemperature.type)]
+        : []
+    ) as any);
 
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels).toEqual([]);
+
+    chartSettingsSignal.set({...chartSettingsSignal(), showAllData: true});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushMicrotasks();
+
+    expect(component.visibilityMode).toBe('custom');
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataTemperature.type]);
   });
 
   it('lists extra recorded metrics without showing them by default', async () => {
@@ -1072,7 +1066,7 @@ describe('EventCardChartComponent', () => {
     expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalledWith({showAllData: true});
   });
 
-  it('does not force all recorded metrics for a merge-only event', async () => {
+  it('makes every recorded chart selectable for a merge-only event', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       chartPanel(DataPower.type),
     ] as any);
@@ -1086,8 +1080,8 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({showAllData: false}));
-    expect(component.allRecordedMetricsForced).toBe(false);
+    expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({showAllData: true}));
+    expect(component.allRecordedMetricsForced).toBe(true);
   });
 
   it('keeps pinned dive-profile metrics selectable but excludes them from the automatic stack', async () => {

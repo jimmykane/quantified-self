@@ -47,19 +47,57 @@ describe('event chart sport profiles', () => {
     expect(resolution.candidateFamilies.slice(0, firstFamilies.length)).toEqual(firstFamilies);
   });
 
-  it('uses canonical unique types for signatures and shares only identical profiles', () => {
+  it('uses canonical Sports Lib groups for homogeneous multi-activity profiles', () => {
     const oneRun = resolveEventChartSportProfile([ActivityTypes.Running]);
     const repeatedRun = resolveEventChartSportProfile([ActivityTypes.Running, ActivityTypes.Running]);
     const cyclingAliases = resolveEventChartSportProfile([ActivityTypes.Cycling, ActivityTypes.EBiking]);
     const mixedCycling = resolveEventChartSportProfile([ActivityTypes.Cycling, ActivityTypes.IndoorCycling]);
     const mixedRunning = resolveEventChartSportProfile([ActivityTypes.Running, ActivityTypes.Treadmill]);
+    const mixedMountainBiking = resolveEventChartSportProfile([
+      ActivityTypes.MountainBiking,
+      ActivityTypes['Enduro MTB'],
+    ]);
+    const mixedSwimming = resolveEventChartSportProfile([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming]);
+    const heterogeneous = resolveEventChartSportProfile([ActivityTypes.Running, ActivityTypes.Cycling]);
+    const sharedProfileAcrossGroups = resolveEventChartSportProfile([ActivityTypes.Crossfit, ActivityTypes.Yoga]);
 
     expect(repeatedRun.signature).toBe(oneRun.signature);
     expect(cyclingAliases.profileID).toBe('cycling');
     expect(cyclingAliases.source).toBe('shared-profile');
-    expect(mixedCycling.profileID).toBe('multisport');
-    expect(mixedCycling.source).toBe('multisport');
-    expect(mixedRunning.profileID).toBe('multisport');
+    expect(mixedCycling.profileID).toBe('cycling');
+    expect(mixedCycling.source).toBe('shared-profile');
+    expect(mixedRunning.profileID).toBe('running');
+    expect(mixedRunning.source).toBe('shared-profile');
+    expect(mixedMountainBiking.profileID).toBe('mountain-biking');
+    expect(mixedMountainBiking.source).toBe('shared-profile');
+    expect(mixedSwimming.profileID).toBe('open-water-swimming');
+    expect(mixedSwimming.source).toBe('shared-profile');
+    expect(heterogeneous.profileID).toBe('multisport');
+    expect(heterogeneous.source).toBe('multisport');
+    expect(sharedProfileAcrossGroups.profileID).toBe('multisport');
+    expect(sharedProfileAcrossGroups.source).toBe('multisport');
+  });
+
+  it('maps every broader Sports Lib group to a deliberate shared presentation profile', () => {
+    const cases = [
+      {activityTypes: [ActivityTypes.Crossfit, ActivityTypes.Orienteering], profileID: 'performance-family'},
+      {activityTypes: [ActivityTypes.IndoorRowing, ActivityTypes.Yoga], profileID: 'fitness'},
+      {activityTypes: [ActivityTypes.Walking, ActivityTypes.Hiking], profileID: 'hiking'},
+      {activityTypes: [ActivityTypes.CrosscountrySkiing, ActivityTypes.AlpineSkiing], profileID: 'alpine-skiing'},
+      {activityTypes: [ActivityTypes.Sailing, ActivityTypes.Rowing], profileID: 'paddled-water'},
+      {activityTypes: [ActivityTypes.ScubaDiving, ActivityTypes.Snorkeling], profileID: 'generic-diving'},
+      {activityTypes: [ActivityTypes.Golf, ActivityTypes.Tennis], profileID: 'team-racket'},
+    ];
+
+    cases.forEach(({activityTypes, profileID}) => {
+      const resolution = resolveEventChartSportProfile(activityTypes);
+      expect(resolution.profileID).toBe(profileID);
+      expect(resolution.source).toBe('shared-profile');
+    });
+
+    const unspecified = resolveEventChartSportProfile([ActivityTypes.Workout, ActivityTypes.Paragliding]);
+    expect(unspecified.profileID).toBe('multisport');
+    expect(unspecified.source).toBe('multisport');
   });
 
   it('applies the explicit Skating and Tactical decisions', () => {

@@ -542,7 +542,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
     expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
     expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
-    expect(gettingStartedSection?.content).toContain('Benchmark comparisons always make all recorded chartable metrics available');
+    expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');

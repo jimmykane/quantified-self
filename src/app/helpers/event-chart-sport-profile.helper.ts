@@ -1,4 +1,6 @@
 import {
+  type ActivityTypeGroup,
+  ActivityTypeGroups,
   ActivityTypes,
   ActivityTypesHelper,
   DataAirPower,
@@ -109,6 +111,7 @@ const PROFILE_IDS = {
   WakeWater: 'wake-water',
   Fitness: 'fitness',
   TeamRacket: 'team-racket',
+  PerformanceFamily: 'performance-family',
   Diving: 'diving',
   GenericDiving: 'generic-diving',
   Snorkeling: 'snorkeling',
@@ -154,6 +157,7 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.WakeWater]: profile(PROFILE_IDS.WakeWater, 'Water sport', ['heart-rate', 'speed', 'sea-level-pressure', 'temperature']),
   [PROFILE_IDS.Fitness]: profile(PROFILE_IDS.Fitness, 'Fitness', ['heart-rate', 'temperature']),
   [PROFILE_IDS.TeamRacket]: profile(PROFILE_IDS.TeamRacket, 'Team or racket sport', ['heart-rate', 'temperature']),
+  [PROFILE_IDS.PerformanceFamily]: profile(PROFILE_IDS.PerformanceFamily, 'Performance', ['heart-rate', 'speed', 'altitude', 'temperature', 'epoc']),
   [PROFILE_IDS.Diving]: profile(PROFILE_IDS.Diving, 'Diving', ['heart-rate', 'temperature']),
   [PROFILE_IDS.GenericDiving]: profile(PROFILE_IDS.GenericDiving, 'Diving', ['depth', 'temperature', 'heart-rate', 'speed', 'swim-pace']),
   [PROFILE_IDS.Snorkeling]: profile(PROFILE_IDS.Snorkeling, 'Snorkeling', ['depth', 'temperature', 'heart-rate', 'speed', 'swim-pace']),
@@ -161,6 +165,23 @@ const PROFILES: Record<EventChartSportProfileID, EventChartSportProfile> = {
   [PROFILE_IDS.Unknown]: profile(PROFILE_IDS.Unknown, 'Unknown Sport', ['heart-rate', 'altitude', 'pace', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.GeneralFallback]: profile(PROFILE_IDS.GeneralFallback, 'Recommended', ['heart-rate', 'altitude', 'power', 'pace', 'speed', 'epoc', 'temperature']),
   [PROFILE_IDS.Empty]: profile(PROFILE_IDS.Empty, 'Transition', []),
+};
+
+type MappedActivityTypeGroup = Exclude<ActivityTypeGroup, typeof ActivityTypeGroups.UnspecifiedGroup>;
+
+const ACTIVITY_GROUP_PROFILE: Record<MappedActivityTypeGroup, EventChartSportProfileID> = {
+  [ActivityTypeGroups.RunningGroup]: PROFILE_IDS.Running,
+  [ActivityTypeGroups.TrailRunningGroup]: PROFILE_IDS.TrailRunning,
+  [ActivityTypeGroups.CyclingGroup]: PROFILE_IDS.Cycling,
+  [ActivityTypeGroups.MountainBikingGroup]: PROFILE_IDS.MountainBiking,
+  [ActivityTypeGroups.SwimmingGroup]: PROFILE_IDS.OpenWaterSwimming,
+  [ActivityTypeGroups.PerformanceGroup]: PROFILE_IDS.PerformanceFamily,
+  [ActivityTypeGroups.IndoorSportsGroup]: PROFILE_IDS.Fitness,
+  [ActivityTypeGroups.OutdoorAdventuresGroup]: PROFILE_IDS.Hiking,
+  [ActivityTypeGroups.WinterSportsGroup]: PROFILE_IDS.AlpineSkiing,
+  [ActivityTypeGroups.WaterSportsGroup]: PROFILE_IDS.PaddledWater,
+  [ActivityTypeGroups.DivingGroup]: PROFILE_IDS.GenericDiving,
+  [ActivityTypeGroups.TeamRacketGroup]: PROFILE_IDS.TeamRacket,
 };
 
 const ACTIVITY_TYPE_PROFILE = new Map<ActivityTypes, EventChartSportProfileID>();
@@ -246,8 +267,24 @@ export function resolveEventChartSportProfile(activityTypes: readonly unknown[])
     ACTIVITY_TYPE_PROFILE.get(activityType) || PROFILE_IDS.GeneralFallback
   ));
   const uniqueProfileIDs = [...new Set(registeredProfileIDs)];
-  const isMixedProfile = uniqueProfileIDs.length > 1;
-  const profileID = isMixedProfile ? PROFILE_IDS.Multisport : uniqueProfileIDs[0];
+  const uniqueActivityGroups = [...new Set(normalizedTypes.map((activityType) => (
+    ActivityTypesHelper.getActivityGroupForActivityType(activityType)
+  )))];
+  const hasMultipleActivityTypes = normalizedTypes.length > 1;
+  const sharedActivityGroup = hasMultipleActivityTypes && uniqueActivityGroups.length === 1
+    ? uniqueActivityGroups[0]
+    : null;
+  const sharedGroupProfileID = sharedActivityGroup && sharedActivityGroup !== ActivityTypeGroups.UnspecifiedGroup
+    ? ACTIVITY_GROUP_PROFILE[sharedActivityGroup]
+    : null;
+  const sharedUnspecifiedProfileID = sharedActivityGroup === ActivityTypeGroups.UnspecifiedGroup
+    && uniqueProfileIDs.length === 1
+    ? uniqueProfileIDs[0]
+    : null;
+  const isMixedProfile = hasMultipleActivityTypes && !sharedGroupProfileID && !sharedUnspecifiedProfileID;
+  const profileID = !hasMultipleActivityTypes
+    ? registeredProfileIDs[0]
+    : sharedGroupProfileID || sharedUnspecifiedProfileID || PROFILE_IDS.Multisport;
   const profileDefinition = PROFILES[profileID];
   const singleActivityType = normalizedTypes.length === 1 ? normalizedTypes[0] : null;
   const source = resolveProfileSource(singleActivityType, profileID, isMixedProfile, normalizedTypes.length);

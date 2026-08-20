@@ -12,8 +12,9 @@ The chart applies these constraints in order:
    metrics or expanded to every supported recorded metric.
 2. `resolveEventChartSportProfile` canonicalizes the selected activity types through Sports Lib and produces a stable
    signature plus an ordered logical metric-family profile.
-3. A valid custom visibility preference for the event and signature wins. Invalid or unavailable stored keys are
-   ignored; an explicitly empty v2 custom preference remains empty.
+3. A custom visibility preference for the event and signature wins. Invalid or unavailable stored keys are filtered
+   from the current panels without changing custom provenance; the stored selection can become visible again if panel
+   discovery later makes it available. An explicitly empty v2 custom preference remains empty.
 4. Without a custom preference, `resolveEventChartRecommendations` intersects the profile with the user's Default
    chart metrics, finite available panels, unit-derived selection keys, and explicit specialized-surface exclusions.
 5. The first up to three eligible recommendations become visible. The resolver does not pad a sparse profile with
@@ -23,8 +24,12 @@ The profile resolver is a pure helper in
 `src/app/helpers/event-chart-sport-profile.helper.ts`. Its registry deliberately covers every canonical activity type
 exposed by the pinned Sports Lib release. The exhaustive test must fail when a dependency update adds an unclassified
 canonical type. Activity counts, IDs, providers, and names do not affect the signature: it contains only sorted,
-unique canonical activity types. Multiple types share a specific presentation profile only when every type maps to
-that same profile; otherwise they use Multisport.
+unique canonical activity types. A single type uses its exact profile. Multiple types that already share one profile
+keep it only when they also share a Sports Lib activity group. Types in the same mapped Sports Lib activity group use
+the registry's deliberate presentation profile for that group; different groups use Multisport even if their exact
+entries happen to reuse the same presentation profile. Sports Lib's Unspecified group is not treated as a coherent
+family unless every selected type already shares one exact presentation profile, because it is the fallback for
+unrelated canonical types that have no group assignment.
 
 Metric recommendations operate on logical families. Unit variants such as pace per mile, speed in knots, and depth in
 feet resolve through existing Sports Lib unit groups. Power, Air Power, Right Power, and Left Power share one profile
@@ -83,10 +88,10 @@ currently rendered unit variant. Custom values for one signature never leak into
 
 ## Availability exceptions and specialized surfaces
 
-Benchmark events force panel discovery to include all recorded chartable metrics. Their automatic stack still obeys
-Default chart metrics and the sport profile; the exception only ensures every chart can be selected or used as an
-overlay. The **Include all recorded metrics** toggle is shown checked and disabled with explanatory copy, and the
-user's global setting is not mutated. A merge-only event retains the normal global discovery setting.
+Merged and benchmark events force panel discovery to include all recorded chartable metrics. Their automatic stack
+still obeys Default chart metrics and the sport profile; the exception only ensures every chart can be selected or
+used as an overlay. The **Include all recorded metrics** toggle is shown checked and disabled with explanatory copy,
+and the user's global setting is not mutated.
 
 When the pinned Dive Profile is present, Depth, Temperature, and Heart Rate are automatic exclusions for the ordinary
 stack. The ordinary panels remain in **Visible charts** when discovery permits them, so a manual custom choice can

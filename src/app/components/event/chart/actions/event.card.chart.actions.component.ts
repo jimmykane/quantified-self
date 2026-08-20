@@ -88,7 +88,7 @@ export class EventCardChartActionsComponent {
 
   public get includeAllRecordedMetricsTooltip(): string {
     return this.allRecordedMetricsForced
-      ? 'Benchmark comparisons always make every recorded chartable metric available for selection.'
+      ? 'Merged and benchmark events always make every recorded chartable metric available for selection.'
       : 'Adds every chartable metric recorded by the activity to Visible charts without changing which charts are visible.';
   }
 

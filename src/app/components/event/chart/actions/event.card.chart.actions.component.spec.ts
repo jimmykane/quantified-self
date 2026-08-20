@@ -143,13 +143,13 @@ describe('EventCardChartActionsComponent', () => {
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_chart_settings_change', { property: 'showAllData' });
   });
 
-  it('forces benchmark metric availability without mutating showAllData', async () => {
+  it('forces merged and benchmark metric availability without mutating showAllData', async () => {
     component.showAllData = false;
     component.allRecordedMetricsForced = true;
     const emitSpy = vi.spyOn(component.showAllDataChange, 'emit');
 
     expect(component.effectiveShowAllData).toBe(true);
-    expect(component.includeAllRecordedMetricsTooltip).toContain('Benchmark comparisons');
+    expect(component.includeAllRecordedMetricsTooltip).toContain('Merged and benchmark events');
 
     await component.onShowAllDataToggle(false);
 
