@@ -76,6 +76,9 @@ describe('EventCardChartActionsComponent', () => {
 
     expect(template).toContain('Include all recorded metrics');
     expect(template).toContain('Visible charts');
+    expect(template).toContain(
+      'Recommendations combine the selected sport, recorded metrics, and your Default chart metrics.',
+    );
     expect(template).toContain('recommendedSeriesMenuLabel');
     expect(template).toContain('Other available');
     expect(template).toContain('Show all charts');

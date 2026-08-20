@@ -95,10 +95,11 @@ explicit rule and test are added here.
 
 ## UX and accessibility
 
-**Visible charts** lists **Recommended for <sport>** in profile order, followed by **Other available**. Checked state
-always reflects the current visible stack. Visibility changes and reset results update a polite live region. Existing
-buttons, menu focus behavior, touch targets, scroll bounds, overlays, zoom, laps, swim lengths, and source-series
-rendering remain owned by their existing components.
+**Visible charts** explains that recommendations combine the selected sport, recorded metrics, and Default chart
+metrics, then lists **Recommended for <sport>** in profile order followed by **Other available**. Checked state always
+reflects the current visible stack. Visibility changes and reset results update a polite live region. Existing buttons,
+menu focus behavior, touch targets, scroll bounds, overlays, zoom, laps, swim lengths, and source-series rendering
+remain owned by their existing components.
 
 When changing this contract, update the pure resolver tests, storage persistence tests, chart and action
 component tests, app Help content, and this document together. Run the focused Vitest suites and an Angular production

@@ -53,6 +53,9 @@
 <mat-menu #seriesMenu="matMenu" xPosition="before" class="qs-menu-panel">
   <div class="series-menu" (click)="$event.stopPropagation()">
     <p class="series-menu__header">Visible charts</p>
+    <p class="series-menu__context">
+      Recommendations combine the selected sport, recorded metrics, and your Default chart metrics.
+    </p>
     @if (recommendedSeriesMenuItems.length > 0) {
     <p class="series-menu__section-label">{{ recommendedSeriesMenuLabel }}</p>
     @for (item of recommendedSeriesMenuItems; track item.dataType) {

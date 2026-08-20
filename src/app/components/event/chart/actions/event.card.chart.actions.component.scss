@@ -51,6 +51,13 @@ section.container {
   font: var(--mat-sys-label-medium);
 }
 
+.series-menu__context {
+  margin: 0;
+  padding: 0 8px 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
 .series-menu__section-label {
   margin: 4px 0 0;
   padding: 4px 8px 0;
