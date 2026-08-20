@@ -20,6 +20,7 @@ const mockAdd = vi.fn().mockResolvedValue({ id: 'new-doc-id' });
 const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 const mockRunTransaction = vi.fn();
+let mockTransactionDocumentData: Record<string, unknown> | undefined;
 const { mockFieldValueDelete } = vi.hoisted(() => ({
     mockFieldValueDelete: vi.fn().mockReturnValue('delete-sentinel'),
 }));
@@ -72,12 +73,13 @@ function installDefaultRunTransactionMock() {
     mockRunTransaction.mockImplementation(async (callback: any) => {
         const pendingDeletes: any[] = [];
         const pendingSets: Array<{ target: any; data: any; options?: any }> = [];
+        const pendingUpdates: Array<{ target: any; data: any }> = [];
         const result = await callback({
             get: vi.fn(async (target: any) => {
                 if (target === mockDocInstance) {
                     return {
                         exists: true,
-                        data: () => ({}),
+                        data: () => mockTransactionDocumentData || {},
                     };
                 }
                 if (target === mockCollectionInstance) {
@@ -94,6 +96,9 @@ function installDefaultRunTransactionMock() {
             set: vi.fn((target: any, data: any, options?: any) => {
                 pendingSets.push({ target, data, options });
             }),
+            update: vi.fn((target: any, data: any) => {
+                pendingUpdates.push({ target, data });
+            }),
         });
 
         for (const pendingSet of pendingSets) {
@@ -105,6 +110,12 @@ function installDefaultRunTransactionMock() {
         for (const target of pendingDeletes) {
             if (target && typeof target.delete === 'function') {
                 await target.delete();
+            }
+        }
+
+        for (const pendingUpdate of pendingUpdates) {
+            if (pendingUpdate.target && typeof pendingUpdate.target.update === 'function') {
+                await pendingUpdate.target.update(pendingUpdate.data);
             }
         }
 
@@ -273,6 +284,7 @@ import { clearServiceConnectionState } from './service-connection-meta';
 
 describe('OAuth2', () => {
     beforeEach(() => {
+        mockTransactionDocumentData = undefined;
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -1330,6 +1342,10 @@ describe('OAuth2', () => {
                 docs: [],
             } as any);
             mockDocInstance.update = mockUpdate;
+            mockTransactionDocumentData = {
+                state: 'some-state',
+                codeVerifier: 'some-verifier',
+            };
 
             // Explicitly restore any spies from previous tests if they weren't cleaned up
             const simpleOAuth2 = await import('simple-oauth2');
@@ -1582,6 +1598,24 @@ describe('OAuth2', () => {
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
+        });
+
+        it('does not delete state or PKCE context created by a newer OAuth attempt', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockRejectedValue(new Error('Exchange failed'));
+            mockTransactionDocumentData = {
+                state: 'newer-state',
+                codeVerifier: 'newer-verifier',
+            };
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.GarminAPI,
+                redirectUri,
+                code,
+            )).rejects.toThrow('Exchange failed');
+
+            expect(mockUpdate).not.toHaveBeenCalled();
         });
 
         it('should not exchange OAuth code when account deletion is active before token exchange', async () => {

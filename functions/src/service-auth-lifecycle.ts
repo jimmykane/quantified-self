@@ -507,8 +507,7 @@ function resolveCleanupPolicy(reason: ServiceAuthCleanupReason): ServiceAuthClea
 
 async function clearServiceConnectionStateBestEffort(userID: string, serviceName: ServiceNames): Promise<boolean> {
   try {
-    await clearServiceConnectionState(userID, serviceName);
-    return true;
+    return await clearServiceConnectionState(userID, serviceName);
   } catch (error: any) {
     logger.error(`Failed to clear service connection state for ${serviceName} and user ${userID}: ${error?.message || error}`);
     return false;

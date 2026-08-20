@@ -7,6 +7,7 @@ const hoisted = vi.hoisted(() => ({
   transactionSet: vi.fn(),
   rootGet: vi.fn(),
   rootRef: { path: 'suuntoAppAccessTokens/user-1', get: vi.fn() },
+  serviceMetaRef: { path: 'users/user-1/meta/Suunto App' },
   getServiceTokenRootDocumentRef: vi.fn(),
   clearServiceConnectionState: vi.fn(),
   mirrorServiceDisconnectPendingToUserMeta: vi.fn(),
@@ -20,6 +21,13 @@ const hoisted = vi.hoisted(() => ({
 vi.mock('firebase-admin', () => {
   const firestore = () => ({
     runTransaction: hoisted.runTransaction,
+    collection: vi.fn(() => ({
+      doc: vi.fn(() => ({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => hoisted.serviceMetaRef),
+        })),
+      })),
+    })),
   });
 
   return {
@@ -192,6 +200,56 @@ describe('service-disconnect-pending', () => {
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
+  });
+
+  it('recovers and releases the pending generation left in metadata by a stale OAuth callback', async () => {
+    hoisted.transactionGet.mockImplementation(async (target: unknown) => {
+      if (target === hoisted.rootRef) {
+        return {
+          exists: true,
+          data: () => ({ activeOAuthCredentialGeneration: 'winning-generation' }),
+        };
+      }
+      if (target === hoisted.serviceMetaRef) {
+        return {
+          exists: true,
+          data: () => ({
+            connectionState: 'disconnect_pending',
+            connectionStateGeneration: 'pending-generation-from-meta',
+            disconnectGeneration: 'pending-generation-from-meta',
+            disconnectReason: 'subscription_enforcement',
+            disconnectAttemptCount: 2,
+          }),
+        };
+      }
+      throw new Error('Unexpected transaction target');
+    });
+
+    const winningGuard = {
+      documentRef: hoisted.rootRef as any,
+      fieldName: 'activeOAuthCredentialGeneration',
+      expectedGeneration: 'winning-generation',
+    };
+    await clearServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      winningGuard,
+    );
+
+    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      {
+        restorePendingDisconnectActivitySyncRoutes: true,
+        expectedTokenCredentialGeneration: winningGuard,
+        expectedPendingDisconnectGeneration: 'pending-generation-from-meta',
+      },
+    );
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-from-meta',
+    );
   });
 
   it('restores pending state when deferred queue release fails after clear', async () => {

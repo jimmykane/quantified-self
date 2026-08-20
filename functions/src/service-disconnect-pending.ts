@@ -9,6 +9,10 @@ import {
   mirrorServiceDisconnectPendingToUserMeta,
 } from './service-connection-meta';
 import {
+  SERVICE_CONNECTION_STATES,
+  type ServiceConnectionMetaFields,
+} from '../../shared/service-connection';
+import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
@@ -58,6 +62,27 @@ function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
     disconnectLastStatusCode: FieldValue.delete(),
     disconnectLastErrorMessage: FieldValue.delete(),
     disconnectManualReviewRequired: FieldValue.delete(),
+  };
+}
+
+function buildPendingDisconnectDataFromServiceMeta(
+  data: ServiceConnectionMetaFields | undefined,
+): PendingServiceDisconnectRootData | null {
+  if (data?.connectionState !== SERVICE_CONNECTION_STATES.DisconnectPending) {
+    return null;
+  }
+
+  return {
+    disconnectGeneration: data.disconnectGeneration || data.connectionStateGeneration || null,
+    disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
+    disconnectReason: data.disconnectReason || null,
+    disconnectAttemptCount: data.disconnectAttemptCount ?? null,
+    disconnectNextAttemptAt: data.disconnectNextAttemptAt as PendingServiceDisconnectRootData['disconnectNextAttemptAt'],
+    disconnectLastAttemptAt: data.disconnectLastAttemptAt as PendingServiceDisconnectRootData['disconnectLastAttemptAt'],
+    disconnectRetryExpiresAt: data.disconnectRetryExpiresAt as PendingServiceDisconnectRootData['disconnectRetryExpiresAt'],
+    disconnectLastStatusCode: data.disconnectLastStatusCode ?? null,
+    disconnectLastErrorMessage: data.disconnectLastErrorMessage || null,
+    disconnectManualReviewRequired: data.disconnectManualReviewRequired === true,
   };
 }
 
@@ -360,6 +385,7 @@ export async function clearServiceDisconnectPending(
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(serviceName);
 
   const clearResult = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
@@ -370,17 +396,32 @@ export async function clearServiceDisconnectPending(
     }
 
     const snapshot = await transaction.get(rootRef);
-    if (!snapshot.exists) {
-      return { status: 'root_missing' as const };
+    const rootData = snapshot.exists
+      ? snapshot.data() as PendingServiceDisconnectRootData
+      : null;
+    let pendingData = isServiceDisconnectPendingData(rootData) ? rootData : null;
+
+    // A previous OAuth callback may have cleared the root fields and then lost
+    // its credential-generation race before clearing metadata or releasing the
+    // parked queue rows. The winning callback must recover that generation
+    // from the still-authoritative user metadata instead of stranding work.
+    if (!pendingData) {
+      const metaSnapshot = await transaction.get(serviceMetaRef);
+      pendingData = buildPendingDisconnectDataFromServiceMeta(
+        metaSnapshot.data() as ServiceConnectionMetaFields | undefined,
+      );
     }
 
-    const rootData = snapshot.data() as PendingServiceDisconnectRootData;
-    const wasPending = isServiceDisconnectPendingData(rootData);
-    transaction.set(rootRef, buildPendingDisconnectFieldDeletes(), { merge: true });
+    if (snapshot.exists) {
+      transaction.set(rootRef, buildPendingDisconnectFieldDeletes(), { merge: true });
+    }
 
-    return wasPending
-      ? { status: 'pending_cleared' as const, pendingData: rootData }
-      : { status: 'clear_only' as const };
+    if (pendingData) {
+      return { status: 'pending_cleared' as const, pendingData };
+    }
+    return snapshot.exists
+      ? { status: 'clear_only' as const }
+      : { status: 'root_missing' as const };
   });
 
   if (clearResult.status === 'skipped' || clearResult.status === 'stale_credential') {

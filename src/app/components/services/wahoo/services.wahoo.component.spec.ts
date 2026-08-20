@@ -82,6 +82,20 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeNull();
   });
 
+  it('keeps the safe account ID visible while reconnect is required', () => {
+    component.serviceMeta = {
+      connectionState: 'reconnect_required',
+      providerUserId: '60462',
+    } as any;
+
+    (component as any).onServiceDataChanged();
+    fixture.detectChanges();
+
+    expect(component.wahooAccountId()).toBe('60462');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(functionsService.call).not.toHaveBeenCalled();
+  });
+
   it('shows the safe Wahoo account ID instead of a generic connected label', () => {
     component.serviceMeta = { connectionState: 'connected', providerUserId: '60462' } as any;
     (component as any).onServiceDataChanged();

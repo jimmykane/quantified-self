@@ -88,7 +88,7 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
 
   protected override onServiceDataChanged(): void {
     const providerUserId = `${this.serviceMeta?.providerUserId || ''}`.trim();
-    if (!this.isConnectedToService()) {
+    if (!this.isConnectedToService() && !this.isReconnectRequired) {
       this.wahooAccountId.set(null);
       this.isLoadingWahooAccountId.set(false);
       this.wahooAccountIdHydrationAttempted = false;

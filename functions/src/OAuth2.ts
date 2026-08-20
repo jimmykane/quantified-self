@@ -37,6 +37,11 @@ export { deleteLocalServiceToken } from './service-token-store';
 
 const ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD = 'activeOAuthCredentialGeneration';
 
+interface OAuthFlowContextGuard {
+  state: unknown;
+  codeVerifier: unknown;
+}
+
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
   public readonly code = 'failed-precondition';
@@ -137,6 +142,7 @@ async function cleanupOAuthFlowContext(
   serviceName: ServiceNames,
   tokenCollectionName: string,
   tokenPersisted: boolean,
+  expectedFlowContext: OAuthFlowContextGuard,
 ): Promise<void> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
@@ -147,7 +153,6 @@ async function cleanupOAuthFlowContext(
   } catch (error) {
     throw new UserDeletionGuardReadError(userID, `oauth_context_cleanup:${serviceName}`, error);
   }
-
   if (deletionGuard.shouldSkip) {
     if (tokenPersisted) {
       logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
@@ -163,9 +168,39 @@ async function cleanupOAuthFlowContext(
     return;
   }
 
-  await tokenRootRef.update({
-    state: FieldValue.delete(),
-    codeVerifier: FieldValue.delete(),
+  await db.runTransaction(async transaction => {
+    let currentDeletionGuard;
+    try {
+      currentDeletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        userID,
+        `oauth_context_cleanup:${serviceName}`,
+        error,
+      );
+    }
+    if (currentDeletionGuard.shouldSkip) {
+      return;
+    }
+
+    const currentSnapshot = await transaction.get(tokenRootRef);
+    const currentData = currentSnapshot.data() as Record<string, unknown> | undefined;
+    if (
+      !currentSnapshot.exists
+      || currentData?.state !== expectedFlowContext.state
+      || currentData?.codeVerifier !== expectedFlowContext.codeVerifier
+    ) {
+      logger.info(`Preserving newer ${serviceName} OAuth flow context for user ${userID}.`);
+      return;
+    }
+    transaction.update(tokenRootRef, {
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+    });
   });
 }
 
@@ -334,6 +369,10 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   // Retrieve stored flow context (state, PKCE verifier, etc)
   const tokensDocumentSnapshot = await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).get();
   const tokensDocumentSnapshotData = tokensDocumentSnapshot.data ? tokensDocumentSnapshot.data() : undefined;
+  const expectedFlowContext: OAuthFlowContextGuard = {
+    state: tokensDocumentSnapshotData?.state,
+    codeVerifier: tokensDocumentSnapshotData?.codeVerifier,
+  };
 
   try {
     const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
@@ -426,7 +465,13 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     // Cleanup temporary fields (state, PKCE verifier)
     try {
       if (shouldCleanupOAuthContext) {
-        await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
+        await cleanupOAuthFlowContext(
+          userID,
+          serviceName,
+          adapter.tokenCollectionName,
+          tokenPersisted,
+          expectedFlowContext,
+        );
         logger.info(`Finished temporary OAuth2 cleanup for User ${userID} and ${serviceName}`);
       }
     } catch (e) {
