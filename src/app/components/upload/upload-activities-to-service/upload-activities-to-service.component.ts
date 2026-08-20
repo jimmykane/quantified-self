@@ -41,7 +41,6 @@ interface ServiceUploadRow {
   jobId?: string;
   uploadId?: string;
   providerUserId?: string;
-  resumeToken?: string;
 }
 
 interface SuuntoUploadResumeState {
@@ -55,7 +54,6 @@ interface ServiceUploadResult {
   pending?: boolean;
   uploadId?: string;
   providerUserId?: string;
-  resumeToken?: string;
   message?: string;
 }
 
@@ -65,14 +63,12 @@ interface ServiceUploadCallableResponse {
   message?: string;
   uploadId?: string;
   providerUserId?: string;
-  resumeToken?: string;
   result?: {
     status?: string;
     code?: string;
     message?: string;
     uploadId?: string;
     providerUserId?: string;
-    resumeToken?: string;
   };
 }
 
@@ -432,7 +428,6 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           message,
           uploadId: result.uploadId || row.uploadId,
           providerUserId: result.providerUserId || row.providerUserId,
-          resumeToken: result.resumeToken || row.resumeToken,
         });
         this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
         this.startWahooStatusPolling(row.id);
@@ -602,7 +597,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   private async getServiceUploadStatusResult(
-    row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'resumeToken'>,
+    row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
   ): Promise<ServiceUploadResult> {
     if (!row.uploadId) {
       throw new Error(`Missing ${this.destinationName} upload identifier.`);
@@ -612,10 +607,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       : 'getWahooAPIWorkoutFileUploadStatus';
     const payload = this.serviceName === ServiceNames.COROSAPI
       ? { uploadId: row.uploadId, providerUserId: row.providerUserId }
-      : {
-        uploadId: row.uploadId,
-        resumeToken: row.resumeToken,
-      };
+      : { uploadId: row.uploadId };
     const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
       callableFunction,
       payload,
@@ -830,20 +822,19 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private getAsynchronousUploadStateUpdate(
     error: unknown,
-  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'resumeToken'> | Record<string, never> {
+  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
     const details = (error as { details?: unknown } | null)?.details;
     if (!details || typeof details !== 'object') {
       return {};
     }
     const retryMode = `${(details as { retryMode?: unknown }).retryMode || ''}`.trim();
     if (retryMode === 'restart') {
-      return { uploadId: undefined, providerUserId: undefined, resumeToken: undefined };
+      return { uploadId: undefined, providerUserId: undefined };
     }
     if (this.serviceName === ServiceNames.WahooAPI && retryMode === 'resume') {
       const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
-      const resumeToken = `${(details as { resumeToken?: unknown }).resumeToken || ''}`.trim();
-      return uploadId && resumeToken
-        ? { uploadId, providerUserId: undefined, resumeToken }
+      return uploadId
+        ? { uploadId, providerUserId: undefined }
         : {};
     }
     if (this.serviceName === ServiceNames.COROSAPI && retryMode === 'resume') {
@@ -856,22 +847,20 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private toServiceUploadResult(
     response: ServiceUploadCallableResponse | undefined,
-    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId' | 'resumeToken'>,
+    resumeState?: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
   ): ServiceUploadResult {
     const responseCode = response?.code || response?.result?.code;
     const responseMessage = response?.message || response?.result?.message;
     const responseStatus = `${response?.status || response?.result?.status || ''}`.trim().toLowerCase();
     const uploadId = response?.uploadId || response?.result?.uploadId || resumeState?.uploadId;
     const providerUserId = response?.providerUserId || response?.result?.providerUserId || resumeState?.providerUserId;
-    const resumeToken = response?.resumeToken || response?.result?.resumeToken || resumeState?.resumeToken;
     if (responseCode === 'ALREADY_EXISTS') {
       return { success: true, duplicate: true, message: responseMessage };
     }
     if (responseStatus === 'pending' || responseStatus === 'processing') {
       if (this.usesAsynchronousStatusPolling
         && (!uploadId
-          || (this.serviceName === ServiceNames.COROSAPI && !providerUserId)
-          || (this.serviceName === ServiceNames.WahooAPI && !resumeToken))) {
+          || (this.serviceName === ServiceNames.COROSAPI && !providerUserId))) {
         throw new Error(`${this.destinationName} returned an incomplete upload status.`);
       }
       return {
@@ -880,7 +869,6 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         pending: true,
         uploadId,
         providerUserId,
-        resumeToken,
         message: responseMessage,
       };
     }

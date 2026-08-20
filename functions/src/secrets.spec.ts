@@ -14,7 +14,6 @@ const GARMIN = ['GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET'];
 const SUUNTO = ['SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET'];
 const SUUNTO_API = [...SUUNTO, 'SUUNTOAPP_SUBSCRIPTION_KEY'];
 const WAHOO = ['WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET'];
-const WAHOO_ACTIVITY_UPLOADS = [...WAHOO, 'WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY'];
 
 const EXPECTED_BINDINGS: Record<string, string[]> = {
   addCOROSAPIHistoryToQueue: COROS,
@@ -41,10 +40,10 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   getSuuntoFITFile: SUUNTO_API,
   getUpcomingRenewalAmount: ['STRIPE_SECRET_KEY'],
   getWahooAPIAuthRequestTokenRedirectURI: WAHOO,
-  getWahooAPIWorkoutFileUploadStatus: WAHOO_ACTIVITY_UPLOADS,
+  getWahooAPIWorkoutFileUploadStatus: WAHOO,
   importActivityToCOROSAPI: COROS,
   importActivityToSuuntoApp: SUUNTO_API,
-  importActivityToWahooAPI: WAHOO_ACTIVITY_UPLOADS,
+  importActivityToWahooAPI: WAHOO,
   importRouteToCOROSAPI: COROS,
   importRouteToGarminAPI: GARMIN,
   importRouteToSuuntoApp: SUUNTO_API,
@@ -88,7 +87,6 @@ describe('Function Secret Manager policy', () => {
       'SUUNTOAPP_CLIENT_SECRET',
       'SUUNTOAPP_NOTIFICATION_SECRET',
       'SUUNTOAPP_SUBSCRIPTION_KEY',
-      'WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY',
       'WAHOOAPI_ALLOWED_FILE_HOSTS',
       'WAHOOAPI_CLIENT_ID',
       'WAHOOAPI_CLIENT_SECRET',

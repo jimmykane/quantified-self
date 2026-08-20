@@ -325,7 +325,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             data: {
                 status: 'pending',
                 uploadId: 'wahoo-upload-1',
-                resumeToken: 'signed-wahoo-resume-token',
                 message: 'Wahoo is processing the activity.',
             },
         });
@@ -355,7 +354,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
             message: 'Wahoo is processing the activity.',
         });
     });
@@ -380,7 +378,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
             message: 'Wahoo is processing the activity.',
         });
         mockFunctionsService.call
@@ -391,14 +388,13 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'processing',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         });
 
         await vi.advanceTimersByTimeAsync(2000);
         expect(component.uploadRows()[0]).toMatchObject({ status: 'processing' });
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'getWahooAPIWorkoutFileUploadStatus',
-            { uploadId: 'wahoo-upload-1', resumeToken: 'signed-wahoo-resume-token' },
+            { uploadId: 'wahoo-upload-1' },
         );
 
         await vi.advanceTimersByTimeAsync(4000);
@@ -426,7 +422,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
             message: 'Wahoo is processing the activity.',
         });
         mockFunctionsService.call
@@ -473,7 +468,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
             message: 'Wahoo is processing the activity.',
         });
         mockFunctionsService.call.mockResolvedValue({ data: { status: 'pending', message: 'Wahoo is still processing the activity.' } });
@@ -512,7 +506,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             duplicate: false,
             pending: true,
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
             message: 'Wahoo is processing the activity.',
         });
 
@@ -540,7 +533,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         };
 
         component.uploadRows.set([row]);
@@ -574,7 +566,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Reconnect Wahoo before checking the upload.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         };
         component.uploadRows.set([row]);
         mockProcessingService.addJob.mockReturnValueOnce('wahoo-retry-job');
@@ -587,7 +578,7 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'getWahooAPIWorkoutFileUploadStatus',
-            { uploadId: 'wahoo-upload-1', resumeToken: 'signed-wahoo-resume-token' },
+            { uploadId: 'wahoo-upload-1' },
         );
         expect(uploadSpy).not.toHaveBeenCalled();
         expect(component.uploadRows()[0]).toMatchObject({
@@ -613,7 +604,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         };
         component.uploadRows.set([row]);
         mockFunctionsService.call.mockRejectedValueOnce({
@@ -626,7 +616,6 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'failed',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         });
     });
 
@@ -646,7 +635,6 @@ describe('UploadActivitiesToServiceComponent', () => {
             message: 'Wahoo is processing the activity.',
             jobId: 'wahoo-job',
             uploadId: 'wahoo-upload-1',
-            resumeToken: 'signed-wahoo-resume-token',
         };
         component.uploadRows.set([row]);
         mockFunctionsService.call.mockRejectedValueOnce({
@@ -660,11 +648,10 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'failed',
             uploadId: undefined,
-            resumeToken: undefined,
         });
     });
 
-    it('retains a signed Wahoo continuation when initial correction must resume', async () => {
+    it('retains a Wahoo upload ID when an upload must resume', async () => {
         component.serviceName = ServiceNames.WahooAPI;
         const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
         const event: any = {
@@ -674,11 +661,10 @@ describe('UploadActivitiesToServiceComponent', () => {
         };
         mockFunctionsService.call.mockRejectedValueOnce({
             code: 'functions/unavailable',
-            message: 'Wahoo is temporarily unable to update the workout type.',
+            message: 'Wahoo is temporarily unavailable while processing the activity.',
             details: {
                 retryMode: 'resume',
                 resumeUploadId: 'wahoo-correction-resume',
-                resumeToken: 'signed-wahoo-resume-token',
             },
         });
 
@@ -687,7 +673,6 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(component.uploadRows()[0]).toMatchObject({
             status: 'failed',
             uploadId: 'wahoo-correction-resume',
-            resumeToken: 'signed-wahoo-resume-token',
         });
 
         mockFunctionsService.call.mockResolvedValueOnce({
@@ -697,7 +682,7 @@ describe('UploadActivitiesToServiceComponent', () => {
 
         expect(mockFunctionsService.call).toHaveBeenLastCalledWith(
             'getWahooAPIWorkoutFileUploadStatus',
-            { uploadId: 'wahoo-correction-resume', resumeToken: 'signed-wahoo-resume-token' },
+            { uploadId: 'wahoo-correction-resume' },
         );
     });
 

@@ -9,12 +9,10 @@ Quantified Self deploys backend credentials through Google Cloud Secret Manager 
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
-| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS`, `WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY` |
+| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
-
-`WAHOOAPI_ACTIVITY_UPLOAD_RESUME_SIGNING_KEY` must be a unique, randomly generated value of at least 32 characters. It signs short-lived direct Wahoo upload continuations and is bound only to the two direct activity-upload callables.
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 
