@@ -11,6 +11,7 @@ const {
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive,
   mockIncreaseRetryCountForQueueItem,
   mockIncreaseRetryCountIfCurrentParams,
   mockMoveToDeadLetterQueue,
@@ -40,6 +41,7 @@ const {
   mockUpdateQueueItemIfUserActive,
   mockFieldValueDelete,
   mockRecordActivitySyncOutboundFingerprint,
+  mockIsWahooReconnectRequiredError,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -50,6 +52,7 @@ const {
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
     mockDeferQueueItemForPendingDisconnectIfCurrentUserActive: vi.fn(),
+    mockDeferQueueItemForReconnectRequiredIfCurrentUserActive: vi.fn(),
     mockIncreaseRetryCountForQueueItem: vi.fn(),
     mockIncreaseRetryCountIfCurrentParams: vi.fn(),
     mockMoveToDeadLetterQueue: vi.fn(),
@@ -83,6 +86,7 @@ const {
     mockUpdateQueueItemIfUserActive: vi.fn(),
     mockFieldValueDelete: Symbol('FIELD_VALUE_DELETE'),
     mockRecordActivitySyncOutboundFingerprint: vi.fn(),
+    mockIsWahooReconnectRequiredError: vi.fn(),
   };
 });
 
@@ -138,6 +142,7 @@ vi.mock('../queue-utils', () => ({
   updateToProcessed: mockUpdateToProcessed,
   deferQueueItemForPendingDisconnect: mockDeferQueueItemForPendingDisconnect,
   deferQueueItemForPendingDisconnectIfCurrentUserActive: mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
+  deferQueueItemForReconnectRequiredIfCurrentUserActive: mockDeferQueueItemForReconnectRequiredIfCurrentUserActive,
   markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
   increaseRetryCountIfCurrentUserActive: async (params: any) => {
@@ -209,6 +214,10 @@ vi.mock('../suunto/activities', () => ({
 vi.mock('../wahoo/activities', () => ({
   uploadActivityFileToWahoo: mockUploadActivityFileToWahoo,
   getWahooActivityUploadStatus: mockGetWahooActivityUploadStatus,
+}));
+
+vi.mock('../wahoo/refresh-recovery', () => ({
+  isWahooReconnectRequiredError: mockIsWahooReconnectRequiredError,
 }));
 
 vi.mock('../coros/activities', () => ({
@@ -349,6 +358,8 @@ describe('activity-sync/process-queue-item', () => {
     mockRecordSuccessfulSuuntoActivityUploadForQueueItem.mockResolvedValue(undefined);
     mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
     mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
+    mockDeferQueueItemForReconnectRequiredIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
+    mockIsWahooReconnectRequiredError.mockReturnValue(false);
     mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -755,6 +766,49 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0])
       .toBeLessThan(mockSetActivitySyncSuccessMetadata.mock.invocationCallOrder[0]);
     expect(mockRecordSuccessfulSuuntoActivityUploadForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('parks Wahoo delivery before upload when its connection requires reconnecting', async () => {
+    mockGetServiceConnectionMeta
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ connectionState: 'reconnect_required' });
+
+    const result = await processActivitySyncQueueItem({
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'activity_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+      additionalData: { deferredServiceName: ServiceNames.WahooAPI },
+    }));
+  });
+
+  it('parks a Wahoo reconnect-required error before generic authentication handling', async () => {
+    const reconnectError = Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      name: 'WahooReconnectRequiredError',
+      code: 'unauthenticated',
+    });
+    mockIsWahooReconnectRequiredError.mockReturnValue(true);
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(reconnectError);
+
+    const result = await processActivitySyncQueueItem({
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'activity_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
   });
 
   it('clears an irrelevant signed continuation while persisting Wahoo upload state', async () => {

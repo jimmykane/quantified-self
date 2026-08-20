@@ -428,4 +428,17 @@ describe('Wahoo activity uploads', () => {
       });
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
+
+  it('preserves the reconnect-required marker so shared queue work parks instead of skipping', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      name: 'WahooReconnectRequiredError',
+    }));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        name: 'WahooReconnectRequiredError',
+        code: 'unauthenticated',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
 });

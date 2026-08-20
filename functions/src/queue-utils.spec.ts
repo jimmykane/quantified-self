@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
 
 // Hoisted Firestore mocks
@@ -22,9 +23,15 @@ const hoisted = vi.hoisted(() => {
     const runTransaction = vi.fn(async (runner: (transactionValue: typeof transaction) => unknown) => runner(transaction));
     const getUserDeletionGuardStateInTransaction = vi.fn();
     const cleanupQueueItemAfterUserDeletionGuard = vi.fn();
-    const collection = vi.fn(() => ({
-        doc: vi.fn((id: string) => ({ id }))
-    }));
+    const createCollection = (id: string) => ({
+        id,
+        doc: vi.fn((documentId: string) => ({
+            id: documentId,
+            parent: { id },
+            collection: vi.fn((subcollectionId: string) => createCollection(subcollectionId)),
+        })),
+    });
+    const collection = vi.fn((id: string) => createCollection(id));
     const firestore = () => ({
         batch: vi.fn(() => batch),
         collection,
@@ -749,6 +756,69 @@ describe('queue-utils', () => {
 
             expect(result).toBe(QueueResult.Processed);
             expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('deferQueueItemForReconnectRequiredIfCurrentUserActive', () => {
+        it('parks the expected live revision only while the Wahoo meta state still requires reconnect', async () => {
+            const queueItem: any = {
+                id: 'guarded-reconnect-1',
+                ref: { parent: { id: 'activitySyncQueue' }, id: 'guarded-reconnect-1' },
+            };
+            hoisted.transaction.get.mockImplementation(async (ref: { id: string }) => {
+                if (ref.id === queueItem.id) {
+                    return { exists: true, data: () => ({ revision: 'expected' }) };
+                }
+                return { exists: true, data: () => ({ connectionState: 'reconnect_required' }) };
+            });
+
+            const result = await deferQueueItemForReconnectRequiredIfCurrentUserActive({
+                queueItem,
+                additionalData: { deferredServiceName: ServiceNames.WahooAPI },
+                userID: 'user-1',
+                serviceName: ServiceNames.WahooAPI,
+                phase: 'provider_reconnect_defer',
+                logPrefix: 'ProviderQueue',
+                isCurrent: current => current.revision === 'expected',
+            });
+
+            expect(result).toBe(QueueResult.Deferred);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: true,
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+                dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+            }));
+        });
+
+        it('re-opens the item when OAuth resolved reconnect before the guarded transition', async () => {
+            const queueItem: any = {
+                id: 'guarded-reconnect-2',
+                ref: { parent: { id: 'routeDeliverySyncQueue' }, id: 'guarded-reconnect-2' },
+            };
+            hoisted.transaction.get.mockImplementation(async (ref: { id: string }) => {
+                if (ref.id === queueItem.id) {
+                    return { exists: true, data: () => ({ revision: 'expected' }) };
+                }
+                return { exists: true, data: () => ({ connectionState: 'connected' }) };
+            });
+
+            const result = await deferQueueItemForReconnectRequiredIfCurrentUserActive({
+                queueItem,
+                additionalData: { deferredServiceName: ServiceNames.WahooAPI },
+                userID: 'user-1',
+                serviceName: ServiceNames.WahooAPI,
+                phase: 'provider_reconnect_defer',
+                logPrefix: 'ProviderQueue',
+                isCurrent: current => current.revision === 'expected',
+            });
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: false,
+                dispatchedToCloudTask: null,
+                deferredReason: hoisted.fieldValueDelete,
+                deferredServiceName: hoisted.fieldValueDelete,
+            }));
         });
     });
 });

@@ -4,13 +4,17 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
-import { isDisconnectPendingServiceConnection } from '../../../shared/service-connection';
+import {
+    isDisconnectPendingServiceConnection,
+    isReconnectRequiredServiceConnection,
+} from '../../../shared/service-connection';
 import {
     RouteDeliverySyncQueueItemInterface,
 } from '../queue/queue-item.interface';
 import {
     deferQueueItemForPendingDisconnect,
     deferQueueItemForPendingDisconnectIfCurrentUserActive,
+    deferQueueItemForReconnectRequiredIfCurrentUserActive,
     increaseRetryCountIfCurrentUserActive,
     isProviderOperationInFlightLeaseActive,
     markQueueItemSkipped,
@@ -44,6 +48,7 @@ import {
 import { setRouteDeliveryMetadata } from '../routes/route-persistence';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { getServiceConnectionMeta } from '../service-connection-meta';
+import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import {
     isProviderOperationError,
     ProviderOperationError,
@@ -768,6 +773,18 @@ async function getPendingDisconnectServiceForRoute(
     return null;
 }
 
+async function isWahooReconnectRequiredForRouteDelivery(
+    userID: string,
+    destinationServiceName: ServiceNames,
+): Promise<boolean> {
+    if (destinationServiceName !== ServiceNames.WahooAPI) {
+        return false;
+    }
+    return isReconnectRequiredServiceConnection(
+        await getServiceConnectionMeta(userID, destinationServiceName),
+    );
+}
+
 async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
     queueItem: RouteDeliverySyncQueueItemInterface,
     bulkWriter: admin.firestore.BulkWriter | undefined,
@@ -784,6 +801,22 @@ async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
         bulkWriter,
         userID: queueItem.userID,
         phase: 'route_delivery_sync_pending_disconnect_transition',
+        logPrefix: 'RouteDeliverySync',
+        isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
+    });
+}
+
+async function deferRouteDeliverySyncQueueItemForReconnectRequired(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    return deferQueueItemForReconnectRequiredIfCurrentUserActive({
+        queueItem,
+        additionalData: { deferredServiceName: `${ServiceNames.WahooAPI}` },
+        bulkWriter,
+        userID: queueItem.userID,
+        serviceName: ServiceNames.WahooAPI,
+        phase: 'route_delivery_sync_reconnect_required_transition',
         logPrefix: 'RouteDeliverySync',
         isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
     });
@@ -921,6 +954,13 @@ export async function processRouteDeliverySyncQueueItem(
                 bulkWriter,
                 pendingDisconnectService,
             );
+        }
+
+        if (await isWahooReconnectRequiredForRouteDelivery(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+        )) {
+            return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
         }
 
         if (!enabled && queueItem.manual !== true) {
@@ -1097,6 +1137,13 @@ export async function processRouteDeliverySyncQueueItem(
                 getPendingDisconnectServiceFromError(error, queueItem),
                 providerSendInProgress,
             );
+        }
+
+        if (
+            queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isWahooReconnectRequiredError(error)
+        ) {
+            return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
         }
 
         if (providerSendInProgress && isDestinationAuthRequiredError(error)) {

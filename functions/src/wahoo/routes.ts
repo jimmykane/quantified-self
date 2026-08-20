@@ -43,6 +43,10 @@ import {
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import {
+  isWahooReconnectRequiredError,
+  isWahooRefreshBackoffError,
+} from './refresh-recovery';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const MAX_FILENAME_LENGTH = 200;
@@ -351,6 +355,17 @@ async function updateWahooRoute(
 }
 
 function toWahooRouteHttpsError(error: unknown): never {
+  if (isWahooReconnectRequiredError(error)) {
+    throw Object.assign(
+      new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.'),
+      { name: 'WahooReconnectRequiredError' },
+    );
+  }
+  if (isWahooRefreshBackoffError(error)) {
+    throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
+      retryAt: error.retryAt,
+    });
+  }
   if (isTerminalServiceAuthError(error)) {
     throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.');
   }

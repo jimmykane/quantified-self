@@ -107,7 +107,13 @@ async function setOAuthTokenIfUserActive(
       logger.warn(`Skipping ${serviceName} OAuth token write for user ${userID} because the user is missing or deletion is in progress.`);
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_token_write:${serviceName}`);
     }
-    transaction.set(tokenDocRef, tokenData);
+    // A reauthorization replaces the credential generation atomically with
+    // the provider token. A refresh worker that started from an older
+    // snapshot can therefore never persist over the newly authorized token.
+    transaction.set(tokenDocRef, {
+      ...tokenData,
+      tokenCredentialGeneration: crypto.randomUUID(),
+    });
   });
 }
 

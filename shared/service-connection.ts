@@ -22,6 +22,10 @@ export interface ServiceConnectionMetaFields {
   lastAuthFailureCode?: string | null;
   lastAuthFailureMessage?: string | null;
   lastDisconnectedAt?: number | null;
+  /** Server-owned Wahoo refresh recovery state. Never stores OAuth values. */
+  wahooRefreshFailureCount?: number | null;
+  wahooRefreshFailureLastAt?: number | null;
+  wahooRefreshRetryAt?: number | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
   disconnectNextAttemptAt?: unknown | null;

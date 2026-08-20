@@ -16,6 +16,33 @@ import {
   disableActivitySyncRoutesForDisconnectedService,
   restoreActivitySyncRoutesForPendingDisconnectClear,
 } from './activity-sync/route-cleanup';
+import { releaseQueueItemsDeferredForReconnectRequired } from './queue/pending-disconnect-release';
+import {
+  areTokenCredentialSnapshotsEqual,
+  getTokenCredentialSnapshot,
+  type TokenCredentialSnapshot,
+} from './token-refresh-coordinator';
+
+export const WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD = 3;
+const WAHOO_OPAQUE_REFRESH_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const WAHOO_OPAQUE_REFRESH_BACKOFF_MS = [
+  5 * 60 * 1000,
+  15 * 60 * 1000,
+] as const;
+
+export interface WahooOpaqueRefreshFailureOutcome {
+  failureCount: number;
+  retryAt: number | null;
+  reconnectRequired: boolean;
+  stale: boolean;
+}
+
+/** The current refresh owner proves an opaque response still applies to this account. */
+export interface WahooOpaqueRefreshFailureClaim {
+  tokenRef: admin.firestore.DocumentReference;
+  leaseOwner: string;
+  credential: TokenCredentialSnapshot;
+}
 
 function serviceMetaRef(
   db: admin.firestore.Firestore,
@@ -135,12 +162,15 @@ export async function markServiceConnected(
   providerUserId?: string | null,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
-  return setServiceMetaIfUserActive(userID, serviceName, {
+  const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     ...(normalizedProviderUserId ? { providerUserId: normalizedProviderUserId } : {}),
     lastAuthFailureCode: FieldValue.delete(),
     lastAuthFailureMessage: FieldValue.delete(),
     lastDisconnectedAt: FieldValue.delete(),
+    wahooRefreshFailureCount: FieldValue.delete(),
+    wahooRefreshFailureLastAt: FieldValue.delete(),
+    wahooRefreshRetryAt: FieldValue.delete(),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
     disconnectNextAttemptAt: FieldValue.delete(),
@@ -154,6 +184,93 @@ export async function markServiceConnected(
     providerBindingCheckLeaseId: FieldValue.delete(),
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
+  });
+  if (!didWrite || serviceName !== ServiceNames.WahooAPI) {
+    return didWrite;
+  }
+
+  try {
+    await releaseQueueItemsDeferredForReconnectRequired(userID, serviceName);
+  } catch (error) {
+    // The connection is usable after the OAuth callback even if a parked item
+    // cannot be released immediately. Keep the reconnect successful and let a
+    // later callback or operator retry the durable release.
+    logger.error(
+      `[ServiceConnectionMeta] Failed to release reconnect-required ${serviceName} queue items for user ${userID}.`,
+      error,
+    );
+  }
+  return true;
+}
+
+/**
+ * Tracks an opaque Wahoo refresh rejection without storing provider bodies or
+ * credential values. A single 400 remains retryable; repeated failures become
+ * an explicit reconnect requirement before sync queues can exhaust retries.
+ */
+export async function recordWahooOpaqueRefreshFailure(
+  userID: string,
+  claim: WahooOpaqueRefreshFailureClaim,
+  nowMs = Date.now(),
+): Promise<WahooOpaqueRefreshFailureOutcome> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, ServiceNames.WahooAPI);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'wahoo_opaque_refresh_failure', error);
+    }
+    if (deletionGuard.shouldSkip) {
+      return { failureCount: 0, retryAt: null, reconnectRequired: false, stale: true };
+    }
+
+    const [tokenSnapshot, metaSnapshot] = await Promise.all([
+      transaction.get(claim.tokenRef),
+      transaction.get(ref),
+    ]);
+    const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
+    if (
+      !tokenSnapshot.exists
+      || tokenData?.tokenRefreshLeaseOwner !== claim.leaseOwner
+      || !areTokenCredentialSnapshotsEqual(
+        getTokenCredentialSnapshot(tokenData),
+        claim.credential,
+      )
+    ) {
+      return { failureCount: 0, retryAt: null, reconnectRequired: false, stale: true };
+    }
+
+    const data = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+    const previousFailureAt = Number(data?.wahooRefreshFailureLastAt || 0);
+    const previousFailureCount = Number(data?.wahooRefreshFailureCount || 0);
+    const withinWindow = Number.isFinite(previousFailureAt)
+      && previousFailureAt > nowMs - WAHOO_OPAQUE_REFRESH_FAILURE_WINDOW_MS;
+    const failureCount = Math.min(
+      WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD,
+      (withinWindow && Number.isFinite(previousFailureCount) ? Math.max(0, previousFailureCount) : 0) + 1,
+    );
+    const reconnectRequired = failureCount >= WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD;
+    const retryAt = reconnectRequired
+      ? null
+      : nowMs + WAHOO_OPAQUE_REFRESH_BACKOFF_MS[Math.min(failureCount - 1, WAHOO_OPAQUE_REFRESH_BACKOFF_MS.length - 1)];
+
+    transaction.set(ref, {
+      wahooRefreshFailureCount: failureCount,
+      wahooRefreshFailureLastAt: nowMs,
+      wahooRefreshRetryAt: retryAt,
+      lastAuthFailureCode: 'wahoo_opaque_refresh_400',
+      lastAuthFailureMessage: reconnectRequired
+        ? 'Reconnect Wahoo to resume sync.'
+        : 'Wahoo could not refresh this connection. Retrying later.',
+      ...(reconnectRequired ? {
+        connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
+        lastDisconnectedAt: nowMs,
+      } : {}),
+    }, { merge: true });
+
+    return { failureCount, retryAt, reconnectRequired, stale: false };
   });
 }
 
@@ -232,6 +349,9 @@ export async function clearServiceConnectionState(
     lastAuthFailureCode: FieldValue.delete(),
     lastAuthFailureMessage: FieldValue.delete(),
     lastDisconnectedAt: FieldValue.delete(),
+    wahooRefreshFailureCount: FieldValue.delete(),
+    wahooRefreshFailureLastAt: FieldValue.delete(),
+    wahooRefreshRetryAt: FieldValue.delete(),
     disconnectReason: FieldValue.delete(),
     disconnectAttemptCount: FieldValue.delete(),
     disconnectNextAttemptAt: FieldValue.delete(),

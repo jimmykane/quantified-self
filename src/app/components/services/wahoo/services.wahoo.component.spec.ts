@@ -64,6 +64,22 @@ describe('ServicesWahooComponent', () => {
     expect(component.connectionDescription).toContain('Disconnect is pending');
   });
 
+  it('shows reconnect-required state and reconnect action while keeping Wahoo tools unavailable', () => {
+    component.user = {} as any;
+    component.hasProAccess = true;
+    component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+
+    fixture.detectChanges();
+
+    expect(component.isReconnectRequired).toBe(true);
+    expect(component.isConnectedToService()).toBe(false);
+    expect(component.connectButtonLabel).toBe('Reconnect');
+    expect(component.connectionDescription).toContain('Reconnect Wahoo');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo rejected repeated token refreshes');
+    expect(fixture.nativeElement.textContent).toContain('Reconnect');
+    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeNull();
+  });
+
   it('shows the safe Wahoo account ID instead of a generic connected label', () => {
     component.serviceMeta = { connectionState: 'connected', providerUserId: '60462' } as any;
     (component as any).onServiceDataChanged();

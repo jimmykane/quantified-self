@@ -1385,6 +1385,21 @@ describe('OAuth2', () => {
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.WahooAPI, '60462');
         });
 
+        it('atomically assigns a new credential generation when OAuth replaces a token', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code);
+
+            expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
+                accessToken: 'mock-token',
+                tokenCredentialGeneration: expect.any(String),
+            }), undefined);
+        });
+
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {
             (hasProAccess as Mock).mockResolvedValue(false);
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
