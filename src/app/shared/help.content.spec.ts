@@ -539,7 +539,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
     expect(gettingStartedSection?.content).toContain('**Include all recorded metrics**');
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
-    expect(gettingStartedSection?.content).toContain('does not change which charts are currently visible');
+    expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
+    expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
+    expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
+    expect(gettingStartedSection?.content).toContain('Benchmark comparisons always make all recorded chartable metrics available');
+    expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
+    expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
+    expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
+    expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth, Temperature, and Heart Rate');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 
