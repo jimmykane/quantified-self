@@ -50,6 +50,15 @@ vi.mock('firebase-functions', () => ({
 
 const firestoreMock = {
     collectionGroup: vi.fn(),
+    collection: vi.fn((collectionName: string) => ({
+        doc: vi.fn((documentID: string) => ({
+            collection: vi.fn((subcollectionName: string) => ({
+                doc: vi.fn((subdocumentID: string) => ({
+                    path: `${collectionName}/${documentID}/${subcollectionName}/${subdocumentID}`,
+                })),
+            })),
+        })),
+    })),
 };
 
 vi.mock('firebase-admin', () => {
@@ -749,6 +758,26 @@ describe('tokens', () => {
                 wahooUserID: 'wahoo-user',
             }));
             expect(mockDoc.ref.update).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: expiresAt.getTime() }));
+            expect(hoisted.persistTokenRefresh).toHaveBeenCalledWith(
+                mockDoc.ref,
+                'refresh-lease',
+                expect.any(Object),
+                expect.objectContaining({
+                    accessToken: 'new-wahoo',
+                    refreshToken: 'new-wahoo-refresh',
+                }),
+                expect.objectContaining({
+                    companionWrites: [expect.objectContaining({
+                        ref: expect.objectContaining({
+                            path: `users/firebase-user-123/meta/${ServiceNames.WahooAPI}`,
+                        }),
+                        data: expect.objectContaining({
+                            wahooRefreshFailureCount: expect.anything(),
+                            wahooRefreshRetryAt: expect.anything(),
+                        }),
+                    })],
+                }),
+            );
         });
 
         it('should delegate 401 Boom errors to the terminal auth lifecycle', async () => {

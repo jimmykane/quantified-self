@@ -21,6 +21,8 @@ import { releaseQueueItemsDeferredForReconnectRequired } from './queue/pending-d
 import {
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
+  type TokenCredentialGuard,
+  type DocumentGenerationGuard,
   type TokenCredentialSnapshot,
 } from './token-refresh-coordinator';
 
@@ -57,6 +59,7 @@ async function setServiceMetaIfUserActive(
   userID: string,
   serviceName: ServiceNames,
   payload: Record<string, unknown>,
+  expectedTokenCredentialGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
@@ -74,6 +77,17 @@ async function setServiceMetaIfUserActive(
         `[ServiceConnectionMeta] Skipping ${serviceName} meta write for user ${userID} because the user is missing or deletion is in progress.`,
       );
       return false;
+    }
+
+    if (expectedTokenCredentialGeneration) {
+      const generationSnapshot = await transaction.get(expectedTokenCredentialGeneration.documentRef);
+      if (
+        !generationSnapshot.exists
+        || generationSnapshot.data()?.[expectedTokenCredentialGeneration.fieldName]
+          !== expectedTokenCredentialGeneration.expectedGeneration
+      ) {
+        return false;
+      }
     }
 
     transaction.set(ref, payload, { merge: true });
@@ -224,10 +238,7 @@ export interface MarkServiceReconnectRequiredOptions {
   /** Terminal cleanup can prove no replacement credential exists. */
   requireEmptyTokenCollection?: admin.firestore.CollectionReference;
   /** A failed deletion may only mark the still-current credential generation. */
-  expectedTokenCredential?: {
-    tokenRef: admin.firestore.DocumentReference;
-    credential: TokenCredentialSnapshot;
-  };
+  expectedTokenCredential?: TokenCredentialGuard;
 }
 
 export async function markServiceReconnectRequired(
@@ -334,6 +345,7 @@ export interface ServiceDisconnectPendingMetaInput {
 interface ClearServiceConnectionStateOptions {
   restorePendingDisconnectActivitySyncRoutes?: boolean;
   expectedPendingDisconnectGeneration?: string;
+  expectedTokenCredentialGeneration?: DocumentGenerationGuard;
 }
 
 export async function mirrorServiceDisconnectPendingToUserMeta(
@@ -382,6 +394,7 @@ export async function markServiceConnected(
   userID: string,
   serviceName: ServiceNames,
   providerUserId?: string | null,
+  expectedTokenCredentialGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
   const connectionStateGeneration = crypto.randomUUID();
@@ -427,7 +440,7 @@ export async function markServiceConnected(
     providerBindingCheckLeaseId: FieldValue.delete(),
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
-  });
+  }, expectedTokenCredentialGeneration);
   if (!didWrite) {
     return didWrite;
   }
@@ -516,6 +529,7 @@ export async function recordWahooOpaqueRefreshFailure(
         : 'Wahoo could not refresh this connection. Retrying later.',
       ...(reconnectRequired ? {
         connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
+        connectionStateGeneration: crypto.randomUUID(),
         lastDisconnectedAt: nowMs,
       } : {}),
     }, { merge: true });
@@ -592,7 +606,7 @@ export async function clearServiceConnectionState(
   userID: string,
   serviceName: ServiceNames,
   options: ClearServiceConnectionStateOptions = {},
-): Promise<void> {
+): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
   const connectionStateGeneration = crypto.randomUUID();
@@ -606,12 +620,24 @@ export async function clearServiceConnectionState(
     }
     if (deletionGuard.shouldSkip) return false;
 
-    if (options.expectedPendingDisconnectGeneration) {
-      const metaSnapshot = await transaction.get(ref);
+    if (options.expectedPendingDisconnectGeneration || options.expectedTokenCredentialGeneration) {
+      const [metaSnapshot, tokenSnapshot] = await Promise.all([
+        transaction.get(ref),
+        options.expectedTokenCredentialGeneration
+          ? transaction.get(options.expectedTokenCredentialGeneration.documentRef)
+          : Promise.resolve(null),
+      ]);
       const meta = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
       if (
-        meta?.connectionState !== SERVICE_CONNECTION_STATES.DisconnectPending
-        || meta.disconnectGeneration !== options.expectedPendingDisconnectGeneration
+        (options.expectedPendingDisconnectGeneration && (
+          meta?.connectionState !== SERVICE_CONNECTION_STATES.DisconnectPending
+          || meta.disconnectGeneration !== options.expectedPendingDisconnectGeneration
+        ))
+        || (options.expectedTokenCredentialGeneration && tokenSnapshot && (
+          !tokenSnapshot.exists
+          || tokenSnapshot.data()?.[options.expectedTokenCredentialGeneration.fieldName]
+            !== options.expectedTokenCredentialGeneration.expectedGeneration
+        ))
       ) {
         return false;
       }
@@ -659,7 +685,7 @@ export async function clearServiceConnectionState(
     return true;
   });
   if (!didWrite || !options.restorePendingDisconnectActivitySyncRoutes) {
-    return;
+    return didWrite;
   }
 
   try {
@@ -673,6 +699,7 @@ export async function clearServiceConnectionState(
       error,
     );
   }
+  return true;
 }
 
 /** Retries a provider-neutral route restoration marker after a partial transition. */

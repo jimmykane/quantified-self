@@ -271,6 +271,56 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('does not let a stale OAuth callback mark an older credential connected', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        accessToken: 'new-access',
+        refreshToken: 'new-refresh',
+        expiresAt: 2_000,
+        dateCreated: 200,
+        dateRefreshed: 200,
+        tokenCredentialGeneration: 'new-generation',
+      }),
+    });
+
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'provider-1',
+      {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'old-generation',
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+  });
+
+  it('allows the authorized credential generation to connect after an intervening token refresh', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'oauth-generation',
+      }),
+    });
+
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'provider-1',
+      {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'oauth-generation',
+      },
+    )).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalled();
+  });
+
   it('keeps the first opaque Wahoo refresh failure retryable without disabling routes', async () => {
     await expect(recordWahooOpaqueRefreshFailure('user-1', getCurrentWahooRefreshClaim(), 1_000)).resolves.toEqual({
       failureCount: 1,
@@ -307,6 +357,7 @@ describe('service-connection-meta', () => {
 
     expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       connectionState: 'reconnect_required',
+      connectionStateGeneration: expect.any(String),
       wahooRefreshFailureCount: 3,
       wahooRefreshRetryAt: null,
       lastAuthFailureMessage: 'Reconnect Wahoo to resume sync.',

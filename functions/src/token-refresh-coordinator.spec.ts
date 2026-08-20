@@ -16,6 +16,11 @@ interface InMemorySnapshot {
 interface InMemoryTransaction {
   get: (ref: admin.firestore.DocumentReference) => Promise<InMemorySnapshot>;
   update: (ref: admin.firestore.DocumentReference, update: Record<string, unknown>) => void;
+  set: (
+    ref: admin.firestore.DocumentReference,
+    data: Record<string, unknown>,
+    options: { merge: boolean },
+  ) => void;
 }
 
 interface InMemoryFirestore {
@@ -34,6 +39,11 @@ function isDeleteTransform(value: unknown): boolean {
 function createInMemoryCoordinator(initialToken: StoredToken) {
   let storedToken = initialToken ? { ...initialToken } : null;
   let deletionInProgress = false;
+  const companionWrites: Array<{
+    ref: admin.firestore.DocumentReference;
+    data: Record<string, unknown>;
+    options: { merge: boolean };
+  }> = [];
   let transactionTail = Promise.resolve();
   const userRef = { id: 'user-1', path: 'users/user-1' } as unknown as admin.firestore.DocumentReference;
   const tombstoneRef = { id: 'user-1', path: 'userDeletionTombstones/user-1' } as unknown as admin.firestore.DocumentReference;
@@ -76,6 +86,9 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
             }
           }
         },
+        set: (writeRef, data, options) => {
+          companionWrites.push({ ref: writeRef, data, options });
+        },
       }));
       transactionTail = execution.then(() => undefined, () => undefined);
       return execution;
@@ -94,6 +107,7 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
     beginDeletion: () => {
       deletionInProgress = true;
     },
+    getCompanionWrites: () => [...companionWrites],
   };
 }
 
@@ -153,6 +167,31 @@ describe('token refresh coordinator', () => {
       refreshToken: 'reauthorized-refresh',
       tokenCredentialGeneration: 'generation-2',
     }));
+  });
+
+  it('commits recovery-state resets only with the winning refresh persistence', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    const claim = await store.coordinator.claim(store.ref, credential, 1_000);
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+    const metaRef = {
+      path: 'users/user-1/meta/wahooAPI',
+    } as unknown as admin.firestore.DocumentReference;
+
+    await expect(store.coordinator.persist(
+      store.ref,
+      claim.leaseOwner,
+      claim.credential,
+      { accessToken: 'rotated-access', refreshToken: 'rotated-refresh' },
+      { companionWrites: [{ ref: metaRef, data: { wahooRefreshFailureCount: 0 } }] },
+    )).resolves.toEqual({ kind: 'persisted' });
+
+    expect(store.getCompanionWrites()).toEqual([{
+      ref: metaRef,
+      data: { wahooRefreshFailureCount: 0 },
+      options: { merge: true },
+    }]);
   });
 
   it('does not recreate a disconnected token when an old refresh finishes', async () => {

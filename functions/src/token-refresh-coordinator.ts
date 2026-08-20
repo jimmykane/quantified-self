@@ -25,6 +25,27 @@ export interface TokenCredentialSnapshot {
   credentialGeneration: string | null;
 }
 
+export interface TokenCredentialGuard {
+  tokenRef: admin.firestore.DocumentReference;
+  credential: TokenCredentialSnapshot;
+}
+
+export interface DocumentGenerationGuard {
+  documentRef: admin.firestore.DocumentReference;
+  fieldName: string;
+  expectedGeneration: string;
+}
+
+export interface TokenRefreshCompanionWrite {
+  ref: admin.firestore.DocumentReference;
+  data: Record<string, unknown>;
+}
+
+export interface PersistTokenRefreshOptions {
+  /** Writes committed atomically only when this refresh still owns the credential. */
+  companionWrites?: readonly TokenRefreshCompanionWrite[];
+}
+
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 type TokenReference = admin.firestore.DocumentReference;
 
@@ -173,6 +194,7 @@ export function createTokenRefreshCoordinator(
     leaseOwner: string,
     expectedCredential: TokenCredentialSnapshot,
     tokenData: Record<string, unknown>,
+    options: PersistTokenRefreshOptions = {},
   ): Promise<PersistTokenRefreshResult> {
     return db.runTransaction(async (transaction) => {
       if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
@@ -199,6 +221,9 @@ export function createTokenRefreshCoordinator(
         ...tokenData,
         ...clearTokenRefreshLeaseUpdate(),
       });
+      for (const companionWrite of options.companionWrites || []) {
+        transaction.set(companionWrite.ref, companionWrite.data, { merge: true });
+      }
       return { kind: 'persisted' };
     });
   }
@@ -246,8 +271,9 @@ export async function persistTokenRefresh(
   leaseOwner: string,
   expectedCredential: TokenCredentialSnapshot,
   tokenData: Record<string, unknown>,
+  options: PersistTokenRefreshOptions = {},
 ): Promise<PersistTokenRefreshResult> {
-  return createTokenRefreshCoordinator().persist(ref, leaseOwner, expectedCredential, tokenData);
+  return createTokenRefreshCoordinator().persist(ref, leaseOwner, expectedCredential, tokenData, options);
 }
 
 export async function releaseTokenRefreshClaim(

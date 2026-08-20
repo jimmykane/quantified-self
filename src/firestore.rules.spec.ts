@@ -145,6 +145,24 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('denies client writes to the backend-owned OAuth credential generation', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).set({
+                activeOAuthCredentialGeneration: 'client-generation',
+            }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('garminAPITokens').doc(userId).set({
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+            });
+
+            await assertFails(db.collection('garminAPITokens').doc(userId).update({
+                activeOAuthCredentialGeneration: 'client-replacement',
+            }));
+        });
+
         it('denies client token mutations while disconnect is pending', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.collection('suuntoAppAccessTokens').doc(userId).collection('tokens').doc('token-1');

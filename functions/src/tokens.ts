@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
   COROSAPIAuth2ServiceTokenInterface,
@@ -482,6 +483,22 @@ export async function getTokenData(
       claimResult.leaseOwner,
       claimResult.credential,
       newToken as unknown as Record<string, unknown>,
+      serviceName === ServiceNames.WahooAPI && firebaseUserID ? {
+        companionWrites: [{
+          ref: admin.firestore()
+            .collection('users')
+            .doc(firebaseUserID)
+            .collection('meta')
+            .doc(ServiceNames.WahooAPI),
+          data: {
+            wahooRefreshFailureCount: FieldValue.delete(),
+            wahooRefreshFailureLastAt: FieldValue.delete(),
+            wahooRefreshRetryAt: FieldValue.delete(),
+            lastAuthFailureCode: FieldValue.delete(),
+            lastAuthFailureMessage: FieldValue.delete(),
+          },
+        }],
+      } : {},
     );
     if (persistResult.kind === 'persisted') {
       releaseClaim = false;

@@ -12,6 +12,9 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
+import {
+  type DocumentGenerationGuard,
+} from './token-refresh-coordinator';
 import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
 import {
   buildPendingDisconnectMarkState,
@@ -97,6 +100,17 @@ async function shouldSkipPendingDisconnectWrite(
     deletionInProgress: deletionGuard.deletionInProgress,
   });
   return true;
+}
+
+async function isExpectedOAuthCredentialGenerationCurrent(
+  transaction: admin.firestore.Transaction,
+  expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
+): Promise<boolean> {
+  if (!expectedOAuthCredentialGeneration) return true;
+  const generationSnapshot = await transaction.get(expectedOAuthCredentialGeneration.documentRef);
+  return generationSnapshot.exists
+    && generationSnapshot.data()?.[expectedOAuthCredentialGeneration.fieldName]
+      === expectedOAuthCredentialGeneration.expectedGeneration;
 }
 
 export async function getServiceDisconnectPendingData(
@@ -296,6 +310,7 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
   serviceName: ServiceNames,
   pendingData: PendingServiceDisconnectRootData,
   originalError: unknown,
+  expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
@@ -306,6 +321,9 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
 
   const didRestoreRoot = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'restore_after_clear_failure')) {
+      return false;
+    }
+    if (!(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthCredentialGeneration))) {
       return false;
     }
 
@@ -338,6 +356,7 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
 export async function clearServiceDisconnectPending(
   userID: string,
   serviceName: ServiceNames,
+  expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
@@ -345,6 +364,9 @@ export async function clearServiceDisconnectPending(
   const clearResult = await db.runTransaction(async (transaction) => {
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
       return { status: 'skipped' as const };
+    }
+    if (!(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthCredentialGeneration))) {
+      return { status: 'stale_credential' as const };
     }
 
     const snapshot = await transaction.get(rootRef);
@@ -361,7 +383,7 @@ export async function clearServiceDisconnectPending(
       : { status: 'clear_only' as const };
   });
 
-  if (clearResult.status === 'skipped') {
+  if (clearResult.status === 'skipped' || clearResult.status === 'stale_credential') {
     return;
   }
 
@@ -376,12 +398,18 @@ export async function clearServiceDisconnectPending(
     const pendingDisconnectGeneration = clearResult.status === 'pending_cleared'
       ? `${clearResult.pendingData.disconnectGeneration || ''}`.trim() || undefined
       : undefined;
-    await clearServiceConnectionState(userID, serviceName, {
+    const didClearConnectionState = await clearServiceConnectionState(userID, serviceName, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      ...(expectedOAuthCredentialGeneration ? {
+        expectedTokenCredentialGeneration: expectedOAuthCredentialGeneration,
+      } : {}),
       ...(pendingDisconnectGeneration ? {
         expectedPendingDisconnectGeneration: pendingDisconnectGeneration,
       } : {}),
     });
+    if (expectedOAuthCredentialGeneration && !didClearConnectionState) {
+      return;
+    }
 
     if (clearResult.status === 'pending_cleared') {
       await releaseQueueItemsDeferredForPendingDisconnect(
@@ -397,6 +425,7 @@ export async function clearServiceDisconnectPending(
         serviceName,
         clearResult.pendingData,
         error,
+        expectedOAuthCredentialGeneration,
       );
     }
     throw error;

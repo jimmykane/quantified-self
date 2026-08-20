@@ -30,7 +30,12 @@ import {
 } from './shared/user-deletion-guard';
 import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
 import { hasProAccess } from './utils';
+import {
+  type DocumentGenerationGuard,
+} from './token-refresh-coordinator';
 export { deleteLocalServiceToken } from './service-token-store';
+
+const ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD = 'activeOAuthCredentialGeneration';
 
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
@@ -93,9 +98,14 @@ async function setOAuthTokenIfUserActive(
   tokenCollectionName: string,
   tokenID: string,
   tokenData: Record<string, unknown>,
-): Promise<void> {
+): Promise<DocumentGenerationGuard> {
   const db = admin.firestore();
-  const tokenDocRef = db.collection(tokenCollectionName).doc(userID).collection('tokens').doc(tokenID);
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  const tokenDocRef = tokenRootRef.collection('tokens').doc(tokenID);
+  const persistedTokenData = {
+    ...tokenData,
+    tokenCredentialGeneration: crypto.randomUUID(),
+  };
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -110,11 +120,16 @@ async function setOAuthTokenIfUserActive(
     // A reauthorization replaces the credential generation atomically with
     // the provider token. A refresh worker that started from an older
     // snapshot can therefore never persist over the newly authorized token.
-    transaction.set(tokenDocRef, {
-      ...tokenData,
-      tokenCredentialGeneration: crypto.randomUUID(),
-    });
+    transaction.set(tokenRootRef, {
+      [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
+    }, { merge: true });
+    transaction.set(tokenDocRef, persistedTokenData);
   });
+  return {
+    documentRef: tokenRootRef,
+    fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+    expectedGeneration: persistedTokenData.tokenCredentialGeneration,
+  };
 }
 
 async function cleanupOAuthFlowContext(
@@ -313,6 +328,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const adapter = getServiceAdapter(serviceName);
   let tokenPersisted = false;
+  let persistedOAuthGenerationGuard: DocumentGenerationGuard | null = null;
   let shouldCleanupOAuthContext = true;
 
   // Retrieve stored flow context (state, PKCE verifier, etc)
@@ -342,7 +358,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
       const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
 
-      await setOAuthTokenIfUserActive(
+      persistedOAuthGenerationGuard = await setOAuthTokenIfUserActive(
         userID,
         serviceName,
         adapter.tokenCollectionName,
@@ -358,12 +374,15 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     }
 
     if (await hasProAccess(userID)) {
-      await clearServiceDisconnectPending(userID, serviceName);
+      if (!persistedOAuthGenerationGuard) {
+        throw new Error(`Missing persisted ${serviceName} credential guard after OAuth token write.`);
+      }
+      await clearServiceDisconnectPending(userID, serviceName, persistedOAuthGenerationGuard);
       const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
-        ? await markServiceConnected(userID, serviceName, uniqueId)
-        : await markServiceConnected(userID, serviceName);
+        ? await markServiceConnected(userID, serviceName, uniqueId, persistedOAuthGenerationGuard)
+        : await markServiceConnected(userID, serviceName, undefined, persistedOAuthGenerationGuard);
       if (!didMarkConnected) {
-        logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
+        logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because a newer credential or account lifecycle transition won after token persistence.`);
         throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
       }
     } else {
