@@ -243,6 +243,8 @@ export interface MarkServiceReconnectRequiredOptions {
   expectedTokenCredential?: TokenCredentialGuard;
   /** Also bind fallback cleanup to the provider token root's OAuth generation. */
   expectedTokenRootCredentialGeneration?: DocumentGenerationGuard;
+  /** Preserve the stable provider account identity while credentials are unavailable. */
+  providerUserId?: string | null;
 }
 
 export async function markServiceReconnectRequired(
@@ -262,6 +264,7 @@ export async function markServiceReconnectRequired(
   );
   const expectedTokenCredential = options.expectedTokenCredential;
   const expectedTokenRootCredentialGeneration = options.expectedTokenRootCredentialGeneration;
+  const providerUserId = `${options.providerUserId || ''}`.trim();
   const didWrite = await db.runTransaction(async transaction => {
     let deletionGuard;
     try {
@@ -296,6 +299,7 @@ export async function markServiceReconnectRequired(
     const currentGeneration = typeof metaSnapshot.data()?.connectionStateGeneration === 'string'
       ? `${metaSnapshot.data()?.connectionStateGeneration}`
       : null;
+    const currentProviderUserId = `${metaSnapshot.data()?.providerUserId || ''}`.trim();
     if (
       (guardsConnectionGeneration
         && currentGeneration !== (options.expectedConnectionStateGeneration || null))
@@ -312,6 +316,7 @@ export async function markServiceReconnectRequired(
           ? expectedTokenRootSnapshot.data()?.[expectedTokenRootCredentialGeneration.fieldName]
           : null) !== expectedTokenRootCredentialGeneration.expectedGeneration
       ))
+      || (providerUserId && currentProviderUserId && currentProviderUserId !== providerUserId)
     ) {
       return false;
     }
@@ -326,6 +331,7 @@ export async function markServiceReconnectRequired(
       lastAuthFailureCode: failureCode || null,
       lastAuthFailureMessage: failureMessage || null,
       lastDisconnectedAt: nowMs,
+      ...(providerUserId ? { providerUserId } : {}),
     }, { merge: true });
     return true;
   });
@@ -607,7 +613,15 @@ export type ServiceConnectionProviderUserIdPinResult =
   | 'already_pinned'
   | 'conflict'
   | 'invalid'
+  | 'token_unavailable'
   | 'user_inactive';
+
+export interface ServiceConnectionProviderUserIdPinOptions {
+  expectedProviderToken?: {
+    documentRef: admin.firestore.DocumentReference;
+    providerUserIdField: string;
+  };
+}
 
 /**
  * Pins a legacy connection without replacing an account selected by a
@@ -618,6 +632,7 @@ export async function pinServiceConnectionProviderUserIdIfUnset(
   userID: string,
   serviceName: ServiceNames,
   providerUserId: string | null | undefined,
+  options: ServiceConnectionProviderUserIdPinOptions = {},
 ): Promise<ServiceConnectionProviderUserIdPinResult> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
   if (!normalizedProviderUserId) {
@@ -637,7 +652,19 @@ export async function pinServiceConnectionProviderUserIdIfUnset(
       return 'user_inactive';
     }
 
-    const snapshot = await transaction.get(ref);
+    const [snapshot, expectedTokenSnapshot] = await Promise.all([
+      transaction.get(ref),
+      options.expectedProviderToken
+        ? transaction.get(options.expectedProviderToken.documentRef)
+        : Promise.resolve(null),
+    ]);
+    if (options.expectedProviderToken && expectedTokenSnapshot && (
+      !expectedTokenSnapshot.exists
+      || `${expectedTokenSnapshot.data()?.[options.expectedProviderToken.providerUserIdField] || ''}`.trim()
+        !== normalizedProviderUserId
+    )) {
+      return 'token_unavailable';
+    }
     const existingProviderUserId = `${snapshot.data()?.providerUserId || ''}`.trim();
     if (existingProviderUserId) {
       return existingProviderUserId === normalizedProviderUserId ? 'already_pinned' : 'conflict';

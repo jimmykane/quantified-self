@@ -393,6 +393,7 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       expect.any(Number),
       {
         expectedConnectionStateGeneration: 'connection-generation-1',
+        providerUserId: 'suunto-user',
         requireEmptyTokenCollection: tokenRef.parent,
       },
     );
@@ -481,6 +482,7 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       expect.any(Number),
       {
         expectedConnectionStateGeneration: 'connection-generation-1',
+        providerUserId: 'suunto-user',
         requireEmptyTokenCollection: tokenRef.parent,
       },
     );
