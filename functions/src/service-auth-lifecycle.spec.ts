@@ -405,6 +405,84 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     });
   });
 
+  it('marks the pinned Wahoo account reconnect-required when an unrelated legacy token remains', async () => {
+    const currentTokenSnapshot: any = {
+      exists: true,
+      id: 'wahoo-account-a',
+      updateTime: makeTimestamp(1, 100_000),
+      ref: tokenRef,
+      data: () => ({ accessToken: 'stale-access', wahooUserID: 'wahoo-account-a' }),
+    };
+    const legacyTokenSnapshot: any = {
+      exists: true,
+      id: 'wahoo-account-b',
+      ref: { id: 'wahoo-account-b' },
+      data: () => ({ accessToken: 'legacy-access', wahooUserID: 'wahoo-account-b' }),
+    };
+    const transactionDelete = vi.fn();
+
+    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
+      get: vi.fn(async (ref: unknown) => {
+        if (ref === tokenRef) return currentTokenSnapshot;
+        if (ref === tokenCollectionRef) return { docs: [currentTokenSnapshot, legacyTokenSnapshot] };
+        if (ref === tokenRootRef) return { exists: true, data: () => ({}) };
+        if (ref === serviceMetaRef) {
+          return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
+        }
+        throw new Error('Unexpected transaction get target');
+      }),
+      delete: transactionDelete,
+    }));
+
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'wahoo-account-a',
+        updateTime: makeTimestamp(1, 100_000),
+        ref: tokenRef,
+      } as any,
+      ServiceNames.WahooAPI,
+      {
+        serviceName: ServiceNames.WahooAPI,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        wahooUserID: 'wahoo-account-a',
+      } as any,
+      {
+        statusCode: 400,
+        providerErrorCode: 'invalid_grant',
+        providerErrorMessage: 'Reconnect required',
+        isInvalidGrant: true,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'invalid_grant',
+      },
+      new Error('400 invalid_grant'),
+    );
+
+    expect(resolution.kind).toBe('terminal_error');
+    expect(transactionDelete).toHaveBeenCalledWith(tokenRef);
+    expect(transactionDelete).not.toHaveBeenCalledWith(tokenRootRef);
+    expect(mockMarkServiceReconnectRequired).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      expect.any(Number),
+      {
+        expectedConnectionStateGeneration: 'connection-generation-1',
+        providerUserId: 'wahoo-account-a',
+        requireMissingToken: tokenRef,
+      },
+    );
+    if (resolution.kind === 'terminal_error') {
+      expect(resolution.error.cleanupOutcome).toMatchObject({
+        connectionStateUpdate: 'reconnect_required',
+        preservedTokenCount: 1,
+      });
+    }
+  });
+
   it('preserves the token root when reconnect state is already stored on it', async () => {
     const currentTokenSnapshot: any = {
       exists: true,
