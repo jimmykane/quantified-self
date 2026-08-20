@@ -270,6 +270,46 @@ describe('service-connection-meta', () => {
     expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
   });
 
+  it('allows a pinned account failure when only unrelated legacy tokens remain', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      {
+        providerUserId: 'wahoo-account-a',
+        requireMissingToken: hoisted.refreshTokenRef as any,
+      },
+    )).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      connectionState: 'reconnect_required',
+      providerUserId: 'wahoo-account-a',
+    }), { merge: true });
+  });
+
+  it('does not mark reconnect-required after the failed account token was replaced', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: true, data: () => ({}) });
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+      {
+        providerUserId: 'wahoo-account-a',
+        requireMissingToken: hoisted.refreshTokenRef as any,
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.disableActivitySyncRoutesForDisconnectedService).not.toHaveBeenCalled();
+  });
+
   it('does not let fallback cleanup cross a newer OAuth root generation', async () => {
     const tokenRoot = { path: 'wahooAPIAccessTokens/user-1' };
     hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {

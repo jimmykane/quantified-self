@@ -239,6 +239,8 @@ export interface MarkServiceReconnectRequiredOptions {
   expectedConnectionStateGeneration?: string | null;
   /** Terminal cleanup can prove no replacement credential exists. */
   requireEmptyTokenCollection?: admin.firestore.CollectionReference;
+  /** Terminal cleanup can prove the failed account token was not replaced. */
+  requireMissingToken?: admin.firestore.DocumentReference;
   /** A failed deletion may only mark the still-current credential generation. */
   expectedTokenCredential?: TokenCredentialGuard;
   /** Also bind fallback cleanup to the provider token root's OAuth generation. */
@@ -282,12 +284,16 @@ export async function markServiceReconnectRequired(
     const [
       metaSnapshot,
       tokenSnapshot,
+      missingTokenSnapshot,
       expectedTokenSnapshot,
       expectedTokenRootSnapshot,
     ] = await Promise.all([
       transaction.get(ref),
       options.requireEmptyTokenCollection
         ? transaction.get(options.requireEmptyTokenCollection)
+        : Promise.resolve(null),
+      options.requireMissingToken
+        ? transaction.get(options.requireMissingToken)
         : Promise.resolve(null),
       expectedTokenCredential
         ? transaction.get(expectedTokenCredential.tokenRef)
@@ -304,6 +310,7 @@ export async function markServiceReconnectRequired(
       (guardsConnectionGeneration
         && currentGeneration !== (options.expectedConnectionStateGeneration || null))
       || (tokenSnapshot && !tokenSnapshot.empty)
+      || (missingTokenSnapshot?.exists === true)
       || (expectedTokenCredential && expectedTokenSnapshot && (
         !expectedTokenSnapshot.exists
         || !areTokenCredentialSnapshotsEqual(

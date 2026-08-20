@@ -861,7 +861,7 @@ async function cleanupTerminalAuthToken(
       }
     }
 
-    if (deleteResult.remainingTokenCount === 0) {
+    if (deleteResult.remainingTokenCount === 0 || serviceName === ServiceNames.WahooAPI) {
       try {
         const didMarkReconnectRequired = await markServiceReconnectRequired(
           userID,
@@ -871,8 +871,15 @@ async function cleanupTerminalAuthToken(
           Date.now(),
           {
             expectedConnectionStateGeneration: deleteResult.connectionStateGeneration,
-            requireEmptyTokenCollection: tokenSnapshot.ref.parent,
             providerUserId: terminalAuthFailure.providerUserId,
+            ...(deleteResult.remainingTokenCount === 0 ? {
+              requireEmptyTokenCollection: tokenSnapshot.ref.parent,
+            } : {
+              // Other legacy Wahoo accounts do not make this pinned account
+              // healthy. Only a replacement for the exact failed account may
+              // supersede its reconnect-required transition.
+              requireMissingToken: tokenSnapshot.ref,
+            }),
           },
         );
         if (didMarkReconnectRequired) {
@@ -907,6 +914,8 @@ async function cleanupTerminalAuthToken(
             providerUserId: terminalAuthFailure.providerUserId,
             ...(deleteResult.remainingTokenCount === 0 ? {
               requireEmptyTokenCollection: tokenSnapshot.ref.parent,
+            } : serviceName === ServiceNames.WahooAPI ? {
+              requireMissingToken: tokenSnapshot.ref,
             } : {}),
           } : {
             providerUserId: terminalAuthFailure.providerUserId,
