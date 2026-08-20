@@ -530,6 +530,75 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('accepts a missing token root only when the guarded credential generation is null', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      expectedTokenCredentialGeneration: {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: null,
+      },
+    })).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalled();
+  });
+
+  it('rejects a missing token root when cleanup expects a live credential generation', async () => {
+    hoisted.refreshTokenGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      expectedTokenCredentialGeneration: {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation-a',
+      },
+    })).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('allows an idempotent retry after pending metadata was cleared but root cleanup failed', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({ exists: true, data: () => ({}) });
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'credential-generation-a' }),
+    });
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      expectedPendingDisconnectGeneration: 'disconnect-generation-a',
+      expectedTokenCredentialGeneration: {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation-a',
+      },
+    })).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalled();
+  });
+
+  it('does not treat a newer connected state as an idempotently cleared pending episode', async () => {
+    hoisted.metaGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ connectionState: 'connected', connectionStateGeneration: 'oauth-generation-b' }),
+    });
+    hoisted.refreshTokenGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'credential-generation-a' }),
+    });
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      expectedPendingDisconnectGeneration: 'disconnect-generation-a',
+      expectedTokenCredentialGeneration: {
+        documentRef: hoisted.refreshTokenRef as any,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation-a',
+      },
+    })).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
   it('tracks route restore state when mirroring pending disconnect metadata', async () => {
     hoisted.metaGet.mockResolvedValue({
       exists: true,

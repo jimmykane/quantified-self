@@ -279,12 +279,16 @@ async function getPendingDisconnectServiceForRoute(
 
 async function getWahooReconnectRequiredServiceForRoute(
     userID: string,
-    sourceServiceName: ServiceNames,
-    destinationServiceName: ServiceNames,
+    sourceServiceName: unknown,
+    destinationServiceName: unknown,
 ): Promise<ServiceNames.WahooAPI | null> {
+    const normalizeServiceName = (value: unknown) => `${value || ''}`
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toLowerCase();
+    const wahooServiceName = normalizeServiceName(ServiceNames.WahooAPI);
     if (
-        sourceServiceName !== ServiceNames.WahooAPI
-        && destinationServiceName !== ServiceNames.WahooAPI
+        normalizeServiceName(sourceServiceName) !== wahooServiceName
+        && normalizeServiceName(destinationServiceName) !== wahooServiceName
     ) {
         return null;
     }
@@ -1296,7 +1300,6 @@ export async function processActivitySyncQueueItem(
             error.dlqContext = 'UNKNOWN_ACTIVITY_SYNC_ROUTE';
             throw error;
         }
-
         if (!shouldResumePersistedDestinationUpload) {
             const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
             if (allowlistConfigError) {
@@ -1343,6 +1346,10 @@ export async function processActivitySyncQueueItem(
 
         if (!shouldResumePersistedDestinationUpload) {
             const isManualRun = queueItem.manual === true;
+            // Read the setting before lifecycle state. If a reconnect-required
+            // transition disables the route concurrently, the later lifecycle
+            // read parks the row instead of permanently completing it as disabled.
+            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
             if (pendingDisconnectService) {
                 return deferActivitySyncQueueItemForPendingDisconnect(
@@ -1354,8 +1361,8 @@ export async function processActivitySyncQueueItem(
             }
             const reconnectRequiredService = await getWahooReconnectRequiredServiceForRoute(
                 queueItem.userID,
-                queueItem.sourceServiceName,
-                queueItem.destinationServiceName,
+                route.sourceServiceName,
+                route.destinationServiceName,
             );
             if (reconnectRequiredService) {
                 return deferActivitySyncQueueItemForReconnectRequired(
@@ -1394,7 +1401,6 @@ export async function processActivitySyncQueueItem(
                 });
             }
 
-            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             if (!enabled && !isManualRun) {
                 await setActivitySyncSkippedMetadata({
                     ...routeMeta,

@@ -14,7 +14,6 @@ import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import {
   SERVICE_NAME,
-  WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_WORKOUTS_WRITE_SCOPE,
 } from './constants';
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
@@ -41,6 +40,7 @@ import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
   recordActivitySyncOutboundFingerprint,
 } from '../activity-sync/outbound-fingerprint';
+import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -223,7 +223,7 @@ async function assertWahooActivityUploadProviderActionAllowed(userID: string, ph
 }
 
 function toWahooHttpsError(error: unknown): never {
-  if (isWahooReconnectRequiredError(error)) {
+  if (isWahooReconnectRequiredError(error) || isTerminalServiceAuthError(error)) {
     throw Object.assign(
       new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.'),
       { name: 'WahooReconnectRequiredError' },
@@ -233,9 +233,6 @@ function toWahooHttpsError(error: unknown): never {
     throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
       retryAt: error.retryAt,
     });
-  }
-  if (isTerminalServiceAuthError(error)) {
-    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
   }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
@@ -291,27 +288,19 @@ async function withWahooWorkoutWriteToken<T>(
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
-  const initialTokenSnapshots = await admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens')
-    .limit(1)
-    .get();
-  const initialTokenSnapshot = initialTokenSnapshots.docs[0];
-  if (!initialTokenSnapshot) {
-    throw new HttpsError('unauthenticated', 'Connect Wahoo before sending activities.');
-  }
+  const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
+  const providerUserId = initialTokenSnapshot.id;
 
   const execute = async (forceRefresh: boolean): Promise<T> => {
-    const currentTokenSnapshot = await initialTokenSnapshot.ref.get();
-    if (!currentTokenSnapshot.exists) {
-      throw new HttpsError('unauthenticated', 'Connect Wahoo before sending activities.');
-    }
+    const currentTokenSnapshot = await getActiveWahooTokenSnapshot(userID, providerUserId);
     const token = await getTokenData(
       currentTokenSnapshot,
       ServiceNames.WahooAPI,
       forceRefresh,
     ) as WahooAPIAuth2ServiceTokenInterface;
+    if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
+    }
     if (!hasWahooWorkoutsWriteScope(token.scope)) {
       throw new WahooWorkoutWriteScopeRequiredError();
     }
@@ -320,6 +309,7 @@ async function withWahooWorkoutWriteToken<T>(
       await beforeProviderRequest();
       await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
     }
+    await getActiveWahooTokenSnapshot(userID, providerUserId);
     return operation(token.accessToken);
   };
 

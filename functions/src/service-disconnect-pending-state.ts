@@ -8,10 +8,16 @@ export const SERVICE_DISCONNECT_PENDING_REASON = {
 
 export type ServiceDisconnectPendingReason = typeof SERVICE_DISCONNECT_PENDING_REASON[keyof typeof SERVICE_DISCONNECT_PENDING_REASON];
 
+export interface ServiceDisconnectLifecycleGuard {
+  disconnectGeneration: string | null;
+  oauthCredentialGeneration: string | null;
+}
+
 export interface PendingServiceDisconnectFailure {
   tokenID: string;
   statusCode: number | null;
   errorMessage: string;
+  lifecycleGuard?: ServiceDisconnectLifecycleGuard;
 }
 
 export interface PendingServiceDisconnectRootData {

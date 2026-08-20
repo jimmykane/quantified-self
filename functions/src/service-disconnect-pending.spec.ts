@@ -420,6 +420,31 @@ describe('service-disconnect-pending', () => {
     );
   });
 
+  it('does not let stale cleanup create a pending episode after OAuth replaced the credential', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'oauth-generation-new' }),
+    });
+
+    const didMark = await markServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      {
+        tokenID: 'token-1',
+        statusCode: 504,
+        errorMessage: 'gateway timeout',
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: 'oauth-generation-old',
+        },
+      },
+    );
+
+    expect(didMark).toBe(false);
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
+  });
+
   it('does not mark pending disconnect when the user is missing or deletion is in progress', async () => {
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
       userExists: false,
@@ -466,6 +491,35 @@ describe('service-disconnect-pending', () => {
         manualReviewRequired: false,
       }),
     );
+  });
+
+  it('does not let a stale retry overwrite a newer disconnect or OAuth generation', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'disconnect-generation-new',
+        activeOAuthCredentialGeneration: 'oauth-generation-new',
+      }),
+    });
+
+    const didRecord = await recordServiceDisconnectRetryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      {
+        tokenID: 'token-1',
+        statusCode: 504,
+        errorMessage: 'gateway timeout',
+        lifecycleGuard: {
+          disconnectGeneration: 'disconnect-generation-old',
+          oauthCredentialGeneration: 'oauth-generation-old',
+        },
+      },
+    );
+
+    expect(didRecord).toBe(false);
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
   });
 
   it('finalizes manual-review roots only after mirroring terminal pending state to user meta', async () => {
@@ -599,6 +653,31 @@ describe('service-disconnect-pending', () => {
         nextAttemptAt: expect.objectContaining({ toMillis: expect.any(Function) }),
       }),
     );
+  });
+
+  it('does not resume stale recovery failure state after a newer OAuth callback wins', async () => {
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'oauth-generation-new' }),
+    });
+
+    const didResume = await resumeServiceDisconnectRetryAfterRecoveryFailure(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      {
+        tokenID: 'token-1',
+        statusCode: 504,
+        errorMessage: 'gateway timeout',
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: 'oauth-generation-old',
+        },
+      },
+    );
+
+    expect(didResume).toBe(false);
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
   });
 
   it('does not record retry failures when the user is missing or deletion is in progress', async () => {

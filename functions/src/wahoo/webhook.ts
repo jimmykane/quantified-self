@@ -14,6 +14,16 @@ import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getActiveWahooTokenSnapshot } from './account';
+import { isWahooReconnectRequiredError } from './refresh-recovery';
+
+function isInactiveWahooAccountError(error: unknown): boolean {
+  const namedError = error as { name?: unknown; code?: unknown } | null;
+  return isWahooReconnectRequiredError(error)
+    || namedError?.name === 'TokenUseSkippedForPendingDisconnectError'
+    || `${namedError?.code || ''}`.endsWith('unauthenticated')
+    || `${namedError?.code || ''}`.endsWith('failed-precondition');
+}
 
 export function secureTokenMatches(actual: unknown, expected: string): boolean {
   if (typeof actual !== 'string') return false;
@@ -50,6 +60,12 @@ export async function resolveActiveWahooOwner(wahooUserID: string): Promise<stri
 
   const deletionGuard = await getUserDeletionGuardState(db, firebaseUserID);
   if (deletionGuard.shouldSkip || await isServiceDisconnectPendingForUser(firebaseUserID, ServiceNames.WahooAPI)) return null;
+  try {
+    await getActiveWahooTokenSnapshot(firebaseUserID, normalizedWahooUserID);
+  } catch (error) {
+    if (isInactiveWahooAccountError(error)) return null;
+    throw error;
+  }
   return (await hasProAccess(firebaseUserID)) ? firebaseUserID : null;
 }
 

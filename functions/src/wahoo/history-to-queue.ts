@@ -15,12 +15,13 @@ import {
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, generateIDFromParts, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { requestWahooAPI, WahooAPIRequestError } from './auth/api';
-import { SERVICE_NAME, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
+import { SERVICE_NAME } from './constants';
 import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
 import {
   assertWahooConnectionAvailable,
   isWahooReconnectRequiredError,
@@ -189,27 +190,21 @@ export async function importWahooHistory(
   };
   let completed = false;
   try {
-    const tokenSnapshots = await admin.firestore()
-      .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-      .doc(userID)
-      .collection('tokens')
-      .get();
-    if (tokenSnapshots.empty) {
-      throw new HttpsError('failed-precondition', 'Connect Wahoo before importing history.');
-    }
-
-    for (const initialTokenSnapshot of tokenSnapshots.docs) {
+    const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
+    const providerUserId = initialTokenSnapshot.id;
+    {
       let page = 1;
       let reachedStart = false;
       while (!reachedStart) {
         // Wahoo rotates refresh tokens and limits unrevoked tokens. Re-read and refresh
         // immediately before the API request so this call always uses the newest token.
-        const currentTokenSnapshot = await initialTokenSnapshot.ref.get();
-        if (!currentTokenSnapshot.exists) {
-          throw new HttpsError('failed-precondition', 'The Wahoo connection is no longer available.');
-        }
+        const currentTokenSnapshot = await getActiveWahooTokenSnapshot(userID, providerUserId);
         const token = await getTokenData(currentTokenSnapshot, ServiceNames.WahooAPI, false) as WahooAPIAuth2ServiceTokenInterface;
+        if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
+          throw new HttpsError('unauthenticated', 'Reconnect Wahoo before importing history.');
+        }
         await assertWahooHistoryProviderActionAllowed(userID);
+        await getActiveWahooTokenSnapshot(userID, providerUserId);
         let response: WahooWorkoutsResponse;
         try {
           response = (await requestWahooAPI<WahooWorkoutsResponse>(

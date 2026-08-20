@@ -16,6 +16,8 @@ function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot):
 
 export interface DeleteLocalServiceTokenOptions {
   preserveOAuthFlowContext?: boolean;
+  /** Keep an empty root so a later guarded lifecycle transaction can still verify its generation. */
+  preserveTokenRootWhenEmpty?: boolean;
   shouldDeleteInTransaction?: (transaction: admin.firestore.Transaction) => Promise<boolean>;
 }
 
@@ -73,7 +75,9 @@ export async function deleteLocalServiceToken(
 
     transaction.delete(tokenDocRef);
 
-    if (remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow) {
+    if (remainingTokenCount === 0
+      && !tokenRootPreservedForOAuthFlow
+      && options.preserveTokenRootWhenEmpty !== true) {
       // Service token roots only store root fields plus the `tokens` subcollection.
       // After deleting the final token doc in this transaction, no descendants remain on the root.
       transaction.delete(userDocRef);
@@ -85,7 +89,9 @@ export async function deleteLocalServiceToken(
     }
 
     return {
-      tokenRootDeleted: remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow,
+      tokenRootDeleted: remainingTokenCount === 0
+        && !tokenRootPreservedForOAuthFlow
+        && options.preserveTokenRootWhenEmpty !== true,
       tokenRootPreservedForOAuthFlow,
       remainingTokenCount,
       skippedByCondition: false,

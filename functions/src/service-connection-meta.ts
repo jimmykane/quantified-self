@@ -674,16 +674,19 @@ export async function clearServiceConnectionState(
           : Promise.resolve(null),
       ]);
       const meta = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+      const expectedPendingDisconnectMatches = !options.expectedPendingDisconnectGeneration || (
+        meta?.connectionState === SERVICE_CONNECTION_STATES.DisconnectPending
+        && meta.disconnectGeneration === options.expectedPendingDisconnectGeneration
+      );
+      const pendingDisconnectWasAlreadyCleared = !!options.expectedPendingDisconnectGeneration
+        && !meta?.connectionState
+        && !meta?.disconnectGeneration;
       if (
-        (options.expectedPendingDisconnectGeneration && (
-          meta?.connectionState !== SERVICE_CONNECTION_STATES.DisconnectPending
-          || meta.disconnectGeneration !== options.expectedPendingDisconnectGeneration
-        ))
-        || (options.expectedTokenCredentialGeneration && tokenSnapshot && (
-          !tokenSnapshot.exists
-          || tokenSnapshot.data()?.[options.expectedTokenCredentialGeneration.fieldName]
-            !== options.expectedTokenCredentialGeneration.expectedGeneration
-        ))
+        (!expectedPendingDisconnectMatches && !pendingDisconnectWasAlreadyCleared)
+        || (options.expectedTokenCredentialGeneration && tokenSnapshot
+          && (tokenSnapshot.exists
+            ? tokenSnapshot.data()?.[options.expectedTokenCredentialGeneration.fieldName] ?? null
+            : null) !== options.expectedTokenCredentialGeneration.expectedGeneration)
       ) {
         return false;
       }
