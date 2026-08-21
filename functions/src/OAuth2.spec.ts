@@ -1777,17 +1777,12 @@ describe('OAuth2', () => {
                     size: 1,
                     docs: [tokenDoc],
                 } as any);
-            (getTokenData as Mock).mockResolvedValueOnce({
-                serviceName: ServiceNames.SuuntoApp,
-                accessToken: 'mock-token',
-                refreshToken: 'mock-refresh-token',
-                expiresAt: Date.now() + 3_600_000,
-                scope: 'workout',
-                tokenType: 'bearer',
-                userName: 'test-external-user',
-                dateCreated: Date.now(),
-                dateRefreshed: Date.now(),
-            });
+            // Return the exact credential that OAuth just persisted. The
+            // cleanup guard intentionally rejects a resolver result whose
+            // credential fields differ from that stored token.
+            (getTokenData as Mock).mockImplementationOnce(async () => ({
+                ...mockTransactionDocumentData,
+            }));
             (requestPromise.get as Mock).mockResolvedValueOnce({});
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
