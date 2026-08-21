@@ -14,10 +14,13 @@ import { ProviderPendingDisconnectError } from '../shared/provider-pending-disco
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { WahooReconnectRequiredError } from './refresh-recovery';
 import {
+  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
   type TokenCredentialSnapshot,
 } from '../token-refresh-coordinator';
+import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from '../service-token-store';
+import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
 
 type WahooTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 const MAX_WAHOO_USER_ID_LENGTH = 200;
@@ -25,6 +28,7 @@ const MAX_WAHOO_USER_ID_LENGTH = 200;
 export interface WahooActiveAccountGuard {
   providerUserId: string;
   connectionStateGeneration: string | null;
+  activeCredentialGeneration: string | null;
   credential: TokenCredentialSnapshot | null;
 }
 
@@ -81,6 +85,10 @@ function getWahooTokenCollection(userID: string): admin.firestore.CollectionRefe
     .collection('tokens');
 }
 
+function getWahooTokenRootDocument(userID: string): admin.firestore.DocumentReference {
+  return admin.firestore().collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME).doc(userID);
+}
+
 function getWahooConnectionMetaDocument(userID: string): admin.firestore.DocumentReference {
   return admin.firestore()
     .collection('users')
@@ -91,6 +99,62 @@ function getWahooConnectionMetaDocument(userID: string): admin.firestore.Documen
 
 function normalizeGeneration(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+async function readWahooActiveAccountGuardInTransaction(
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  expectedProviderUserId: string,
+  expectedAccessToken?: string,
+): Promise<WahooActiveAccountGuard> {
+  const providerUserId = normalizeWahooUserID(expectedProviderUserId);
+  if (!providerUserId) {
+    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending data.');
+  }
+
+  const [metaSnapshot, tokenRootSnapshot, tokenSnapshot] = await Promise.all([
+    transaction.get(getWahooConnectionMetaDocument(userID)),
+    transaction.get(getWahooTokenRootDocument(userID)),
+    transaction.get(getWahooTokenCollection(userID).doc(providerUserId)),
+  ]);
+  const meta = metaSnapshot.data();
+  const tokenRoot = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
+  if (isDisconnectPendingServiceConnection(meta)
+    || isServiceDisconnectPendingData(tokenRoot)
+    || normalizeGeneration(tokenRoot?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD])) {
+    throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, 'active_account_guard');
+  }
+  if (isReconnectRequiredServiceConnection(meta)) {
+    throw new WahooReconnectRequiredError();
+  }
+  const rawPinnedProviderUserId = meta?.providerUserId;
+  const hasPinnedProviderUserId = rawPinnedProviderUserId !== undefined
+    && rawPinnedProviderUserId !== null
+    && rawPinnedProviderUserId !== '';
+  const pinnedProviderUserId = normalizeWahooUserID(rawPinnedProviderUserId);
+  if ((hasPinnedProviderUserId && !pinnedProviderUserId)
+    || (pinnedProviderUserId && pinnedProviderUserId !== providerUserId)
+    || !tokenSnapshot.exists
+    || !snapshotMatchesWahooUserID(tokenSnapshot, providerUserId)) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+  }
+
+  const credential = getTokenCredentialSnapshot(
+    tokenSnapshot.data() as Record<string, unknown> | undefined,
+  );
+  const activeCredentialGeneration = normalizeGeneration(
+    tokenRoot?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+  );
+  if ((activeCredentialGeneration && activeCredentialGeneration !== credential.credentialGeneration)
+    || (expectedAccessToken !== undefined && credential.accessToken !== expectedAccessToken)) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo credential changed before data could be sent.');
+  }
+  return {
+    providerUserId,
+    connectionStateGeneration: normalizeGeneration(meta?.connectionStateGeneration),
+    activeCredentialGeneration,
+    credential: expectedAccessToken === undefined ? null : credential,
+  };
 }
 
 /**
@@ -104,50 +168,13 @@ export async function captureWahooActiveAccountGuard(
   expectedProviderUserId: string,
   expectedAccessToken?: string,
 ): Promise<WahooActiveAccountGuard> {
-  const providerUserId = normalizeWahooUserID(expectedProviderUserId);
-  if (!providerUserId) {
-    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending data.');
-  }
-
   const db = admin.firestore();
-  const metaRef = getWahooConnectionMetaDocument(userID);
-  const tokenRef = getWahooTokenCollection(userID).doc(providerUserId);
-  return db.runTransaction(async transaction => {
-    const [metaSnapshot, tokenSnapshot] = await Promise.all([
-      transaction.get(metaRef),
-      transaction.get(tokenRef),
-    ]);
-    const meta = metaSnapshot.data();
-    if (isDisconnectPendingServiceConnection(meta)) {
-      throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, 'active_account_guard');
-    }
-    if (isReconnectRequiredServiceConnection(meta)) {
-      throw new WahooReconnectRequiredError();
-    }
-    const rawPinnedProviderUserId = meta?.providerUserId;
-    const hasPinnedProviderUserId = rawPinnedProviderUserId !== undefined
-      && rawPinnedProviderUserId !== null
-      && rawPinnedProviderUserId !== '';
-    const pinnedProviderUserId = normalizeWahooUserID(rawPinnedProviderUserId);
-    if ((hasPinnedProviderUserId && !pinnedProviderUserId)
-      || (pinnedProviderUserId && pinnedProviderUserId !== providerUserId)
-      || !tokenSnapshot.exists
-      || !snapshotMatchesWahooUserID(tokenSnapshot, providerUserId)) {
-      throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
-    }
-
-    const credential = getTokenCredentialSnapshot(
-      tokenSnapshot.data() as Record<string, unknown> | undefined,
-    );
-    if (expectedAccessToken !== undefined && credential.accessToken !== expectedAccessToken) {
-      throw new HttpsError('unauthenticated', 'The selected Wahoo credential changed before data could be sent.');
-    }
-    return {
-      providerUserId,
-      connectionStateGeneration: normalizeGeneration(meta?.connectionStateGeneration),
-      credential: expectedAccessToken === undefined ? null : credential,
-    };
-  });
+  return db.runTransaction(transaction => readWahooActiveAccountGuardInTransaction(
+    transaction,
+    userID,
+    expectedProviderUserId,
+    expectedAccessToken,
+  ));
 }
 
 /** Revalidates a captured account/credential atomically immediately before I/O. */
@@ -161,6 +188,28 @@ export async function assertWahooActiveAccountGuardCurrent(
     expected.credential?.accessToken,
   );
   if (current.connectionStateGeneration !== expected.connectionStateGeneration
+    || current.activeCredentialGeneration !== expected.activeCredentialGeneration
+    || (expected.credential !== null
+      && (current.credential === null
+        || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+  }
+}
+
+/** Enforces the account fence inside the transaction that performs a durable write. */
+export async function assertWahooActiveAccountGuardCurrentInTransaction(
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  expected: WahooActiveAccountGuard,
+): Promise<void> {
+  const current = await readWahooActiveAccountGuardInTransaction(
+    transaction,
+    userID,
+    expected.providerUserId,
+    expected.credential?.accessToken,
+  );
+  if (current.connectionStateGeneration !== expected.connectionStateGeneration
+    || current.activeCredentialGeneration !== expected.activeCredentialGeneration
     || (expected.credential !== null
       && (current.credential === null
         || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {

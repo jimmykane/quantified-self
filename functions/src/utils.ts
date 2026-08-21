@@ -185,6 +185,11 @@ export interface SetEventWriteOptions {
    * Storage behavior.
    */
   stageOriginalFilesUntilEventWrite?: boolean;
+  /** Provider/account ownership predicate evaluated in every event-write transaction. */
+  assertWriteAuthorizationInTransaction?: (
+    db: admin.firestore.Firestore,
+    transaction: admin.firestore.Transaction,
+  ) => Promise<void>;
 }
 
 export async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
@@ -225,10 +230,14 @@ async function assertEventWriteAuthorizationInTransaction(
 async function assertEventWriteAuthorizationCurrent(
   userID: string,
   phase: string,
+  assertAdditionalAuthorization?: SetEventWriteOptions['assertWriteAuthorizationInTransaction'],
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
+    if (assertAdditionalAuthorization) {
+      await assertAdditionalAuthorization(db, transaction);
+    }
   });
 }
 
@@ -242,10 +251,14 @@ export async function setEventDocumentIfUserActive(
     incomingData: admin.firestore.DocumentData,
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
+  assertAdditionalAuthorization?: SetEventWriteOptions['assertWriteAuthorizationInTransaction'],
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
+    if (assertAdditionalAuthorization) {
+      await assertAdditionalAuthorization(db, transaction);
+    }
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
@@ -272,7 +285,11 @@ interface EventServiceMetaData {
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: EventServiceMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
-  await assertEventWriteUserActive(userID, 'event_write_start');
+  await assertEventWriteAuthorizationCurrent(
+    userID,
+    'event_write_start',
+    writeOptions.assertWriteAuthorizationInTransaction,
+  );
   const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
   const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
@@ -355,6 +372,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        writeOptions.assertWriteAuthorizationInTransaction,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -367,7 +385,11 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
   const storageAdapter: StorageAdapter = {
     uploadFile: async (path: string, data: any) => {
-      await assertEventWriteUserActive(userID, `event_original_file_upload:${path}`);
+      await assertEventWriteAuthorizationCurrent(
+        userID,
+        `event_original_file_upload:${path}`,
+        writeOptions.assertWriteAuthorizationInTransaction,
+      );
       if (stagingBucket) {
         // These objects are backend-only: no user ID appears in the path, so
         // they cannot match the Storage rules' user-readable `/users/**` paths.
@@ -420,6 +442,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingMetaData,
       undefined,
       undefined,
+      writeOptions.assertWriteAuthorizationInTransaction,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -438,6 +461,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       metaData.toJSON(),
       undefined,
       undefined,
+      writeOptions.assertWriteAuthorizationInTransaction,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately
@@ -446,6 +470,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     await assertEventWriteAuthorizationCurrent(
       userID,
       'event_original_file_promotion',
+      writeOptions.assertWriteAuthorizationInTransaction,
     );
     await promoteStagedOriginalFiles();
 

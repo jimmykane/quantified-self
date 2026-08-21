@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as logger from 'firebase-functions/logger';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedByTransactionGuardError, EventWriteSkippedForDeletedUserError } from './utils';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
@@ -369,7 +369,7 @@ describe('utils higher-level helpers', () => {
         });
 
         it('does not write event data when account deletion is active', async () => {
-            hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
                 userExists: true,
                 deletionInProgress: true,
                 shouldSkip: true,

@@ -175,6 +175,20 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
                 oauthFlowGeneration: 'client-flow-replacement',
             }));
+
+            await assertFails(db.collection('COROSAPIAccessTokens').doc(userId).set({
+                disconnectOperationGeneration: 'client-disconnect-operation',
+            }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('wahooAPIAccessTokens').doc(userId).set({
+                    disconnectOperationGeneration: 'server-disconnect-operation',
+                });
+            });
+
+            await assertFails(db.collection('wahooAPIAccessTokens').doc(userId).update({
+                disconnectOperationGeneration: 'client-disconnect-replacement',
+            }));
         });
 
         it('denies client token mutations while disconnect is pending', async () => {
@@ -201,6 +215,34 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
                 state: 'new-oauth-state',
             }));
+        });
+
+        it('denies legacy client token mutations while explicit disconnect owns the root', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
+                    await context.firestore().collection(collectionName).doc(userId).set({
+                        disconnectOperationGeneration: 'disconnect-operation-1',
+                    });
+                    await context.firestore()
+                        .collection(collectionName)
+                        .doc(userId)
+                        .collection('tokens')
+                        .doc('token-1')
+                        .set({ accessToken: 'stored-token' });
+                }
+            });
+
+            for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
+                const rootRef = db.collection(collectionName).doc(userId);
+                const tokenRef = rootRef.collection('tokens').doc('token-1');
+                await assertSucceeds(tokenRef.get());
+                await assertFails(tokenRef.update({ accessToken: 'changed' }));
+                await assertFails(tokenRef.delete());
+                await assertFails(rootRef.update({ state: 'new-oauth-state' }));
+                await assertFails(rootRef.delete());
+            }
         });
     });
 

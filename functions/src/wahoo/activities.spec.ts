@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => {
   const loggerWarn = vi.fn();
   const hasProAccess = vi.fn();
   const recordActivitySyncOutboundFingerprint = vi.fn();
+  const markActivitySyncOutboundFingerprintProviderRequestStarted = vi.fn();
+  const rollbackActivitySyncOutboundFingerprint = vi.fn();
   const getActiveWahooTokenSnapshot = vi.fn();
   const captureWahooActiveAccountGuard = vi.fn();
   const assertWahooActiveAccountGuardCurrent = vi.fn();
@@ -41,6 +43,8 @@ const mocks = vi.hoisted(() => {
     loggerWarn,
     hasProAccess,
     recordActivitySyncOutboundFingerprint,
+    markActivitySyncOutboundFingerprintProviderRequestStarted,
+    rollbackActivitySyncOutboundFingerprint,
     getActiveWahooTokenSnapshot,
     captureWahooActiveAccountGuard,
     assertWahooActiveAccountGuardCurrent,
@@ -78,6 +82,8 @@ vi.mock('../utils', async (importOriginal) => {
 });
 vi.mock('../activity-sync/outbound-fingerprint', () => ({
   recordActivitySyncOutboundFingerprint: mocks.recordActivitySyncOutboundFingerprint,
+  markActivitySyncOutboundFingerprintProviderRequestStarted: mocks.markActivitySyncOutboundFingerprintProviderRequestStarted,
+  rollbackActivitySyncOutboundFingerprint: mocks.rollbackActivitySyncOutboundFingerprint,
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
     readonly name = 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError';
   },
@@ -125,7 +131,10 @@ describe('Wahoo activity uploads', () => {
     mocks.recordActivitySyncOutboundFingerprint.mockResolvedValue({
       exactFingerprintId: 'exact-v1-test',
       fingerprintIds: ['exact-v1-test'],
+      operationId: 'operation-1',
     });
+    mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mockResolvedValue(undefined);
+    mocks.rollbackActivitySyncOutboundFingerprint.mockResolvedValue(undefined);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true, id: 'wahoo-user' });
     mocks.getActiveWahooTokenSnapshot.mockResolvedValue({
@@ -184,8 +193,11 @@ describe('Wahoo activity uploads', () => {
       userID: 'user-1',
       destinationServiceName: ServiceNames.WahooAPI,
       fileBuffer,
+      provisional: true,
     });
     expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mock.invocationCallOrder[0]);
+    expect(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.requestWahooAPI.mock.invocationCallOrder[0]);
   });
 
@@ -203,6 +215,59 @@ describe('Wahoo activity uploads', () => {
       message: 'Account is being deleted or no longer exists.',
     });
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('removes the direct-upload fingerprint when the account changes before the POST starts', async () => {
+    mocks.assertWahooConnectionAvailable
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('Reconnect Wahoo.'), {
+        name: 'WahooReconnectRequiredError',
+      }));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({ code: 'unauthenticated' });
+
+    expect(mocks.rollbackActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: expect.objectContaining({ operationId: 'operation-1' }),
+    });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('does not call Wahoo and rolls back the provisional receipt when promotion fails', async () => {
+    mocks.markActivitySyncOutboundFingerprintProviderRequestStarted
+      .mockRejectedValueOnce(new Error('fingerprint promotion unavailable'));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toThrow('fingerprint promotion unavailable');
+
+    expect(mocks.rollbackActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: expect.objectContaining({ operationId: 'operation-1' }),
+    });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('retains the direct-upload fingerprint after an ambiguous POST failure', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPITransportError('connection closed'));
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+    expect(mocks.rollbackActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
   });
 
   it('does not write a direct-upload echo receipt without a connected Wahoo account', async () => {

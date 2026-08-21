@@ -22,6 +22,10 @@ export class WahooRefreshBackoffError extends Error {
   }
 }
 
+export interface WahooRefreshLifecycleGuard {
+  connectionStateGeneration: string | null;
+}
+
 export function isWahooRefreshBackoffError(error: unknown): error is WahooRefreshBackoffError {
   return error instanceof WahooRefreshBackoffError
     || (error instanceof Error && error.name === 'WahooRefreshBackoffError');
@@ -61,7 +65,7 @@ function getRetryAt(meta: ServiceConnectionMetaFields | null): number | null {
 export async function assertWahooRefreshAllowed(
   userID: string,
   nowMs = Date.now(),
-): Promise<void> {
+): Promise<WahooRefreshLifecycleGuard> {
   const meta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
   if (isReconnectRequiredServiceConnection(meta)) {
     throw new WahooReconnectRequiredError();
@@ -71,6 +75,11 @@ export async function assertWahooRefreshAllowed(
   if (retryAt !== null && retryAt > nowMs) {
     throw new WahooRefreshBackoffError(retryAt);
   }
+  const connectionStateGeneration = typeof meta?.connectionStateGeneration === 'string'
+    && meta.connectionStateGeneration.trim()
+    ? meta.connectionStateGeneration
+    : null;
+  return { connectionStateGeneration };
 }
 
 /** Prevents use of a connection after its opaque refresh failures became terminal. */

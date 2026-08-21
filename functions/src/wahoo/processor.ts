@@ -25,6 +25,7 @@ import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
 import {
   assertWahooActiveAccountGuardCurrent,
+  assertWahooActiveAccountGuardCurrentInTransaction,
   captureWahooActiveAccountGuard,
   getActiveWahooTokenSnapshot,
 } from './account';
@@ -162,6 +163,13 @@ export async function processWahooWorkoutQueueItem(
       providerEventSecondaryID: queueItem.wahooUserID,
       providerEventSecondaryIDField: 'serviceUserID',
       preferProviderIdentityEventID: true,
+      assertWriteAuthorizationInTransaction: async (_db, transaction) => {
+        await assertWahooActiveAccountGuardCurrentInTransaction(
+          transaction,
+          userID,
+          accountGuard,
+        );
+      },
     });
     const metadata = new WahooAPIEventMetaData(
       queueItem.workoutID,
@@ -189,7 +197,16 @@ export async function processWahooWorkoutQueueItem(
       undefined,
       undefined,
       undefined,
-      { stageOriginalFilesUntilEventWrite: true },
+      {
+        stageOriginalFilesUntilEventWrite: true,
+        assertWriteAuthorizationInTransaction: async (_db, transaction) => {
+          await assertWahooActiveAccountGuardCurrentInTransaction(
+            transaction,
+            userID,
+            accountGuard,
+          );
+        },
+      },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,

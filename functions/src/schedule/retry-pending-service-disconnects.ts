@@ -195,6 +195,21 @@ async function processWithBoundedConcurrency<T>(
   }
 }
 
+function getUserIDFromServiceMetaSnapshot(
+  snapshot: admin.firestore.QueryDocumentSnapshot,
+): string | null {
+  const metaCollection = snapshot.ref.parent;
+  const userRef = metaCollection.parent;
+  if (
+    metaCollection.id !== 'meta'
+    || !userRef
+    || userRef.parent.id !== 'users'
+  ) {
+    return null;
+  }
+  return userRef.id || null;
+}
+
 async function updatePendingDisconnectScanCursor(
   config: PendingDisconnectCollectionConfig,
   scanType: PendingDisconnectScanType,
@@ -446,7 +461,7 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
 
   await processWithBoundedConcurrency(docs, async metaSnapshot => {
     if (metaSnapshot.id !== ServiceNames.WahooAPI) return;
-    const userID = metaSnapshot.ref.parent.parent?.id;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
     if (!userID) return;
 
     try {
@@ -473,7 +488,7 @@ async function retryPendingServiceRouteRestorations(): Promise<number> {
 
   await processWithBoundedConcurrency(docs, async metaSnapshot => {
     if (!knownServiceNames.has(metaSnapshot.id)) return;
-    const userID = metaSnapshot.ref.parent.parent?.id;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
     if (!userID) return;
 
     try {

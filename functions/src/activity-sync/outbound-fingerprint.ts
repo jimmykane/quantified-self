@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
+import { FieldValue } from 'firebase-admin/firestore';
 import { EventImporterFIT, ServiceNames } from '@sports-alliance/sports-lib';
 
 import { createParsingOptions } from '../../../shared/parsing-options';
@@ -16,9 +17,13 @@ const EXACT_FINGERPRINT_VERSION = 'exact-v1';
 const SEMANTIC_FINGERPRINT_VERSION = 'semantic-v1';
 const DESTINATION_NAMESPACE_VERSION = 'destination-v1';
 
-export interface ActivitySyncOutboundFingerprintRecord {
+export interface ActivitySyncOutboundFingerprintIds {
   exactFingerprintId: string;
   fingerprintIds: string[];
+}
+
+export interface ActivitySyncOutboundFingerprintRecord extends ActivitySyncOutboundFingerprintIds {
+  operationId: string;
 }
 
 export class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
@@ -82,7 +87,7 @@ async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | 
   }
 }
 
-export async function buildActivitySyncOutboundFingerprintIds(fileBuffer: Buffer): Promise<ActivitySyncOutboundFingerprintRecord> {
+export async function buildActivitySyncOutboundFingerprintIds(fileBuffer: Buffer): Promise<ActivitySyncOutboundFingerprintIds> {
   const exactFingerprintId = `${EXACT_FINGERPRINT_VERSION}-${sha256(fileBuffer)}`;
   const semanticFingerprintId = await buildSemanticFingerprintId(fileBuffer);
   return {
@@ -120,8 +125,14 @@ export async function recordActivitySyncOutboundFingerprint(params: {
   userID: string;
   destinationServiceName: ServiceNames;
   fileBuffer: Buffer;
+  /** Delay echo eligibility until the provider request is irrevocably about to start. */
+  provisional?: boolean;
 }): Promise<ActivitySyncOutboundFingerprintRecord> {
   const fingerprints = await buildActivitySyncOutboundFingerprintIds(params.fileBuffer);
+  const record: ActivitySyncOutboundFingerprintRecord = {
+    ...fingerprints,
+    operationId: crypto.randomUUID(),
+  };
   const db = admin.firestore();
   const collection = fingerprintCollection(params.userID);
   const recordedAt = Date.now();
@@ -136,20 +147,112 @@ export async function recordActivitySyncOutboundFingerprint(params: {
       throw new ActivitySyncOutboundFingerprintSkippedForDeletedUserError(params.userID);
     }
 
-    for (const fingerprintId of fingerprints.fingerprintIds) {
-      transaction.set(collection.doc(getActivitySyncOutboundFingerprintDocumentId(
+    const refs = fingerprints.fingerprintIds.map(fingerprintId => collection.doc(
+      getActivitySyncOutboundFingerprintDocumentId(
         params.destinationServiceName,
         fingerprintId,
-      )), {
+      ),
+    ));
+    const snapshots = params.provisional === true
+      ? await Promise.all(refs.map(ref => transaction.get(ref)))
+      : [];
+    for (let index = 0; index < fingerprints.fingerprintIds.length; index += 1) {
+      const fingerprintId = fingerprints.fingerprintIds[index];
+      const existingData = snapshots[index]?.data() || {};
+      const hasLiveAcceptedReceipt = params.provisional === true
+        && (toEpochMs(existingData.providerRequestStartedAt) || 0) > 0
+        && (toEpochMs(existingData.expireAt) || 0) > recordedAt;
+      transaction.set(refs[index], {
         version: 1,
         destinationServiceName: params.destinationServiceName,
         fingerprintKind: fingerprintId.startsWith(`${SEMANTIC_FINGERPRINT_VERSION}-`) ? 'semantic' : 'exact',
-        recordedAt,
+        ...(params.provisional === true ? {
+          pendingOperationIds: FieldValue.arrayUnion(record.operationId),
+          ...(hasLiveAcceptedReceipt ? {} : {
+            providerRequestStartedAt: FieldValue.delete(),
+            recordedAt,
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
+          }),
+        } : {
+          providerRequestStartedAt: recordedAt,
+          recordedAt,
+          expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
+        }),
+      }, { merge: true });
+    }
+  });
+  return record;
+}
+
+/** Promotes one provisional operation into a durable provider-request receipt. */
+export async function markActivitySyncOutboundFingerprintProviderRequestStarted(params: {
+  userID: string;
+  destinationServiceName: ServiceNames;
+  record: ActivitySyncOutboundFingerprintRecord;
+}): Promise<void> {
+  const db = admin.firestore();
+  const collection = fingerprintCollection(params.userID);
+  const refs = params.record.fingerprintIds.map(fingerprintId => collection.doc(
+    getActivitySyncOutboundFingerprintDocumentId(params.destinationServiceName, fingerprintId),
+  ));
+  const providerRequestStartedAt = Date.now();
+  await db.runTransaction(async transaction => {
+    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    if (deletionGuard.shouldSkip) {
+      throw new ActivitySyncOutboundFingerprintSkippedForDeletedUserError(params.userID);
+    }
+    const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+    if (snapshots.some(snapshot => {
+      const pending = snapshot.data()?.pendingOperationIds;
+      return !snapshot.exists
+        || !Array.isArray(pending)
+        || !pending.includes(params.record.operationId);
+    })) {
+      throw new Error('The outbound activity fingerprint operation is no longer current.');
+    }
+    for (const ref of refs) {
+      transaction.set(ref, {
+        pendingOperationIds: FieldValue.arrayRemove(params.record.operationId),
+        providerRequestStartedAt,
+        recordedAt: providerRequestStartedAt,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
       }, { merge: true });
     }
   });
-  return fingerprints;
+}
+
+/** Removes only receipts written by a provider request that never started. */
+export async function rollbackActivitySyncOutboundFingerprint(params: {
+  userID: string;
+  destinationServiceName: ServiceNames;
+  record: ActivitySyncOutboundFingerprintRecord;
+}): Promise<void> {
+  const db = admin.firestore();
+  const collection = fingerprintCollection(params.userID);
+  await db.runTransaction(async transaction => {
+    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    if (deletionGuard.shouldSkip) return;
+    const refs = params.record.fingerprintIds.map(fingerprintId => collection.doc(
+      getActivitySyncOutboundFingerprintDocumentId(params.destinationServiceName, fingerprintId),
+    ));
+    const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+    for (let index = 0; index < snapshots.length; index += 1) {
+      const data = snapshots[index].data() || {};
+      const originalPending = Array.isArray(data.pendingOperationIds)
+        ? data.pendingOperationIds
+        : [];
+      const pending = originalPending.filter((value: unknown) => value !== params.record.operationId);
+      if (!snapshots[index].exists || pending.length === originalPending.length) continue;
+      if (toEpochMs(data.providerRequestStartedAt) !== null || pending.length > 0) {
+        transaction.set(refs[index], {
+          pendingOperationIds: FieldValue.arrayRemove(params.record.operationId),
+        }, { merge: true });
+      } else {
+        // Fingerprint documents never have descendants.
+        transaction.delete(refs[index]);
+      }
+    }
+  });
 }
 
 function toEpochMs(value: unknown): number | null {
@@ -178,8 +281,11 @@ export async function isActivitySyncOutboundEcho(params: {
     if (!snapshot.exists) return false;
     const data = snapshot.data() || {};
     const expireAt = toEpochMs(data.expireAt);
+    const providerRequestStartedAt = toEpochMs(data.providerRequestStartedAt);
     return data.version === 1
       && data.destinationServiceName === params.sourceServiceName
+      && providerRequestStartedAt !== null
+      && providerRequestStartedAt > 0
       && expireAt !== null
       && expireAt > now;
   });

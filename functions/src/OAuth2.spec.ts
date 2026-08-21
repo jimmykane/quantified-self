@@ -52,7 +52,10 @@ const {
 
 const mockDocInstance = {
     delete: mockDelete,
-    get: mockGet,
+    get: vi.fn(async () => mockTransactionDocumentData !== undefined ? ({
+        exists: true,
+        data: () => mockTransactionDocumentData,
+    }) : mockGet()),
     collection: mockCollection,
     set: vi.fn().mockResolvedValue({}),
     update: vi.fn().mockResolvedValue({}),
@@ -88,6 +91,12 @@ function installDefaultRunTransactionMock() {
                 if (target && typeof target.get === 'function') {
                     return await target.get();
                 }
+                if (target && typeof target.delete === 'function') {
+                    return {
+                        exists: true,
+                        data: () => typeof target.data === 'function' ? target.data() : {},
+                    };
+                }
                 throw new Error('Unexpected transaction get target');
             }),
             delete: vi.fn((target: any) => {
@@ -102,18 +111,40 @@ function installDefaultRunTransactionMock() {
         });
 
         for (const pendingSet of pendingSets) {
+            if (pendingSet.target === mockDocInstance) {
+                const nextData = pendingSet.options?.merge
+                    ? { ...(mockTransactionDocumentData || {}) }
+                    : {};
+                for (const [key, value] of Object.entries(pendingSet.data || {})) {
+                    if (value === 'delete-sentinel') delete nextData[key];
+                    else nextData[key] = value;
+                }
+                mockTransactionDocumentData = nextData;
+            }
             if (pendingSet.target && typeof pendingSet.target.set === 'function') {
                 await pendingSet.target.set(pendingSet.data, pendingSet.options);
             }
         }
 
         for (const target of pendingDeletes) {
+            // The lightweight Firestore mock reuses mockDocInstance for both
+            // token roots and nested token documents. Do not erase the root's
+            // lifecycle fields when a nested token is deleted; dedicated
+            // deleteLocalServiceToken tests use distinct references.
             if (target && typeof target.delete === 'function') {
                 await target.delete();
             }
         }
 
         for (const pendingUpdate of pendingUpdates) {
+            if (pendingUpdate.target === mockDocInstance) {
+                const nextData = { ...(mockTransactionDocumentData || {}) };
+                for (const [key, value] of Object.entries(pendingUpdate.data || {})) {
+                    if (value === 'delete-sentinel') delete nextData[key];
+                    else nextData[key] = value;
+                }
+                mockTransactionDocumentData = nextData;
+            }
             if (pendingUpdate.target && typeof pendingUpdate.target.update === 'function') {
                 await pendingUpdate.target.update(pendingUpdate.data);
             }
@@ -234,6 +265,8 @@ vi.mock('./service-disconnect-pending', () => ({
             ? `${data.disconnectGeneration || ''}`.trim() || null
             : null,
         oauthCredentialGeneration: `${data?.activeOAuthCredentialGeneration || ''}`.trim() || null,
+        oauthFlowGeneration: `${data?.oauthFlowGeneration || ''}`.trim() || null,
+        disconnectOperationGeneration: `${data?.disconnectOperationGeneration || ''}`.trim() || null,
     }),
     isRetryableSubscriptionEnforcementDisconnectStatus: (statusCode: number | null) => statusCode === null
         || statusCode === 408
@@ -302,7 +335,7 @@ describe('OAuth2', () => {
             empty: true,
             size: 0,
             docs: [],
-        } as any);
+        } as unknown as admin.firestore.QuerySnapshot);
         mockDocInstance.set.mockReset().mockResolvedValue({});
         mockGetUserDeletionGuardState.mockReset().mockResolvedValue({
             userExists: true,
@@ -494,26 +527,35 @@ describe('OAuth2', () => {
             (getTokenData as Mock).mockReset();
 
             // Default: 1 token found
+            const mockTokenData = {
+                accessToken: 'mock-access',
+                refreshToken: undefined,
+                expiresAt: 0,
+            };
             const mockTokenDoc = {
                 id: 'token-doc-id',
+                data: () => mockTokenData,
                 ref: {
                     delete: mockDelete, // Use the shared mockDelete
+                    data: () => mockTokenData,
                 },
             };
 
-            mockGet.mockResolvedValueOnce({
+            const oneTokenSnapshot = {
                 empty: false,
                 size: 1,
                 docs: [mockTokenDoc],
-            } as unknown as admin.firestore.QuerySnapshot).mockResolvedValueOnce({
+            } as unknown as admin.firestore.QuerySnapshot;
+            mockGet.mockResolvedValue({
                 empty: true,
                 size: 0,
                 docs: [],
-            } as unknown as admin.firestore.QuerySnapshot);
+            } as unknown as admin.firestore.QuerySnapshot)
+                .mockResolvedValueOnce(oneTokenSnapshot);
 
             mockDelete.mockResolvedValue({});
             mockRecursiveDelete.mockResolvedValue({});
-            (clearServiceConnectionState as Mock).mockReset().mockResolvedValue(undefined);
+            (clearServiceConnectionState as Mock).mockReset().mockResolvedValue(true);
 
             (getTokenData as Mock).mockResolvedValue({ accessToken: 'mock-access' });
             (requestPromise.get as Mock).mockResolvedValue({});
@@ -537,6 +579,29 @@ describe('OAuth2', () => {
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }), { merge: true });
+        });
+
+        it('does not start explicit disconnect while a token refresh lease is active', async () => {
+            const tokenData = {
+                accessToken: 'mock-access',
+                refreshToken: 'mock-refresh',
+                expiresAt: Date.now() + 60_000,
+                tokenRefreshLeaseOwner: 'refresh-owner-1',
+                tokenRefreshLeaseExpiresAt: Date.now() + 60_000,
+            };
+            mockGet.mockReset().mockResolvedValue({
+                empty: false,
+                size: 1,
+                docs: [{ id: 'token-doc-id', data: () => tokenData }],
+            } as unknown as admin.firestore.QuerySnapshot);
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+                statusCode: 409,
+            });
+
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockDocInstance.set).not.toHaveBeenCalled();
         });
 
         it('should fail explicit disconnect when local token cleanup fails', async () => {
@@ -610,8 +675,10 @@ describe('OAuth2', () => {
         */
         it('should delete successful tokens but PRESERVE failed (500) tokens and parent doc', async () => {
             // Mock two tokens
-            const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
-            const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
+            const token1Data = { accessToken: 't1' };
+            const token2Data = { accessToken: 't2' };
+            const token1 = { id: 'token-1', ref: { delete: mockDelete, data: () => token1Data }, data: () => token1Data };
+            const token2 = { id: 'token-2', ref: { delete: mockDelete, data: () => token2Data }, data: () => token2Data };
 
             mockGet.mockReset();
             mockGet
@@ -645,8 +712,10 @@ describe('OAuth2', () => {
 
         it('should delete ALL local records if multiple tokens succeed', async () => {
             // Mock two tokens
-            const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
-            const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
+            const token1Data = { accessToken: 't1' };
+            const token2Data = { accessToken: 't2' };
+            const token1 = { id: 'token-1', ref: { delete: mockDelete, data: () => token1Data }, data: () => token1Data };
+            const token2 = { id: 'token-2', ref: { delete: mockDelete, data: () => token2Data }, data: () => token2Data };
 
             mockGet.mockReset();
 
@@ -661,9 +730,9 @@ describe('OAuth2', () => {
                 return { empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot;
             });
 
-            (getTokenData as Mock).mockImplementation(async () => {
-                return { accessToken: 'valid' };
-            });
+            (getTokenData as Mock)
+                .mockResolvedValueOnce({ accessToken: 't1' })
+                .mockResolvedValueOnce({ accessToken: 't2' });
             (requestPromise.get as Mock).mockResolvedValue({});
 
             await deauthorizeServiceForUser(userID, serviceName);
@@ -672,7 +741,7 @@ describe('OAuth2', () => {
             expect(mockDelete).toHaveBeenCalledTimes(3);
         });
 
-        it('should clean up ORPHANED documents (existing parent but no tokens) using recursiveDelete', async () => {
+        it('should transactionally clean up an orphaned root when no tokens exist', async () => {
             mockGet.mockReset();
             mockGet.mockImplementation(() => Promise.resolve({ empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot));
             mockRecursiveDelete.mockReset();
@@ -680,15 +749,18 @@ describe('OAuth2', () => {
 
             await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(TokenNotFoundError);
 
-            // Should have called recursiveDelete to clean up the orphaned parent document
-            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
         });
 
         it('should clear service connection state after explicit disconnect when no tokens remain', async () => {
+            const tokenData = { accessToken: 'mock-access' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
+                data: () => tokenData,
                 ref: {
                     delete: mockDelete,
+                    data: () => tokenData,
                 },
             };
             mockGet.mockReset();
@@ -712,14 +784,21 @@ describe('OAuth2', () => {
             await deauthorizeServiceForUser(userID, serviceName, {
             });
 
-            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(
+                userID,
+                serviceName,
+                expect.objectContaining({ expectedDisconnectLifecycleGuard: expect.any(Object) }),
+            );
         });
 
         it('should not fail explicit disconnect if clearing service connection state fails after cleanup', async () => {
+            const tokenData = { accessToken: 'mock-access' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
+                data: () => tokenData,
                 ref: {
                     delete: mockDelete,
+                    data: () => tokenData,
                 },
             };
             mockGet.mockReset();
@@ -744,8 +823,12 @@ describe('OAuth2', () => {
             await expect(deauthorizeServiceForUser(userID, serviceName, {
             })).resolves.not.toThrow();
 
-            expect(mockDelete).toHaveBeenCalledTimes(2);
-            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(
+                userID,
+                serviceName,
+                expect.objectContaining({ expectedDisconnectLifecycleGuard: expect.any(Object) }),
+            );
         });
 
         it('should clear service connection state when explicit disconnect finds no token docs', async () => {
@@ -756,7 +839,11 @@ describe('OAuth2', () => {
                 missingTokensBehavior: 'ignore',
             })).resolves.not.toThrow();
 
-            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(
+                userID,
+                serviceName,
+                expect.objectContaining({ expectedDisconnectLifecycleGuard: expect.any(Object) }),
+            );
         });
 
         it('should not fail orphaned cleanup if clearing service connection state fails', async () => {
@@ -768,8 +855,12 @@ describe('OAuth2', () => {
                 missingTokensBehavior: 'ignore',
             })).resolves.not.toThrow();
 
-            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
-            expect(clearServiceConnectionState).toHaveBeenCalledWith(userID, serviceName);
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
+            expect(clearServiceConnectionState).toHaveBeenCalledWith(
+                userID,
+                serviceName,
+                expect.objectContaining({ expectedDisconnectLifecycleGuard: expect.any(Object) }),
+            );
         });
 
 
@@ -992,6 +1083,46 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).not.toHaveBeenCalled();
         });
 
+        it('does not publish delayed OAuth preparation after an explicit disconnect invalidates the flow', async () => {
+            const { SuuntoAuthAdapter } = await import('./suunto/auth/adapter');
+            const originalGetAuthorizationData = SuuntoAuthAdapter.prototype.getAuthorizationData;
+            let markPreparationStarted!: () => void;
+            let releasePreparation!: () => void;
+            const preparationStarted = new Promise<void>((resolve) => {
+                markPreparationStarted = resolve;
+            });
+            const preparationGate = new Promise<void>((resolve) => {
+                releasePreparation = resolve;
+            });
+            vi.spyOn(SuuntoAuthAdapter.prototype, 'getAuthorizationData')
+                .mockImplementationOnce(async function (redirect, state) {
+                    markPreparationStarted();
+                    await preparationGate;
+                    return originalGetAuthorizationData.call(this, redirect, state);
+                });
+
+            const authorizationPromise = getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+            );
+            await preparationStarted;
+            mockTransactionDocumentData = {
+                ...mockTransactionDocumentData,
+                oauthFlowGeneration: 'disconnect-fence-generation',
+                disconnectOperationGeneration: 'disconnect-operation-generation',
+            };
+            releasePreparation();
+
+            await expect(authorizationPromise).rejects.toMatchObject({
+                name: 'OAuthFlowContextMismatchError',
+            });
+            expect(mockTransactionDocumentData).toMatchObject({
+                oauthFlowGeneration: 'disconnect-fence-generation',
+                disconnectOperationGeneration: 'disconnect-operation-generation',
+            });
+        });
+
         it('should generate state and save to Firestore for COROSAPI', async () => {
             const result = await getServiceOAuth2CodeRedirectAndSaveStateToUser(
                 userID,
@@ -1196,9 +1327,11 @@ describe('OAuth2', () => {
         });
 
         it('should call Garmin DELETE deauthorization API', async () => {
+            const tokenData = { accessToken: 'garmin-access' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
-                ref: { delete: mockDelete },
+                data: () => tokenData,
+                ref: { delete: mockDelete, data: () => tokenData },
             };
 
             mockGet.mockResolvedValueOnce({
@@ -1224,9 +1357,11 @@ describe('OAuth2', () => {
         });
 
         it('should preserve token when API deauthorization fails with 500', async () => {
+            const tokenData = { accessToken: 'mock-token' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
-                ref: { delete: mockDelete },
+                data: () => tokenData,
+                ref: { delete: mockDelete, data: () => tokenData },
             };
 
             mockGet.mockResolvedValueOnce({
@@ -1253,9 +1388,11 @@ describe('OAuth2', () => {
         });
 
         it('should preserve token when API deauthorization fails with 502', async () => {
+            const tokenData = { accessToken: 'mock-token' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
-                ref: { delete: mockDelete },
+                data: () => tokenData,
+                ref: { delete: mockDelete, data: () => tokenData },
             };
 
             mockGet.mockResolvedValueOnce({
@@ -1282,9 +1419,11 @@ describe('OAuth2', () => {
         });
 
         it('should continue cleanup when API fails with non-500 error', async () => {
+            const tokenData = { accessToken: 'mock-token' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
-                ref: { delete: mockDelete },
+                data: () => tokenData,
+                ref: { delete: mockDelete, data: () => tokenData },
             };
 
             mockGet.mockResolvedValueOnce({
@@ -1312,9 +1451,11 @@ describe('OAuth2', () => {
         });
 
         it('should fail explicit disconnect when deleting the local token fails', async () => {
+            const tokenData = { accessToken: 'mock-token' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
-                ref: { delete: mockDelete },
+                data: () => tokenData,
+                ref: { delete: mockDelete, data: () => tokenData },
             };
 
             mockGet.mockResolvedValueOnce({
@@ -1384,13 +1525,18 @@ describe('OAuth2', () => {
 
         beforeEach(async () => {
             vi.clearAllMocks();
-            mockGet.mockClear();
-            mockGet.mockResolvedValue({
+            // Clear queued one-shot results from earlier lifecycle scenarios;
+            // this block exercises its own exact Firestore/provider sequence.
+            mockGet.mockReset().mockResolvedValue({
                 exists: true,
                 data: () => ({ state: 'some-state', codeVerifier: 'some-verifier' }),
                 empty: true,
                 docs: [],
             } as any);
+            (getTokenData as Mock).mockReset().mockResolvedValue({ accessToken: 'mock-access-token' });
+            (requestPromise.get as Mock).mockReset().mockResolvedValue({});
+            (requestPromise.post as Mock).mockReset().mockResolvedValue({});
+            (requestPromise.delete as Mock).mockReset().mockResolvedValue({});
             mockDocInstance.update = mockUpdate;
             mockTransactionDocumentData = {
                 state: 'some-state',
@@ -1439,6 +1585,10 @@ describe('OAuth2', () => {
                     fieldName: 'activeOAuthCredentialGeneration',
                     expectedGeneration: expect.any(String),
                 }),
+                expect.objectContaining({
+                    fieldName: 'oauthFlowGeneration',
+                    expectedGeneration: 'oauth-flow-generation',
+                }),
             );
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(
                 userID,
@@ -1447,6 +1597,10 @@ describe('OAuth2', () => {
                 expect.objectContaining({
                     fieldName: 'activeOAuthCredentialGeneration',
                     expectedGeneration: expect.any(String),
+                }),
+                expect.objectContaining({
+                    fieldName: 'oauthFlowGeneration',
+                    expectedGeneration: 'oauth-flow-generation',
                 }),
             );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
@@ -1471,6 +1625,10 @@ describe('OAuth2', () => {
                 expect.objectContaining({
                     fieldName: 'activeOAuthCredentialGeneration',
                     expectedGeneration: expect.any(String),
+                }),
+                expect.objectContaining({
+                    fieldName: 'oauthFlowGeneration',
+                    expectedGeneration: 'oauth-flow-generation',
                 }),
             );
         });
@@ -1519,6 +1677,41 @@ describe('OAuth2', () => {
             });
 
             expect(mockDelete).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves the persisted token for an explicit disconnect that won before connected-state promotion', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { access_token: 'disconnect-owned-token', refresh_token: 'disconnect-owned-refresh' },
+                expired: () => false,
+            } as unknown as AccessToken);
+            mockGetWahooUserID.mockResolvedValueOnce('wahoo-account');
+            mockDocInstance.set.mockImplementation(async (data: Record<string, unknown>) => {
+                if (typeof data.tokenCredentialGeneration === 'string') {
+                    mockTransactionDocumentData = { ...data };
+                }
+                return {};
+            });
+            mockMarkServiceConnected.mockImplementationOnce(async () => {
+                mockTransactionDocumentData = {
+                    ...mockTransactionDocumentData,
+                    oauthFlowGeneration: 'disconnect-flow-generation',
+                    disconnectOperationGeneration: 'disconnect-operation-generation',
+                };
+                return false;
+            });
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.WahooAPI,
+                redirectUri,
+                code,
+                'some-state',
+            )).rejects.toMatchObject({
+                phase: `oauth_mark_connected:${ServiceNames.WahooAPI}`,
+            });
+
+            expect(mockDelete).not.toHaveBeenCalled();
         });
 
         it('preserves the winning credential when the same token document was replaced', async () => {
@@ -1570,17 +1763,8 @@ describe('OAuth2', () => {
             } as any);
             const tokenDoc = {
                 id: 'test-external-user',
-                data: () => ({
-                    serviceName: ServiceNames.SuuntoApp,
-                    accessToken: 'mock-token',
-                    refreshToken: 'mock-refresh-token',
-                    expiresAt: Date.now() + 3_600_000,
-                    scope: 'workout',
-                    tokenType: 'bearer',
-                    userName: 'test-external-user',
-                    dateCreated: Date.now(),
-                    dateRefreshed: Date.now(),
-                }),
+                ref: mockDocInstance,
+                data: () => mockTransactionDocumentData,
             };
             mockGet
                 .mockResolvedValueOnce({
@@ -1626,15 +1810,25 @@ describe('OAuth2', () => {
                 userID,
                 ServiceNames.SuuntoApp,
                 expect.objectContaining({
-                    expectedTokenCredentialGeneration: expect.objectContaining({
-                        fieldName: 'activeOAuthCredentialGeneration',
-                    }),
+                    expectedDisconnectLifecycleGuard: expect.any(Object),
                 }),
             );
         });
 
         it('resumes pending disconnect retries when non-Pro OAuth recovery deauthorization fails retryably', async () => {
             (hasProAccess as Mock).mockResolvedValue(false);
+            const tokenNow = Date.now();
+            const storedTokenData = {
+                serviceName: ServiceNames.SuuntoApp,
+                accessToken: 'mock-token',
+                refreshToken: 'mock-refresh-token',
+                expiresAt: tokenNow + 3_600_000,
+                scope: 'workout',
+                tokenType: 'bearer',
+                userName: 'test-external-user',
+                dateCreated: tokenNow,
+                dateRefreshed: tokenNow,
+            };
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
                 token: {
@@ -1648,17 +1842,11 @@ describe('OAuth2', () => {
             } as any);
             const tokenDoc = {
                 id: 'test-external-user',
-                data: () => ({
-                    serviceName: ServiceNames.SuuntoApp,
-                    accessToken: 'mock-token',
-                    refreshToken: 'mock-refresh-token',
-                    expiresAt: Date.now() + 3_600_000,
-                    scope: 'workout',
-                    tokenType: 'bearer',
-                    userName: 'test-external-user',
-                    dateCreated: Date.now(),
-                    dateRefreshed: Date.now(),
-                }),
+                data: () => storedTokenData,
+                ref: {
+                    delete: mockDelete,
+                    data: () => storedTokenData,
+                },
             };
             mockGet
                 .mockResolvedValueOnce({
@@ -1666,17 +1854,7 @@ describe('OAuth2', () => {
                     size: 1,
                     docs: [tokenDoc],
                 } as any);
-            (getTokenData as Mock).mockResolvedValueOnce({
-                serviceName: ServiceNames.SuuntoApp,
-                accessToken: 'mock-token',
-                refreshToken: 'mock-refresh-token',
-                expiresAt: Date.now() + 3_600_000,
-                scope: 'workout',
-                tokenType: 'bearer',
-                userName: 'test-external-user',
-                dateCreated: Date.now(),
-                dateRefreshed: Date.now(),
-            });
+            (getTokenData as Mock).mockResolvedValueOnce(storedTokenData);
             (requestPromise.get as Mock).mockRejectedValueOnce(Object.assign(new Error('gateway timeout'), {
                 statusCode: 504,
             }));
@@ -1695,6 +1873,8 @@ describe('OAuth2', () => {
                     lifecycleGuard: {
                         disconnectGeneration: null,
                         oauthCredentialGeneration: null,
+                        oauthFlowGeneration: null,
+                        disconnectOperationGeneration: null,
                     },
                 },
             );

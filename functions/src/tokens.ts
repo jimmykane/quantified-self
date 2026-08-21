@@ -18,7 +18,9 @@ import {
   TerminalServiceAuthFailureResolution,
 } from './service-auth-lifecycle';
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
-import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
+import { getServiceDisconnectPendingData } from './service-disconnect-pending';
+import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
+import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from './service-token-store';
 import { getWahooErrorLogDetails } from './wahoo/error-details';
 import {
   COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
@@ -137,6 +139,8 @@ interface GetTokenDataOptions {
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
   allowDisconnectPendingTokenUse?: boolean;
+  /** Only the explicit-disconnect owner may use a token while its fence is active. */
+  expectedDisconnectOperationGeneration?: string;
 }
 
 function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | DocumentSnapshot): string | null {
@@ -147,7 +151,7 @@ async function assertTokenUseAllowedForUser(
   doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
   phase: 'before_return' | 'before_refresh' | 'before_persist',
-  options: Pick<GetTokenDataOptions, 'allowDisconnectPendingTokenUse'> = {},
+  options: Pick<GetTokenDataOptions, 'allowDisconnectPendingTokenUse' | 'expectedDisconnectOperationGeneration'> = {},
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
   if (!firebaseUserID) {
@@ -163,11 +167,22 @@ async function assertTokenUseAllowedForUser(
     throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, serviceName, doc.id, phase);
   }
 
-  if (options.allowDisconnectPendingTokenUse === true) {
-    return;
+  const tokenRootData = await getServiceDisconnectPendingData(firebaseUserID, serviceName);
+  const disconnectOperationGeneration = typeof tokenRootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] === 'string'
+    ? `${tokenRootData[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]}`.trim()
+    : '';
+  const expectedDisconnectOperationGeneration = `${options.expectedDisconnectOperationGeneration || ''}`.trim();
+  if (
+    (disconnectOperationGeneration && disconnectOperationGeneration !== expectedDisconnectOperationGeneration)
+    || (expectedDisconnectOperationGeneration && disconnectOperationGeneration !== expectedDisconnectOperationGeneration)
+  ) {
+    logger.warn(
+      `Skipping ${serviceName} token use for ${doc.id} during ${phase} because another disconnect lifecycle owns user ${firebaseUserID}.`,
+    );
+    throw new TokenUseSkippedForPendingDisconnectError(firebaseUserID, serviceName, doc.id, phase);
   }
 
-  if (await isServiceDisconnectPendingForUser(firebaseUserID, serviceName)) {
+  if (options.allowDisconnectPendingTokenUse !== true && isServiceDisconnectPendingData(tokenRootData)) {
     logger.warn(
       `Skipping ${serviceName} token use for ${doc.id} during ${phase} because service disconnect is pending for user ${firebaseUserID}.`,
     );
@@ -338,9 +353,9 @@ export async function getTokenData(
   let releaseClaim = true;
   try {
     await assertTokenUseAllowedForUser(refreshDoc, serviceName, 'before_refresh', options);
-    if (serviceName === ServiceNames.WahooAPI && firebaseUserID) {
-      await assertWahooRefreshAllowed(firebaseUserID);
-    }
+    const wahooRefreshLifecycleGuard = serviceName === ServiceNames.WahooAPI && firebaseUserID
+      ? await assertWahooRefreshAllowed(firebaseUserID)
+      : null;
 
     let responseToken: any;
     try {
@@ -386,6 +401,7 @@ export async function getTokenData(
           tokenRef: doc.ref,
           leaseOwner: claimResult.leaseOwner,
           credential: claimResult.credential,
+          connectionStateGeneration: wahooRefreshLifecycleGuard?.connectionStateGeneration || null,
         });
       }
 

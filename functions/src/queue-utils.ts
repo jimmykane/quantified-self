@@ -40,8 +40,9 @@ export const QUEUE_SKIPPED_REASONS = {
 } as const;
 
 export const QUEUE_DEFERRED_REASONS = {
-    ServiceDisconnectPending: 'service_disconnect_pending',
-    ServiceReconnectRequired: 'service_reconnect_required',
+  ServiceDisconnectPending: 'service_disconnect_pending',
+  ServiceReconnectRequired: 'service_reconnect_required',
+  RouteRestorePending: 'route_restore_pending',
 } as const;
 
 export type QueueSkippedReason = typeof QUEUE_SKIPPED_REASONS[keyof typeof QUEUE_SKIPPED_REASONS] | string;

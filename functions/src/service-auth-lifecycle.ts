@@ -24,6 +24,8 @@ import {
   deleteLocalServiceToken,
   getServiceTokenCollectionRef,
   getServiceTokenRootDocumentRef,
+  OAUTH_FLOW_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 import {
@@ -189,6 +191,8 @@ interface CleanupServiceConnectionOptions {
   tokenResolver?: (doc: QueryDocumentSnapshot) => Promise<StoredServiceToken>;
   terminalAuthFailure?: TerminalAuthFailureInput;
   disconnectLifecycleGuard?: ServiceDisconnectLifecycleGuard;
+  /** Explicit disconnect captures tokens atomically with its lifecycle fence. */
+  initialTokenQuerySnapshot?: admin.firestore.QuerySnapshot;
 }
 
 interface CleanupServiceTokenResolution {
@@ -270,8 +274,43 @@ function areServiceDisconnectLifecycleGuardsEqual(
   left: ServiceDisconnectLifecycleGuard,
   right: ServiceDisconnectLifecycleGuard,
 ): boolean {
-  return left.disconnectGeneration === right.disconnectGeneration
-    && left.oauthCredentialGeneration === right.oauthCredentialGeneration;
+  return (left.disconnectGeneration || null) === (right.disconnectGeneration || null)
+    && (left.oauthCredentialGeneration || null) === (right.oauthCredentialGeneration || null)
+    && (left.oauthFlowGeneration || null) === (right.oauthFlowGeneration || null)
+    && (left.disconnectOperationGeneration || null) === (right.disconnectOperationGeneration || null);
+}
+
+function resolvedServiceTokenMatchesSnapshot(
+  serviceToken: StoredServiceToken,
+  snapshot: DocumentSnapshot,
+): boolean {
+  if (!snapshot.exists) return false;
+  const current = snapshot.data() as Partial<Auth2ServiceTokenInterface> | undefined;
+  return current?.accessToken === serviceToken.accessToken
+    && current?.refreshToken === serviceToken.refreshToken
+    && Number(current?.expiresAt || 0) === Number(serviceToken.expiresAt || 0);
+}
+
+async function captureResolvedCleanupTokenSnapshotIfCurrent(
+  rootRef: admin.firestore.DocumentReference,
+  tokenRef: admin.firestore.DocumentReference,
+  lifecycleGuard: ServiceDisconnectLifecycleGuard,
+  serviceToken: StoredServiceToken,
+): Promise<DocumentSnapshot | null> {
+  return admin.firestore().runTransaction(async transaction => {
+    const [rootSnapshot, tokenSnapshot] = await Promise.all([
+      transaction.get(rootRef),
+      transaction.get(tokenRef),
+    ]);
+    const currentGuard = getServiceDisconnectLifecycleGuardFromRootData(
+      rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : null,
+    );
+    if (!areServiceDisconnectLifecycleGuardsEqual(currentGuard, lifecycleGuard)
+      || !resolvedServiceTokenMatchesSnapshot(serviceToken, tokenSnapshot)) {
+      return null;
+    }
+    return tokenSnapshot;
+  });
 }
 
 async function isServiceDisconnectLifecycleGuardCurrent(
@@ -617,11 +656,7 @@ async function applyPostCleanupConnectionState(
 
   const cleared = disconnectLifecycleGuard
     ? await clearServiceConnectionState(userID, serviceName, {
-      expectedTokenCredentialGeneration: {
-        documentRef: getServiceTokenRootDocumentRef(userID, serviceName),
-        fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
-        expectedGeneration: disconnectLifecycleGuard.oauthCredentialGeneration,
-      },
+      expectedDisconnectLifecycleGuard: disconnectLifecycleGuard,
       ...(disconnectLifecycleGuard.disconnectGeneration ? {
         expectedPendingDisconnectGeneration: disconnectLifecycleGuard.disconnectGeneration,
       } : {}),
@@ -669,7 +704,18 @@ function hasPendingOAuthFlowContext(snapshot: DocumentSnapshot): boolean {
   const data = snapshot.data() as Record<string, unknown> | undefined;
   const state = typeof data?.state === 'string' ? data.state.trim() : '';
   const codeVerifier = typeof data?.codeVerifier === 'string' ? data.codeVerifier.trim() : '';
-  return state.length > 0 || codeVerifier.length > 0;
+  const oauthFlowGeneration = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
+    ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
+    : '';
+  const disconnectOperationGeneration = typeof data?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] === 'string'
+    ? data[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD].trim()
+    : '';
+  // Explicit disconnect rotates the OAuth generation as a fence. That value
+  // is not a reconnect context and must not keep an otherwise empty root
+  // alive after the guarded disconnect has completed.
+  return state.length > 0
+    || codeVerifier.length > 0
+    || (oauthFlowGeneration.length > 0 && disconnectOperationGeneration.length === 0);
 }
 
 async function deleteCurrentTerminalAuthToken(
@@ -955,13 +1001,20 @@ export async function cleanupServiceConnectionForUser(
   const policy = resolveCleanupPolicy(reason);
   const adapter = getServiceAdapter(serviceName);
   const userDocRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  const needsDisconnectLifecycleGuard = reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement;
+  const needsDisconnectLifecycleGuard = reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+    || reason === SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
+    || !!options.disconnectLifecycleGuard;
   const tokenCollectionRef = getServiceTokenCollectionRef(userID, serviceName);
   const [tokenQuerySnapshots, initialTokenRootSnapshot] = needsDisconnectLifecycleGuard
-    ? await admin.firestore().runTransaction(async transaction => Promise.all([
-      transaction.get(tokenCollectionRef),
-      transaction.get(userDocRef),
-    ]))
+    ? options.initialTokenQuerySnapshot
+      ? [
+        options.initialTokenQuerySnapshot,
+        await admin.firestore().runTransaction(transaction => transaction.get(userDocRef)),
+      ]
+      : await admin.firestore().runTransaction(async transaction => Promise.all([
+        transaction.get(tokenCollectionRef),
+        transaction.get(userDocRef),
+      ]))
     : [await tokenCollectionRef.get(), null];
   const outcome: ServiceAuthCleanupOutcome = {
     reason,
@@ -980,7 +1033,12 @@ export async function cleanupServiceConnectionForUser(
         ? initialTokenRootSnapshot.data() as Record<string, unknown>
         : null,
     )
-    : { disconnectGeneration: null, oauthCredentialGeneration: null };
+    : {
+      disconnectGeneration: null,
+      oauthCredentialGeneration: null,
+      oauthFlowGeneration: null,
+      disconnectOperationGeneration: null,
+    };
   if (options.disconnectLifecycleGuard && !areServiceDisconnectLifecycleGuardsEqual(
     disconnectLifecycleGuard,
     getServiceDisconnectLifecycleGuardFromRootData(
@@ -1011,7 +1069,7 @@ export async function cleanupServiceConnectionForUser(
 
   if (tokenQuerySnapshots.empty) {
     logger.warn(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Cleaning up abandoned data.`);
-    if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement) {
+    if (needsDisconnectLifecycleGuard) {
       const emptyRootValidation = await validateEmptyTokenRootForDisconnectEpisode(
         userDocRef,
         disconnectLifecycleGuard,
@@ -1031,11 +1089,11 @@ export async function cleanupServiceConnectionForUser(
       reason,
       outcome,
       false,
-      reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+      needsDisconnectLifecycleGuard
         ? disconnectLifecycleGuard
         : undefined,
     );
-    if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+    if (needsDisconnectLifecycleGuard
       && outcome.connectionStateUpdate === 'cleared') {
       await deleteEmptyTokenRootForDisconnectEpisode(userDocRef, disconnectLifecycleGuard);
     }
@@ -1054,8 +1112,9 @@ export async function cleanupServiceConnectionForUser(
     let shouldDeleteToken = true;
     let serviceToken: StoredServiceToken | null = null;
     let tokenResolution: CleanupServiceTokenResolution | null = null;
+    let tokenSnapshotForCleanup: DocumentSnapshot = tokenQueryDocumentSnapshot;
 
-    if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+    if (needsDisconnectLifecycleGuard
       && !(await isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard))) {
       outcome.skippedByCondition = true;
       return outcome;
@@ -1071,6 +1130,21 @@ export async function cleanupServiceConnectionForUser(
             reason,
           );
         serviceToken = tokenResolution.serviceToken;
+        if (needsDisconnectLifecycleGuard) {
+          const currentResolvedSnapshot = await captureResolvedCleanupTokenSnapshotIfCurrent(
+            userDocRef,
+            tokenQueryDocumentSnapshot.ref,
+            disconnectLifecycleGuard,
+            serviceToken,
+          );
+          if (!currentResolvedSnapshot) {
+            outcome.skippedByCondition = true;
+            return outcome;
+          }
+          // The resolver may have refreshed and persisted this credential. Use
+          // the post-refresh version as the conditional local-delete guard.
+          tokenSnapshotForCleanup = currentResolvedSnapshot;
+        }
       } catch (error: any) {
         const statusCode = getErrorStatusCode(error);
         if (reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion && isRetryableAccountDeletionPartnerFailure(statusCode)) {
@@ -1106,7 +1180,7 @@ export async function cleanupServiceConnectionForUser(
       }
 
       if (shouldDeleteToken && serviceToken) {
-        if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+        if (needsDisconnectLifecycleGuard
           && !(await isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard))) {
           outcome.skippedByCondition = true;
           return outcome;
@@ -1165,16 +1239,16 @@ export async function cleanupServiceConnectionForUser(
     }
 
     try {
-      const tokenDataForOperationalCleanup = getSnapshotDataForOperationalCleanup(tokenQueryDocumentSnapshot);
+      const tokenDataForOperationalCleanup = getSnapshotDataForOperationalCleanup(tokenSnapshotForCleanup);
       const expectedTokenCredential = getTokenCredentialSnapshot(
         tokenDataForOperationalCleanup || undefined,
       );
-      const expectedTokenUpdateTime = tokenQueryDocumentSnapshot.updateTime || null;
+      const expectedTokenUpdateTime = tokenSnapshotForCleanup.updateTime || null;
       const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
         preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
           && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
           && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
-        ...(reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement ? {
+        ...(needsDisconnectLifecycleGuard ? {
           preserveTokenRootWhenEmpty: true,
           shouldDeleteInTransaction: async (transaction: admin.firestore.Transaction) => {
             const [lifecycleCurrent, currentTokenSnapshot] = await Promise.all([
@@ -1204,7 +1278,7 @@ export async function cleanupServiceConnectionForUser(
         return outcome;
       }
       outcome.deletedTokenCount += 1;
-      knownNoTokensRemain = reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+      knownNoTokensRemain = needsDisconnectLifecycleGuard
         ? deleteResult.remainingTokenCount === 0
         : deleteResult.tokenRootDeleted;
       if (tokenDataForOperationalCleanup) {
@@ -1251,11 +1325,11 @@ export async function cleanupServiceConnectionForUser(
     reason,
     outcome,
     knownNoTokensRemain,
-    reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+    needsDisconnectLifecycleGuard
       ? disconnectLifecycleGuard
       : undefined,
   );
-  if (reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement
+  if (needsDisconnectLifecycleGuard
     && knownNoTokensRemain
     && outcome.connectionStateUpdate === 'cleared') {
     await deleteEmptyTokenRootForDisconnectEpisode(userDocRef, disconnectLifecycleGuard);
