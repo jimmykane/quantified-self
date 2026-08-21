@@ -54,6 +54,22 @@ interface ServiceSyncRouteDescriptor {
   kind: ServiceSyncRouteKind;
 }
 
+/**
+ * Activity and route-delivery routes intentionally share some route IDs. Keep
+ * their reconnect restore state separate so restoring one never enables the
+ * other.
+ */
+function getPendingDisconnectRouteRestoreMarkerKey(route: ServiceSyncRouteDescriptor): string {
+  return `${route.kind}:${route.id}`;
+}
+
+function isRouteIdSharedAcrossSyncKinds(routeId: string): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(ACTIVITY_SYNC_ROUTES, routeId)
+    && Object.prototype.hasOwnProperty.call(ROUTE_DELIVERY_SYNC_ROUTES, routeId)
+  );
+}
+
 function normalizeServiceName(value: unknown): string {
   return `${value || ''}`.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 }
@@ -223,6 +239,7 @@ export async function disableActivitySyncRoutesForDisconnectedService(
       const routeRestoreUpdates: Record<string, true> = {};
 
       for (const route of getAffectedServiceSyncRoutes(disconnectedServiceName)) {
+        const markerKey = getPendingDisconnectRouteRestoreMarkerKey(route);
         const routeSetting = asRecord(
           route.kind === 'activity'
             ? existingRouteSettings[route.id]
@@ -230,10 +247,16 @@ export async function disableActivitySyncRoutesForDisconnectedService(
         );
         if (
           routeSetting.enabled === true ||
-          existingRestoreSettings[route.id] === true ||
-          existingServiceRestoreSettings[route.id] === true
+          existingRestoreSettings[markerKey] === true ||
+          (
+            !isRouteIdSharedAcrossSyncKinds(route.id)
+            && (
+              existingRestoreSettings[route.id] === true ||
+              existingServiceRestoreSettings[route.id] === true
+            )
+          )
         ) {
-          routeRestoreUpdates[route.id] = true;
+          routeRestoreUpdates[markerKey] = true;
         }
       }
 
@@ -312,10 +335,31 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
     const routeUpdates: Partial<Record<ActivitySyncRouteId, { enabled: boolean }>> = {};
     const routeDeliveryUpdates: Partial<Record<RouteDeliverySyncRouteId, { enabled: boolean }>> = {};
     const restoreMarkerUpdates: Record<string, unknown> = {};
+    const legacyServiceRestoreMarkerUpdates: Record<string, unknown> = {};
     const serviceUnavailableCache = new Map<string, boolean>();
 
     for (const route of affectedRoutes) {
-      const hasRestoreMarker = restoreSettings[route.id] === true || serviceRestoreSettings[route.id] === true;
+      const markerKey = getPendingDisconnectRouteRestoreMarkerKey(route);
+      const hasCurrentMarker = restoreSettings[markerKey] === true;
+      const hasLegacyFlatMarker = restoreSettings[route.id] === true;
+      const hasLegacyServiceMarker = serviceRestoreSettings[route.id] === true;
+      const canSafelyMigrateLegacyMarker = !isRouteIdSharedAcrossSyncKinds(route.id);
+      const hasRestoreMarker = hasCurrentMarker || (
+        canSafelyMigrateLegacyMarker && (hasLegacyFlatMarker || hasLegacyServiceMarker)
+      );
+
+      // Flat legacy markers cannot say which setting kind was originally
+      // enabled when a route ID is shared. Drop that ambiguous state rather
+      // than re-enabling a user-disabled delivery type.
+      if (!canSafelyMigrateLegacyMarker) {
+        if (hasLegacyFlatMarker) {
+          restoreMarkerUpdates[route.id] = FieldValue.delete();
+        }
+        if (hasLegacyServiceMarker) {
+          legacyServiceRestoreMarkerUpdates[route.id] = FieldValue.delete();
+        }
+      }
+
       if (!hasRestoreMarker) {
         continue;
       }
@@ -326,14 +370,20 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
         } else {
           routeDeliveryUpdates[route.id as RouteDeliverySyncRouteId] = { enabled: true };
         }
-        restoreMarkerUpdates[route.id] = FieldValue.delete();
-      } else if (serviceRestoreSettings[route.id] === true && restoreSettings[route.id] !== true) {
-        restoreMarkerUpdates[route.id] = true;
+        if (hasCurrentMarker) {
+          restoreMarkerUpdates[markerKey] = FieldValue.delete();
+        }
+        if (hasLegacyFlatMarker) {
+          restoreMarkerUpdates[route.id] = FieldValue.delete();
+        }
+        if (hasLegacyServiceMarker) {
+          legacyServiceRestoreMarkerUpdates[route.id] = FieldValue.delete();
+        }
       }
     }
 
-    if (Object.keys(serviceRestoreSettings).length > 0) {
-      restoreMarkerUpdates[serviceRestoreKey] = FieldValue.delete();
+    if (Object.keys(legacyServiceRestoreMarkerUpdates).length > 0) {
+      restoreMarkerUpdates[serviceRestoreKey] = legacyServiceRestoreMarkerUpdates;
     }
 
     const hasSettingsUpdate = (
