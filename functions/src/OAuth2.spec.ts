@@ -1751,9 +1751,6 @@ describe('OAuth2', () => {
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {
             (hasProAccess as Mock).mockResolvedValue(false);
             const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
-            const { SuuntoAuthAdapter } = await import('./suunto/auth/adapter');
-            const deauthorizeSpy = vi.spyOn(SuuntoAuthAdapter.prototype, 'deauthorize')
-                .mockResolvedValue(undefined);
             vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
                 token: {
                     user: 'test-external-user',
@@ -1791,6 +1788,7 @@ describe('OAuth2', () => {
                 dateCreated: Date.now(),
                 dateRefreshed: Date.now(),
             });
+            (requestPromise.get as Mock).mockResolvedValueOnce({});
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
@@ -1805,8 +1803,8 @@ describe('OAuth2', () => {
                     allowDisconnectPendingTokenUse: true,
                 }),
             );
-            expect(deauthorizeSpy).toHaveBeenCalledWith(expect.objectContaining({
-                accessToken: 'mock-token',
+            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('/oauth/deauthorize'),
             }));
             expect(clearServiceConnectionState).toHaveBeenCalledWith(
                 userID,
@@ -1815,7 +1813,6 @@ describe('OAuth2', () => {
                     expectedDisconnectLifecycleGuard: expect.any(Object),
                 }),
             );
-            deauthorizeSpy.mockRestore();
         });
 
         it('resumes pending disconnect retries when non-Pro OAuth recovery deauthorization fails retryably', async () => {
