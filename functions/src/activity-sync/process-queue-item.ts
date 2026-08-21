@@ -67,6 +67,10 @@ import {
     toProviderOperationLogDetails,
 } from '../shared/provider-operation-error';
 import { recordActivitySyncOutboundFingerprint } from './outbound-fingerprint';
+import {
+    DisabledSyncRouteTransitionResult,
+    finalizeDisabledSyncRouteIfCurrent,
+} from '../queue/sync-route-eligibility';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -1203,14 +1207,15 @@ async function deferActivitySyncQueueItemForReconnectRequired(
     queueItem: ActivitySyncQueueItemInterface,
     bulkWriter: admin.firestore.BulkWriter | undefined,
     routeMeta: ActivitySyncRouteMeta,
+    serviceName: ServiceNames = ServiceNames.WahooAPI,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
-    const error = new Error('Reconnect Wahoo to resume this activity delivery.');
+    const error = new Error(`Reconnect ${serviceName} to resume this activity delivery.`);
     const deferredResult = await deferQueueItemForReconnectRequiredIfCurrentUserActive({
         queueItem,
-        additionalData: { deferredServiceName: `${ServiceNames.WahooAPI}` },
+        additionalData: { deferredServiceName: `${serviceName}` },
         bulkWriter,
         userID: queueItem.userID,
-        serviceName: ServiceNames.WahooAPI,
+        serviceName,
         phase: 'activity_sync_reconnect_required_transition',
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
@@ -1402,16 +1407,52 @@ export async function processActivitySyncQueueItem(
             }
 
             if (!enabled && !isManualRun) {
-                await setActivitySyncSkippedMetadata({
-                    ...routeMeta,
-                    skippedReason: 'route_disabled',
-                    detail: 'Route is disabled in user settings.',
+                const routeDisabledResult = await finalizeDisabledSyncRouteIfCurrent({
+                    queueItem,
+                    userID: queueItem.userID,
+                    routeId: queueItem.routeId,
+                    settingsKind: 'activitySyncRoutes',
+                    serviceNames: [route.sourceServiceName, route.destinationServiceName],
+                    isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
                 });
-                return updateToProcessed(queueItem, bulkWriter, {
-                    skippedReason: 'route_disabled',
-                    destinationUploadContinuation: null,
-                    resultStatus: 'skipped',
-                });
+                if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.Enabled) {
+                    // Route restoration won after the earlier settings read.
+                    // Continue with the now-enabled route.
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.DeferredForRestore) {
+                    return QueueResult.Deferred;
+                } else if (
+                    routeDisabledResult.result === DisabledSyncRouteTransitionResult.DisconnectPending
+                    && routeDisabledResult.serviceName
+                ) {
+                    return deferActivitySyncQueueItemForPendingDisconnect(
+                        queueItem,
+                        bulkWriter,
+                        routeMeta,
+                        routeDisabledResult.serviceName,
+                        true,
+                    );
+                } else if (
+                    routeDisabledResult.result === DisabledSyncRouteTransitionResult.ReconnectRequired
+                    && routeDisabledResult.serviceName
+                ) {
+                    return deferActivitySyncQueueItemForReconnectRequired(
+                        queueItem,
+                        bulkWriter,
+                        routeMeta,
+                        routeDisabledResult.serviceName,
+                    );
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.SkippedDeletedUser) {
+                    return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.NotCurrent) {
+                    return QueueResult.Processed;
+                } else {
+                    await setActivitySyncSkippedMetadata({
+                        ...routeMeta,
+                        skippedReason: 'route_disabled',
+                        detail: 'Route is disabled in user settings.',
+                    });
+                    return QueueResult.Processed;
+                }
             }
 
             const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);

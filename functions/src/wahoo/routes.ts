@@ -48,7 +48,13 @@ import {
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+  normalizeWahooUserID,
+  type WahooActiveAccountGuard,
+} from './account';
 
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
@@ -146,7 +152,7 @@ async function assertWahooRouteUploadProviderActionAllowed(userID: string, phase
 
 async function withWahooRouteAccessToken<T>(
   userID: string,
-  operation: (accessToken: string) => Promise<T>,
+  operation: (context: WahooRouteRequestContext) => Promise<T>,
 ): Promise<T> {
   await assertWahooRouteUploadProviderActionAllowed(userID, 'before_token_lookup');
 
@@ -167,8 +173,12 @@ async function withWahooRouteAccessToken<T>(
       throw new WahooRouteWriteScopeRequiredError();
     }
     await assertWahooRouteUploadProviderActionAllowed(userID, 'before_provider_request');
-    await getActiveWahooTokenSnapshot(userID, providerUserId);
-    return operation(token.accessToken);
+    const accountGuard = await captureWahooActiveAccountGuard(
+      userID,
+      providerUserId,
+      token.accessToken,
+    );
+    return operation({ userID, accessToken: token.accessToken, accountGuard });
   };
 
   try {
@@ -179,6 +189,20 @@ async function withWahooRouteAccessToken<T>(
     }
     throw error;
   }
+}
+
+interface WahooRouteRequestContext {
+  userID: string;
+  accessToken: string;
+  accountGuard: WahooActiveAccountGuard;
+}
+
+async function assertWahooRouteRequestContextCurrent(
+  context: WahooRouteRequestContext,
+  phase: string,
+): Promise<void> {
+  await assertWahooRouteUploadProviderActionAllowed(context.userID, phase);
+  await assertWahooActiveAccountGuardCurrent(context.userID, context.accountGuard);
 }
 
 function getRouteMetric(routeFile: RouteFileInterface, type: string): number | null {
@@ -316,9 +340,14 @@ function getProviderRouteId(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
-async function findWahooRouteByExternalId(accessToken: string, externalId: string): Promise<WahooRouteRecord | undefined> {
+async function findWahooRouteByExternalId(
+  context: WahooRouteRequestContext,
+  externalId: string,
+  phase: string,
+): Promise<WahooRouteRecord | undefined> {
+  await assertWahooRouteRequestContextCurrent(context, phase);
   const existingResponse = await requestWahooAPI<unknown>(
-    accessToken,
+    context.accessToken,
     `/v1/routes?external_id=${encodeURIComponent(externalId)}`,
   );
   return getRouteRecords(existingResponse.data)[0];
@@ -332,15 +361,14 @@ function isWahooRouteCreateConflict(error: unknown): boolean {
 }
 
 async function updateWahooRoute(
-  userID: string,
-  accessToken: string,
+  context: WahooRouteRequestContext,
   providerRouteId: string,
   form: URLSearchParams,
   phase: string,
 ): Promise<{ providerRouteId?: string; message: string }> {
-  await assertWahooRouteUploadProviderActionAllowed(userID, phase);
+  await assertWahooRouteRequestContextCurrent(context, phase);
   const response = await requestWahooAPI<WahooRouteRecord>(
-    accessToken,
+    context.accessToken,
     `/v1/routes/${encodeURIComponent(providerRouteId)}`,
     { method: 'PUT', form },
   );
@@ -437,26 +465,29 @@ async function uploadWahooRoute(
   }
 
   try {
-    return await withWahooRouteAccessToken(userID, async (accessToken) => {
+    return await withWahooRouteAccessToken(userID, async (context) => {
       const routeFile = options.routeFile || await parseWahooRoute(fileBuffer, inputFormat);
       const fitBuffer = inputFormat === 'gpx'
         ? await convertWahooGpxRouteToFit(routeFile)
         : fileBuffer;
       const payload = buildWahooRoutePayload(userID, fileBuffer, routeFile, filename, options.externalId);
       const form = buildWahooRouteForm(fitBuffer, payload);
-      await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_lookup');
-      const existingRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
+      const existingRoute = await findWahooRouteByExternalId(
+        context,
+        payload.externalId,
+        'before_route_lookup',
+      );
       const existingRouteId = getProviderRouteId(existingRoute);
       if (existingRouteId) {
         return {
           status: 'success',
-          ...await updateWahooRoute(userID, accessToken, existingRouteId, form, 'before_route_update'),
+          ...await updateWahooRoute(context, existingRouteId, form, 'before_route_update'),
         };
       }
 
-      await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_create');
+      await assertWahooRouteRequestContextCurrent(context, 'before_route_create');
       try {
-        const response = await requestWahooAPI<WahooRouteRecord>(accessToken, '/v1/routes', { method: 'POST', form });
+        const response = await requestWahooAPI<WahooRouteRecord>(context.accessToken, '/v1/routes', { method: 'POST', form });
         return {
           status: 'success',
           providerRouteId: getProviderRouteId(response.data),
@@ -465,14 +496,17 @@ async function uploadWahooRoute(
       } catch (error) {
         if (!isWahooRouteCreateConflict(error)) throw error;
 
-        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_conflict_route_lookup');
-        const conflictRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
+        const conflictRoute = await findWahooRouteByExternalId(
+          context,
+          payload.externalId,
+          'before_conflict_route_lookup',
+        );
         const conflictRouteId = getProviderRouteId(conflictRoute);
         if (!conflictRouteId) throw error;
 
         return {
           status: 'success',
-          ...await updateWahooRoute(userID, accessToken, conflictRouteId, form, 'before_conflict_route_update'),
+          ...await updateWahooRoute(context, conflictRouteId, form, 'before_conflict_route_update'),
         };
       }
     });

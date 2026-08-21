@@ -42,6 +42,13 @@ interface PersistedOAuthCredentialGuard {
   tokenCredentialGeneration: string;
 }
 
+export const OAUTH_FLOW_GENERATION_FIELD = 'oauthFlowGeneration';
+
+interface ClaimedOAuthFlowContext {
+  data: Record<string, unknown>;
+  generation: string;
+}
+
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
   public readonly code = 'failed-precondition';
@@ -121,7 +128,7 @@ async function claimOAuthFlowContext(
   serviceName: ServiceNames,
   tokenCollectionName: string,
   expectedState: string,
-): Promise<Record<string, unknown>> {
+): Promise<ClaimedOAuthFlowContext> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
   return db.runTransaction(async transaction => {
@@ -141,7 +148,10 @@ async function claimOAuthFlowContext(
 
     const snapshot = await transaction.get(tokenRootRef);
     const data = snapshot.data() as Record<string, unknown> | undefined;
-    if (!snapshot.exists || data?.state !== expectedState) {
+    const generation = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
+      ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
+      : '';
+    if (!snapshot.exists || data?.state !== expectedState || !generation) {
       throw new OAuthFlowContextMismatchError(serviceName);
     }
 
@@ -149,7 +159,33 @@ async function claimOAuthFlowContext(
       state: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     });
-    return data;
+    return { data, generation };
+  });
+}
+
+async function invalidateOAuthFlowBeforeDisconnect(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+): Promise<void> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_disconnect_invalidate:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) return;
+
+    const rootSnapshot = await transaction.get(tokenRootRef);
+    if (!rootSnapshot.exists) return;
+    transaction.set(tokenRootRef, {
+      [OAUTH_FLOW_GENERATION_FIELD]: crypto.randomUUID(),
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+    }, { merge: true });
   });
 }
 
@@ -159,6 +195,7 @@ async function setOAuthTokenIfUserActive(
   tokenCollectionName: string,
   tokenID: string,
   tokenData: Record<string, unknown>,
+  expectedOAuthFlowGeneration: string,
 ): Promise<PersistedOAuthCredentialGuard> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
@@ -178,11 +215,19 @@ async function setOAuthTokenIfUserActive(
       logger.warn(`Skipping ${serviceName} OAuth token write for user ${userID} because the user is missing or deletion is in progress.`);
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_token_write:${serviceName}`);
     }
+    const tokenRootSnapshot = await transaction.get(tokenRootRef);
+    if (
+      !tokenRootSnapshot.exists
+      || tokenRootSnapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== expectedOAuthFlowGeneration
+    ) {
+      throw new OAuthFlowContextMismatchError(serviceName);
+    }
     // A reauthorization replaces the credential generation atomically with
     // the provider token. A refresh worker that started from an older
     // snapshot can therefore never persist over the newly authorized token.
     transaction.set(tokenRootRef, {
       [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
+      [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
     }, { merge: true });
     transaction.set(tokenDocRef, persistedTokenData);
   });
@@ -357,6 +402,7 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: str
 
   const tokenData: any = {
     state: state,
+    [OAUTH_FLOW_GENERATION_FIELD]: crypto.randomUUID(),
     ...(context || {}),
   };
 
@@ -411,14 +457,18 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
 
   // Atomically validate and consume state plus PKCE context before the
   // provider exchange. A second callback or an older callback loses here.
-  const tokensDocumentSnapshotData = await claimOAuthFlowContext(
+  const claimedOAuthFlowContext = await claimOAuthFlowContext(
     userID,
     serviceName,
     adapter.tokenCollectionName,
     callbackState,
   );
 
-  const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
+  const tokenConfig = adapter.getTokenRequestConfig(
+    redirectUri,
+    code,
+    claimedOAuthFlowContext.data,
+  );
 
   await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_exchange:${serviceName}`);
 
@@ -450,6 +500,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
       adapter.tokenCollectionName,
       uniqueId || 'default',
       tokenData,
+      claimedOAuthFlowContext.generation,
     );
     tokenPersisted = true;
   } catch (error) {
@@ -534,6 +585,11 @@ export async function deauthorizeServiceForUser(
   serviceName: ServiceNames,
   options: DeauthorizeServiceForUserOptions = {},
 ) {
+  const adapter = getServiceAdapter(serviceName);
+  // This transaction orders explicit disconnect against both a claimed
+  // callback and a newer authorization attempt. Whichever wins first leaves a
+  // generation the callback must still prove before recreating credentials.
+  await invalidateOAuthFlowBeforeDisconnect(userID, serviceName, adapter.tokenCollectionName);
   return cleanupServiceConnectionForUser(
     userID,
     serviceName,

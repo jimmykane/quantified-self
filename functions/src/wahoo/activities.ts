@@ -40,7 +40,12 @@ import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
   recordActivitySyncOutboundFingerprint,
 } from '../activity-sync/outbound-fingerprint';
-import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+  normalizeWahooUserID,
+} from './account';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -305,11 +310,16 @@ async function withWahooWorkoutWriteToken<T>(
       throw new WahooWorkoutWriteScopeRequiredError();
     }
     await assertWahooActivityUploadProviderActionAllowed(userID, 'before_provider_request');
+    const accountGuard = await captureWahooActiveAccountGuard(
+      userID,
+      providerUserId,
+      token.accessToken,
+    );
     if (beforeProviderRequest) {
       await beforeProviderRequest();
       await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
     }
-    await getActiveWahooTokenSnapshot(userID, providerUserId);
+    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
     return operation(token.accessToken);
   };
 

@@ -22,7 +22,8 @@ service cloud.firestore {
         'disconnectLastStatusCode',
         'disconnectLastErrorMessage',
         'disconnectManualReviewRequired',
-        'activeOAuthCredentialGeneration'
+        'activeOAuthCredentialGeneration',
+        'oauthFlowGeneration'
       ];
     }
 

@@ -43,6 +43,7 @@ const {
   mockFieldValueDelete,
   mockRecordActivitySyncOutboundFingerprint,
   mockIsWahooReconnectRequiredError,
+  mockFinalizeDisabledSyncRouteIfCurrent,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -89,6 +90,7 @@ const {
     mockFieldValueDelete: Symbol('FIELD_VALUE_DELETE'),
     mockRecordActivitySyncOutboundFingerprint: vi.fn(),
     mockIsWahooReconnectRequiredError: vi.fn(),
+    mockFinalizeDisabledSyncRouteIfCurrent: vi.fn(),
   };
 });
 
@@ -178,6 +180,18 @@ vi.mock('../queue-utils', () => ({
     ServiceDisconnectPending: 'service_disconnect_pending',
     ServiceReconnectRequired: 'service_reconnect_required',
   },
+}));
+vi.mock('../queue/sync-route-eligibility', () => ({
+  DisabledSyncRouteTransitionResult: {
+    Enabled: 'enabled',
+    DeferredForRestore: 'deferred_for_restore',
+    DisconnectPending: 'disconnect_pending',
+    ReconnectRequired: 'reconnect_required',
+    ProcessedAsDisabled: 'processed_as_disabled',
+    NotCurrent: 'not_current',
+    SkippedDeletedUser: 'skipped_deleted_user',
+  },
+  finalizeDisabledSyncRouteIfCurrent: mockFinalizeDisabledSyncRouteIfCurrent,
 }));
 
 vi.mock('./settings', () => ({
@@ -367,6 +381,7 @@ describe('activity-sync/process-queue-item', () => {
     mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
     mockDeferQueueItemForReconnectRequiredIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
     mockIsWahooReconnectRequiredError.mockReturnValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValue({ result: 'processed_as_disabled' });
     mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -2169,6 +2184,44 @@ describe('activity-sync/process-queue-item', () => {
       skippedReason: 'route_disabled',
     }));
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('defers a disabled route while atomic route restoration remains pending', async () => {
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({ result: 'deferred_for_restore' });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('parks a route when reconnect-required wins after the earlier lifecycle read', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({
+      result: 'reconnect_required',
+      serviceName: ServiceNames.WahooAPI,
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem,
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
   });
 
   it('skips and marks processed when destination service requires reconnect even if a token remains', async () => {
