@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
+import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from './service-token-store';
 
 /**
  * A provider refresh can take several seconds. Keep the ownership lease short
@@ -49,6 +50,11 @@ export interface PersistTokenRefreshOptions {
   companionWrites?: readonly TokenRefreshCompanionWrite[];
 }
 
+/** Only explicit-disconnect cleanup may refresh while its root fence is active. */
+export interface TokenRefreshClaimOptions {
+  expectedDisconnectOperationGeneration?: string;
+}
+
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 type TokenReference = admin.firestore.DocumentReference;
 
@@ -68,6 +74,9 @@ export type TokenRefreshClaimResult =
   }
   | {
     kind: 'skipped_user_deletion';
+  }
+  | {
+    kind: 'skipped_service_disconnect';
   };
 
 export type PersistTokenRefreshResult =
@@ -82,6 +91,18 @@ function normalizedString(value: unknown): string {
 function normalizedNumber(value: unknown): number {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function normalizedGeneration(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function doesDisconnectOperationGenerationMatch(
+  rootData: Record<string, unknown> | undefined,
+  expectedDisconnectOperationGeneration: string | undefined,
+): boolean {
+  return normalizedGeneration(rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD])
+    === normalizedGeneration(expectedDisconnectOperationGeneration);
 }
 
 /**
@@ -156,13 +177,31 @@ export function createTokenRefreshCoordinator(
     ref: TokenReference,
     expectedCredential: TokenCredentialSnapshot,
     nowMs = Date.now(),
+    options: TokenRefreshClaimOptions = {},
   ): Promise<TokenRefreshClaimResult> {
     return db.runTransaction(async (transaction) => {
       if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
         return { kind: 'skipped_user_deletion' };
       }
 
-      const snapshot = await transaction.get(ref) as TokenSnapshot;
+      // A pre-refresh root read is not sufficient: an explicit disconnect can
+      // commit its root fence between that read and this claim. Read the root
+      // in the same transaction as the token lease so a non-owner can never
+      // acquire a lease after disconnect has won.
+      const tokenRootRef = ref.parent?.parent;
+      if (!tokenRootRef) {
+        return { kind: 'skipped_service_disconnect' };
+      }
+      const [snapshot, tokenRootSnapshot] = await Promise.all([
+        transaction.get(ref) as Promise<TokenSnapshot>,
+        transaction.get(tokenRootRef),
+      ]);
+      if (!doesDisconnectOperationGenerationMatch(
+        tokenRootSnapshot.data() as Record<string, unknown> | undefined,
+        options.expectedDisconnectOperationGeneration,
+      )) {
+        return { kind: 'skipped_service_disconnect' };
+      }
       if (!snapshot.exists) {
         return { kind: 'superseded', snapshot: null };
       }
@@ -265,8 +304,9 @@ export function createTokenRefreshCoordinator(
 export async function claimTokenRefresh(
   ref: TokenReference,
   expectedCredential: TokenCredentialSnapshot,
+  options: TokenRefreshClaimOptions = {},
 ): Promise<TokenRefreshClaimResult> {
-  return createTokenRefreshCoordinator().claim(ref, expectedCredential);
+  return createTokenRefreshCoordinator().claim(ref, expectedCredential, Date.now(), options);
 }
 
 export async function persistTokenRefresh(

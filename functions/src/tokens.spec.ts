@@ -521,6 +521,37 @@ describe('tokens', () => {
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
         });
 
+        it('parks a refresh when an explicit disconnect commits after the preliminary check', async () => {
+            mockToken.expired.mockReturnValue(true);
+            // The claim transaction is the atomic fence: model disconnect
+            // winning after the earlier root check but before this lease.
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'skipped_service_disconnect' });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('forwards the explicit-disconnect owner generation into the atomic refresh claim', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            expect(hoisted.claimTokenRefresh).toHaveBeenCalledWith(
+                mockDoc.ref,
+                expect.any(Object),
+                { expectedDisconnectOperationGeneration: 'disconnect-operation-1' },
+            );
+            expect(mockToken.refresh).toHaveBeenCalled();
+        });
+
         it('uses the newer credential snapshot when guarded refresh persistence is superseded', async () => {
             const latestDoc = {
                 id: 'user-123',
