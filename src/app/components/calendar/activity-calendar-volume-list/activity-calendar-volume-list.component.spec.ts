@@ -70,6 +70,7 @@ describe('ActivityCalendarVolumeListComponent', () => {
     const link = fixture.nativeElement.querySelector('.calendar-family-volume-row--link') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('/user/user-1/event/event-1');
     expect(link.getAttribute('aria-label')).toContain('Open activity');
+    expect(link.querySelector('mat-icon.calendar-family-volume-row-meta')).toBeNull();
 
     fixture.componentInstance.selectRow(row);
     expect(selected).toHaveBeenCalledWith(row);

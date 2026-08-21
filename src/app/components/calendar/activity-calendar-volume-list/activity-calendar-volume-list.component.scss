@@ -18,7 +18,6 @@
 }
 
 .calendar-family-volume-row--link {
-  padding-right: 40px;
   cursor: pointer;
 }
 
@@ -30,14 +29,6 @@
 .calendar-family-volume-row--link:focus-visible {
   outline: 2px solid var(--mat-sys-primary);
   outline-offset: -2px;
-}
-
-.calendar-family-volume-row-meta {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  color: var(--mat-sys-on-surface-variant);
-  transform: translateY(-50%);
 }
 
 .calendar-family-volume-identity {

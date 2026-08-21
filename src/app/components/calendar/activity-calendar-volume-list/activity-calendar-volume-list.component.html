@@ -26,9 +26,6 @@
     @if (family.stats.length) {
     <app-activity-calendar-volume-stats [stats]="family.stats"></app-activity-calendar-volume-stats>
     }
-    @if (family.route) {
-    <mat-icon class="calendar-family-volume-row-meta" aria-hidden="true">chevron_right</mat-icon>
-    }
   </a>
   @if (!$last) {
   <mat-divider></mat-divider>
