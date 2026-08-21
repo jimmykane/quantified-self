@@ -38,6 +38,7 @@ import {
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
+  completeActivitySyncOutboundFingerprintProviderRequest,
   recordActivitySyncOutboundFingerprint,
   markActivitySyncOutboundFingerprintProviderRequestStarted,
   rollbackActivitySyncOutboundFingerprint,
@@ -78,6 +79,8 @@ export interface WahooActivityUploadOptions {
   onProviderRequestAborted?: () => Promise<void>;
   /** Promote pre-request state; account ownership is revalidated before I/O. */
   onProviderRequestStarting?: () => Promise<void>;
+  /** Finalizes pre-request state after Wahoo has been attempted. */
+  onProviderRequestFinished?: () => Promise<void>;
 }
 
 export class WahooActivityUploadSkippedForDeletedUserError extends Error {
@@ -298,7 +301,10 @@ async function withWahooWorkoutWriteToken<T>(
   operation: (accessToken: string) => Promise<T>,
   hooks: Pick<
     WahooActivityUploadOptions,
-    'beforeProviderRequest' | 'onProviderRequestAborted' | 'onProviderRequestStarting'
+    'beforeProviderRequest'
+    | 'onProviderRequestAborted'
+    | 'onProviderRequestStarting'
+    | 'onProviderRequestFinished'
   > = {},
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
@@ -343,7 +349,19 @@ async function withWahooWorkoutWriteToken<T>(
         await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
       }
       providerRequestStarted = true;
-      return await operation(token.accessToken);
+      try {
+        return await operation(token.accessToken);
+      } finally {
+        if (hooks.onProviderRequestFinished) {
+          try {
+            await hooks.onProviderRequestFinished();
+          } catch (completionError) {
+            logger.error('Could not finalize a Wahoo outbound fingerprint after the provider request started.', {
+              error: getWahooErrorLogDetails(completionError),
+            });
+          }
+        }
+      }
     } catch (error) {
       if (providerPreparationCompleted && !providerRequestStarted && hooks.onProviderRequestAborted) {
         try {
@@ -493,6 +511,14 @@ export const importActivityToWahooAPI = onCall({
           throw new Error('Missing provisional Wahoo outbound fingerprint.');
         }
         await markActivitySyncOutboundFingerprintProviderRequestStarted({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+      },
+      onProviderRequestFinished: async () => {
+        if (!outboundFingerprint) return;
+        await completeActivitySyncOutboundFingerprintProviderRequest({
           userID,
           destinationServiceName: ServiceNames.WahooAPI,
           record: outboundFingerprint,

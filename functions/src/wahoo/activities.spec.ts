@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
   const hasProAccess = vi.fn();
   const recordActivitySyncOutboundFingerprint = vi.fn();
   const markActivitySyncOutboundFingerprintProviderRequestStarted = vi.fn();
+  const completeActivitySyncOutboundFingerprintProviderRequest = vi.fn();
   const rollbackActivitySyncOutboundFingerprint = vi.fn();
   const getActiveWahooTokenSnapshot = vi.fn();
   const captureWahooActiveAccountGuard = vi.fn();
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => {
     hasProAccess,
     recordActivitySyncOutboundFingerprint,
     markActivitySyncOutboundFingerprintProviderRequestStarted,
+    completeActivitySyncOutboundFingerprintProviderRequest,
     rollbackActivitySyncOutboundFingerprint,
     getActiveWahooTokenSnapshot,
     captureWahooActiveAccountGuard,
@@ -83,6 +85,7 @@ vi.mock('../utils', async (importOriginal) => {
 vi.mock('../activity-sync/outbound-fingerprint', () => ({
   recordActivitySyncOutboundFingerprint: mocks.recordActivitySyncOutboundFingerprint,
   markActivitySyncOutboundFingerprintProviderRequestStarted: mocks.markActivitySyncOutboundFingerprintProviderRequestStarted,
+  completeActivitySyncOutboundFingerprintProviderRequest: mocks.completeActivitySyncOutboundFingerprintProviderRequest,
   rollbackActivitySyncOutboundFingerprint: mocks.rollbackActivitySyncOutboundFingerprint,
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError: class ActivitySyncOutboundFingerprintSkippedForDeletedUserError extends Error {
     readonly name = 'ActivitySyncOutboundFingerprintSkippedForDeletedUserError';
@@ -134,6 +137,7 @@ describe('Wahoo activity uploads', () => {
       operationId: 'operation-1',
     });
     mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mockResolvedValue(undefined);
+    mocks.completeActivitySyncOutboundFingerprintProviderRequest.mockResolvedValue(undefined);
     mocks.rollbackActivitySyncOutboundFingerprint.mockResolvedValue(undefined);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true, id: 'wahoo-user' });
@@ -199,6 +203,8 @@ describe('Wahoo activity uploads', () => {
       .toBeLessThan(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mock.invocationCallOrder[0]);
     expect(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.requestWahooAPI.mock.invocationCallOrder[0]);
+    expect(mocks.completeActivitySyncOutboundFingerprintProviderRequest.mock.invocationCallOrder[0])
+      .toBeGreaterThan(mocks.requestWahooAPI.mock.invocationCallOrder[0]);
   });
 
   it('stops before Wahoo when the direct-upload echo receipt cannot be written', async () => {
@@ -236,6 +242,7 @@ describe('Wahoo activity uploads', () => {
       destinationServiceName: ServiceNames.WahooAPI,
       record: expect.objectContaining({ operationId: 'operation-1' }),
     });
+    expect(mocks.completeActivitySyncOutboundFingerprintProviderRequest).not.toHaveBeenCalled();
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 

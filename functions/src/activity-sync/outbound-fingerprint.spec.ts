@@ -110,6 +110,7 @@ vi.mock('../shared/ttl-config', () => ({
 import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
   buildActivitySyncOutboundFingerprintIds,
+  completeActivitySyncOutboundFingerprintProviderRequest,
   getActivitySyncOutboundFingerprintDocumentId,
   isActivitySyncOutboundEcho,
   markActivitySyncOutboundFingerprintProviderRequestStarted,
@@ -212,6 +213,11 @@ describe('activity sync outbound fingerprints', () => {
       destinationServiceName: ServiceNames.WahooAPI,
       record: accepted,
     });
+    await completeActivitySyncOutboundFingerprintProviderRequest({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: accepted,
+    });
     const acceptedRecordedAt = 123_456;
     const acceptedExpireAt = { toMillis: () => Date.now() + 60_000 };
     for (const fingerprintId of accepted.fingerprintIds) {
@@ -227,6 +233,11 @@ describe('activity sync outbound fingerprints', () => {
       destinationServiceName: ServiceNames.WahooAPI,
       fileBuffer,
       provisional: true,
+    });
+    await markActivitySyncOutboundFingerprintProviderRequestStarted({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: aborted,
     });
     await rollbackActivitySyncOutboundFingerprint({
       userID: 'user-1',
@@ -247,6 +258,40 @@ describe('activity sync outbound fingerprints', () => {
       sourceServiceName: ServiceNames.WahooAPI,
       fileBuffer,
     })).resolves.toBe(true);
+  });
+
+  it('removes a promoted receipt when the provider request is aborted before it starts', async () => {
+    const fileBuffer = Buffer.from('post-promotion-account-switch-fit');
+    const provisional = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+      provisional: true,
+    });
+    await markActivitySyncOutboundFingerprintProviderRequestStarted({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: provisional,
+    });
+
+    await expect(isActivitySyncOutboundEcho({
+      userID: 'user-1',
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+    })).resolves.toBe(true);
+
+    await rollbackActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: provisional,
+    });
+
+    expect(mocks.documents.size).toBe(0);
+    await expect(isActivitySyncOutboundEcho({
+      userID: 'user-1',
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+    })).resolves.toBe(false);
   });
 
   it('does not treat a provisional receipt as a provider echo', async () => {

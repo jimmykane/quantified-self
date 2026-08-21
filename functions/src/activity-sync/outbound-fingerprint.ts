@@ -159,7 +159,7 @@ export async function recordActivitySyncOutboundFingerprint(params: {
     for (let index = 0; index < fingerprints.fingerprintIds.length; index += 1) {
       const fingerprintId = fingerprints.fingerprintIds[index];
       const existingData = snapshots[index]?.data() || {};
-      const hasLiveAcceptedReceipt = params.provisional === true
+      const hasLiveProviderReceipt = params.provisional === true
         && (toEpochMs(existingData.providerRequestStartedAt) || 0) > 0
         && (toEpochMs(existingData.expireAt) || 0) > recordedAt;
       transaction.set(refs[index], {
@@ -168,13 +168,17 @@ export async function recordActivitySyncOutboundFingerprint(params: {
         fingerprintKind: fingerprintId.startsWith(`${SEMANTIC_FINGERPRINT_VERSION}-`) ? 'semantic' : 'exact',
         ...(params.provisional === true ? {
           pendingOperationIds: FieldValue.arrayUnion(record.operationId),
-          ...(hasLiveAcceptedReceipt ? {} : {
+          ...(hasLiveProviderReceipt ? {} : {
             providerRequestStartedAt: FieldValue.delete(),
+            providerRequestReceiptPending: FieldValue.delete(),
+            providerRequestStartingOperationIds: FieldValue.delete(),
             recordedAt,
             expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
           }),
         } : {
           providerRequestStartedAt: recordedAt,
+          providerRequestReceiptPending: FieldValue.delete(),
+          providerRequestStartingOperationIds: FieldValue.delete(),
           recordedAt,
           expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
         }),
@@ -184,7 +188,11 @@ export async function recordActivitySyncOutboundFingerprint(params: {
   return record;
 }
 
-/** Promotes one provisional operation into a durable provider-request receipt. */
+/**
+ * Promotes one provisional operation into a durable provider-request receipt.
+ * The operation remains attributable until the provider request is attempted,
+ * so an account switch during the final ownership check can remove it safely.
+ */
 export async function markActivitySyncOutboundFingerprintProviderRequestStarted(params: {
   userID: string;
   destinationServiceName: ServiceNames;
@@ -210,12 +218,50 @@ export async function markActivitySyncOutboundFingerprintProviderRequestStarted(
     })) {
       throw new Error('The outbound activity fingerprint operation is no longer current.');
     }
-    for (const ref of refs) {
-      transaction.set(ref, {
+    for (let index = 0; index < refs.length; index += 1) {
+      const data = snapshots[index].data() || {};
+      const hasProviderReceipt = (toEpochMs(data.providerRequestStartedAt) || 0) > 0;
+      transaction.set(refs[index], {
         pendingOperationIds: FieldValue.arrayRemove(params.record.operationId),
-        providerRequestStartedAt,
-        recordedAt: providerRequestStartedAt,
-        expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
+        providerRequestStartingOperationIds: FieldValue.arrayUnion(params.record.operationId),
+        ...(hasProviderReceipt ? {} : {
+          providerRequestStartedAt,
+          providerRequestReceiptPending: true,
+          recordedAt: providerRequestStartedAt,
+          expireAt: getExpireAtTimestamp(TTL_CONFIG.ACTIVITY_SYNC_OUTBOUND_FINGERPRINT_IN_DAYS),
+        }),
+      }, { merge: true });
+    }
+  });
+}
+
+/**
+ * Finalizes an ownership claim once Wahoo was actually attempted. The receipt
+ * stays eligible for echo suppression; only the reversible pre-request claim
+ * is removed.
+ */
+export async function completeActivitySyncOutboundFingerprintProviderRequest(params: {
+  userID: string;
+  destinationServiceName: ServiceNames;
+  record: ActivitySyncOutboundFingerprintRecord;
+}): Promise<void> {
+  const db = admin.firestore();
+  const collection = fingerprintCollection(params.userID);
+  await db.runTransaction(async transaction => {
+    const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
+    if (deletionGuard.shouldSkip) return;
+    const refs = params.record.fingerprintIds.map(fingerprintId => collection.doc(
+      getActivitySyncOutboundFingerprintDocumentId(params.destinationServiceName, fingerprintId),
+    ));
+    const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+    for (let index = 0; index < snapshots.length; index += 1) {
+      const starting = snapshots[index].data()?.providerRequestStartingOperationIds;
+      if (!snapshots[index].exists || !Array.isArray(starting) || !starting.includes(params.record.operationId)) {
+        continue;
+      }
+      transaction.set(refs[index], {
+        providerRequestStartingOperationIds: FieldValue.arrayRemove(params.record.operationId),
+        providerRequestReceiptPending: FieldValue.delete(),
       }, { merge: true });
     }
   });
@@ -241,15 +287,30 @@ export async function rollbackActivitySyncOutboundFingerprint(params: {
       const originalPending = Array.isArray(data.pendingOperationIds)
         ? data.pendingOperationIds
         : [];
+      const originalStarting = Array.isArray(data.providerRequestStartingOperationIds)
+        ? data.providerRequestStartingOperationIds
+        : [];
       const pending = originalPending.filter((value: unknown) => value !== params.record.operationId);
-      if (!snapshots[index].exists || pending.length === originalPending.length) continue;
-      if (toEpochMs(data.providerRequestStartedAt) !== null || pending.length > 0) {
-        transaction.set(refs[index], {
-          pendingOperationIds: FieldValue.arrayRemove(params.record.operationId),
-        }, { merge: true });
-      } else {
+      const starting = originalStarting.filter((value: unknown) => value !== params.record.operationId);
+      const removedPending = pending.length !== originalPending.length;
+      const removedStarting = starting.length !== originalStarting.length;
+      if (!snapshots[index].exists || (!removedPending && !removedStarting)) continue;
+      const hasProviderReceipt = (toEpochMs(data.providerRequestStartedAt) || 0) > 0;
+      const shouldDelete = (!hasProviderReceipt || data.providerRequestReceiptPending === true)
+        && pending.length === 0
+        && starting.length === 0;
+      if (shouldDelete) {
         // Fingerprint documents never have descendants.
         transaction.delete(refs[index]);
+      } else {
+        transaction.set(refs[index], {
+          ...(removedPending ? {
+            pendingOperationIds: FieldValue.arrayRemove(params.record.operationId),
+          } : {}),
+          ...(removedStarting ? {
+            providerRequestStartingOperationIds: FieldValue.arrayRemove(params.record.operationId),
+          } : {}),
+        }, { merge: true });
       }
     }
   });
