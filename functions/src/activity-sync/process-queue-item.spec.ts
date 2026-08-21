@@ -2380,7 +2380,11 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
       skippedReason: 'destination_not_connected',
     }));
-    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockSetActivitySyncRetryingMetadataIfQueueItemDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      queueItemRef: baseQueueItem.ref,
+      deferredReason: 'service_disconnect_pending',
+    }));
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
     expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
       baseQueueItem,
       undefined,
@@ -2450,7 +2454,33 @@ describe('activity-sync/process-queue-item', () => {
     const guardedDeferral = mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mock.calls[0][0];
     expect(guardedDeferral.isCurrent({ ...queueItem })).toBe(true);
     expect(guardedDeferral.isCurrent({ ...queueItem, processed: true })).toBe(false);
+    expect(mockSetActivitySyncRetryingMetadataIfQueueItemDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      queueItemRef: queueItem.ref,
+      deferredReason: 'service_disconnect_pending',
+    }));
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite successful metadata when a stale pending-disconnect worker cannot park its row', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(Object.assign(
+      new Error('Wahoo disconnect is pending.'),
+      {
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        serviceName: ServiceNames.WahooAPI,
+      },
+    ));
+    mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValueOnce(QueueResult.Processed);
+
+    await expect(processActivitySyncQueueItem(queueItem)).resolves.toBe(QueueResult.Processed);
+
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncRetryingMetadataIfQueueItemDeferred).not.toHaveBeenCalled();
   });
 
   it('defers an enabled Wahoo route when its source service is pending disconnect', async () => {

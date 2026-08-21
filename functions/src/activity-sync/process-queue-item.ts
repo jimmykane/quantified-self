@@ -1180,27 +1180,33 @@ async function deferActivitySyncQueueItemForPendingDisconnect(
     requireCurrentProviderState = false,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const error = new Error(`${serviceName} disconnect is pending.`);
-    await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
-        ...routeMeta,
-        error: toActivitySyncMetadataError(error),
-    }));
     const additionalData = { deferredServiceName: `${serviceName}` };
-    if (!requireCurrentProviderState) {
-        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
+    const deferredResult = !requireCurrentProviderState
+        ? await deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
             userID: queueItem.userID,
             serviceName,
+        })
+        : await deferQueueItemForPendingDisconnectIfCurrentUserActive({
+            queueItem,
+            additionalData,
+            bulkWriter,
+            userID: queueItem.userID,
+            serviceName,
+            phase: 'activity_sync_pending_disconnect_transition',
+            logPrefix: 'ActivitySync',
+            isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
         });
+    if (deferredResult !== QueueResult.Deferred || !queueItem.ref) {
+        return deferredResult;
     }
-    return deferQueueItemForPendingDisconnectIfCurrentUserActive({
-        queueItem,
-        additionalData,
-        bulkWriter,
-        userID: queueItem.userID,
-        serviceName,
-        phase: 'activity_sync_pending_disconnect_transition',
-        logPrefix: 'ActivitySync',
-        isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
-    });
+
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadataIfQueueItemDeferred({
+        ...routeMeta,
+        queueItemRef: queueItem.ref!,
+        deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+        error: toActivitySyncMetadataError(error),
+    }).then(() => undefined));
+    return deferredResult;
 }
 
 async function deferActivitySyncQueueItemForReconnectRequired(
