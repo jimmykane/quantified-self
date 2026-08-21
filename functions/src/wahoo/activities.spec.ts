@@ -239,6 +239,35 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
+  it('rechecks the Wahoo account after fingerprint promotion before posting the upload', async () => {
+    const accountChanged = Object.assign(
+      new Error('The selected Wahoo account changed before data could be sent.'),
+      { code: 'unauthenticated' },
+    );
+    mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mockImplementationOnce(async () => {
+      // Model a disconnect or account switch that commits during the awaited
+      // fingerprint-promotion transaction.
+      mocks.assertWahooActiveAccountGuardCurrent.mockRejectedValueOnce(accountChanged);
+    });
+
+    await expect(importActivityToWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'test-app' },
+      data: { file: Buffer.from('FIT').toString('base64') },
+    } as never)).rejects.toBe(accountChanged);
+
+    expect(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.assertWahooActiveAccountGuardCurrent).toHaveBeenCalledTimes(2);
+    expect(mocks.assertWahooActiveAccountGuardCurrent.mock.invocationCallOrder[1])
+      .toBeGreaterThan(mocks.markActivitySyncOutboundFingerprintProviderRequestStarted.mock.invocationCallOrder[0]);
+    expect(mocks.rollbackActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: expect.objectContaining({ operationId: 'operation-1' }),
+    });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
   it('does not call Wahoo and rolls back the provisional receipt when promotion fails', async () => {
     mocks.markActivitySyncOutboundFingerprintProviderRequestStarted
       .mockRejectedValueOnce(new Error('fingerprint promotion unavailable'));

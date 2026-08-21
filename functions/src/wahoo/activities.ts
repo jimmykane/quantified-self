@@ -335,6 +335,11 @@ async function withWahooWorkoutWriteToken<T>(
       await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
       if (onProviderRequestStarting) {
         await onProviderRequestStarting();
+        // Fingerprint promotion is an awaited Firestore transaction. A
+        // disconnect, credential rotation, or account switch can win while it
+        // is in flight, so prove ownership again immediately before the
+        // irreversible provider request.
+        await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
       }
       providerRequestStarted = true;
       return await operation(token.accessToken);
