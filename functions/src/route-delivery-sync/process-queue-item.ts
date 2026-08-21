@@ -59,6 +59,10 @@ import {
     updateQueueItemIfUserActive,
 } from '../queue/dispatch-marker';
 import { RouteProviderSendResult } from '../routes/provider-acceptance';
+import {
+    DisabledSyncRouteTransitionResult,
+    finalizeDisabledSyncRouteIfCurrent,
+} from '../queue/sync-route-eligibility';
 
 interface ErrorLike {
     code?: unknown;
@@ -813,13 +817,14 @@ async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
 async function deferRouteDeliverySyncQueueItemForReconnectRequired(
     queueItem: RouteDeliverySyncQueueItemInterface,
     bulkWriter: admin.firestore.BulkWriter | undefined,
+    serviceName: ServiceNames = ServiceNames.WahooAPI,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     return deferQueueItemForReconnectRequiredIfCurrentUserActive({
         queueItem,
-        additionalData: { deferredServiceName: `${ServiceNames.WahooAPI}` },
+        additionalData: { deferredServiceName: `${serviceName}` },
         bulkWriter,
         userID: queueItem.userID,
-        serviceName: ServiceNames.WahooAPI,
+        serviceName,
         phase: 'route_delivery_sync_reconnect_required_transition',
         logPrefix: 'RouteDeliverySync',
         isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
@@ -968,11 +973,51 @@ export async function processRouteDeliverySyncQueueItem(
         }
 
         if (!enabled && queueItem.manual !== true) {
-            await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'route_disabled',
-                resultStatus: 'skipped',
+            const routeDisabledResult = await finalizeDisabledSyncRouteIfCurrent({
+                queueItem,
+                userID: queueItem.userID,
+                routeId: queueItem.routeId,
+                settingsKind: 'routeDeliverySyncRoutes',
+                serviceNames: [route.sourceServiceName, route.destinationServiceName],
+                isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
             });
+            if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.Enabled) {
+                // Route restoration won after the earlier settings read.
+                // Continue with the now-enabled route.
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.DeferredForRestore) {
+                return QueueResult.Deferred;
+            } else if (
+                routeDisabledResult.result === DisabledSyncRouteTransitionResult.DisconnectPending
+                && routeDisabledResult.serviceName
+            ) {
+                return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                    queueItem,
+                    bulkWriter,
+                    routeDisabledResult.serviceName,
+                    true,
+                );
+            } else if (
+                routeDisabledResult.result === DisabledSyncRouteTransitionResult.ReconnectRequired
+                && routeDisabledResult.serviceName
+            ) {
+                return deferRouteDeliverySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeDisabledResult.serviceName,
+                );
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.SkippedDeletedUser) {
+                return markQueueItemSkipped(
+                    queueItem,
+                    bulkWriter,
+                    QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                    { skippedContext: 'USER_DELETION_GUARD' },
+                );
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.NotCurrent) {
+                return QueueResult.Processed;
+            } else {
+                await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
+                return QueueResult.Processed;
+            }
         }
 
         const adapter = getRouteSendAdapter(queueItem.destinationServiceName);

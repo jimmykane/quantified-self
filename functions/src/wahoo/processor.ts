@@ -23,7 +23,11 @@ import { isActivitySyncOutboundEcho } from '../activity-sync/outbound-fingerprin
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
-import { getActiveWahooTokenSnapshot } from './account';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+} from './account';
 import { isWahooReconnectRequiredError } from './refresh-recovery';
 import {
   claimWahooWorkoutQueueRevision,
@@ -117,6 +121,7 @@ export async function processWahooWorkoutQueueItem(
       });
     }
     await getActiveWahooTokenSnapshot(userID, queueItem.wahooUserID);
+    const accountGuard = await captureWahooActiveAccountGuard(userID, queueItem.wahooUserID);
 
     const fitFile = await downloadWahooFITFile(queueItem.FITFileURI);
     const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(fitFile), createParsingOptions());
@@ -144,6 +149,10 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'outbound_provider_echo',
       });
     }
+    // Event-ID resolution persists a provider-identity reservation. Guard it
+    // separately from the later event write so neither durable mutation can
+    // be attributed to an account that was replaced during parsing.
+    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
     const eventID = await resolveProviderImportEventID({
       userID,
       startDate: event.startDate,
@@ -164,6 +173,13 @@ export async function processWahooWorkoutQueueItem(
       queueItem.edited,
       queueItem.fitnessAppID,
     );
+    // Event-id migration can also outlive a disconnect/reconnect. Prove this
+    // inbound item still belongs to the same connection immediately before
+    // the event and original-file persistence transaction.
+    if (!(await isClaimedWahooWorkoutQueueRevisionCurrent(queueItem, processingOwner))) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    }
+    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
     const setEventResult = await setEvent(
       userID,
       eventID,

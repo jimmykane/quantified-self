@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => {
   const tokenQueryGet = vi.fn();
   const loggerWarn = vi.fn();
   const getActiveWahooTokenSnapshot = vi.fn();
+  const captureWahooActiveAccountGuard = vi.fn();
+  const assertWahooActiveAccountGuardCurrent = vi.fn();
   const tokenRef = { get: tokenRefGet };
   let onCallOptions: unknown = null;
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
@@ -38,6 +40,8 @@ const mocks = vi.hoisted(() => {
     tokenRef,
     loggerWarn,
     getActiveWahooTokenSnapshot,
+    captureWahooActiveAccountGuard,
+    assertWahooActiveAccountGuardCurrent,
     WahooAPIRequestError,
     getOnCallOptions: () => onCallOptions,
     setOnCallOptions: (options: unknown) => {
@@ -102,6 +106,8 @@ vi.mock('./auth/api', () => ({
 }));
 vi.mock('./account', () => ({
   getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  captureWahooActiveAccountGuard: mocks.captureWahooActiveAccountGuard,
+  assertWahooActiveAccountGuardCurrent: mocks.assertWahooActiveAccountGuardCurrent,
   normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
 }));
 
@@ -146,6 +152,12 @@ describe('Wahoo route uploads', () => {
       ref: mocks.tokenRef,
       data: () => ({ wahooUserID: 'wahoo-user' }),
     });
+    mocks.captureWahooActiveAccountGuard.mockResolvedValue({
+      providerUserId: 'wahoo-user',
+      connectionStateGeneration: 'connection-1',
+      credential: { accessToken: 'access-token' },
+    });
+    mocks.assertWahooActiveAccountGuardCurrent.mockResolvedValue(undefined);
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
@@ -363,6 +375,21 @@ describe('Wahoo route uploads', () => {
     await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
       .rejects.toMatchObject({ code: 'failed-precondition', message: 'Wahoo disconnect is pending.' });
     expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create a route after the active Wahoo credential changes during lookup', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({ data: [] });
+    mocks.assertWahooActiveAccountGuardCurrent
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('credential changed'), { code: 'unauthenticated' }));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+    expect(mocks.requestWahooAPI).toHaveBeenCalledWith(
+      'access-token',
+      expect.stringMatching(/^\/v1\/routes\?external_id=/),
+    );
   });
 
   it('requires both Wahoo route scopes before making provider requests', async () => {

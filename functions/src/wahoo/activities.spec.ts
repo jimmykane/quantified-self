@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => {
   const hasProAccess = vi.fn();
   const recordActivitySyncOutboundFingerprint = vi.fn();
   const getActiveWahooTokenSnapshot = vi.fn();
+  const captureWahooActiveAccountGuard = vi.fn();
+  const assertWahooActiveAccountGuardCurrent = vi.fn();
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
     constructor(
       _message: string,
@@ -40,6 +42,8 @@ const mocks = vi.hoisted(() => {
     hasProAccess,
     recordActivitySyncOutboundFingerprint,
     getActiveWahooTokenSnapshot,
+    captureWahooActiveAccountGuard,
+    assertWahooActiveAccountGuardCurrent,
     WahooAPIRequestError,
   };
 });
@@ -101,6 +105,8 @@ vi.mock('./auth/api', () => ({
 }));
 vi.mock('./account', () => ({
   getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  captureWahooActiveAccountGuard: mocks.captureWahooActiveAccountGuard,
+  assertWahooActiveAccountGuardCurrent: mocks.assertWahooActiveAccountGuardCurrent,
   normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
 }));
 
@@ -128,6 +134,12 @@ describe('Wahoo activity uploads', () => {
       ref: mocks.tokenRef,
       data: () => ({ wahooUserID: 'wahoo-user' }),
     });
+    mocks.captureWahooActiveAccountGuard.mockResolvedValue({
+      providerUserId: 'wahoo-user',
+      connectionStateGeneration: 'connection-1',
+      credential: { accessToken: 'access-token' },
+    });
+    mocks.assertWahooActiveAccountGuardCurrent.mockResolvedValue(undefined);
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',

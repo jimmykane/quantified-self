@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => {
     deferPendingGuarded: vi.fn().mockResolvedValue('deferred'),
     deferReconnectGuarded: vi.fn().mockResolvedValue('deferred'),
     getActiveWahooTokenSnapshot: vi.fn(),
+    captureWahooActiveAccountGuard: vi.fn(),
+    assertWahooActiveAccountGuardCurrent: vi.fn(),
     retry: vi.fn().mockResolvedValue('retry'),
     processed: vi.fn().mockResolvedValue('processed'),
     claimRevision: vi.fn().mockResolvedValue('claimed'),
@@ -57,6 +59,8 @@ vi.mock('../queue-utils', () => ({
 }));
 vi.mock('./account', () => ({
   getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  captureWahooActiveAccountGuard: mocks.captureWahooActiveAccountGuard,
+  assertWahooActiveAccountGuardCurrent: mocks.assertWahooActiveAccountGuardCurrent,
 }));
 vi.mock('./refresh-recovery', () => ({
   isWahooReconnectRequiredError: (error: unknown) => (
@@ -100,6 +104,12 @@ describe('processWahooWorkoutQueueItem', () => {
       id: 'wahoo-1',
       data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: 'wahoo-1' }),
     });
+    mocks.captureWahooActiveAccountGuard.mockResolvedValue({
+      providerUserId: 'wahoo-1',
+      connectionStateGeneration: 'connection-1',
+      credential: null,
+    });
+    mocks.assertWahooActiveAccountGuardCurrent.mockResolvedValue(undefined);
     mocks.downloadFIT.mockResolvedValue(Buffer.from('valid-fit'));
     mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
     mocks.resolveEventID.mockResolvedValue('event-1');
@@ -248,6 +258,36 @@ describe('processWahooWorkoutQueueItem', () => {
     expect(mocks.resolveEventID).not.toHaveBeenCalled();
     expect(mocks.setEvent).not.toHaveBeenCalled();
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+  });
+
+  it('does not reserve an event ID after the active Wahoo account changes', async () => {
+    mocks.assertWahooActiveAccountGuardCurrent.mockRejectedValueOnce(
+      Object.assign(new Error('account changed'), { code: 'unauthenticated' }),
+    );
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.resolveEventID).not.toHaveBeenCalled();
+    expect(mocks.setEvent).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'provider_not_connected',
+    });
+  });
+
+  it('does not persist an inbound activity when the account changes after event-ID reservation', async () => {
+    mocks.assertWahooActiveAccountGuardCurrent
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('account changed'), { code: 'unauthenticated' }));
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.resolveEventID).toHaveBeenCalled();
+    expect(mocks.setEvent).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'provider_not_connected',
+    });
   });
 
   it('skips work if the server-side Wahoo credential is no longer present', async () => {

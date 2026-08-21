@@ -161,6 +161,20 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection('garminAPITokens').doc(userId).update({
                 activeOAuthCredentialGeneration: 'client-replacement',
             }));
+
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).set({
+                oauthFlowGeneration: 'client-flow-generation',
+            }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('suuntoAppAccessTokens').doc(userId).set({
+                    oauthFlowGeneration: 'server-flow-generation',
+                });
+            });
+
+            await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
+                oauthFlowGeneration: 'client-flow-replacement',
+            }));
         });
 
         it('denies client token mutations while disconnect is pending', async () => {

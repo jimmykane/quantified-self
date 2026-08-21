@@ -28,6 +28,7 @@ import {
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+  areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
 } from './token-refresh-coordinator';
 
@@ -955,10 +956,13 @@ export async function cleanupServiceConnectionForUser(
   const adapter = getServiceAdapter(serviceName);
   const userDocRef = getServiceTokenRootDocumentRef(userID, serviceName);
   const needsDisconnectLifecycleGuard = reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement;
-  const [tokenQuerySnapshots, initialTokenRootSnapshot] = await Promise.all([
-    getServiceTokenCollectionRef(userID, serviceName).get(),
-    needsDisconnectLifecycleGuard ? userDocRef.get() : Promise.resolve(null),
-  ]);
+  const tokenCollectionRef = getServiceTokenCollectionRef(userID, serviceName);
+  const [tokenQuerySnapshots, initialTokenRootSnapshot] = needsDisconnectLifecycleGuard
+    ? await admin.firestore().runTransaction(async transaction => Promise.all([
+      transaction.get(tokenCollectionRef),
+      transaction.get(userDocRef),
+    ]))
+    : [await tokenCollectionRef.get(), null];
   const outcome: ServiceAuthCleanupOutcome = {
     reason,
     tokenCount: tokenQuerySnapshots.size,
@@ -1162,14 +1166,37 @@ export async function cleanupServiceConnectionForUser(
 
     try {
       const tokenDataForOperationalCleanup = getSnapshotDataForOperationalCleanup(tokenQueryDocumentSnapshot);
+      const expectedTokenCredential = getTokenCredentialSnapshot(
+        tokenDataForOperationalCleanup || undefined,
+      );
+      const expectedTokenUpdateTime = tokenQueryDocumentSnapshot.updateTime || null;
       const deleteResult = await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id, {
         preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
           && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
           && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
         ...(reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement ? {
           preserveTokenRootWhenEmpty: true,
-          shouldDeleteInTransaction: (transaction: admin.firestore.Transaction) =>
-            isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard, transaction),
+          shouldDeleteInTransaction: async (transaction: admin.firestore.Transaction) => {
+            const [lifecycleCurrent, currentTokenSnapshot] = await Promise.all([
+              isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard, transaction),
+              transaction.get(tokenQueryDocumentSnapshot.ref),
+            ]);
+            if (!lifecycleCurrent || !currentTokenSnapshot.exists) {
+              return false;
+            }
+            if (expectedTokenUpdateTime && currentTokenSnapshot.updateTime) {
+              return areFirestoreTimestampsEqual(
+                currentTokenSnapshot.updateTime,
+                expectedTokenUpdateTime,
+              );
+            }
+            return areTokenCredentialSnapshotsEqual(
+              getTokenCredentialSnapshot(
+                currentTokenSnapshot.data() as Record<string, unknown> | undefined,
+              ),
+              expectedTokenCredential,
+            );
+          },
         } : {}),
       });
       if (deleteResult.skippedByCondition) {

@@ -529,6 +529,16 @@ describe('OAuth2', () => {
             expect(mockDelete).toHaveBeenCalledTimes(2); // token + root cleanup
         });
 
+        it('invalidates claimed OAuth flow context before explicit disconnect cleanup', async () => {
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
+                oauthFlowGeneration: expect.any(String),
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }), { merge: true });
+        });
+
         it('should fail explicit disconnect when local token cleanup fails', async () => {
             mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
 
@@ -1345,6 +1355,7 @@ describe('OAuth2', () => {
             mockTransactionDocumentData = {
                 state: 'some-state',
                 codeVerifier: 'some-verifier',
+                oauthFlowGeneration: 'oauth-flow-generation',
             };
         });
 
@@ -1384,6 +1395,7 @@ describe('OAuth2', () => {
             mockTransactionDocumentData = {
                 state: 'some-state',
                 codeVerifier: 'some-verifier',
+                oauthFlowGeneration: 'oauth-flow-generation',
             };
 
             // Explicitly restore any spies from previous tests if they weren't cleaned up
@@ -1724,6 +1736,45 @@ describe('OAuth2', () => {
 
             expect(getTokenSpy).not.toHaveBeenCalled();
             expect(mockUpdate).not.toHaveBeenCalled();
+        });
+
+        it('rejects a claimed callback when disconnect invalidates its OAuth generation during exchange', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            let releaseExchange!: () => void;
+            let exchangeStarted!: () => void;
+            const exchangeStartedPromise = new Promise<void>((resolve) => {
+                exchangeStarted = resolve;
+            });
+            const exchangeGate = new Promise<void>((resolve) => {
+                releaseExchange = resolve;
+            });
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockImplementation(async () => {
+                exchangeStarted();
+                await exchangeGate;
+                return {
+                    token: { user: 'test-external-user', access_token: 'exchanged-token' },
+                    expired: () => false,
+                } as any;
+            });
+
+            const callbackPromise = getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+                code,
+                'some-state',
+            );
+            await exchangeStartedPromise;
+            mockTransactionDocumentData = {
+                ...mockTransactionDocumentData,
+                oauthFlowGeneration: 'disconnect-invalidated-generation',
+            };
+            releaseExchange();
+
+            await expect(callbackPromise).rejects.toMatchObject({
+                name: 'OAuthFlowContextMismatchError',
+            });
+            expect(mockMarkServiceConnected).not.toHaveBeenCalled();
         });
 
         it('should not exchange OAuth code when account deletion is active before token exchange', async () => {
@@ -2314,6 +2365,7 @@ describe('OAuth2', () => {
             mockTransactionDocumentData = {
                 state: 'matches',
                 codeVerifier: 'mockVerifier',
+                oauthFlowGeneration: 'oauth-flow-generation',
             };
         });
 

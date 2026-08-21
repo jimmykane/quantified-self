@@ -32,6 +32,7 @@ const {
   mockIsDeliveryMetadataPersistenceError,
   mockIsWahooReconnectRequiredError,
   MockRouteSendItemError,
+  mockFinalizeDisabledSyncRouteIfCurrent,
 } = vi.hoisted(() => ({
   mockHasProAccess: vi.fn(),
   mockIsRouteEnabled: vi.fn(),
@@ -69,6 +70,7 @@ const {
       this.name = 'RouteSendItemError';
     }
   },
+  mockFinalizeDisabledSyncRouteIfCurrent: vi.fn(),
 }));
 
 vi.mock('../utils', () => ({
@@ -140,6 +142,18 @@ vi.mock('../queue-utils', () => ({
       params.context,
     );
   },
+}));
+vi.mock('../queue/sync-route-eligibility', () => ({
+  DisabledSyncRouteTransitionResult: {
+    Enabled: 'enabled',
+    DeferredForRestore: 'deferred_for_restore',
+    DisconnectPending: 'disconnect_pending',
+    ReconnectRequired: 'reconnect_required',
+    ProcessedAsDisabled: 'processed_as_disabled',
+    NotCurrent: 'not_current',
+    SkippedDeletedUser: 'skipped_deleted_user',
+  },
+  finalizeDisabledSyncRouteIfCurrent: mockFinalizeDisabledSyncRouteIfCurrent,
 }));
 
 vi.mock('../service-connection-meta', () => ({
@@ -265,6 +279,7 @@ function mockSuccessfulPrerequisites(): void {
   mockIsDestinationPermissionRequiredError.mockReturnValue(false);
   mockIsDeliveryMetadataPersistenceError.mockReturnValue(false);
   mockIsWahooReconnectRequiredError.mockReturnValue(false);
+  mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValue({ result: 'processed_as_disabled' });
 }
 
 describe('route-delivery-sync/process-queue-item', () => {
@@ -841,6 +856,42 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'route_disabled',
     }));
+  });
+
+  it('defers a disabled route while atomic route restoration remains pending', async () => {
+    mockIsRouteEnabled.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({ result: 'deferred_for_restore' });
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockSetRouteDeliveryMetadata).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it('parks a route when reconnect-required wins after the earlier lifecycle read', async () => {
+    const queueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockIsRouteEnabled.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({
+      result: 'reconnect_required',
+      serviceName: ServiceNames.WahooAPI,
+    });
+
+    const result = await processRouteDeliverySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
   it('defers manual route delivery before Garmin context creation when destination disconnect is pending', async () => {

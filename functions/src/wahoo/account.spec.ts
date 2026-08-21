@@ -5,25 +5,48 @@ const mocks = vi.hoisted(() => ({
   getServiceConnectionMeta: vi.fn(),
   pinServiceConnectionProviderUserIdIfUnset: vi.fn(),
   tokenDocs: new Map<string, any>(),
+  tokenRefs: new Map<string, any>(),
+  transactionMeta: null as Record<string, unknown> | null,
+  runTransaction: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: () => ({
-    collection: () => ({
-      doc: () => ({
-        collection: () => ({
-          doc: (id: string) => ({
-            get: vi.fn(async () => mocks.tokenDocs.get(id) || {
-              exists: false,
-              id,
-              data: () => undefined,
-            }),
+  firestore: () => {
+    const getTokenRef = (id: string) => {
+      if (!mocks.tokenRefs.has(id)) {
+        mocks.tokenRefs.set(id, {
+          id,
+          path: `wahooAPIAccessTokens/user-1/tokens/${id}`,
+          get: vi.fn(async () => mocks.tokenDocs.get(id) || {
+            exists: false,
+            id,
+            data: () => undefined,
           }),
-          get: vi.fn(async () => ({ docs: [...mocks.tokenDocs.values()] })),
+        });
+      }
+      return mocks.tokenRefs.get(id);
+    };
+    const metaRef = {
+      id: 'wahooAPI',
+      path: 'users/user-1/meta/wahooAPI',
+      get: vi.fn(async () => ({
+        exists: mocks.transactionMeta !== null,
+        data: () => mocks.transactionMeta || undefined,
+      })),
+    };
+    return {
+      runTransaction: mocks.runTransaction,
+      collection: (collectionName: string) => ({
+        doc: () => ({
+          collection: (nestedCollectionName: string) => ({
+            doc: (id: string) => nestedCollectionName === 'meta' ? metaRef : getTokenRef(id),
+            get: vi.fn(async () => ({ docs: [...mocks.tokenDocs.values()] })),
+          }),
         }),
+        ...(collectionName === 'users' ? {} : {}),
       }),
-    }),
-  }),
+    };
+  },
 }));
 
 vi.mock('../service-connection-meta', () => ({
@@ -32,7 +55,9 @@ vi.mock('../service-connection-meta', () => ({
 }));
 
 import {
+  assertWahooActiveAccountGuardCurrent,
   assertWahooOAuthAccountCompatible,
+  captureWahooActiveAccountGuard,
   getActiveWahooTokenSnapshot,
 } from './account';
 
@@ -59,6 +84,11 @@ describe('Wahoo active account resolution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.tokenDocs.clear();
+    mocks.tokenRefs.clear();
+    mocks.transactionMeta = null;
+    mocks.runTransaction.mockImplementation(async (callback: any) => callback({
+      get: vi.fn(async (target: { get: () => Promise<unknown> }) => target.get()),
+    }));
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.pinServiceConnectionProviderUserIdIfUnset.mockResolvedValue('pinned');
   });
@@ -138,5 +168,64 @@ describe('Wahoo active account resolution', () => {
       receivedProviderUserId: 'account-a',
     });
     await expect(assertWahooOAuthAccountCompatible('user-1', 'account-b')).resolves.toBeUndefined();
+  });
+
+  it('rejects a captured account guard after the same token document is replaced', async () => {
+    mocks.transactionMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-a',
+      providerUserId: 'account-a',
+    };
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100, {
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      expiresAt: 123,
+      tokenCredentialGeneration: 'credential-a',
+    }));
+    const guard = await captureWahooActiveAccountGuard('user-1', 'account-a', 'access-a');
+
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 200, {
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      expiresAt: 456,
+      tokenCredentialGeneration: 'credential-b',
+    }));
+
+    await expect(assertWahooActiveAccountGuardCurrent('user-1', guard)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+  });
+
+  it('rejects a captured account guard after the connection generation changes', async () => {
+    mocks.transactionMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-a',
+      providerUserId: 'account-a',
+    };
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100));
+    const guard = await captureWahooActiveAccountGuard('user-1', 'account-a');
+
+    mocks.transactionMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-b',
+      providerUserId: 'account-a',
+    };
+
+    await expect(assertWahooActiveAccountGuardCurrent('user-1', guard)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+  });
+
+  it('rejects malformed pinned account metadata even when the value is falsy', async () => {
+    mocks.transactionMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-a',
+      providerUserId: 0,
+    };
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100));
+
+    await expect(captureWahooActiveAccountGuard('user-1', 'account-a')).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
   });
 });

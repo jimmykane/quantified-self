@@ -189,6 +189,15 @@ describe('service-auth-lifecycle refresh failure policy', () => {
 describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRunTransaction.mockReset().mockImplementation(async (callback: any) => callback({
+      get: vi.fn(async (target: { get?: () => Promise<unknown> }) => {
+        if (typeof target?.get !== 'function') throw new Error('Unexpected transaction get target');
+        return target.get();
+      }),
+      delete: vi.fn(),
+      set: vi.fn(),
+      update: vi.fn(),
+    }));
     mockDeleteLocalServiceToken.mockReset();
     mockCleanupProviderOperationalDocsForServiceToken.mockReset().mockResolvedValue({
       providerUserId: 'suunto-user',
@@ -1522,6 +1531,94 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('does not delete a replacement credential written after subscription cleanup captured the original token', async () => {
+    const originalTokenData = {
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'original-access-token',
+      refreshToken: 'original-refresh-token',
+      expiresAt: Date.now() + 120_000,
+      userName: 'suunto-user-id',
+      dateCreated: 1,
+      dateRefreshed: 2,
+      tokenCredentialGeneration: 'credential-a',
+    };
+    const originalGuard = {
+      disconnectGeneration: 'disconnect-generation-a',
+      oauthCredentialGeneration: 'oauth-generation-a',
+    };
+    const originalUpdateTime = {
+      isEqual: (other: unknown) => other === originalUpdateTime,
+    };
+    const replacementUpdateTime = {
+      isEqual: (other: unknown) => other === replacementUpdateTime,
+    };
+    const tokenSnapshot = {
+      id: tokenRef.id,
+      ref: tokenRef,
+      updateTime: originalUpdateTime,
+      data: () => originalTokenData,
+    };
+    tokenCollectionRef.get.mockResolvedValue({
+      empty: false,
+      size: 1,
+      docs: [tokenSnapshot],
+    });
+    tokenRootRef.get.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        disconnectGeneration: originalGuard.disconnectGeneration,
+        activeOAuthCredentialGeneration: originalGuard.oauthCredentialGeneration,
+      }),
+    });
+    mockDeleteLocalServiceToken.mockImplementationOnce(async (
+      _userID: string,
+      _serviceName: ServiceNames,
+      _tokenID: string,
+      options: { shouldDeleteInTransaction?: (transaction: unknown) => Promise<boolean> },
+    ) => {
+      const shouldDelete = await options.shouldDeleteInTransaction?.({
+        get: vi.fn(async (target: unknown) => {
+          if (target === tokenRootRef) {
+            return {
+              exists: true,
+              data: () => ({
+                disconnectGeneration: originalGuard.disconnectGeneration,
+                activeOAuthCredentialGeneration: originalGuard.oauthCredentialGeneration,
+              }),
+            };
+          }
+          if (target === tokenRef) {
+            return {
+              exists: true,
+              updateTime: replacementUpdateTime,
+              // Preserve every credential field to prove that the Firestore
+              // document version, rather than value comparison, owns cleanup.
+              data: () => ({ ...originalTokenData }),
+            };
+          }
+          throw new Error('Unexpected transaction get target');
+        }),
+      });
+      return {
+        tokenRootDeleted: false,
+        tokenRootPreservedForOAuthFlow: true,
+        remainingTokenCount: 1,
+        skippedByCondition: shouldDelete !== true,
+      };
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      { disconnectLifecycleGuard: originalGuard },
+    );
+
+    expect(outcome.skippedByCondition).toBe(true);
+    expect(outcome.deletedTokenCount).toBe(0);
+    expect(outcome.preservedTokenCount).toBe(0);
+  });
+
   it('records subscription-enforcement local cleanup failures for pending disconnect retry', async () => {
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
@@ -1705,11 +1802,15 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       skippedByCondition: false,
     });
     mockClearServiceConnectionState.mockResolvedValueOnce(true);
+    tokenCollectionRef.limit.mockReturnValueOnce({
+      get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+    });
     const transactionDelete = vi.fn();
-    mockRunTransaction.mockImplementationOnce(async (callback: any) => callback({
-      get: vi.fn()
-        .mockResolvedValueOnce(guardedRootSnapshot)
-        .mockResolvedValueOnce({ empty: true, docs: [] }),
+    mockRunTransaction.mockImplementation(async (callback: any) => callback({
+      get: vi.fn(async (target: { get?: () => Promise<unknown> }) => {
+        if (typeof target?.get !== 'function') throw new Error('Unexpected transaction get target');
+        return target.get();
+      }),
       delete: transactionDelete,
     }));
 
