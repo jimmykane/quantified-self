@@ -604,6 +604,24 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).not.toHaveBeenCalled();
         });
 
+        it('does not replace an explicit disconnect operation already in progress', async () => {
+            mockTransactionDocumentData = {
+                oauthFlowGeneration: 'disconnect-flow-generation-1',
+                disconnectOperationGeneration: 'disconnect-operation-1',
+            };
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+                statusCode: 409,
+            });
+
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockDocInstance.set).not.toHaveBeenCalled();
+            expect(mockTransactionDocumentData).toMatchObject({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+            });
+        });
+
         it('should fail explicit disconnect when local token cleanup fails', async () => {
             mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
 

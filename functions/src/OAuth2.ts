@@ -95,7 +95,7 @@ class ServiceDisconnectInProgressError extends Error {
   public readonly statusCode = 409;
 
   constructor(serviceName: ServiceNames) {
-    super(`Finish disconnecting ${serviceName} before starting a new authorization.`);
+    super(`Finish disconnecting ${serviceName} before starting another connection operation.`);
   }
 }
 
@@ -307,6 +307,17 @@ async function beginExplicitDisconnectOperation(
       transaction.get(tokenRootRef),
       transaction.get(tokenRootRef.collection('tokens')),
     ]);
+    // The first explicit disconnect owns this root fence until its finally
+    // block completes. A second request must not replace that generation: the
+    // first may already be deauthorizing the provider credential.
+    const existingDisconnectGuard = getServiceDisconnectLifecycleGuardFromRootData(
+      rootSnapshot.exists
+        ? rootSnapshot.data() as Record<string, unknown>
+        : null,
+    );
+    if (existingDisconnectGuard.disconnectOperationGeneration) {
+      throw new ServiceDisconnectInProgressError(serviceName);
+    }
     const nowMs = Date.now();
     const refreshIsActive = tokenSnapshots.docs.some(snapshot => {
       const tokenData = typeof snapshot.data === 'function' ? snapshot.data() : undefined;
