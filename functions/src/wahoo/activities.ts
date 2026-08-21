@@ -76,7 +76,7 @@ export interface WahooActivityUploadOptions {
   beforeProviderRequest?: () => Promise<void>;
   /** Rolls back preparation only when no provider request was issued. */
   onProviderRequestAborted?: () => Promise<void>;
-  /** Promote pre-request state only after the final account guard succeeds. */
+  /** Promote pre-request state; account ownership is revalidated before I/O. */
   onProviderRequestStarting?: () => Promise<void>;
 }
 
@@ -296,9 +296,10 @@ function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperation
 async function withWahooWorkoutWriteToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
-  beforeProviderRequest?: () => Promise<void>,
-  onProviderRequestAborted?: () => Promise<void>,
-  onProviderRequestStarting?: () => Promise<void>,
+  hooks: Pick<
+    WahooActivityUploadOptions,
+    'beforeProviderRequest' | 'onProviderRequestAborted' | 'onProviderRequestStarting'
+  > = {},
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
@@ -327,14 +328,14 @@ async function withWahooWorkoutWriteToken<T>(
     let providerPreparationCompleted = false;
     let providerRequestStarted = false;
     try {
-      if (beforeProviderRequest) {
-        await beforeProviderRequest();
+      if (hooks.beforeProviderRequest) {
+        await hooks.beforeProviderRequest();
         providerPreparationCompleted = true;
         await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
       }
       await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
-      if (onProviderRequestStarting) {
-        await onProviderRequestStarting();
+      if (hooks.onProviderRequestStarting) {
+        await hooks.onProviderRequestStarting();
         // Fingerprint promotion is an awaited Firestore transaction. A
         // disconnect, credential rotation, or account switch can win while it
         // is in flight, so prove ownership again immediately before the
@@ -344,9 +345,9 @@ async function withWahooWorkoutWriteToken<T>(
       providerRequestStarted = true;
       return await operation(token.accessToken);
     } catch (error) {
-      if (providerPreparationCompleted && !providerRequestStarted && onProviderRequestAborted) {
+      if (providerPreparationCompleted && !providerRequestStarted && hooks.onProviderRequestAborted) {
         try {
-          await onProviderRequestAborted();
+          await hooks.onProviderRequestAborted();
         } catch (rollbackError) {
           logger.error('Could not roll back an unused Wahoo outbound fingerprint.', {
             error: getWahooErrorLogDetails(rollbackError),
@@ -403,7 +404,7 @@ export async function uploadActivityFileToWahoo(
         { method: 'POST', form },
       );
       return toWahooActivityUploadResult(data || {}, 'upload');
-    }, options.beforeProviderRequest, options.onProviderRequestAborted, options.onProviderRequestStarting);
+    }, options);
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'upload');
     if (isWahooDuplicateError(error)) {
