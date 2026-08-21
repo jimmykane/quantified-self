@@ -28,6 +28,8 @@ export interface ServiceConnectionMetaFields {
   disconnectGeneration?: string | null;
   /** Durable provider-neutral repair marker for route restoration. */
   routeRestorePending?: boolean | null;
+  /** True after new route-restore deferrals have been transactionally fenced. */
+  routeRestoreParkingClosed?: boolean | null;
   routeRestoreConnectionGeneration?: string | null;
   routeRestoreLastAttemptAt?: number | null;
   routeRestoreAttemptCount?: number | null;

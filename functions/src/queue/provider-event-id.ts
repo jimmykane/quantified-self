@@ -32,6 +32,10 @@ export interface ProviderImportEventIDRequest {
    */
   allowLegacySecondaryFieldPresenceMatch?: boolean;
   preferProviderIdentityEventID?: boolean;
+  assertWriteAuthorizationInTransaction?: (
+    db: admin.firestore.Firestore,
+    transaction: admin.firestore.Transaction,
+  ) => Promise<void>;
 }
 
 interface ProviderImportEventIDReservation {
@@ -232,6 +236,9 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
         `[Queue] Skipping provider event ID reservation for ${request.serviceName} user ${request.userID} because the user is missing or deletion is in progress.`,
       );
       throw new EventWriteSkippedForDeletedUserError(request.userID, `provider_import_event_id:${request.serviceName}`);
+    }
+    if (request.assertWriteAuthorizationInTransaction) {
+      await request.assertWriteAuthorizationInTransaction(db, transaction);
     }
 
     const [metadataSnapshot, reservationSnapshot] = await Promise.all([

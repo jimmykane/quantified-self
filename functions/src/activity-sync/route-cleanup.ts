@@ -16,6 +16,11 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import { getServiceTokenRootDocumentRef } from '../service-token-store';
+import {
+  doesRootMatchServiceDisconnectLifecycleGuard,
+  type ServiceDisconnectLifecycleGuard,
+} from '../service-disconnect-pending-state';
 
 interface ActivitySyncRouteCleanupOptions {
   trackPendingDisconnectRestore?: boolean;
@@ -31,6 +36,8 @@ interface ActivitySyncRouteRestoreOptions {
   expectedConnectionStateGeneration?: string;
   /** Clear the durable repair marker atomically with the settings update. */
   clearRouteRestoreMarker?: boolean;
+  /** Bind every restore phase to the same provider-token lifecycle episode. */
+  expectedDisconnectLifecycleGuard?: ServiceDisconnectLifecycleGuard;
 }
 
 export interface DisabledServiceSyncSettingsUpdate {
@@ -270,6 +277,19 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
     }
 
     const serviceMetaRef = getUserServiceMetaRef(db, userID, serviceName);
+    if (options.expectedDisconnectLifecycleGuard) {
+      const tokenRootSnapshot = await transaction.get(
+        getServiceTokenRootDocumentRef(userID, serviceName),
+      );
+      if (!doesRootMatchServiceDisconnectLifecycleGuard(
+        tokenRootSnapshot.exists
+          ? tokenRootSnapshot.data() as Record<string, unknown>
+          : null,
+        options.expectedDisconnectLifecycleGuard,
+      )) {
+        return;
+      }
+    }
     if (options.requireServiceConnected || options.expectedConnectionStateGeneration) {
       const serviceMetaSnapshot = await transaction.get(serviceMetaRef);
       const serviceMeta = asRecord(serviceMetaSnapshot.data());
@@ -343,6 +363,7 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
     if (options.clearRouteRestoreMarker) {
       transaction.set(serviceMetaRef, {
         routeRestorePending: FieldValue.delete(),
+        routeRestoreParkingClosed: FieldValue.delete(),
         routeRestoreConnectionGeneration: FieldValue.delete(),
         routeRestoreLastAttemptAt: FieldValue.delete(),
         routeRestoreAttemptCount: FieldValue.delete(),

@@ -69,6 +69,8 @@ vi.mock('../service-disconnect-pending', () => ({
       ? `${data.disconnectGeneration || ''}`.trim() || null
       : null,
     oauthCredentialGeneration: `${data?.activeOAuthCredentialGeneration || ''}`.trim() || null,
+    oauthFlowGeneration: `${data?.oauthFlowGeneration || ''}`.trim() || null,
+    disconnectOperationGeneration: `${data?.disconnectOperationGeneration || ''}`.trim() || null,
   }),
   isServiceDisconnectPendingData: (data: any) => data?.disconnectState === 'disconnect_pending',
   PENDING_SERVICE_DISCONNECT_BATCH_LIMIT: 50,
@@ -118,6 +120,19 @@ function buildPagedQuery(pages: any[][]) {
       empty: pages[pageIndex]?.length === 0,
       docs: pages[pageIndex++] || [],
     })),
+  };
+}
+
+function buildUserServiceMetaRef(userID: string, serviceName: ServiceNames | string) {
+  return {
+    path: `users/${userID}/meta/${serviceName}`,
+    parent: {
+      id: 'meta',
+      parent: {
+        id: userID,
+        parent: { id: 'users' },
+      },
+    },
   };
 }
 
@@ -196,6 +211,8 @@ describe('retry-pending-service-disconnects', () => {
         lifecycleGuard: {
           disconnectGeneration: null,
           oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
         },
       },
     );
@@ -211,11 +228,11 @@ describe('retry-pending-service-disconnects', () => {
         docs: [
           {
             id: ServiceNames.WahooAPI,
-            ref: { parent: { parent: { id: 'user-1' } } },
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.WahooAPI),
           },
           {
             id: ServiceNames.WahooAPI,
-            ref: { parent: { parent: { id: 'user-2' } } },
+            ref: buildUserServiceMetaRef('user-2', ServiceNames.WahooAPI),
           },
         ],
       }),
@@ -231,10 +248,7 @@ describe('retry-pending-service-disconnects', () => {
   it('bounds and checkpoints lifecycle-repair pages', async () => {
     const docs = Array.from({ length: 25 }, (_, index) => ({
       id: ServiceNames.WahooAPI,
-      ref: {
-        path: `users/user-${index}/meta/${ServiceNames.WahooAPI}`,
-        parent: { parent: { id: `user-${index}` } },
-      },
+      ref: buildUserServiceMetaRef(`user-${index}`, ServiceNames.WahooAPI),
     }));
     const query = {
       where: vi.fn().mockReturnThis(),
@@ -280,10 +294,7 @@ describe('retry-pending-service-disconnects', () => {
       startAfter: vi.fn().mockReturnThis(),
       get: vi.fn().mockResolvedValue({ docs: [{
         id: ServiceNames.WahooAPI,
-        ref: {
-          path: `users/user-25/meta/${ServiceNames.WahooAPI}`,
-          parent: { parent: { id: 'user-25' } },
-        },
+        ref: buildUserServiceMetaRef('user-25', ServiceNames.WahooAPI),
       }] }),
     };
     hoisted.collectionGroup.mockReturnValueOnce(query);
@@ -316,11 +327,11 @@ describe('retry-pending-service-disconnects', () => {
         docs: [
           {
             id: ServiceNames.SuuntoApp,
-            ref: { parent: { parent: { id: 'user-1' } } },
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.SuuntoApp),
           },
           {
             id: 'not-a-service',
-            ref: { parent: { parent: { id: 'user-2' } } },
+            ref: buildUserServiceMetaRef('user-2', 'not-a-service'),
           },
         ],
       }),
@@ -334,6 +345,35 @@ describe('retry-pending-service-disconnects', () => {
       ServiceNames.SuuntoApp,
     );
     expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores matching marker fields outside users/{uid}/meta/{service}', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [{
+          id: ServiceNames.WahooAPI,
+          ref: {
+            path: `other/user-1/meta/${ServiceNames.WahooAPI}`,
+            parent: {
+              id: 'meta',
+              parent: {
+                id: 'user-1',
+                parent: { id: 'other' },
+              },
+            },
+          },
+        }],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingWahooReconnectQueueReleases())
+      .resolves.toBe(0);
+
+    expect(hoisted.retryWahooReconnectQueueRelease).not.toHaveBeenCalled();
   });
 
   it('records retry failure when local cleanup remains partial without a retryable partner failure', async () => {
@@ -362,6 +402,8 @@ describe('retry-pending-service-disconnects', () => {
         lifecycleGuard: {
           disconnectGeneration: null,
           oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
         },
       },
     );

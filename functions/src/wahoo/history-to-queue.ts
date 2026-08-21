@@ -21,7 +21,14 @@ import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { getActiveWahooTokenSnapshot, normalizeWahooUserID } from './account';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  assertWahooActiveAccountGuardCurrentInTransaction,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+  normalizeWahooUserID,
+  type WahooActiveAccountGuard,
+} from './account';
 import {
   assertWahooConnectionAvailable,
   isWahooReconnectRequiredError,
@@ -142,6 +149,7 @@ export async function finishWahooHistoryLease(
   endDate: Date,
   processedCount: number,
   completed: boolean,
+  accountGuard?: WahooActiveAccountGuard | null,
 ): Promise<void> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
@@ -156,11 +164,23 @@ export async function finishWahooHistoryLease(
 
     const snapshot = await transaction.get(metaRef);
     if (`${snapshot.data()?.historyImportLeaseOwner || ''}` !== leaseOwner) return;
+    let accountIsCurrent = true;
+    if (accountGuard) {
+      try {
+        await assertWahooActiveAccountGuardCurrentInTransaction(
+          transaction,
+          userID,
+          accountGuard,
+        );
+      } catch {
+        accountIsCurrent = false;
+      }
+    }
     const update: Record<string, unknown> = {
       historyImportLeaseOwner: FieldValue.delete(),
       historyImportLeaseExpiresAt: FieldValue.delete(),
     };
-    if (completed) {
+    if (completed && accountIsCurrent) {
       update.didLastHistoryImport = Date.now();
       update.lastHistoryImportStartDate = startDate.getTime();
       update.lastHistoryImportEndDate = endDate.getTime();
@@ -189,6 +209,7 @@ export async function importWahooHistory(
     pagesFetched: 0,
   };
   let completed = false;
+  let historyAccountGuard: WahooActiveAccountGuard | null = null;
   try {
     const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
     const providerUserId = initialTokenSnapshot.id;
@@ -203,8 +224,15 @@ export async function importWahooHistory(
         if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
           throw new HttpsError('unauthenticated', 'Reconnect Wahoo before importing history.');
         }
+        const pageAccountGuard = await captureWahooActiveAccountGuard(userID, providerUserId);
+        historyAccountGuard = pageAccountGuard;
+        const providerRequestGuard = await captureWahooActiveAccountGuard(
+          userID,
+          providerUserId,
+          token.accessToken,
+        );
         await assertWahooHistoryProviderActionAllowed(userID);
-        await getActiveWahooTokenSnapshot(userID, providerUserId);
+        await assertWahooActiveAccountGuardCurrent(userID, providerRequestGuard);
         let response: WahooWorkoutsResponse;
         try {
           response = (await requestWahooAPI<WahooWorkoutsResponse>(
@@ -219,6 +247,7 @@ export async function importWahooHistory(
           }
           throw error;
         }
+        await assertWahooActiveAccountGuardCurrent(userID, pageAccountGuard);
         stats.pagesFetched++;
         const workouts = Array.isArray(response.workouts) ? response.workouts : [];
         const selectedPage = selectWahooHistoryPage(token.wahooUserID, workouts, startDate, endDate);
@@ -232,10 +261,20 @@ export async function importWahooHistory(
               id,
               firebaseUserID: userID,
               fromHistory: true,
-            }, 'deferred');
+            }, 'deferred', async transaction => {
+              await assertWahooActiveAccountGuardCurrentInTransaction(
+                transaction,
+                userID,
+                pageAccountGuard,
+              );
+            });
             if (queued.queued) stats.successCount++;
             else stats.skippedCount++;
           } catch (error) {
+            // A queue transaction can lose the account generation after the
+            // page-level check. Do not reduce that lifecycle fence to an
+            // ordinary per-item failure and continue through the old page.
+            await assertWahooActiveAccountGuardCurrent(userID, pageAccountGuard);
             stats.failureCount++;
             logger.error('Could not queue a Wahoo history item', {
               userID,
@@ -254,7 +293,15 @@ export async function importWahooHistory(
     completed = true;
     return stats;
   } finally {
-    await finishWahooHistoryLease(userID, leaseOwner, startDate, endDate, stats.successCount, completed);
+    await finishWahooHistoryLease(
+      userID,
+      leaseOwner,
+      startDate,
+      endDate,
+      stats.successCount,
+      completed,
+      historyAccountGuard,
+    );
   }
 }
 

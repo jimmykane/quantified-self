@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type * as admin from 'firebase-admin';
 
 const hoisted = vi.hoisted(() => ({
   runTransaction: vi.fn(),
@@ -51,6 +52,8 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
+  OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   getServiceTokenRootDocumentRef: hoisted.getServiceTokenRootDocumentRef,
 }));
 
@@ -161,21 +164,18 @@ describe('service-disconnect-pending', () => {
       ServiceNames.SuuntoApp,
       'pending-generation-1',
     );
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.rootRef,
-      expect.objectContaining({
-        disconnectState: 'DELETE_SENTINEL',
-        disconnectReason: 'DELETE_SENTINEL',
-        disconnectManualReviewRequired: 'DELETE_SENTINEL',
-      }),
-      { merge: true },
-    );
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      clearPendingDisconnectRoot: true,
+      expectedDisconnectLifecycleGuard: {
+        disconnectGeneration: 'pending-generation-1',
+        oauthCredentialGeneration: null,
+        oauthFlowGeneration: null,
+        disconnectOperationGeneration: null,
+      },
       expectedPendingDisconnectGeneration: 'pending-generation-1',
     });
-    expect(hoisted.transactionSet.mock.invocationCallOrder[0])
-      .toBeLessThan(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0]);
     expect(hoisted.clearServiceConnectionState.mock.invocationCallOrder[0])
       .toBeLessThan(hoisted.releaseQueueItemsDeferredForPendingDisconnect.mock.invocationCallOrder[0]);
   });
@@ -196,6 +196,38 @@ describe('service-disconnect-pending', () => {
       fieldName: 'activeOAuthCredentialGeneration',
       expectedGeneration: 'old-generation',
     });
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not let a claimed callback clear pending state after disconnect rotates its OAuth flow', async () => {
+    const credentialGuard = {
+      documentRef: hoisted.rootRef as unknown as admin.firestore.DocumentReference,
+      fieldName: 'activeOAuthCredentialGeneration',
+      expectedGeneration: 'credential-generation',
+    };
+    const staleFlowGuard = {
+      documentRef: hoisted.rootRef as unknown as admin.firestore.DocumentReference,
+      fieldName: 'oauthFlowGeneration',
+      expectedGeneration: 'claimed-flow',
+    };
+    hoisted.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'credential-generation',
+        oauthFlowGeneration: 'disconnect-fence',
+        disconnectState: 'disconnect_pending',
+      }),
+    });
+
+    await clearServiceDisconnectPending(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      credentialGuard,
+      staleFlowGuard,
+    );
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
@@ -226,14 +258,44 @@ describe('service-disconnect-pending', () => {
     });
 
     const winningGuard = {
-      documentRef: hoisted.rootRef as any,
+      documentRef: hoisted.rootRef as unknown as admin.firestore.DocumentReference,
       fieldName: 'activeOAuthCredentialGeneration',
       expectedGeneration: 'winning-generation',
     };
+    const winningFlowGuard = {
+      documentRef: hoisted.rootRef as unknown as admin.firestore.DocumentReference,
+      fieldName: 'oauthFlowGeneration',
+      expectedGeneration: 'winning-flow',
+    };
+    hoisted.transactionGet.mockImplementation(async (target: unknown) => {
+      if (target === hoisted.rootRef) {
+        return {
+          exists: true,
+          data: () => ({
+            activeOAuthCredentialGeneration: 'winning-generation',
+            oauthFlowGeneration: 'winning-flow',
+          }),
+        };
+      }
+      if (target === hoisted.serviceMetaRef) {
+        return {
+          exists: true,
+          data: () => ({
+            connectionState: 'disconnect_pending',
+            connectionStateGeneration: 'pending-generation-from-meta',
+            disconnectGeneration: 'pending-generation-from-meta',
+            disconnectReason: 'subscription_enforcement',
+            disconnectAttemptCount: 2,
+          }),
+        };
+      }
+      throw new Error('Unexpected transaction target');
+    });
     await clearServiceDisconnectPending(
       'user-1',
       ServiceNames.SuuntoApp,
       winningGuard,
+      winningFlowGuard,
     );
 
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith(
@@ -241,7 +303,15 @@ describe('service-disconnect-pending', () => {
       ServiceNames.SuuntoApp,
       {
         restorePendingDisconnectActivitySyncRoutes: true,
+        clearPendingDisconnectRoot: true,
+        expectedDisconnectLifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: 'winning-generation',
+          oauthFlowGeneration: 'winning-flow',
+          disconnectOperationGeneration: null,
+        },
         expectedTokenCredentialGeneration: winningGuard,
+        expectedOAuthFlowGeneration: winningFlowGuard,
         expectedPendingDisconnectGeneration: 'pending-generation-from-meta',
       },
     );
@@ -283,20 +353,17 @@ describe('service-disconnect-pending', () => {
     );
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      clearPendingDisconnectRoot: true,
+      expectedDisconnectLifecycleGuard: {
+        disconnectGeneration: 'pending-generation-2',
+        oauthCredentialGeneration: null,
+        oauthFlowGeneration: null,
+        disconnectOperationGeneration: null,
+      },
       expectedPendingDisconnectGeneration: 'pending-generation-2',
     });
     expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
       1,
-      hoisted.rootRef,
-      expect.objectContaining({
-        disconnectState: 'DELETE_SENTINEL',
-        disconnectReason: 'DELETE_SENTINEL',
-        disconnectManualReviewRequired: 'DELETE_SENTINEL',
-      }),
-      { merge: true },
-    );
-    expect(hoisted.transactionSet).toHaveBeenNthCalledWith(
-      2,
       hoisted.rootRef,
       expect.objectContaining({
         disconnectState: 'disconnect_pending',
@@ -318,7 +385,34 @@ describe('service-disconnect-pending', () => {
     );
   });
 
-  it('clears non-pending token roots without releasing deferred pending-disconnect queue items', async () => {
+  it('does not restore an old pending episode when OAuth wins after the atomic clear', async () => {
+    hoisted.transactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'pending-generation-old',
+        activeOAuthCredentialGeneration: 'oauth-generation-old',
+        disconnectReason: 'subscription_enforcement',
+        disconnectAttemptCount: 2,
+        disconnectNextAttemptAt: 'next-attempt',
+        disconnectRetryExpiresAt: 'retry-expires',
+      }),
+    }).mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'oauth-generation-new',
+      }),
+    });
+    hoisted.releaseQueueItemsDeferredForPendingDisconnect.mockRejectedValueOnce(new Error('release failed'));
+
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .rejects.toThrow('release failed');
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mirrorServiceDisconnectPendingToUserMeta).not.toHaveBeenCalled();
+  });
+
+  it('does not clear a healthy connection when the token root is not pending disconnect', async () => {
     hoisted.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({ connectionState: 'connected' }),
@@ -327,30 +421,47 @@ describe('service-disconnect-pending', () => {
     await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
 
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.rootRef,
-      expect.objectContaining({
-        disconnectState: 'DELETE_SENTINEL',
-        disconnectReason: 'DELETE_SENTINEL',
-        disconnectManualReviewRequired: 'DELETE_SENTINEL',
-      }),
-      { merge: true },
-    );
-    expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
-      restorePendingDisconnectActivitySyncRoutes: true,
-    });
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
   });
 
   it('clears stale user meta when the pending token root is already missing', async () => {
-    hoisted.transactionGet.mockResolvedValueOnce({ exists: false });
+    hoisted.transactionGet.mockImplementation(async (target: unknown) => {
+      if (target === hoisted.rootRef) return { exists: false, data: () => undefined };
+      if (target === hoisted.serviceMetaRef) {
+        return {
+          exists: true,
+          data: () => ({
+            connectionState: 'disconnect_pending',
+            connectionStateGeneration: 'pending-generation-from-meta',
+            disconnectGeneration: 'pending-generation-from-meta',
+            disconnectReason: 'subscription_enforcement',
+            disconnectAttemptCount: 1,
+          }),
+        };
+      }
+      throw new Error('Unexpected transaction target');
+    });
 
     await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      clearPendingDisconnectRoot: true,
+      expectedDisconnectLifecycleGuard: {
+        disconnectGeneration: null,
+        oauthCredentialGeneration: null,
+        oauthFlowGeneration: null,
+        disconnectOperationGeneration: null,
+      },
+      expectedPendingDisconnectGeneration: 'pending-generation-from-meta',
     });
-    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-from-meta',
+    );
   });
 
   it('does not clear root or meta state when the user is missing or deletion is in progress', async () => {

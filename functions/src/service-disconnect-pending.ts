@@ -1,9 +1,10 @@
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
-import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getServiceTokenRootDocumentRef } from './service-token-store';
+import {
+  getServiceTokenRootDocumentRef,
+} from './service-token-store';
 import {
   clearServiceConnectionState,
   mirrorServiceDisconnectPendingToUserMeta,
@@ -16,10 +17,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
-import {
-  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
-  type DocumentGenerationGuard,
-} from './token-refresh-coordinator';
+import type { DocumentGenerationGuard } from './token-refresh-coordinator';
 import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
 import {
   buildPendingDisconnectMarkState,
@@ -27,6 +25,8 @@ import {
   buildPendingDisconnectRecoveryRetryData,
   buildPendingDisconnectRetryFailureTransition,
   buildRestoredPendingDisconnectData,
+  doesRootMatchServiceDisconnectLifecycleGuard,
+  getServiceDisconnectLifecycleGuardFromRootData,
   isServiceDisconnectPendingData,
   SERVICE_DISCONNECT_PENDING_REASON,
   timestampToISOString,
@@ -53,46 +53,7 @@ export type {
   ServiceDisconnectPendingReason,
 } from './service-disconnect-pending-state';
 
-function normalizeGeneration(value: unknown): string | null {
-  const normalized = typeof value === 'string' ? value.trim() : '';
-  return normalized || null;
-}
-
-export function getServiceDisconnectLifecycleGuardFromRootData(
-  data: Record<string, unknown> | null | undefined,
-): ServiceDisconnectLifecycleGuard {
-  return {
-    disconnectGeneration: isServiceDisconnectPendingData(data as PendingServiceDisconnectRootData | null)
-      ? normalizeGeneration(data?.disconnectGeneration)
-      : null,
-    oauthCredentialGeneration: normalizeGeneration(data?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]),
-  };
-}
-
-function doesRootMatchServiceDisconnectLifecycleGuard(
-  data: Record<string, unknown> | null | undefined,
-  guard: ServiceDisconnectLifecycleGuard | undefined,
-): boolean {
-  if (!guard) return true;
-  const current = getServiceDisconnectLifecycleGuardFromRootData(data);
-  return current.disconnectGeneration === guard.disconnectGeneration
-    && current.oauthCredentialGeneration === guard.oauthCredentialGeneration;
-}
-
-function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
-  return {
-    disconnectGeneration: FieldValue.delete(),
-    disconnectState: FieldValue.delete(),
-    disconnectReason: FieldValue.delete(),
-    disconnectAttemptCount: FieldValue.delete(),
-    disconnectNextAttemptAt: FieldValue.delete(),
-    disconnectLastAttemptAt: FieldValue.delete(),
-    disconnectRetryExpiresAt: FieldValue.delete(),
-    disconnectLastStatusCode: FieldValue.delete(),
-    disconnectLastErrorMessage: FieldValue.delete(),
-    disconnectManualReviewRequired: FieldValue.delete(),
-  };
-}
+export { getServiceDisconnectLifecycleGuardFromRootData } from './service-disconnect-pending-state';
 
 function buildPendingDisconnectDataFromServiceMeta(
   data: ServiceConnectionMetaFields | undefined,
@@ -388,7 +349,7 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
   serviceName: ServiceNames,
   pendingData: PendingServiceDisconnectRootData,
   originalError: unknown,
-  expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
+  expectedPostClearLifecycleGuard: ServiceDisconnectLifecycleGuard,
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
@@ -401,11 +362,13 @@ async function restoreServiceDisconnectPendingAfterClearFailure(
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'restore_after_clear_failure')) {
       return false;
     }
-    if (!(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthCredentialGeneration))) {
+    const snapshot = await transaction.get(rootRef);
+    if (!doesRootMatchServiceDisconnectLifecycleGuard(
+      snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+      expectedPostClearLifecycleGuard,
+    )) {
       return false;
     }
-
-    const snapshot = await transaction.get(rootRef);
     if (isServiceDisconnectPendingData(snapshot.exists ? snapshot.data() as PendingServiceDisconnectRootData : null)) {
       return false;
     }
@@ -435,6 +398,7 @@ export async function clearServiceDisconnectPending(
   userID: string,
   serviceName: ServiceNames,
   expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
+  expectedOAuthFlowGeneration?: DocumentGenerationGuard,
 ): Promise<void> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
@@ -444,7 +408,10 @@ export async function clearServiceDisconnectPending(
     if (await shouldSkipPendingDisconnectWrite(db, transaction, userID, serviceName, 'clear')) {
       return { status: 'skipped' as const };
     }
-    if (!(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthCredentialGeneration))) {
+    if (
+      !(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthCredentialGeneration))
+      || !(await isExpectedOAuthCredentialGenerationCurrent(transaction, expectedOAuthFlowGeneration))
+    ) {
       return { status: 'stale_credential' as const };
     }
 
@@ -465,47 +432,47 @@ export async function clearServiceDisconnectPending(
       );
     }
 
-    if (snapshot.exists) {
-      transaction.set(rootRef, buildPendingDisconnectFieldDeletes(), { merge: true });
-    }
+    const lifecycleGuard = getServiceDisconnectLifecycleGuardFromRootData(
+      snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+    );
 
     if (pendingData) {
-      return { status: 'pending_cleared' as const, pendingData };
+      return { status: 'pending_found' as const, pendingData, lifecycleGuard };
     }
-    return snapshot.exists
-      ? { status: 'clear_only' as const }
-      : { status: 'root_missing' as const };
+    return { status: 'no_pending' as const };
   });
 
-  if (clearResult.status === 'skipped' || clearResult.status === 'stale_credential') {
-    return;
-  }
-
-  if (clearResult.status === 'root_missing') {
-    await clearServiceConnectionState(userID, serviceName, {
-      restorePendingDisconnectActivitySyncRoutes: true,
-    });
+  if (
+    clearResult.status === 'skipped'
+    || clearResult.status === 'stale_credential'
+    || clearResult.status === 'no_pending'
+  ) {
     return;
   }
 
   try {
-    const pendingDisconnectGeneration = clearResult.status === 'pending_cleared'
+    const pendingDisconnectGeneration = clearResult.status === 'pending_found'
       ? `${clearResult.pendingData.disconnectGeneration || ''}`.trim() || undefined
       : undefined;
     const didClearConnectionState = await clearServiceConnectionState(userID, serviceName, {
       restorePendingDisconnectActivitySyncRoutes: true,
+      clearPendingDisconnectRoot: true,
+      expectedDisconnectLifecycleGuard: clearResult.lifecycleGuard,
       ...(expectedOAuthCredentialGeneration ? {
         expectedTokenCredentialGeneration: expectedOAuthCredentialGeneration,
+      } : {}),
+      ...(expectedOAuthFlowGeneration ? {
+        expectedOAuthFlowGeneration,
       } : {}),
       ...(pendingDisconnectGeneration ? {
         expectedPendingDisconnectGeneration: pendingDisconnectGeneration,
       } : {}),
     });
-    if (expectedOAuthCredentialGeneration && !didClearConnectionState) {
+    if (!didClearConnectionState) {
       return;
     }
 
-    if (clearResult.status === 'pending_cleared') {
+    if (clearResult.status === 'pending_found') {
       await releaseQueueItemsDeferredForPendingDisconnect(
         userID,
         serviceName,
@@ -513,13 +480,16 @@ export async function clearServiceDisconnectPending(
       );
     }
   } catch (error) {
-    if (clearResult.status === 'pending_cleared') {
+    if (clearResult.status === 'pending_found') {
       await restoreServiceDisconnectPendingAfterClearFailure(
         userID,
         serviceName,
         clearResult.pendingData,
         error,
-        expectedOAuthCredentialGeneration,
+        {
+          ...clearResult.lifecycleGuard,
+          disconnectGeneration: null,
+        },
       );
     }
     throw error;

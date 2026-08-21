@@ -72,6 +72,7 @@ function installTransaction(
   settingsEnabled: boolean,
   routeRestorePending: boolean,
   connectionState?: string,
+  routeRestoreParkingClosed = false,
 ): void {
   mocks.runTransaction.mockImplementation(async (callback: (transaction: unknown) => unknown) => callback({
     get: vi.fn(async (target: unknown) => {
@@ -87,7 +88,10 @@ function installTransaction(
         };
       }
       if (target === mocks.sourceMetaRef || target === mocks.destinationMetaRef) {
-        return { exists: true, data: () => ({ routeRestorePending, connectionState }) };
+        return {
+          exists: true,
+          data: () => ({ routeRestorePending, routeRestoreParkingClosed, connectionState }),
+        };
       }
       throw new Error('Unexpected transaction target');
     }),
@@ -114,9 +118,14 @@ describe('finalizeDisabledSyncRouteIfCurrent', () => {
     })).resolves.toEqual({ result: DisabledSyncRouteTransitionResult.DeferredForRestore });
 
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.queueRef, expect.objectContaining({
-      processed: false,
+      processed: true,
       resultStatus: 'deferred',
       deferredReason: 'route_restore_pending',
+      deferredContext: JSON.stringify({
+        serviceName: ServiceNames.SuuntoApp,
+        settingsKind: 'activitySyncRoutes',
+        routeId: 'routeA',
+      }),
       dispatchedToCloudTask: null,
     }));
   });
@@ -134,6 +143,25 @@ describe('finalizeDisabledSyncRouteIfCurrent', () => {
     })).resolves.toEqual({ result: DisabledSyncRouteTransitionResult.Enabled });
 
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not create a new parked row after restoration closes its parking barrier', async () => {
+    installTransaction(false, true, undefined, true);
+
+    await expect(finalizeDisabledSyncRouteIfCurrent({
+      queueItem: queueItem(),
+      userID: 'user-1',
+      routeId: 'routeA',
+      settingsKind: 'activitySyncRoutes',
+      serviceNames: [ServiceNames.SuuntoApp, ServiceNames.WahooAPI],
+      isCurrent: current => current.processed !== true,
+    })).resolves.toEqual({ result: DisabledSyncRouteTransitionResult.ProcessedAsDisabled });
+
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.queueRef, expect.objectContaining({
+      processed: true,
+      resultStatus: 'skipped',
+      skippedReason: 'route_disabled',
+    }));
   });
 
   it('returns the authoritative reconnect state instead of finalizing a concurrently disabled route', async () => {

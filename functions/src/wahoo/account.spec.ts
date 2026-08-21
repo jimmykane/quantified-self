@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   tokenDocs: new Map<string, any>(),
   tokenRefs: new Map<string, any>(),
   transactionMeta: null as Record<string, unknown> | null,
+  tokenRootData: {} as Record<string, unknown>,
   runTransaction: vi.fn(),
 }));
 
@@ -34,17 +35,28 @@ vi.mock('firebase-admin', () => ({
         data: () => mocks.transactionMeta || undefined,
       })),
     };
+    const tokenRootRef = {
+      id: 'user-1',
+      path: 'wahooAPIAccessTokens/user-1',
+      get: vi.fn(async () => ({
+        exists: true,
+        data: () => mocks.tokenRootData,
+      })),
+      collection: () => ({
+        doc: (id: string) => getTokenRef(id),
+        get: vi.fn(async () => ({ docs: [...mocks.tokenDocs.values()] })),
+      }),
+    };
     return {
       runTransaction: mocks.runTransaction,
-      collection: (collectionName: string) => ({
+      collection: (collectionName: string) => collectionName === 'users' ? ({
         doc: () => ({
           collection: (nestedCollectionName: string) => ({
             doc: (id: string) => nestedCollectionName === 'meta' ? metaRef : getTokenRef(id),
             get: vi.fn(async () => ({ docs: [...mocks.tokenDocs.values()] })),
           }),
         }),
-        ...(collectionName === 'users' ? {} : {}),
-      }),
+      }) : ({ doc: () => tokenRootRef }),
     };
   },
 }));
@@ -86,6 +98,7 @@ describe('Wahoo active account resolution', () => {
     mocks.tokenDocs.clear();
     mocks.tokenRefs.clear();
     mocks.transactionMeta = null;
+    mocks.tokenRootData = {};
     mocks.runTransaction.mockImplementation(async (callback: any) => callback({
       get: vi.fn(async (target: { get: () => Promise<unknown> }) => target.get()),
     }));
@@ -213,6 +226,23 @@ describe('Wahoo active account resolution', () => {
 
     await expect(assertWahooActiveAccountGuardCurrent('user-1', guard)).rejects.toMatchObject({
       code: 'unauthenticated',
+    });
+  });
+
+  it('rejects provider work when authoritative pending-disconnect state has not reached metadata yet', async () => {
+    mocks.transactionMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-a',
+      providerUserId: 'account-a',
+    };
+    mocks.tokenRootData = {
+      disconnectState: 'disconnect_pending',
+      disconnectGeneration: 'disconnect-a',
+    };
+    mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100));
+
+    await expect(captureWahooActiveAccountGuard('user-1', 'account-a')).rejects.toMatchObject({
+      name: 'TokenUseSkippedForPendingDisconnectError',
     });
   });
 

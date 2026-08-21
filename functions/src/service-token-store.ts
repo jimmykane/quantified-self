@@ -3,6 +3,9 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceAdapter } from './auth/factory';
 
+export const OAUTH_FLOW_GENERATION_FIELD = 'oauthFlowGeneration';
+export const SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD = 'disconnectOperationGeneration';
+
 function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot): boolean {
   if (!snapshot.exists) {
     return false;
@@ -11,7 +14,10 @@ function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot):
   const data = snapshot.data() as Record<string, unknown> | undefined;
   const state = typeof data?.state === 'string' ? data.state.trim() : '';
   const codeVerifier = typeof data?.codeVerifier === 'string' ? data.codeVerifier.trim() : '';
-  return state.length > 0 || codeVerifier.length > 0;
+  const oauthFlowGeneration = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
+    ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
+    : '';
+  return state.length > 0 || codeVerifier.length > 0 || oauthFlowGeneration.length > 0;
 }
 
 export interface DeleteLocalServiceTokenOptions {

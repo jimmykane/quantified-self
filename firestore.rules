@@ -22,6 +22,7 @@ service cloud.firestore {
         'disconnectLastStatusCode',
         'disconnectLastErrorMessage',
         'disconnectManualReviewRequired',
+        'disconnectOperationGeneration',
         'activeOAuthCredentialGeneration',
         'oauthFlowGeneration'
       ];
@@ -36,8 +37,11 @@ service cloud.firestore {
     }
 
     function serviceRootIsNotPendingDisconnect() {
-      return !('disconnectState' in resource.data)
-        || resource.data.disconnectState != 'disconnect_pending';
+      return (
+          !('disconnectState' in resource.data)
+          || resource.data.disconnectState != 'disconnect_pending'
+        )
+        && !('disconnectOperationGeneration' in resource.data);
     }
 
     // Make sure the uid of the requesting user matches name of the user
@@ -393,7 +397,10 @@ service cloud.firestore {
           allow write: if isNonAnonymousOwner(userID)
             && (
               !exists(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID))
-              || get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+              || (
+                get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data)
+              )
             );
        }
     }
@@ -430,7 +437,10 @@ service cloud.firestore {
           allow write: if isNonAnonymousOwner(userID)
             && (
               !exists(/databases/$(database)/documents/garminAPITokens/$(userID))
-              || get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
+              || (
+                get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
+                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/garminAPITokens/$(userID)).data)
+              )
             );
        }
     }

@@ -16,7 +16,7 @@ const hoisted = vi.hoisted(() => ({
         deletionInProgress: false,
         shouldSkip: false,
     }),
-    isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+    getServiceDisconnectPendingData: vi.fn().mockResolvedValue({}),
     logger: {
         error: vi.fn(),
         info: vi.fn(),
@@ -174,7 +174,7 @@ vi.mock('./shared/user-deletion-guard', () => ({
 }));
 
 vi.mock('./service-disconnect-pending', () => ({
-    isServiceDisconnectPendingForUser: hoisted.isServiceDisconnectPendingForUser,
+    getServiceDisconnectPendingData: hoisted.getServiceDisconnectPendingData,
 }));
 
 vi.mock('./token-refresh-coordinator', () => ({
@@ -216,7 +216,7 @@ describe('tokens', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
-        hoisted.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+        hoisted.getServiceDisconnectPendingData.mockResolvedValue({});
         hoisted.assertWahooConnectionAvailable.mockResolvedValue(undefined);
         hoisted.assertWahooRefreshAllowed.mockResolvedValue(undefined);
         hoisted.toWahooRefreshFailureError.mockResolvedValue(new Error('Wahoo refresh unavailable'));
@@ -364,7 +364,9 @@ describe('tokens', () => {
 
         it('should not return an existing valid token when service disconnect is pending', async () => {
             mockToken.expired.mockReturnValue(false);
-            hoisted.isServiceDisconnectPendingForUser.mockResolvedValueOnce(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectState: 'disconnect_pending',
+            });
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
@@ -382,7 +384,34 @@ describe('tokens', () => {
 
             expect(result.accessToken).toBe('old-access');
             expect(mockToken.refresh).not.toHaveBeenCalled();
-            expect(hoisted.isServiceDisconnectPendingForUser).not.toHaveBeenCalled();
+            expect(hoisted.getServiceDisconnectPendingData).toHaveBeenCalled();
+        });
+
+        it('should reject ordinary token use while an explicit disconnect operation owns the lifecycle', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('should allow only the matching explicit-disconnect owner to use the fenced token', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            expect(result.accessToken).toBe('old-access');
+            expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 
         it('should refresh token if forced', async () => {

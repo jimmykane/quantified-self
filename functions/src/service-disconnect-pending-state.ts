@@ -1,6 +1,11 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { SERVICE_CONNECTION_STATES } from '../../shared/service-connection';
 import type { ServiceDisconnectPendingMetaInput } from './service-connection-meta';
+import {
+  OAUTH_FLOW_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+} from './service-token-store';
+import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from './token-refresh-coordinator';
 
 export const SERVICE_DISCONNECT_PENDING_REASON = {
   SubscriptionEnforcement: 'subscription_enforcement',
@@ -11,6 +16,38 @@ export type ServiceDisconnectPendingReason = typeof SERVICE_DISCONNECT_PENDING_R
 export interface ServiceDisconnectLifecycleGuard {
   disconnectGeneration: string | null;
   oauthCredentialGeneration: string | null;
+  oauthFlowGeneration: string | null;
+  disconnectOperationGeneration: string | null;
+}
+
+function normalizeGeneration(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || null;
+}
+
+export function getServiceDisconnectLifecycleGuardFromRootData(
+  data: Record<string, unknown> | null | undefined,
+): ServiceDisconnectLifecycleGuard {
+  return {
+    disconnectGeneration: isServiceDisconnectPendingData(data as PendingServiceDisconnectRootData | null)
+      ? normalizeGeneration(data?.disconnectGeneration)
+      : null,
+    oauthCredentialGeneration: normalizeGeneration(data?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]),
+    oauthFlowGeneration: normalizeGeneration(data?.[OAUTH_FLOW_GENERATION_FIELD]),
+    disconnectOperationGeneration: normalizeGeneration(data?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]),
+  };
+}
+
+export function doesRootMatchServiceDisconnectLifecycleGuard(
+  data: Record<string, unknown> | null | undefined,
+  guard: ServiceDisconnectLifecycleGuard | undefined,
+): boolean {
+  if (!guard) return true;
+  const current = getServiceDisconnectLifecycleGuardFromRootData(data);
+  return current.disconnectGeneration === (guard.disconnectGeneration || null)
+    && current.oauthCredentialGeneration === (guard.oauthCredentialGeneration || null)
+    && current.oauthFlowGeneration === (guard.oauthFlowGeneration || null)
+    && current.disconnectOperationGeneration === (guard.disconnectOperationGeneration || null);
 }
 
 export interface PendingServiceDisconnectFailure {
@@ -21,6 +58,7 @@ export interface PendingServiceDisconnectFailure {
 }
 
 export interface PendingServiceDisconnectRootData {
+  disconnectOperationGeneration?: string | null;
   disconnectGeneration?: string | null;
   disconnectState?: string | null;
   disconnectReason?: string | null;

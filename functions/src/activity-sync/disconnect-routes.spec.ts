@@ -561,6 +561,7 @@ describe('activity-sync/disconnect-routes', () => {
 
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.objectContaining({ __mockType: 'meta' }), {
       routeRestorePending: 'DELETE_SENTINEL',
+      routeRestoreParkingClosed: 'DELETE_SENTINEL',
       routeRestoreConnectionGeneration: 'DELETE_SENTINEL',
       routeRestoreLastAttemptAt: 'DELETE_SENTINEL',
       routeRestoreAttemptCount: 'DELETE_SENTINEL',

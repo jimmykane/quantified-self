@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 const {
   mockMarkServiceReconnectRequired,
@@ -18,13 +18,6 @@ const {
   tokenRootRef,
   serviceMetaRef,
 } = vi.hoisted(() => {
-  const tokenRef = {
-    id: 'suunto-user',
-    parent: {
-      parent: { id: 'firebase-user-123' },
-    },
-  };
-
   const tokenDocumentGet = vi.fn().mockResolvedValue({
     exists: true,
     data: () => ({
@@ -32,6 +25,14 @@ const {
       userName: 'suunto-user',
     }),
   });
+
+  const tokenRef = {
+    id: 'suunto-user',
+    parent: {
+      parent: { id: 'firebase-user-123' },
+    },
+    get: tokenDocumentGet,
+  };
 
   const tokenCollectionRef = {
     doc: vi.fn(() => ({
@@ -112,6 +113,8 @@ vi.mock('./service-connection-meta', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
+  OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   deleteLocalServiceToken: mockDeleteLocalServiceToken,
   getServiceTokenCollectionRef: vi.fn(() => tokenCollectionRef),
   getServiceTokenRootDocumentRef: vi.fn(() => tokenRootRef),
@@ -841,51 +844,78 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       'firebase-user-123',
       ServiceNames.GarminAPI,
       'garmin-token-id',
-      { preserveOAuthFlowContext: false },
+      expect.objectContaining({ preserveOAuthFlowContext: false }),
     );
   });
 
-  it('cancels pending OAuth context during explicit user disconnect cleanup', async () => {
+  it('uses the post-refresh token version when explicit disconnect deletes its own refreshed credential', async () => {
+    const oldUpdateTime = makeTimestamp(1, 100_000);
+    const refreshedUpdateTime = makeTimestamp(2, 100_000);
+    const refreshedTokenData = {
+      serviceName: ServiceNames.GarminAPI,
+      accessToken: 'refreshed-access-token',
+      refreshToken: 'refreshed-refresh-token',
+      expiresAt: Date.now() + 60_000,
+    };
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [
         {
           id: 'garmin-token-id',
+          ref: tokenRef,
+          updateTime: oldUpdateTime,
           data: () => ({
             serviceName: ServiceNames.GarminAPI,
-            accessToken: 'access-token',
-            refreshToken: 'refresh-token',
+            accessToken: 'old-access-token',
+            refreshToken: 'old-refresh-token',
             expiresAt: Date.now() + 60_000,
           }),
         },
       ],
     });
-    mockDeleteLocalServiceToken.mockResolvedValueOnce({
-      tokenRootDeleted: true,
-      tokenRootPreservedForOAuthFlow: false,
-      remainingTokenCount: 0,
+    const refreshedSnapshot = {
+      exists: true,
+      ref: tokenRef,
+      updateTime: refreshedUpdateTime,
+      data: () => refreshedTokenData,
+    };
+    tokenDocumentGet.mockResolvedValue(refreshedSnapshot);
+    mockDeleteLocalServiceToken.mockImplementationOnce(async (
+      _userID: string,
+      _serviceName: ServiceNames,
+      _tokenID: string,
+      options: { shouldDeleteInTransaction?: (transaction: unknown) => Promise<boolean> },
+    ) => {
+      const shouldDelete = await options.shouldDeleteInTransaction?.({
+        get: vi.fn(async (target: unknown) => target === tokenRootRef
+          ? { exists: false, data: () => undefined }
+          : refreshedSnapshot),
+      });
+      return {
+        tokenRootDeleted: true,
+        tokenRootPreservedForOAuthFlow: false,
+        remainingTokenCount: 0,
+        skippedByCondition: shouldDelete !== true,
+      };
     });
 
-    await cleanupServiceConnectionForUser(
+    const outcome = await cleanupServiceConnectionForUser(
       'firebase-user-123',
       ServiceNames.GarminAPI,
       SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
       {
-        tokenResolver: async () => ({
-          serviceName: ServiceNames.GarminAPI,
-          accessToken: 'access-token',
-          refreshToken: 'refresh-token',
-          expiresAt: Date.now() + 60_000,
-        } as any),
+        tokenResolver: async () => refreshedTokenData as unknown as Auth2ServiceTokenInterface,
       },
     );
 
+    expect(outcome.deletedTokenCount).toBe(1);
+    expect(outcome.skippedByCondition).not.toBe(true);
     expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
       'firebase-user-123',
       ServiceNames.GarminAPI,
       'garmin-token-id',
-      { preserveOAuthFlowContext: false },
+      expect.objectContaining({ preserveOAuthFlowContext: false }),
     );
   });
 
@@ -1377,25 +1407,32 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   });
 
   it('preserves subscription-enforcement tokens when partner deauthorization fails retryably', async () => {
+    const tokenData = {
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'valid-access-token',
+      refreshToken: 'stored-refresh-token',
+      expiresAt: Date.now() + 120_000,
+      scope: 'workout',
+      tokenType: 'bearer',
+      userName: 'suunto-user-id',
+      dateCreated: 1,
+      dateRefreshed: 2,
+    };
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [
         {
           id: 'suunto-token-id',
-          data: () => ({
-            serviceName: ServiceNames.SuuntoApp,
-            accessToken: 'valid-access-token',
-            refreshToken: 'stored-refresh-token',
-            expiresAt: Date.now() + 120_000,
-            scope: 'workout',
-            tokenType: 'bearer',
-            userName: 'suunto-user-id',
-            dateCreated: 1,
-            dateRefreshed: 2,
-          }),
+          ref: tokenRef,
+          data: () => tokenData,
         },
       ],
+    });
+    tokenDocumentGet.mockResolvedValueOnce({
+      exists: true,
+      ref: tokenRef,
+      data: () => tokenData,
     });
     mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('gateway timeout'), {
       statusCode: 504,
@@ -1418,6 +1455,8 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         lifecycleGuard: {
           disconnectGeneration: null,
           oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
         },
       },
     ]);
@@ -1480,25 +1519,32 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   });
 
   it('deletes subscription-enforcement tokens when partner deauthorization fails terminally', async () => {
+    const tokenData = {
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'valid-access-token',
+      refreshToken: 'stored-refresh-token',
+      expiresAt: Date.now() + 120_000,
+      scope: 'workout',
+      tokenType: 'bearer',
+      userName: 'suunto-user-id',
+      dateCreated: 1,
+      dateRefreshed: 2,
+    };
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [
         {
           id: 'suunto-token-id',
-          data: () => ({
-            serviceName: ServiceNames.SuuntoApp,
-            accessToken: 'valid-access-token',
-            refreshToken: 'stored-refresh-token',
-            expiresAt: Date.now() + 120_000,
-            scope: 'workout',
-            tokenType: 'bearer',
-            userName: 'suunto-user-id',
-            dateCreated: 1,
-            dateRefreshed: 2,
-          }),
+          ref: tokenRef,
+          data: () => tokenData,
         },
       ],
+    });
+    tokenDocumentGet.mockResolvedValueOnce({
+      exists: true,
+      ref: tokenRef,
+      data: () => tokenData,
     });
     mockAdapterDeauthorize.mockRejectedValueOnce(Object.assign(new Error('registration not found'), {
       statusCode: 404,
@@ -1620,25 +1666,32 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   });
 
   it('records subscription-enforcement local cleanup failures for pending disconnect retry', async () => {
+    const tokenData = {
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'valid-access-token',
+      refreshToken: 'stored-refresh-token',
+      expiresAt: Date.now() + 120_000,
+      scope: 'workout',
+      tokenType: 'bearer',
+      userName: 'suunto-user-id',
+      dateCreated: 1,
+      dateRefreshed: 2,
+    };
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [
         {
           id: 'suunto-token-id',
-          data: () => ({
-            serviceName: ServiceNames.SuuntoApp,
-            accessToken: 'valid-access-token',
-            refreshToken: 'stored-refresh-token',
-            expiresAt: Date.now() + 120_000,
-            scope: 'workout',
-            tokenType: 'bearer',
-            userName: 'suunto-user-id',
-            dateCreated: 1,
-            dateRefreshed: 2,
-          }),
+          ref: tokenRef,
+          data: () => tokenData,
         },
       ],
+    });
+    tokenDocumentGet.mockResolvedValueOnce({
+      exists: true,
+      ref: tokenRef,
+      data: () => tokenData,
     });
     mockDeleteLocalServiceToken.mockRejectedValueOnce(new Error('firestore unavailable'));
 
@@ -1658,6 +1711,8 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         lifecycleGuard: {
           disconnectGeneration: null,
           oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
         },
       },
     ]);
@@ -1768,19 +1823,26 @@ describe('service-auth-lifecycle terminal auth handling', () => {
   });
 
   it('clears pending metadata before deleting the generation-bearing empty token root', async () => {
+    const tokenData = {
+      serviceName: ServiceNames.SuuntoApp,
+      accessToken: 'valid-access-token',
+      refreshToken: 'stored-refresh-token',
+      expiresAt: Date.now() + 120_000,
+      userName: 'suunto-user-id',
+    };
     tokenCollectionRef.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [{
         id: 'suunto-token-id',
-        data: () => ({
-          serviceName: ServiceNames.SuuntoApp,
-          accessToken: 'valid-access-token',
-          refreshToken: 'stored-refresh-token',
-          expiresAt: Date.now() + 120_000,
-          userName: 'suunto-user-id',
-        }),
+        ref: tokenRef,
+        data: () => tokenData,
       }],
+    });
+    tokenDocumentGet.mockResolvedValueOnce({
+      exists: true,
+      ref: tokenRef,
+      data: () => tokenData,
     });
     const guard = {
       disconnectGeneration: 'disconnect-generation-a',
@@ -1833,8 +1895,8 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       ServiceNames.SuuntoApp,
       expect.objectContaining({
         expectedPendingDisconnectGeneration: guard.disconnectGeneration,
-        expectedTokenCredentialGeneration: expect.objectContaining({
-          expectedGeneration: guard.oauthCredentialGeneration,
+        expectedDisconnectLifecycleGuard: expect.objectContaining({
+          oauthCredentialGeneration: guard.oauthCredentialGeneration,
         }),
       }),
     );

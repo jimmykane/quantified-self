@@ -26,9 +26,34 @@ const mocks = vi.hoisted(() => {
     doc: (id: string) => document(`${path}/${id}`),
   });
   const transaction = {
-    set: vi.fn((ref: { path: string }, data: Record<string, unknown>, options: unknown) => {
-      writes.push({ path: ref.path, data, options });
-      documents.set(ref.path, data);
+    get: vi.fn(async (ref: { path: string }) => ({
+      exists: documents.has(ref.path),
+      data: () => documents.get(ref.path),
+    })),
+    set: vi.fn((ref: { path: string }, data: Record<string, unknown>, options: { merge?: boolean } | undefined) => {
+      const next: Record<string, unknown> = options?.merge
+        ? { ...(documents.get(ref.path) || {}) }
+        : {};
+      for (const [key, value] of Object.entries(data)) {
+        const transform = value as { __op?: string; values?: unknown[] };
+        if (transform?.__op === 'arrayUnion') {
+          const current = Array.isArray(next[key]) ? next[key] as unknown[] : [];
+          next[key] = [...new Set([...current, ...(transform.values || [])])];
+        } else if (transform?.__op === 'arrayRemove') {
+          const removed = new Set(transform.values || []);
+          next[key] = (Array.isArray(next[key]) ? next[key] as unknown[] : [])
+            .filter(item => !removed.has(item));
+        } else if (transform?.__op === 'delete') {
+          delete next[key];
+        } else {
+          next[key] = value;
+        }
+      }
+      writes.push({ path: ref.path, data: next, options });
+      documents.set(ref.path, next);
+    }),
+    delete: vi.fn((ref: { path: string }) => {
+      documents.delete(ref.path);
     }),
   };
   const db = {
@@ -48,6 +73,14 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => mocks.db,
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    arrayUnion: (...values: unknown[]) => ({ __op: 'arrayUnion', values }),
+    arrayRemove: (...values: unknown[]) => ({ __op: 'arrayRemove', values }),
+    delete: () => ({ __op: 'delete' }),
+  },
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -79,7 +112,9 @@ import {
   buildActivitySyncOutboundFingerprintIds,
   getActivitySyncOutboundFingerprintDocumentId,
   isActivitySyncOutboundEcho,
+  markActivitySyncOutboundFingerprintProviderRequestStarted,
   recordActivitySyncOutboundFingerprint,
+  rollbackActivitySyncOutboundFingerprint,
 } from './outbound-fingerprint';
 
 function parsedEvent() {
@@ -129,9 +164,125 @@ describe('activity sync outbound fingerprints', () => {
     expect(mocks.writes[0].data).toEqual(expect.objectContaining({
       version: 1,
       destinationServiceName: ServiceNames.COROSAPI,
+      providerRequestStartedAt: expect.any(Number),
       recordedAt: expect.any(Number),
       expireAt: expect.objectContaining({ toMillis: expect.any(Function) }),
     }));
+  });
+
+  it('rolls back only receipts from the provider operation that never started', async () => {
+    const first = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer: Buffer.from('fit-data'),
+      provisional: true,
+    });
+    const replacement = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer: Buffer.from('fit-data'),
+      provisional: true,
+    });
+
+    await rollbackActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: first,
+    });
+    expect(mocks.documents.size).toBe(2);
+
+    await rollbackActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: replacement,
+    });
+    expect(mocks.documents.size).toBe(0);
+  });
+
+  it('keeps an accepted receipt when a later provisional operation rolls back', async () => {
+    const fileBuffer = Buffer.from('same-fit');
+    const accepted = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+      provisional: true,
+    });
+    await markActivitySyncOutboundFingerprintProviderRequestStarted({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: accepted,
+    });
+    const acceptedRecordedAt = 123_456;
+    const acceptedExpireAt = { toMillis: () => Date.now() + 60_000 };
+    for (const fingerprintId of accepted.fingerprintIds) {
+      const path = `users/user-1/activitySyncOutboundFingerprints/${getActivitySyncOutboundFingerprintDocumentId(ServiceNames.WahooAPI, fingerprintId)}`;
+      mocks.documents.set(path, {
+        ...(mocks.documents.get(path) || {}),
+        recordedAt: acceptedRecordedAt,
+        expireAt: acceptedExpireAt,
+      });
+    }
+    const aborted = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+      provisional: true,
+    });
+    await rollbackActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: aborted,
+    });
+
+    for (const fingerprintId of accepted.fingerprintIds) {
+      const path = `users/user-1/activitySyncOutboundFingerprints/${getActivitySyncOutboundFingerprintDocumentId(ServiceNames.WahooAPI, fingerprintId)}`;
+      expect(mocks.documents.get(path)).toEqual(expect.objectContaining({
+        recordedAt: acceptedRecordedAt,
+        expireAt: acceptedExpireAt,
+      }));
+    }
+
+    await expect(isActivitySyncOutboundEcho({
+      userID: 'user-1',
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+    })).resolves.toBe(true);
+  });
+
+  it('does not treat a provisional receipt as a provider echo', async () => {
+    const fileBuffer = Buffer.from('provisional-fit');
+    await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+      provisional: true,
+    });
+
+    await expect(isActivitySyncOutboundEcho({
+      userID: 'user-1',
+      sourceServiceName: ServiceNames.WahooAPI,
+      fileBuffer,
+    })).resolves.toBe(false);
+  });
+
+  it('does not mutate provisional receipts after account deletion starts', async () => {
+    const provisional = await recordActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      fileBuffer: Buffer.from('deleted-user-fit'),
+      provisional: true,
+    });
+    vi.clearAllMocks();
+    mocks.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+
+    await rollbackActivitySyncOutboundFingerprint({
+      userID: 'user-1',
+      destinationServiceName: ServiceNames.WahooAPI,
+      record: provisional,
+    });
+
+    expect(mocks.transaction.set).not.toHaveBeenCalled();
+    expect(mocks.transaction.delete).not.toHaveBeenCalled();
   });
 
   it('fails closed without writing when account deletion has started', async () => {

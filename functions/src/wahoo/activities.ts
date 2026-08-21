@@ -39,6 +39,9 @@ import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
   recordActivitySyncOutboundFingerprint,
+  markActivitySyncOutboundFingerprintProviderRequestStarted,
+  rollbackActivitySyncOutboundFingerprint,
+  type ActivitySyncOutboundFingerprintRecord,
 } from '../activity-sync/outbound-fingerprint';
 import {
   assertWahooActiveAccountGuardCurrent,
@@ -71,6 +74,10 @@ export interface WahooActivityUploadOptions {
   timeZone?: unknown;
   /** Runs after account validation and immediately before the provider request. */
   beforeProviderRequest?: () => Promise<void>;
+  /** Rolls back preparation only when no provider request was issued. */
+  onProviderRequestAborted?: () => Promise<void>;
+  /** Promote pre-request state only after the final account guard succeeds. */
+  onProviderRequestStarting?: () => Promise<void>;
 }
 
 export class WahooActivityUploadSkippedForDeletedUserError extends Error {
@@ -290,6 +297,8 @@ async function withWahooWorkoutWriteToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
   beforeProviderRequest?: () => Promise<void>,
+  onProviderRequestAborted?: () => Promise<void>,
+  onProviderRequestStarting?: () => Promise<void>,
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
@@ -315,12 +324,32 @@ async function withWahooWorkoutWriteToken<T>(
       providerUserId,
       token.accessToken,
     );
-    if (beforeProviderRequest) {
-      await beforeProviderRequest();
-      await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
+    let providerPreparationCompleted = false;
+    let providerRequestStarted = false;
+    try {
+      if (beforeProviderRequest) {
+        await beforeProviderRequest();
+        providerPreparationCompleted = true;
+        await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
+      }
+      await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
+      if (onProviderRequestStarting) {
+        await onProviderRequestStarting();
+      }
+      providerRequestStarted = true;
+      return await operation(token.accessToken);
+    } catch (error) {
+      if (providerPreparationCompleted && !providerRequestStarted && onProviderRequestAborted) {
+        try {
+          await onProviderRequestAborted();
+        } catch (rollbackError) {
+          logger.error('Could not roll back an unused Wahoo outbound fingerprint.', {
+            error: getWahooErrorLogDetails(rollbackError),
+          });
+        }
+      }
+      throw error;
     }
-    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
-    return operation(token.accessToken);
   };
 
   try {
@@ -369,7 +398,7 @@ export async function uploadActivityFileToWahoo(
         { method: 'POST', form },
       );
       return toWahooActivityUploadResult(data || {}, 'upload');
-    }, options.beforeProviderRequest);
+    }, options.beforeProviderRequest, options.onProviderRequestAborted, options.onProviderRequestStarting);
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'upload');
     if (isWahooDuplicateError(error)) {
@@ -440,16 +469,37 @@ export const importActivityToWahooAPI = onCall({
 }, async (request) => {
   const userID = await requireWahooActivityUploadAccess(request);
   const fileBuffer = toUploadBuffer(request.data?.file);
+  let outboundFingerprint: ActivitySyncOutboundFingerprintRecord | null = null;
   try {
     return await uploadActivityFileToWahoo(userID, fileBuffer, {
       filename: request.data?.filename,
       timeZone: request.data?.timeZone,
       beforeProviderRequest: async () => {
-        await recordActivitySyncOutboundFingerprint({
+        outboundFingerprint = await recordActivitySyncOutboundFingerprint({
           userID,
           destinationServiceName: ServiceNames.WahooAPI,
           fileBuffer,
+          provisional: true,
         });
+      },
+      onProviderRequestStarting: async () => {
+        if (!outboundFingerprint) {
+          throw new Error('Missing provisional Wahoo outbound fingerprint.');
+        }
+        await markActivitySyncOutboundFingerprintProviderRequestStarted({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+      },
+      onProviderRequestAborted: async () => {
+        if (!outboundFingerprint) return;
+        await rollbackActivitySyncOutboundFingerprint({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+        outboundFingerprint = null;
       },
     });
   } catch (error) {
