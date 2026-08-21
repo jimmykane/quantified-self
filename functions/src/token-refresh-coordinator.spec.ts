@@ -38,6 +38,7 @@ function isDeleteTransform(value: unknown): boolean {
 
 function createInMemoryCoordinator(initialToken: StoredToken) {
   let storedToken = initialToken ? { ...initialToken } : null;
+  let tokenRootData: Record<string, unknown> = {};
   let deletionInProgress = false;
   const companionWrites: Array<{
     ref: admin.firestore.DocumentReference;
@@ -47,9 +48,10 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
   let transactionTail = Promise.resolve();
   const userRef = { id: 'user-1', path: 'users/user-1' } as unknown as admin.firestore.DocumentReference;
   const tombstoneRef = { id: 'user-1', path: 'userDeletionTombstones/user-1' } as unknown as admin.firestore.DocumentReference;
+  const tokenRootRef = { id: 'user-1', path: 'testTokens/user-1' } as unknown as admin.firestore.DocumentReference;
   const ref = {
     path: 'testTokens/user-1/tokens/token-1',
-    parent: { parent: userRef },
+    parent: { parent: tokenRootRef },
   } as unknown as admin.firestore.DocumentReference;
   const db: InMemoryFirestore = {
     collection: (collectionName: string) => ({
@@ -69,6 +71,12 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
             return {
               exists: deletionInProgress,
               data: () => deletionInProgress ? { expireAt: Date.now() + 60_000 } : undefined,
+            };
+          }
+          if (requestedRef === tokenRootRef) {
+            return {
+              exists: Object.keys(tokenRootData).length > 0,
+              data: () => ({ ...tokenRootData }),
             };
           }
           return {
@@ -103,6 +111,12 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
     getStoredToken: () => storedToken ? { ...storedToken } : null,
     setStoredToken: (nextToken: StoredToken) => {
       storedToken = nextToken ? { ...nextToken } : null;
+    },
+    beginExplicitDisconnect: (generation: string) => {
+      tokenRootData = {
+        ...tokenRootData,
+        disconnectOperationGeneration: generation,
+      };
     },
     beginDeletion: () => {
       deletionInProgress = true;
@@ -139,6 +153,31 @@ describe('token refresh coordinator', () => {
       tokenRefreshLeaseOwner: owner.leaseOwner,
       tokenRefreshLeaseExpiresAt: 1_000 + TOKEN_REFRESH_LEASE_MS,
     }));
+  });
+
+  it('does not claim a refresh after an explicit disconnect fences the token root', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+
+    // Model a regular worker that cleared its non-transactional pre-refresh
+    // check just before the explicit disconnect commits this root fence.
+    store.beginExplicitDisconnect('disconnect-operation-1');
+
+    await expect(store.coordinator.claim(store.ref, credential, 1_000))
+      .resolves.toEqual({ kind: 'skipped_service_disconnect' });
+    expect(store.getStoredToken()).not.toHaveProperty('tokenRefreshLeaseOwner');
+  });
+
+  it('allows only the matching explicit-disconnect owner to claim the fenced token', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    store.beginExplicitDisconnect('disconnect-operation-1');
+
+    const claim = await store.coordinator.claim(store.ref, credential, 1_000, {
+      expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+    });
+
+    expect(claim.kind).toBe('owner');
   });
 
   it('rejects a stale refresh result after reauthorization replaces the credential generation', async () => {

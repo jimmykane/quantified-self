@@ -298,11 +298,20 @@ export async function getTokenData(
   }
 
   const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
-  const claimResult = await claimTokenRefresh(doc.ref, initialCredential);
+  const claimResult = await claimTokenRefresh(doc.ref, initialCredential, {
+    expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+  });
   if (claimResult.kind === 'skipped_user_deletion') {
     const userID = getFirebaseUserIDForTokenDocument(doc);
     if (userID) {
       throw new TokenRefreshSkippedForDeletedUserError(userID, serviceName, doc.id, 'before_refresh');
+    }
+    throw new TokenRefreshSupersededError(serviceName, doc.id);
+  }
+  if (claimResult.kind === 'skipped_service_disconnect') {
+    const userID = getFirebaseUserIDForTokenDocument(doc);
+    if (userID) {
+      throw new TokenUseSkippedForPendingDisconnectError(userID, serviceName, doc.id, 'before_refresh');
     }
     throw new TokenRefreshSupersededError(serviceName, doc.id);
   }
