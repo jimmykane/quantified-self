@@ -72,6 +72,11 @@
   font: var(--mat-sys-body-small);
 }
 
+.calendar-family-volume-count-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
 .calendar-family-volume-value {
   min-width: 0;
   grid-column: 2;

@@ -16,6 +16,7 @@ import {
   buildActivityCalendarVolumeStats,
 } from '../../../helpers/activity-calendar-volume.helper';
 import type { SummaryStatsSettingsLike } from '../../../helpers/summary-stats.helper';
+import type { BottomSheetHeaderTitleSegment } from '../../shared/bottom-sheet-header/bottom-sheet-header.component';
 import { SharedModule } from '../../../modules/shared.module';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
@@ -35,8 +36,14 @@ interface CalendarDayEventRow {
   label: string;
   activityType: string;
   detailLabel: string;
+  detailParts: CalendarDayEventDetailPart[];
   metricStats: ActivityCalendarFamilyVolumeStat[];
   route: string[] | null;
+}
+
+interface CalendarDayEventDetailPart {
+  text: string;
+  isNumeric: boolean;
 }
 
 @Component({
@@ -52,12 +59,15 @@ export class CalendarDayDetailsComponent {
   private readonly router = inject(Router);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   readonly data = inject<CalendarDayDetailsData>(MAT_BOTTOM_SHEET_DATA);
-  readonly title = new Intl.DateTimeFormat(this.data.locale, {
+  private readonly titleFormatter = new Intl.DateTimeFormat(this.data.locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(this.data.day.date);
+  });
+  readonly title = this.titleFormatter.format(this.data.day.date);
+  readonly titleSegments: BottomSheetHeaderTitleSegment[] = this.titleFormatter.formatToParts(this.data.day.date)
+    .map((part) => ({ text: part.value, isNumeric: part.type === 'day' || part.type === 'year' }));
   readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
   readonly familyVolumeRows = this.buildFamilyVolumeRows();
 
@@ -110,16 +120,20 @@ export class CalendarDayDetailsComponent {
         { includeDuration: false },
       )
       : [];
+    const detailParts = [
+      ...(activityTypeLabel.toLocaleLowerCase() === label.toLocaleLowerCase()
+        ? []
+        : [{ text: activityTypeLabel, isNumeric: false }]),
+      { text: timeLabel, isNumeric: !!startDate },
+      { text: durationLabel, isNumeric: durationSeconds !== null },
+    ];
     return {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
       familyId: eventFamily?.id || null,
       label,
       activityType: activityTypeLabel,
-      detailLabel: [
-        activityTypeLabel.toLocaleLowerCase() === label.toLocaleLowerCase() ? null : activityTypeLabel,
-        timeLabel,
-        durationLabel,
-      ].filter((value): value is string => !!value).join(' - '),
+      detailLabel: detailParts.map(part => part.text).join(' - '),
+      detailParts,
       metricStats,
       route: eventId && this.data.userId
         ? ['/user', this.data.userId, 'event', eventId]

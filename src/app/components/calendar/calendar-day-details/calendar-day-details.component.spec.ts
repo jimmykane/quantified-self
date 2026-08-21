@@ -28,8 +28,39 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')?.getAttribute('href'))
       .toBe('/user/user-1/event/event-1');
+    expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
+    expect([...fixture.nativeElement.querySelectorAll('.bottom-sheet-title-numeric')]
+      .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['3', '2026']);
+    expect([...fixture.nativeElement.querySelectorAll('.calendar-day-event-metric')]
+      .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
     expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
       .toEqual(['Activities', 'Activity details']);
+  });
+
+  it('uses Barlow Condensed for numeric day-detail content without changing adjacent copy', () => {
+    const detailsStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+    const listStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-volume-list/activity-calendar-volume-list.component.scss'),
+      'utf8',
+    );
+    const headerStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/bottom-sheet-header/bottom-sheet-header.component.scss'),
+      'utf8',
+    );
+
+    expect(detailsStyles).toMatch(
+      /\.calendar-day-number,\s*\.calendar-day-event-metric\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
+    );
+    expect(listStyles).toMatch(
+      /\.calendar-family-volume-count-value\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
+    );
+    expect(headerStyles).toMatch(
+      /\.bottom-sheet-title-numeric\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
+    );
   });
 
   it('keeps a family summary non-clickable when it contains multiple events', async () => {

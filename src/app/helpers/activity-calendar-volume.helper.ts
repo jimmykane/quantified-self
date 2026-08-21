@@ -34,6 +34,7 @@ export interface ActivityCalendarFamilyVolumeRow {
   icon: string;
   color: string;
   route?: string[] | null;
+  eventCount: number;
   eventCountLabel: string;
   value: number;
   maximumValue: number;
@@ -85,7 +86,8 @@ export function buildActivityCalendarFamilyVolumeRows(
       label: family.label,
       icon: AppActivityTypeGroupIcons[family.activityTypeGroup],
       color: family.color,
-      eventCountLabel: `${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}`,
+      eventCount: family.eventCount,
+      eventCountLabel: family.eventCount === 1 ? 'activity' : 'activities',
       value: aggregate.value,
       maximumValue: Math.max(1, maximumValue),
       valueLabel,

@@ -13,6 +13,7 @@ import { ActivityCalendarVolumeStatsComponent } from './activity-calendar-volume
 })
 export class ActivityCalendarVolumeListComponent {
   readonly rows = input<readonly ActivityCalendarFamilyVolumeRow[]>([]);
+  readonly emphasizeNumericText = input(false);
   readonly rowSelected = output<ActivityCalendarFamilyVolumeRow>();
 
   selectRow(row: ActivityCalendarFamilyVolumeRow): void {
