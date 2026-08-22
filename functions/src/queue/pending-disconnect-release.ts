@@ -181,7 +181,9 @@ async function releaseDeferredDocsForQuery(
     expectedGeneration?: string,
 ): Promise<number> {
     const updateData = buildDeferredQueueReleaseUpdate();
-    const deferredQuery = query.where('deferredReason', '==', deferredReason);
+    // Callers must scope deferredReason before pagination so each query's
+    // index requirements are explicit at its construction site.
+    const deferredQuery = query;
     let releasedCount = 0;
     let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
 
@@ -360,7 +362,7 @@ async function releaseDeferredDocsForQueries(
         releasedCount += await releaseDeferredDocsForQuery(
             userID,
             serviceName,
-            spec.query,
+            spec.query.where('deferredReason', '==', deferredReason),
             spec.matchesService,
             spec.logContext,
             releasedQueueItemPaths,
@@ -484,7 +486,8 @@ async function releaseQueueItemsDeferredForServiceState(
             serviceName,
             db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
                 .where('userID', '==', userID)
-                .where('deferredServiceName', '==', serviceName),
+                .where('deferredServiceName', '==', serviceName)
+                .where('deferredReason', '==', deferredReason),
             (data) => isActivitySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'activity_sync' },
             releasedQueueItemPaths,
@@ -496,7 +499,8 @@ async function releaseQueueItemsDeferredForServiceState(
             serviceName,
             routeDeliverySyncQueue
                 .where('userID', '==', userID)
-                .where('deferredServiceName', '==', serviceName),
+                .where('deferredServiceName', '==', serviceName)
+                .where('deferredReason', '==', deferredReason),
             (data) => isRouteDeliverySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'route_delivery_sync' },
             releasedQueueItemPaths,
