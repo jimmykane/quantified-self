@@ -251,6 +251,8 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('scaled against the longest-duration group');
     expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');
+    expect(calendarSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
+    expect(calendarSection?.content).toContain('do not contribute either elevation metric; their vertical movement is recorded as depth');
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
