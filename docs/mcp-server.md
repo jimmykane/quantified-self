@@ -623,7 +623,10 @@ Sports Lib 19.1.0 adds source-native dive summary classes for average/maximum de
 dive number, descent/ascent/hang times, average/maximum descent and ascent rates, starting/ending CNS and N2 loads,
 oxygen toxicity, average pressure/volume SAC, and average RMV. These become MCP metrics through the same automatic
 catalog only when the corresponding numeric stat is actually persisted. MCP does not calculate a missing summary from
-a continuous stream, promote lap-only values to an activity, or expose gas/tank records as metrics.
+a continuous stream, promote lap-only values to an activity, or expose gas/tank records as metrics. The same FIT import
+transition preserves explicit Garmin dive sub-sports as canonical Scuba Diving for single-gas, multi-gas, and gauge
+diving, and Free Diving for apnea diving and apnea hunting; MCP activity-type and Diving-group filters consume those
+persisted canonical values without adding another classification registry.
 
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat

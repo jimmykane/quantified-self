@@ -15,12 +15,17 @@ dive-ascent-rate streams. The importer preserves sparse source values and parser
 missing summaries, reconstruct streams, fill gaps, apply plausibility thresholds, promote lap-only summaries, or
 flatten gas/tank messages.
 
+The FIT importer also preserves Garmin's explicit dive sub-sport semantics: single-gas, multi-gas, and gauge diving
+become canonical Scuba Diving activities, while apnea diving and apnea hunting become Free Diving. Other dive
+sub-sports without an exact Sports Lib activity type remain canonical Diving instead of being guessed into a nearby
+type.
+
 New imports persist only the summary stats actually supplied by the source. Run an ordinary targeted reparse when a
-specific retained historical source must persist those new parser-owned summaries. Do not enable the automatic scanner
-or enqueue a global historical reparse solely for this release. Event Details hydrates continuous dive streams on
-demand from retained originals, so that view requires no persistence rewrite. MCP exposes persisted numeric summaries
-through its automatic catalog while its frozen continuous chart tools remain unchanged. Saved routes, Training
-disciplines, durability, and Training-derived schemas are unchanged.
+specific retained historical source must persist those new parser-owned summaries or corrected explicit dive activity
+type. Do not enable the automatic scanner or enqueue a global historical reparse solely for this release. Event Details
+hydrates continuous dive streams on demand from retained originals, so that view requires no persistence rewrite. MCP
+exposes persisted numeric summaries through its automatic catalog while its frozen continuous chart tools remain
+unchanged. Saved routes, Training disciplines, durability, and Training-derived schemas are unchanged.
 
 ### Sports Lib 19.0.0 stroke-rate semantics transition
 

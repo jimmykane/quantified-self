@@ -366,6 +366,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Event dive profiles
 
 - Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a pinned **Dive Profile** below Performance Charts and above the normal Event Details charts when the original source contains continuous depth samples.
+- Garmin FIT activities explicitly recorded as single-gas, multi-gas, or gauge diving are classified as **Scuba Diving**; apnea diving and apnea hunting are classified as **Free Diving**. Other dive modes remain **Diving** when there is no exact activity type.
 - Their Event Details summaries omit terrain-derived elevation metrics: **Altitude Minimum**, **Altitude Maximum**, **Average Altitude**, ascent/descent timing, grade and grade-adjusted values, VAM, and vertical speed. Dive vertical movement is represented by depth instead.
 - The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
 - Temperature, heart rate, next-stop depth/time, time to surface, no-decompression limit, CNS/N2 load, air time remaining, pressure/volume SAC, RMV, PO₂, and dive ascent rate are available one at a time from the standard chart overlay picker when the source records them. Overlays start turned off, and multi-activity events keep each selected dive separate.

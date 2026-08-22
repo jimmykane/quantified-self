@@ -1814,9 +1814,11 @@ The repository now pins Sports Lib `19.1.0`. It adds parser-owned, source-native
 streams for the Diving group. Quantified Self displays only values supplied by the retained source: it does not derive
 missing summaries from samples, reconstruct samples from summaries, fill gaps, apply plausibility thresholds, promote
 lap-only values, or flatten gas/tank messages. New imports persist the available summary stats; an ordinary targeted
-Sports Lib reparse is required only when an existing event must persist newly available parser summaries. Continuous
-Dive Profile streams are hydrated on demand from the retained source and need no Firestore rewrite. MCP exposes the
-persisted numeric summaries through its automatic catalog; its frozen continuous chart tools are unchanged.
+Sports Lib reparse is required only when an existing event must persist newly available parser summaries or the
+corrected canonical type for an explicit Garmin dive sub-sport. Single-gas, multi-gas, and gauge diving map to Scuba
+Diving; apnea diving and apnea hunting map to Free Diving; unrepresented dive sub-sports remain Diving. Continuous Dive
+Profile streams are hydrated on demand from the retained source and need no Firestore rewrite. MCP exposes the persisted
+numeric summaries through its automatic catalog; its frozen continuous chart tools are unchanged.
 
 These dive values are not Training inputs and do not change durability, Training schema 18, or any derived payload.
 Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
