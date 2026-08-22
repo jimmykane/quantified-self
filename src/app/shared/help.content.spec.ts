@@ -831,6 +831,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('authorize the same Wahoo account');
+    expect(serviceConnectionsSection?.content).toContain('disconnect the retained account first');
     expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
     expect(serviceConnectionsSection?.content).toContain('COROS activity upload, activity delivery, and route delivery are available to all eligible connected Pro users');
     expect(serviceConnectionsSection?.content).not.toMatch(/COROS[^.]*\bpilot\b|\bpilot\b[^.]*COROS/i);
@@ -975,6 +977,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo rejects repeated token refreshes');
+    expect(serviceConnectionsSection?.content).toContain('keeps unaccepted automatic activity and saved-route deliveries parked');
+    expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');

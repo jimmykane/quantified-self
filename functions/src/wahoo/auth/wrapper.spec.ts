@@ -20,13 +20,14 @@ const mocks = vi.hoisted(() => {
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
     validateOAuth2State: vi.fn(),
+    getServiceConnectionMeta: vi.fn(),
+    getActiveWahooTokenSnapshot: vi.fn(),
     tokenQueryGet,
     tokenCollection,
     tokenRoot,
     rootCollection,
     firestoreCollection,
     firestore,
-    setServiceConnectionProviderUserId: vi.fn(),
   };
 });
 
@@ -63,11 +64,18 @@ vi.mock('../../OAuth2', () => ({
   disconnectServiceForUser: vi.fn(),
   getAndSetServiceOAuth2AccessTokenForUser: mocks.getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser: mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser,
+  isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
   validateOAuth2State: mocks.validateOAuth2State,
 }));
 
 vi.mock('../../service-connection-meta', () => ({
-  setServiceConnectionProviderUserId: mocks.setServiceConnectionProviderUserId,
+  getServiceConnectionMeta: mocks.getServiceConnectionMeta,
+}));
+
+vi.mock('../account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  isWahooOAuthAccountMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'WahooOAuthAccountMismatchError',
+  normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
 }));
 
 import {
@@ -78,54 +86,97 @@ import {
 describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.setServiceConnectionProviderUserId.mockResolvedValue(true);
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
+    mocks.getServiceConnectionMeta.mockResolvedValue(null);
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValue(new Error('No Wahoo account'));
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
     mocks.hasServiceOAuthConnectAccess.mockResolvedValue(true);
     mocks.validateOAuth2State.mockResolvedValue(true);
   });
 
-  it('returns and safely mirrors only the Wahoo account ID for an authenticated user', async () => {
-    mocks.tokenQueryGet.mockResolvedValue({
-      docs: [{
-        data: () => ({
-          wahooUserID: ' 60462 ',
-          accessToken: 'server-only-access-token',
-          refreshToken: 'server-only-refresh-token',
-        }),
-      }],
+  it('passes the validated callback state into the atomic OAuth context claim', async () => {
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toBeUndefined();
+
+    expect(mocks.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'https://localhost/callback',
+      'oauth-code',
+      'oauth-state',
+    );
+  });
+
+  it('reports an OAuth context race as an invalid state', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
+      Object.assign(new Error('stale callback'), { name: 'OAuthFlowContextMismatchError', statusCode: 403 }),
+    );
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'Invalid OAuth state.',
     });
+  });
+
+  it('does not misreport a provider HTTP 403 as an invalid OAuth state', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
+      Object.assign(new Error('provider rejected code'), { statusCode: 403 }),
+    );
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: 'Wahoo rejected the authorization request.',
+    });
+  });
+
+  it('returns only the pinned Wahoo account ID for an authenticated user', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: ' 60462 ' });
 
     await expect(getWahooAPIConnectionAccount({
       auth: { uid: 'user-1' },
       app: { appId: 'app-1' },
     } as any)).resolves.toEqual({ providerUserId: '60462' });
 
-    expect(mocks.firestoreCollection).toHaveBeenCalledWith('wahooAPIAccessTokens');
-    expect(mocks.setServiceConnectionProviderUserId).toHaveBeenCalledWith(
-      'user-1',
-      ServiceNames.WahooAPI,
-      '60462',
-    );
+    expect(mocks.getActiveWahooTokenSnapshot).not.toHaveBeenCalled();
   });
 
   it('does not disclose credentials when no Wahoo account ID is available', async () => {
-    mocks.tokenQueryGet.mockResolvedValue({
-      docs: [{ data: () => ({ accessToken: 'server-only-access-token' }) }],
-    });
-
     await expect(getWahooAPIConnectionAccount({
       auth: { uid: 'user-1' },
       app: { appId: 'app-1' },
     } as any)).resolves.toEqual({ providerUserId: null });
 
-    expect(mocks.setServiceConnectionProviderUserId).not.toHaveBeenCalled();
+    expect(mocks.getActiveWahooTokenSnapshot).toHaveBeenCalledWith('user-1');
   });
 
   it('requires an authenticated user before reading the server-only token record', async () => {
     await expect(getWahooAPIConnectionAccount({ app: { appId: 'app-1' } } as any))
       .rejects.toThrow('User must be authenticated.');
 
-    expect(mocks.tokenQueryGet).not.toHaveBeenCalled();
+    expect(mocks.getServiceConnectionMeta).not.toHaveBeenCalled();
   });
 
   it('reports retryable Wahoo authorization failures as temporarily unavailable', async () => {

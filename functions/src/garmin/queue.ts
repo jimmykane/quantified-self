@@ -125,9 +125,13 @@ function markGarminQueueItemSkippedForDeletedUser(
 
 function deferGarminQueueItemForPendingDisconnect(
   queueItem: GarminAPIActivityQueueItemInterface,
+  firebaseUserID: string,
   bulkWriter?: admin.firestore.BulkWriter,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
-  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter);
+  return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, {}, {
+    userID: firebaseUserID,
+    serviceName: ServiceNames.GarminAPI,
+  });
 }
 
 
@@ -261,7 +265,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     }
     if (isTokenUseSkippedForPendingDisconnectError(e)) {
       logger.warn(`Deferring Garmin queue item ${queueItem.id} because service disconnect is pending for user ${firebaseUserID}.`);
-      return deferGarminQueueItemForPendingDisconnect(queueItem, bulkWriter);
+      return deferGarminQueueItemForPendingDisconnect(queueItem, firebaseUserID, bulkWriter);
     }
     if (e instanceof TerminalServiceAuthError) {
       logger.warn(`Garmin token for queue item ${queueItem.id} requires reconnect; moving item to DLQ with ${e.dlqContext}.`, {

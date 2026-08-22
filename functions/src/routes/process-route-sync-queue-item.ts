@@ -405,6 +405,9 @@ export async function processRouteSyncQueueItem(
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
             return deferQueueItemForPendingDisconnect(queueItem, undefined, {
                 deferredServiceName: queueItem.sourceServiceName,
+            }, {
+                userID,
+                serviceName: queueItem.sourceServiceName,
             });
         }
 

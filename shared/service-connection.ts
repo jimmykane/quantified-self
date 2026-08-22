@@ -22,6 +22,31 @@ export interface ServiceConnectionMetaFields {
   lastAuthFailureCode?: string | null;
   lastAuthFailureMessage?: string | null;
   lastDisconnectedAt?: number | null;
+  /** Server-owned generation for the latest connection-state transition. */
+  connectionStateGeneration?: string | null;
+  /** Server-owned generation for the active pending-disconnect episode. */
+  disconnectGeneration?: string | null;
+  /** Durable provider-neutral repair marker for route restoration. */
+  routeRestorePending?: boolean | null;
+  /** True after new route-restore deferrals have been transactionally fenced. */
+  routeRestoreParkingClosed?: boolean | null;
+  routeRestoreConnectionGeneration?: string | null;
+  routeRestoreLastAttemptAt?: number | null;
+  routeRestoreAttemptCount?: number | null;
+  /** Server-owned Wahoo refresh recovery state. Never stores OAuth values. */
+  wahooRefreshFailureCount?: number | null;
+  wahooRefreshFailureLastAt?: number | null;
+  wahooRefreshRetryAt?: number | null;
+  /** Server-owned repair marker for a partially completed reconnect queue release. */
+  wahooReconnectReleasePending?: boolean | null;
+  wahooReconnectReleaseLastAttemptAt?: number | null;
+  wahooReconnectReleaseAttemptCount?: number | null;
+  wahooReconnectReleaseConnectionGeneration?: string | null;
+  /** Server-owned repair marker for a bounded pending-disconnect queue release. */
+  pendingDisconnectQueueReleasePending?: boolean | null;
+  pendingDisconnectQueueReleaseLastAttemptAt?: number | null;
+  pendingDisconnectQueueReleaseAttemptCount?: number | null;
+  pendingDisconnectQueueReleaseGeneration?: string | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
   disconnectNextAttemptAt?: unknown | null;

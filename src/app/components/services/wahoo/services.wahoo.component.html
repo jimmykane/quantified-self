@@ -12,10 +12,10 @@
     [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
-    [showDetails]="isConnectedToService() || isDisconnectPending"
-    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : null"
-    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
-    [statusTone]="isDisconnectPending ? 'attention' : 'default'">
+    [showDetails]="isConnectedToService() || isReconnectRequired || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : isReconnectRequired ? 'Reconnect required' : null"
+    [statusIconOverride]="isDisconnectPending || isReconnectRequired ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending || isReconnectRequired ? 'attention' : 'default'">
     <div connection-body class="connection-details">
       @if (isDisconnectPending) {
       <div class="reconnect-required-banner" role="status">
@@ -26,17 +26,34 @@
         </div>
       </div>
       }
-      @if (isConnectedToService()) {
+      @if (isReconnectRequired) {
+      <div class="reconnect-required-banner" role="alert">
+        <mat-icon>sync_problem</mat-icon>
+        <div class="reconnect-required-banner__copy">
+          <div class="reconnect-required-banner__title">Reconnect Wahoo</div>
+          <div class="reconnect-required-banner__message">Wahoo rejected repeated token refreshes. Reconnect to resume activity sync and route delivery; queued deliveries will continue safely after reconnecting.</div>
+        </div>
+      </div>
+      }
+      @if (isConnectedToService() || isReconnectRequired) {
       <div class="connection-account-row">
         <div class="connection-account-info">
           <mat-icon class="connected-account-icon">account_circle</mat-icon>
           <div class="connected-account-copy">
             @if (wahooAccountId()) {
             <div class="connected-account-title">Wahoo account ID: {{ wahooAccountId() }}</div>
+            @if (isReconnectRequired) {
+            <div class="connected-account-line">This retained account ID identifies the Wahoo account that needs reconnection.</div>
+            } @else {
             <div class="connected-account-line">OAuth credentials are stored securely on the server.</div>
+            }
             } @else if (isLoadingWahooAccountId()) {
             <div class="connected-account-title">Loading Wahoo account ID…</div>
+            @if (isReconnectRequired) {
+            <div class="connected-account-line">Loading the retained account identifier for this connection.</div>
+            } @else {
             <div class="connected-account-line">OAuth credentials stay securely on the server.</div>
+            }
             } @else {
             <div class="connected-account-title">Wahoo account ID unavailable</div>
             <div class="connected-account-line">Reconnect Wahoo if this account ID remains unavailable.</div>
@@ -54,7 +71,7 @@
     </div>
 
     <div connection-actions class="tool-actions">
-      @if (!isConnectedToService() && !isDisconnectPending) {
+      @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting"
         (click)="connectWithService($event)">
@@ -65,8 +82,8 @@
         </span>
         } @else {
         <span class="connection-action-content">
-          <mat-icon>{{ canConnectServiceWithCurrentAccess ? 'link' : 'workspace_premium' }}</mat-icon>
-          {{ canConnectServiceWithCurrentAccess ? 'Connect' : 'View Pro plans' }}
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
+          {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
         </span>
         }
       </button>

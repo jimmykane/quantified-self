@@ -37,6 +37,7 @@ vi.mock('../../OAuth2', () => ({
     disconnectServiceForUser: vi.fn().mockResolvedValue({}),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn().mockResolvedValue({}),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn().mockResolvedValue('https://mock-redirect.com'),
+    isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
     validateOAuth2State: vi.fn().mockResolvedValue(true)
 }));
 
@@ -122,7 +123,8 @@ describe('COROS Auth Wrapper', () => {
                 'testUserID',
                 SERVICE_NAME,
                 'https://app.com/callback',
-                'validCode'
+                'validCode',
+                'validState',
             );
         });
 

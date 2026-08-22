@@ -130,6 +130,30 @@ describe('firestore indexes', () => {
             ttl: true,
             indexes: [],
         });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'wahooReconnectReleasePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'routeRestorePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'pendingDisconnectQueueReleasePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
         expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
             collectionGroup: 'tokens',
             fieldPath: 'wahooUserID',
@@ -419,6 +443,29 @@ describe('firestore indexes', () => {
             queryScope: 'COLLECTION',
             fields: [
                 {
+                    fieldPath: 'userID',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'deferredReason',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'deferredServiceName',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'routeDeliverySyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
                     fieldPath: 'processed',
                     order: 'ASCENDING',
                 },
@@ -476,6 +523,34 @@ describe('firestore indexes', () => {
             fieldPath: 'expireAt',
             ttl: true,
             indexes: [],
+        });
+    });
+
+    it('keeps deferred activity recovery queries deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'activitySyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'userID',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'deferredReason',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'deferredServiceName',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
         });
     });
 });

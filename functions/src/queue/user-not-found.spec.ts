@@ -81,6 +81,29 @@ const mockFirestore = {
         { exists: true, data: () => ({}) },
         { exists: false, data: () => undefined },
     ])),
+    runTransaction: vi.fn(async (callback: (transaction: {
+        get: ReturnType<typeof vi.fn>;
+        set: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+    }) => unknown) => {
+        let readCount = 0;
+        return callback({
+            // Event-write transactions always read the user and deletion
+            // tombstone first. Other documents in this lightweight fixture
+            // are intentionally absent.
+            get: vi.fn(async () => {
+                readCount += 1;
+                return {
+                    exists: readCount === 1,
+                    data: () => ({}),
+                };
+            }),
+            set: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+        });
+    }),
     batch: vi.fn(() => mockBatch),
     bulkWriter: vi.fn(() => ({
         set: vi.fn(),

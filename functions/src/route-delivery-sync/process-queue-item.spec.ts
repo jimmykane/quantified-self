@@ -12,6 +12,7 @@ const {
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive,
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive,
   mockMarkQueueItemSkipped,
   mockIncreaseRetryCount,
   mockMoveToDLQ,
@@ -29,7 +30,9 @@ const {
   mockIsDestinationAuthRequiredError,
   mockIsDestinationPermissionRequiredError,
   mockIsDeliveryMetadataPersistenceError,
+  mockIsWahooReconnectRequiredError,
   MockRouteSendItemError,
+  mockFinalizeDisabledSyncRouteIfCurrent,
 } = vi.hoisted(() => ({
   mockHasProAccess: vi.fn(),
   mockIsRouteEnabled: vi.fn(),
@@ -39,6 +42,7 @@ const {
   mockUpdateToProcessed: vi.fn(),
   mockDeferQueueItemForPendingDisconnect: vi.fn(),
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive: vi.fn(),
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive: vi.fn(),
   mockMarkQueueItemSkipped: vi.fn(),
   mockIncreaseRetryCount: vi.fn(),
   mockMoveToDLQ: vi.fn(),
@@ -56,6 +60,7 @@ const {
   mockIsDestinationAuthRequiredError: vi.fn(),
   mockIsDestinationPermissionRequiredError: vi.fn(),
   mockIsDeliveryMetadataPersistenceError: vi.fn(),
+  mockIsWahooReconnectRequiredError: vi.fn(),
   MockRouteSendItemError: class MockRouteSendItemError extends Error {
     constructor(
       public readonly reason: string,
@@ -65,6 +70,7 @@ const {
       this.name = 'RouteSendItemError';
     }
   },
+  mockFinalizeDisabledSyncRouteIfCurrent: vi.fn(),
 }));
 
 vi.mock('../utils', () => ({
@@ -114,6 +120,9 @@ vi.mock('../queue-utils', () => ({
   deferQueueItemForPendingDisconnectIfCurrentUserActive: (params: any) => (
     mockDeferQueueItemForPendingDisconnectIfCurrentUserActive(params)
   ),
+  deferQueueItemForReconnectRequiredIfCurrentUserActive: (params: any) => (
+    mockDeferQueueItemForReconnectRequiredIfCurrentUserActive(params)
+  ),
   markQueueItemSkipped: (...args: any[]) => mockMarkQueueItemSkipped(...args),
   increaseRetryCountForQueueItem: (...args: any[]) => mockIncreaseRetryCount(...args),
   increaseRetryCountIfCurrentUserActive: (params: any) => {
@@ -134,9 +143,25 @@ vi.mock('../queue-utils', () => ({
     );
   },
 }));
+vi.mock('../queue/sync-route-eligibility', () => ({
+  DisabledSyncRouteTransitionResult: {
+    Enabled: 'enabled',
+    DeferredForRestore: 'deferred_for_restore',
+    DisconnectPending: 'disconnect_pending',
+    ReconnectRequired: 'reconnect_required',
+    ProcessedAsDisabled: 'processed_as_disabled',
+    NotCurrent: 'not_current',
+    SkippedDeletedUser: 'skipped_deleted_user',
+  },
+  finalizeDisabledSyncRouteIfCurrent: mockFinalizeDisabledSyncRouteIfCurrent,
+}));
 
 vi.mock('../service-connection-meta', () => ({
   getServiceConnectionMeta: (...args: any[]) => mockGetServiceConnectionMeta(...args),
+}));
+
+vi.mock('../wahoo/refresh-recovery', () => ({
+  isWahooReconnectRequiredError: mockIsWahooReconnectRequiredError,
 }));
 
 vi.mock('../queue/dispatch-marker', () => ({
@@ -245,6 +270,7 @@ function mockSuccessfulPrerequisites(): void {
   mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
   mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
+  mockDeferQueueItemForReconnectRequiredIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
   mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
   mockIncreaseRetryCount.mockResolvedValue(QueueResult.RetryIncremented);
   mockMoveToDLQ.mockResolvedValue(QueueResult.MovedToDLQ);
@@ -252,6 +278,8 @@ function mockSuccessfulPrerequisites(): void {
   mockIsDestinationAuthRequiredError.mockReturnValue(false);
   mockIsDestinationPermissionRequiredError.mockReturnValue(false);
   mockIsDeliveryMetadataPersistenceError.mockReturnValue(false);
+  mockIsWahooReconnectRequiredError.mockReturnValue(false);
+  mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValue({ result: 'processed_as_disabled' });
 }
 
 describe('route-delivery-sync/process-queue-item', () => {
@@ -818,12 +846,52 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.sourceServiceName}`,
       }),
+      {
+        userID: manualQueueItem.userID,
+        serviceName: suuntoToGarminRoute.sourceServiceName,
+      },
     );
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'route_disabled',
     }));
+  });
+
+  it('defers a disabled route while atomic route restoration remains pending', async () => {
+    mockIsRouteEnabled.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({ result: 'deferred_for_restore' });
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockSetRouteDeliveryMetadata).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      skippedReason: 'route_disabled',
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it('parks a route when reconnect-required wins after the earlier lifecycle read', async () => {
+    const queueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockIsRouteEnabled.mockResolvedValue(false);
+    mockFinalizeDisabledSyncRouteIfCurrent.mockResolvedValueOnce({
+      result: 'reconnect_required',
+      serviceName: ServiceNames.WahooAPI,
+    });
+
+    const result = await processRouteDeliverySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
   it('defers manual route delivery before Garmin context creation when destination disconnect is pending', async () => {
@@ -845,10 +913,73 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
       }),
+      {
+        userID: manualQueueItem.userID,
+        serviceName: suuntoToGarminRoute.destinationServiceName,
+      },
     );
     expect(mockCreateContext).not.toHaveBeenCalled();
     expect(mockSendPreparedRoute).not.toHaveBeenCalled();
     expect(mockPersistRouteDeliveryMetadata).not.toHaveBeenCalled();
+  });
+
+  it('parks Wahoo route delivery when the destination requires reconnecting', async () => {
+    mockGetServiceConnectionMeta
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ connectionState: 'reconnect_required' });
+
+    const wahooQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(wahooQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem: wahooQueueItem,
+      phase: 'route_delivery_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+      additionalData: { deferredServiceName: ServiceNames.WahooAPI },
+    }));
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it('preserves a Wahoo route queued when reconnecting starts during context creation', async () => {
+    const reconnectError = Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      code: 'unauthenticated',
+      name: 'WahooReconnectRequiredError',
+    });
+    mockGetServiceConnectionMeta.mockResolvedValue(null);
+    mockGetRouteSendAdapter.mockReturnValue({
+      destinationServiceName: ServiceNames.WahooAPI,
+      createContext: vi.fn().mockRejectedValue(reconnectError),
+      sendRoute: vi.fn(),
+    });
+    mockIsWahooReconnectRequiredError.mockImplementation(error => error === reconnectError);
+    mockIsDestinationAuthRequiredError.mockImplementation(error => error === reconnectError);
+    const wahooQueueItem: RouteDeliverySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+
+    const result = await processRouteDeliverySyncQueueItem(wahooQueueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForReconnectRequiredIfCurrentUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem: wahooQueueItem,
+      phase: 'route_delivery_sync_reconnect_required_transition',
+      serviceName: ServiceNames.WahooAPI,
+    }));
+    expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ skippedReason: 'destination_not_connected' }),
+    );
   });
 
   it('defers when destination token use becomes blocked by pending disconnect during context creation', async () => {
@@ -867,6 +998,10 @@ describe('route-delivery-sync/process-queue-item', () => {
       expect.objectContaining({
         deferredServiceName: `${suuntoToGarminRoute.destinationServiceName}`,
       }),
+      {
+        userID: baseQueueItem.userID,
+        serviceName: suuntoToGarminRoute.destinationServiceName,
+      },
     );
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'destination_not_connected',

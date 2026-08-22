@@ -1,4 +1,3 @@
-import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -7,7 +6,13 @@ import {
   WahooAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
 import { createParsingOptions } from '../../../shared/parsing-options';
-import { deferQueueItemForPendingDisconnect, markQueueItemSkipped, QueueResult } from '../queue-utils';
+import {
+  deferQueueItemForPendingDisconnect,
+  deferQueueItemForPendingDisconnectIfCurrentUserActive,
+  deferQueueItemForReconnectRequiredIfCurrentUserActive,
+  markQueueItemSkipped,
+  QueueResult,
+} from '../queue-utils';
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
@@ -16,9 +21,15 @@ import { hasProAccess, setEvent } from '../utils';
 import { enqueueActivitySyncAfterEventPersistence } from '../activity-sync/enqueue-after-event-persistence';
 import { isActivitySyncOutboundEcho } from '../activity-sync/outbound-fingerprint';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
-import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  assertWahooActiveAccountGuardCurrentInTransaction,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+} from './account';
+import { isWahooReconnectRequiredError } from './refresh-recovery';
 import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
@@ -26,6 +37,54 @@ import {
   isClaimedWahooWorkoutQueueRevisionCurrent,
   type WahooQueueClaimResult,
 } from './queue-store';
+
+function isPendingDisconnectError(error: unknown): boolean {
+  return (error as { name?: unknown } | null)?.name === 'TokenUseSkippedForPendingDisconnectError';
+}
+
+function isWahooAccountUnavailableError(error: unknown): boolean {
+  return `${(error as { code?: unknown } | null)?.code || ''}`.endsWith('unauthenticated');
+}
+
+function isCurrentClaimedWahooRevision(
+  current: Record<string, unknown>,
+  queueItem: WahooAPIWorkoutQueueItemInterface,
+  processingOwner: string,
+): boolean {
+  return current.processingOwner === processingOwner
+    && current.workoutSummaryID === queueItem.workoutSummaryID
+    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt;
+}
+
+async function deferClaimedWahooQueueItemForReconnect(
+  queueItem: WahooAPIWorkoutQueueItemInterface,
+  userID: string,
+  processingOwner: string,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+  return deferQueueItemForReconnectRequiredIfCurrentUserActive({
+    queueItem,
+    userID,
+    serviceName: ServiceNames.WahooAPI,
+    phase: 'wahoo_workout_reconnect_required_transition',
+    logPrefix: 'WahooWorkoutQueue',
+    isCurrent: current => isCurrentClaimedWahooRevision(current, queueItem, processingOwner),
+  });
+}
+
+async function deferClaimedWahooQueueItemForPendingDisconnect(
+  queueItem: WahooAPIWorkoutQueueItemInterface,
+  userID: string,
+  processingOwner: string,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+  return deferQueueItemForPendingDisconnectIfCurrentUserActive({
+    queueItem,
+    userID,
+    serviceName: ServiceNames.WahooAPI,
+    phase: 'wahoo_workout_pending_disconnect_transition',
+    logPrefix: 'WahooWorkoutQueue',
+    isCurrent: current => isCurrentClaimedWahooRevision(current, queueItem, processingOwner),
+  });
+}
 
 function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(payload.byteLength);
@@ -41,7 +100,10 @@ export async function processWahooWorkoutQueueItem(
     return markQueueItemSkipped(queueItem, undefined, 'user_deleted_or_deleting');
   }
   if (await isServiceDisconnectPendingForUser(userID, ServiceNames.WahooAPI)) {
-    return deferQueueItemForPendingDisconnect(queueItem);
+    return deferQueueItemForPendingDisconnect(queueItem, undefined, {}, {
+      userID,
+      serviceName: ServiceNames.WahooAPI,
+    });
   }
   const processingOwner = crypto.randomUUID();
   const claimResult: WahooQueueClaimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);
@@ -59,18 +121,8 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'pro_access_required',
       });
     }
-    const tokenSnapshot = await admin.firestore()
-      .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-      .doc(userID)
-      .collection('tokens')
-      .doc(queueItem.wahooUserID)
-      .get();
-    if (!tokenSnapshot.exists || tokenSnapshot.data()?.serviceName !== ServiceNames.WahooAPI) {
-      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
-        resultStatus: 'skipped',
-        skippedReason: 'provider_not_connected',
-      });
-    }
+    await getActiveWahooTokenSnapshot(userID, queueItem.wahooUserID);
+    const accountGuard = await captureWahooActiveAccountGuard(userID, queueItem.wahooUserID);
 
     const fitFile = await downloadWahooFITFile(queueItem.FITFileURI);
     const event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(fitFile), createParsingOptions());
@@ -98,6 +150,10 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'outbound_provider_echo',
       });
     }
+    // Event-ID resolution persists a provider-identity reservation. Guard it
+    // separately from the later event write so neither durable mutation can
+    // be attributed to an account that was replaced during parsing.
+    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
     const eventID = await resolveProviderImportEventID({
       userID,
       startDate: event.startDate,
@@ -107,6 +163,13 @@ export async function processWahooWorkoutQueueItem(
       providerEventSecondaryID: queueItem.wahooUserID,
       providerEventSecondaryIDField: 'serviceUserID',
       preferProviderIdentityEventID: true,
+      assertWriteAuthorizationInTransaction: async (_db, transaction) => {
+        await assertWahooActiveAccountGuardCurrentInTransaction(
+          transaction,
+          userID,
+          accountGuard,
+        );
+      },
     });
     const metadata = new WahooAPIEventMetaData(
       queueItem.workoutID,
@@ -118,6 +181,13 @@ export async function processWahooWorkoutQueueItem(
       queueItem.edited,
       queueItem.fitnessAppID,
     );
+    // Event-id migration can also outlive a disconnect/reconnect. Prove this
+    // inbound item still belongs to the same connection immediately before
+    // the event and original-file persistence transaction.
+    if (!(await isClaimedWahooWorkoutQueueRevisionCurrent(queueItem, processingOwner))) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    }
+    await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
     const setEventResult = await setEvent(
       userID,
       eventID,
@@ -127,7 +197,16 @@ export async function processWahooWorkoutQueueItem(
       undefined,
       undefined,
       undefined,
-      { stageOriginalFilesUntilEventWrite: true },
+      {
+        stageOriginalFilesUntilEventWrite: true,
+        assertWriteAuthorizationInTransaction: async (_db, transaction) => {
+          await assertWahooActiveAccountGuardCurrentInTransaction(
+            transaction,
+            userID,
+            accountGuard,
+          );
+        },
+      },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
@@ -145,6 +224,18 @@ export async function processWahooWorkoutQueueItem(
     }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
   } catch (error) {
+    if (isWahooReconnectRequiredError(error)) {
+      return deferClaimedWahooQueueItemForReconnect(queueItem, userID, processingOwner);
+    }
+    if (isPendingDisconnectError(error)) {
+      return deferClaimedWahooQueueItemForPendingDisconnect(queueItem, userID, processingOwner);
+    }
+    if (isWahooAccountUnavailableError(error)) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped',
+        skippedReason: 'provider_not_connected',
+      });
+    }
     logger.error('Wahoo activity processing failed', {
       queueItemId: queueItem.id,
       error: getWahooErrorLogDetails(error),

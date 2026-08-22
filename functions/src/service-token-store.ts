@@ -3,6 +3,61 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceAdapter } from './auth/factory';
 
+export const OAUTH_FLOW_GENERATION_FIELD = 'oauthFlowGeneration';
+export const SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD = 'disconnectOperationGeneration';
+export const SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD = 'disconnectOperationLeaseExpiresAt';
+
+/**
+ * Explicit disconnects fence OAuth and token use while provider cleanup is in
+ * flight. The lease deliberately exceeds callable execution time, but still
+ * expires so a crashed invocation cannot strand the connection forever.
+ */
+export const EXPLICIT_DISCONNECT_OPERATION_LEASE_MS = 10 * 60 * 1000;
+
+function normalizeGeneration(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeLeaseExpiry(value: unknown): number {
+  const expiresAt = Number(value);
+  return Number.isFinite(expiresAt) ? expiresAt : 0;
+}
+
+export function getServiceDisconnectOperationGeneration(
+  data: object | null | undefined,
+): string | null {
+  const rootData = data as Record<string, unknown> | null | undefined;
+  return normalizeGeneration(rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]) || null;
+}
+
+export function getActiveServiceDisconnectOperationGeneration(
+  data: object | null | undefined,
+  nowMs = Date.now(),
+): string | null {
+  const rootData = data as Record<string, unknown> | null | undefined;
+  const generation = getServiceDisconnectOperationGeneration(rootData);
+  const expiresAt = normalizeLeaseExpiry(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]);
+  return generation && expiresAt > nowMs ? generation : null;
+}
+
+/**
+ * A normal worker may proceed only after the explicit-disconnect fence has
+ * been explicitly recovered or finished. An expired fence may be reclaimed
+ * by OAuth or a disconnect retry, but must not silently resume sync after a
+ * user-initiated disconnect.
+ * The explicit-disconnect owner may proceed only while its own lease remains
+ * current, so an expired owner cannot resume after a recovery has started.
+ */
+export function doesServiceDisconnectOperationPermitTokenUse(
+  data: object | null | undefined,
+  expectedGeneration: string | undefined,
+  nowMs = Date.now(),
+): boolean {
+  const expected = normalizeGeneration(expectedGeneration);
+  if (!expected) return getServiceDisconnectOperationGeneration(data) === null;
+  return getActiveServiceDisconnectOperationGeneration(data, nowMs) === expected;
+}
+
 function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot): boolean {
   if (!snapshot.exists) {
     return false;
@@ -11,11 +66,16 @@ function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot):
   const data = snapshot.data() as Record<string, unknown> | undefined;
   const state = typeof data?.state === 'string' ? data.state.trim() : '';
   const codeVerifier = typeof data?.codeVerifier === 'string' ? data.codeVerifier.trim() : '';
-  return state.length > 0 || codeVerifier.length > 0;
+  const oauthFlowGeneration = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
+    ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
+    : '';
+  return state.length > 0 || codeVerifier.length > 0 || oauthFlowGeneration.length > 0;
 }
 
 export interface DeleteLocalServiceTokenOptions {
   preserveOAuthFlowContext?: boolean;
+  /** Keep an empty root so a later guarded lifecycle transaction can still verify its generation. */
+  preserveTokenRootWhenEmpty?: boolean;
   shouldDeleteInTransaction?: (transaction: admin.firestore.Transaction) => Promise<boolean>;
 }
 
@@ -73,7 +133,9 @@ export async function deleteLocalServiceToken(
 
     transaction.delete(tokenDocRef);
 
-    if (remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow) {
+    if (remainingTokenCount === 0
+      && !tokenRootPreservedForOAuthFlow
+      && options.preserveTokenRootWhenEmpty !== true) {
       // Service token roots only store root fields plus the `tokens` subcollection.
       // After deleting the final token doc in this transaction, no descendants remain on the root.
       transaction.delete(userDocRef);
@@ -85,7 +147,9 @@ export async function deleteLocalServiceToken(
     }
 
     return {
-      tokenRootDeleted: remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow,
+      tokenRootDeleted: remainingTokenCount === 0
+        && !tokenRootPreservedForOAuthFlow
+        && options.preserveTokenRootWhenEmpty !== true,
       tokenRootPreservedForOAuthFlow,
       remainingTokenCount,
       skippedByCondition: false,

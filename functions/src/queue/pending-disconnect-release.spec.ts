@@ -19,30 +19,55 @@ const hoisted = vi.hoisted(() => {
 
     const collections = new Map<string, StoredDoc[]>();
     const getFailures = new Map<string, Error>();
+    const beforeTransactionRead = new Map<string, () => void>();
+    const serviceConnectionMeta = new Map<string, Record<string, unknown>>();
     const deleteSentinel = { delete: true };
     const timestampFromDate = vi.fn((date: Date) => date);
+    const getUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+    });
 
-    const makeQuery = (collectionName: string, filters: Filter[] = []) => ({
+    const makeQuery = (
+        collectionName: string,
+        filters: Filter[] = [],
+        startAfterID: string | null = null,
+        pageLimit: number | null = null,
+    ) => ({
         where: vi.fn((field: string, operator: string, value: unknown) => {
             if (operator !== '==') {
                 throw new Error(`Unexpected operator ${operator}`);
             }
             return makeQuery(collectionName, [...filters, { field, value }]);
         }),
+        orderBy: vi.fn(() => makeQuery(collectionName, filters, startAfterID, pageLimit)),
+        limit: vi.fn((limit: number) => makeQuery(collectionName, filters, startAfterID, limit)),
+        startAfter: vi.fn((doc: { id: string }) => makeQuery(collectionName, filters, doc.id, pageLimit)),
         get: vi.fn(async () => {
             const getFailure = getFailures.get(collectionName);
             if (getFailure) {
                 throw getFailure;
             }
 
-            const docs = (collections.get(collectionName) || [])
+            const matchingDocs = (collections.get(collectionName) || [])
                 .filter((doc) => filters.every((filter) => doc.data[filter.field] === filter.value))
+                .sort((left, right) => left.id.localeCompare(right.id));
+            const startIndex = startAfterID
+                ? matchingDocs.findIndex(doc => doc.id === startAfterID) + 1
+                : 0;
+            const docs = matchingDocs
+                .slice(
+                    Math.max(0, startIndex),
+                    pageLimit === null ? undefined : Math.max(0, startIndex) + pageLimit,
+                )
                 .map((doc) => ({
                     id: doc.id,
                     data: () => doc.data,
                     ref: {
                         path: `${collectionName}/${doc.id}`,
                         update: doc.update,
+                        storedDoc: doc,
                     },
                 }));
 
@@ -51,17 +76,72 @@ const hoisted = vi.hoisted(() => {
                 docs,
             };
         }),
-        doc: vi.fn((docID: string) => ({
-            collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
-        })),
+        doc: vi.fn((docID: string) => {
+            const storedDoc = (collections.get(collectionName) || []).find(doc => doc.id === docID);
+            return {
+                path: `${collectionName}/${docID}`,
+                storedDoc,
+                collection: vi.fn((subcollectionName: string) => makeQuery(`${collectionName}/${docID}/${subcollectionName}`)),
+            };
+        }),
     });
 
     return {
         collections,
         getFailures,
+        beforeTransactionRead,
+        serviceConnectionMeta,
         deleteSentinel,
         timestampFromDate,
+        getUserDeletionGuardStateInTransaction,
         collection: vi.fn((collectionName: string) => makeQuery(collectionName)),
+        runTransaction: vi.fn(async (runner: (transaction: {
+            get: (ref: { path: string; storedDoc?: StoredDoc }) => Promise<{ exists: boolean; data: () => Record<string, unknown> | undefined }>;
+            update: (ref: { path: string; storedDoc?: StoredDoc; update: ReturnType<typeof vi.fn> }, data: Record<string, unknown>) => void;
+        }) => unknown) => {
+            const pendingUpdates: Array<{
+                ref: { path: string; storedDoc?: StoredDoc; update: ReturnType<typeof vi.fn> };
+                data: Record<string, unknown>;
+                result: unknown;
+            }> = [];
+            const result = await runner({
+                get: async (ref) => {
+                    const hook = beforeTransactionRead.get(ref.path);
+                    if (hook) {
+                        beforeTransactionRead.delete(ref.path);
+                        hook();
+                    }
+                    const serviceMeta = serviceConnectionMeta.get(ref.path);
+                    if (serviceMeta) {
+                        return {
+                            exists: true,
+                            data: () => serviceMeta,
+                        };
+                    }
+                    const storedDoc = ref.storedDoc;
+                    return {
+                        exists: Boolean(storedDoc),
+                        data: () => storedDoc ? storedDoc.data : undefined,
+                    };
+                },
+                update: (ref, data) => {
+                    pendingUpdates.push({ ref, data, result: ref.update(data) });
+                },
+            });
+            await Promise.all(pendingUpdates.map(update => update.result));
+            for (const update of pendingUpdates) {
+                const storedDoc = update.ref.storedDoc;
+                if (!storedDoc) continue;
+                for (const [key, value] of Object.entries(update.data)) {
+                    if (value === deleteSentinel) {
+                        delete storedDoc.data[key];
+                    } else {
+                        storedDoc.data[key] = value;
+                    }
+                }
+            }
+            return result;
+        }),
         loggerInfo: vi.fn(),
         loggerError: vi.fn(),
     };
@@ -70,6 +150,7 @@ const hoisted = vi.hoisted(() => {
 vi.mock('firebase-admin', () => {
     const firestore = () => ({
         collection: hoisted.collection,
+        runTransaction: hoisted.runTransaction,
     });
 
     return {
@@ -79,6 +160,9 @@ vi.mock('firebase-admin', () => {
 });
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldPath: {
+        documentId: () => '__name__',
+    },
     FieldValue: {
         delete: vi.fn(() => hoisted.deleteSentinel),
     },
@@ -92,13 +176,30 @@ vi.mock('firebase-functions/logger', () => ({
     error: hoisted.loggerError,
 }));
 
-import { releaseQueueItemsDeferredForPendingDisconnect } from './pending-disconnect-release';
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        readonly name = 'UserDeletionGuardReadError';
+    },
+}));
+
+import {
+    releaseQueueItemsDeferredForPendingDisconnect,
+    releaseQueueItemsDeferredForReconnectRequired,
+} from './pending-disconnect-release';
 
 describe('pending disconnect queue release', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.collections.clear();
         hoisted.getFailures.clear();
+        hoisted.beforeTransactionRead.clear();
+        hoisted.serviceConnectionMeta.clear();
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
     });
 
     afterEach(() => {
@@ -119,6 +220,32 @@ describe('pending disconnect queue release', () => {
 
     function failCollectionGet(collectionName: string, error: Error): void {
         hoisted.getFailures.set(collectionName, error);
+    }
+
+    function advanceQueueItemBeforeReleaseTransaction(
+        collectionName: string,
+        id: string,
+        advance: (data: Record<string, unknown>) => void,
+    ): void {
+        hoisted.beforeTransactionRead.set(`${collectionName}/${id}`, () => {
+            const storedDoc = (hoisted.collections.get(collectionName) || []).find(doc => doc.id === id);
+            if (storedDoc) advance(storedDoc.data);
+        });
+    }
+
+    function setServiceConnectionState(userID: string, serviceName: ServiceNames, connectionState: string): void {
+        hoisted.serviceConnectionMeta.set(`users/${userID}/meta/${serviceName}`, { connectionState });
+    }
+
+    function setPendingDisconnectQueueReleaseRepair(
+        userID: string,
+        serviceName: ServiceNames,
+        generation: string,
+    ): void {
+        hoisted.serviceConnectionMeta.set(`users/${userID}/meta/${serviceName}`, {
+            pendingDisconnectQueueReleasePending: true,
+            pendingDisconnectQueueReleaseGeneration: generation,
+        });
     }
 
     it('releases deferred queue items for the restored service without touching other services', async () => {
@@ -190,6 +317,227 @@ describe('pending disconnect queue release', () => {
         expect(otherRouteDeliveryUpdate).not.toHaveBeenCalled();
         expect(notDeferredSleepUpdate).not.toHaveBeenCalled();
         expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not let another service consume the target service release page budget', async () => {
+        const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+        const otherServiceUpdates = Array.from({ length: 500 }, (_, index) => addDoc(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            `garmin-${`${index}`.padStart(3, '0')}`,
+            {
+                userID: 'user-1',
+                deferredReason,
+                deferredServiceName: ServiceNames.GarminAPI,
+            },
+        ));
+        const targetUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'suunto-target', {
+            userID: 'user-1',
+            deferredReason,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+        )).resolves.toBe(1);
+
+        expect(targetUpdate).toHaveBeenCalledTimes(1);
+        for (const otherServiceUpdate of otherServiceUpdates) {
+            expect(otherServiceUpdate).not.toHaveBeenCalled();
+        }
+    });
+
+    it('releases only Wahoo work parked for reconnect after a successful OAuth callback', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const reconnectReason = QUEUE_DEFERRED_REASONS.ServiceReconnectRequired;
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const routeDeliveryUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-wahoo', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const pendingDisconnectUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-pending-disconnect', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+        const otherServiceUpdate = addDoc(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'route-other', {
+            userID: 'user-1',
+            deferredReason: reconnectReason,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(2);
+
+        for (const update of [activityUpdate, routeDeliveryUpdate]) {
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: false,
+                dispatchedToCloudTask: null,
+                deferredReason: hoisted.deleteSentinel,
+                serviceReconnectRequiredDeferredAt: hoisted.deleteSentinel,
+            }));
+        }
+        expect(pendingDisconnectUpdate).not.toHaveBeenCalled();
+        expect(otherServiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('bounds reconnect releases and resumes from the remaining deferred page on retry', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const updates = Array.from({ length: 501 }, (_, index) => addDoc(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            `activity-${`${index}`.padStart(3, '0')}`,
+            {
+                userID: 'user-1',
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+                deferredServiceName: ServiceNames.WahooAPI,
+            },
+        ));
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI))
+            .rejects.toThrow('reached its bounded page limit');
+
+        expect(updates.filter(update => update.mock.calls.length > 0)).toHaveLength(500);
+        expect(updates[500]).not.toHaveBeenCalled();
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI))
+            .resolves.toBe(1);
+        expect(updates[500]).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not overwrite a queue item claimed after a reconnect-release query was read', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+            processed: true,
+            dispatchedToCloudTask: Number.MAX_SAFE_INTEGER,
+        });
+        advanceQueueItemBeforeReleaseTransaction(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', data => {
+            delete data.deferredReason;
+            delete data.deferredServiceName;
+            data.processed = false;
+            data.dispatchedToCloudTask = Number.MAX_SAFE_INTEGER - 1;
+            data.providerOperationStartedAt = 1_782_126_100_000;
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release an older pending-disconnect generation into a newer pending episode', async () => {
+        addDoc('suuntoAppAccessTokens', 'user-1', {
+            disconnectState: 'disconnect_pending',
+            disconnectGeneration: 'pending-generation-2',
+        });
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+            serviceDisconnectPendingGeneration: 'pending-generation-1',
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('releases older parked generations after the authoritative pending root is clear', async () => {
+        setPendingDisconnectQueueReleaseRepair('user-1', ServiceNames.SuuntoApp, 'pending-generation-1');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+            serviceDisconnectPendingGeneration: 'pending-generation-2',
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(1);
+
+        expect(activityUpdate).toHaveBeenCalled();
+    });
+
+    it('does not reopen pending work after completed explicit disconnect removes the repair marker and token root', async () => {
+        setPendingDisconnectQueueReleaseRepair('user-1', ServiceNames.SuuntoApp, 'pending-generation-1');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+        hoisted.beforeTransactionRead.set(`users/user-1/meta/${ServiceNames.SuuntoApp}`, () => {
+            hoisted.serviceConnectionMeta.delete(`users/user-1/meta/${ServiceNames.SuuntoApp}`);
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release pending-disconnect work after an explicit disconnect fences the token root', async () => {
+        addDoc('suuntoAppAccessTokens', 'user-1', {
+            disconnectOperationGeneration: 'disconnect-operation-1',
+            disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+        });
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not release reconnect-parked work after a concurrent Wahoo disconnect', async () => {
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not recreate a deferred queue item when account deletion begins before the release transaction', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+            processed: true,
+        });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
     });
 
     it('releases legacy workout, sleep, and route queue items by provider identifier when local user fields are missing', async () => {

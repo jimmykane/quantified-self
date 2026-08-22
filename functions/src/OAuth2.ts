@@ -20,17 +20,50 @@ import {
 } from './service-auth-lifecycle';
 import {
   clearServiceDisconnectPending,
+  getServiceDisconnectLifecycleGuardFromRootData,
   resumeServiceDisconnectRetryAfterRecoveryFailure,
+  type ServiceDisconnectLifecycleGuard,
 } from './service-disconnect-pending';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
-  UserDeletionGuardState,
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
 import { hasProAccess } from './utils';
+import {
+  EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
+  OAUTH_FLOW_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD,
+  getActiveServiceDisconnectOperationGeneration,
+  getServiceTokenRootDocumentRef,
+} from './service-token-store';
+import {
+  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+  type DocumentGenerationGuard,
+} from './token-refresh-coordinator';
+import { assertWahooOAuthAccountCompatible } from './wahoo/account';
 export { deleteLocalServiceToken } from './service-token-store';
+
+interface PersistedOAuthCredentialGuard {
+  rootGenerationGuard: DocumentGenerationGuard;
+  oauthFlowGenerationGuard: DocumentGenerationGuard;
+  tokenRef: admin.firestore.DocumentReference;
+  tokenCredentialGeneration: string;
+}
+
+export { OAUTH_FLOW_GENERATION_FIELD } from './service-token-store';
+
+interface ClaimedOAuthFlowContext {
+  data: Record<string, unknown>;
+  generation: string;
+}
+
+interface ExplicitDisconnectOperation {
+  lifecycleGuard: ServiceDisconnectLifecycleGuard;
+  tokenQuerySnapshot: admin.firestore.QuerySnapshot;
+}
 
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
   public readonly name = 'OAuthServiceConnectionSkippedForDeletedUserError';
@@ -43,6 +76,29 @@ class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
     public readonly phase: string,
   ) {
     super(`Skipping ${serviceName} OAuth write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+  }
+}
+
+export class OAuthFlowContextMismatchError extends Error {
+  public readonly name = 'OAuthFlowContextMismatchError';
+  public readonly statusCode = 403;
+
+  constructor(serviceName: ServiceNames) {
+    super(`The ${serviceName} OAuth callback does not match the active authorization flow.`);
+  }
+}
+
+export function isOAuthFlowContextMismatchError(error: unknown): error is OAuthFlowContextMismatchError {
+  return error instanceof OAuthFlowContextMismatchError
+    || (error instanceof Error && error.name === 'OAuthFlowContextMismatchError');
+}
+
+class ServiceDisconnectInProgressError extends Error {
+  public readonly name = 'ServiceDisconnectInProgressError';
+  public readonly statusCode = 409;
+
+  constructor(serviceName: ServiceNames) {
+    super(`Finish disconnecting ${serviceName} before starting another connection operation.`);
   }
 }
 
@@ -64,15 +120,16 @@ async function assertOAuthUserCanWriteServiceState(
   }
 }
 
-async function setOAuthStateIfUserActive(
+async function beginOAuthFlowIfUserActive(
   userID: string,
   serviceName: ServiceNames,
   tokenCollectionName: string,
-  tokenData: Record<string, unknown>,
-): Promise<void> {
+  state: string,
+): Promise<string> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
-  await db.runTransaction(async (transaction) => {
+  const generation = crypto.randomUUID();
+  await db.runTransaction(async transaction => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -83,7 +140,248 @@ async function setOAuthStateIfUserActive(
       logger.warn(`Skipping ${serviceName} OAuth state write for user ${userID} because the user is missing or deletion is in progress.`);
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_state_write:${serviceName}`);
     }
-    transaction.set(tokenRootRef, tokenData, { merge: true });
+    const rootSnapshot = await transaction.get(tokenRootRef);
+    if (getActiveServiceDisconnectOperationGeneration(
+      rootSnapshot.data() as Record<string, unknown> | undefined,
+    )) {
+      throw new ServiceDisconnectInProgressError(serviceName);
+    }
+
+    // This is the first durable action in an OAuth-start request. Disconnects
+    // and newer starts rotate this generation, so any delayed preparation can
+    // only publish state for the lifecycle episode it actually claimed.
+    transaction.set(tokenRootRef, {
+      state,
+      codeVerifier: FieldValue.delete(),
+      [OAUTH_FLOW_GENERATION_FIELD]: generation,
+      // A prior process may have died after claiming an explicit disconnect.
+      // Starting a new OAuth episode is the safe recovery point for an
+      // expired fence and invalidates that old owner.
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
+    }, { merge: true });
+  });
+  return generation;
+}
+
+async function completeOAuthFlowPreparationIfCurrent(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+  generation: string,
+  context: Record<string, unknown> | null | undefined,
+): Promise<void> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  await db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_state_finalize:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_state_finalize:${serviceName}`);
+    }
+
+    const snapshot = await transaction.get(tokenRootRef);
+    if (
+      !snapshot.exists
+      || snapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== generation
+      || getActiveServiceDisconnectOperationGeneration(
+        snapshot.data() as Record<string, unknown> | undefined,
+      )
+    ) {
+      throw new OAuthFlowContextMismatchError(serviceName);
+    }
+    transaction.set(tokenRootRef, {
+      ...(context && Object.keys(context).length > 0 ? context : {}),
+      // If a disconnect lease elapsed between OAuth start and this write, the
+      // winning OAuth flow fences the old cleanup before publishing context.
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
+    }, { merge: true });
+  });
+}
+
+async function abandonOAuthFlowPreparationIfCurrent(
+  userID: string,
+  tokenCollectionName: string,
+  generation: string,
+): Promise<void> {
+  const tokenRootRef = admin.firestore().collection(tokenCollectionName).doc(userID);
+  await admin.firestore().runTransaction(async transaction => {
+    const snapshot = await transaction.get(tokenRootRef);
+    if (!snapshot.exists || snapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== generation) return;
+    transaction.set(tokenRootRef, {
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+      [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
+    }, { merge: true });
+  });
+}
+
+async function finishRejectedOAuthFlowIfCurrent(
+  userID: string,
+  tokenCollectionName: string,
+  generation: string,
+): Promise<void> {
+  const tokenRootRef = admin.firestore().collection(tokenCollectionName).doc(userID);
+  await admin.firestore().runTransaction(async transaction => {
+    const [rootSnapshot, tokenSnapshot] = await Promise.all([
+      transaction.get(tokenRootRef),
+      transaction.get(tokenRootRef.collection('tokens').limit(1)),
+    ]);
+    if (!rootSnapshot.exists || rootSnapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== generation) return;
+
+    if (tokenSnapshot.empty) {
+      // The rejected callback's provider token has been deauthorized and no
+      // stored credential remains. Delete the lifecycle root atomically so a
+      // claimed callback cannot masquerade as a pending reconnect forever.
+      transaction.delete(tokenRootRef);
+      return;
+    }
+    transaction.set(tokenRootRef, {
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+      [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
+    }, { merge: true });
+  });
+}
+
+/**
+ * Claims and consumes the exact callback context in one transaction. OAuth
+ * state and PKCE verifiers are single-use: an older callback must never read
+ * or delete context installed by a newer authorization attempt.
+ */
+async function claimOAuthFlowContext(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+  expectedState: string,
+): Promise<ClaimedOAuthFlowContext> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_context_claim:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(
+        userID,
+        serviceName,
+        `oauth_context_claim:${serviceName}`,
+      );
+    }
+
+    const snapshot = await transaction.get(tokenRootRef);
+    const data = snapshot.data() as Record<string, unknown> | undefined;
+    const generation = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
+      ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
+      : '';
+    if (!snapshot.exists || data?.state !== expectedState || !generation) {
+      throw new OAuthFlowContextMismatchError(serviceName);
+    }
+
+    transaction.update(tokenRootRef, {
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+    });
+    return { data, generation };
+  });
+}
+
+async function beginExplicitDisconnectOperation(
+  userID: string,
+  serviceName: ServiceNames,
+  tokenCollectionName: string,
+): Promise<ExplicitDisconnectOperation> {
+  const db = admin.firestore();
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, `oauth_disconnect_invalidate:${serviceName}`, error);
+    }
+    if (deletionGuard.shouldSkip) {
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(
+        userID,
+        serviceName,
+        `oauth_disconnect_invalidate:${serviceName}`,
+      );
+    }
+
+    const [rootSnapshot, tokenSnapshots] = await Promise.all([
+      transaction.get(tokenRootRef),
+      transaction.get(tokenRootRef.collection('tokens')),
+    ]);
+    // The first explicit disconnect owns this root fence until its finally
+    // block completes. A second request must not replace that generation: the
+    // first may already be deauthorizing the provider credential.
+    const rootData = rootSnapshot.exists
+      ? rootSnapshot.data() as Record<string, unknown>
+      : undefined;
+    if (getActiveServiceDisconnectOperationGeneration(rootData)) {
+      throw new ServiceDisconnectInProgressError(serviceName);
+    }
+    const nowMs = Date.now();
+    const refreshIsActive = tokenSnapshots.docs.some(snapshot => {
+      const tokenData = typeof snapshot.data === 'function' ? snapshot.data() : undefined;
+      const leaseOwner = `${tokenData?.tokenRefreshLeaseOwner || ''}`.trim();
+      const leaseExpiresAt = Number(tokenData?.tokenRefreshLeaseExpiresAt || 0);
+      return leaseOwner && Number.isFinite(leaseExpiresAt) && leaseExpiresAt > nowMs;
+    });
+    if (refreshIsActive) {
+      throw new ServiceDisconnectInProgressError(serviceName);
+    }
+    const invalidatedOAuthFlowGeneration = crypto.randomUUID();
+    const disconnectOperationGeneration = crypto.randomUUID();
+    const nextRootData = {
+      ...(rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : {}),
+      [OAUTH_FLOW_GENERATION_FIELD]: invalidatedOAuthFlowGeneration,
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: disconnectOperationGeneration,
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: nowMs + EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
+      state: FieldValue.delete(),
+      codeVerifier: FieldValue.delete(),
+    };
+    transaction.set(tokenRootRef, nextRootData, { merge: true });
+    return {
+      lifecycleGuard: getServiceDisconnectLifecycleGuardFromRootData({
+        ...nextRootData,
+        state: undefined,
+        codeVerifier: undefined,
+      }),
+      tokenQuerySnapshot: tokenSnapshots,
+    };
+  });
+}
+
+async function finishExplicitDisconnectOperation(
+  userID: string,
+  serviceName: ServiceNames,
+  guard: ServiceDisconnectLifecycleGuard,
+): Promise<void> {
+  const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  await admin.firestore().runTransaction(async transaction => {
+    const snapshot = await transaction.get(rootRef);
+    if (!snapshot.exists) return;
+    const current = getServiceDisconnectLifecycleGuardFromRootData(
+      snapshot.data() as Record<string, unknown>,
+    );
+    if (
+      current.oauthFlowGeneration !== guard.oauthFlowGeneration
+      || current.disconnectOperationGeneration !== guard.disconnectOperationGeneration
+    ) return;
+    transaction.set(rootRef, {
+      [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
+    }, { merge: true });
   });
 }
 
@@ -93,9 +391,15 @@ async function setOAuthTokenIfUserActive(
   tokenCollectionName: string,
   tokenID: string,
   tokenData: Record<string, unknown>,
-): Promise<void> {
+  expectedOAuthFlowGeneration: string,
+): Promise<PersistedOAuthCredentialGuard> {
   const db = admin.firestore();
-  const tokenDocRef = db.collection(tokenCollectionName).doc(userID).collection('tokens').doc(tokenID);
+  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
+  const tokenDocRef = tokenRootRef.collection('tokens').doc(tokenID);
+  const persistedTokenData = {
+    ...tokenData,
+    tokenCredentialGeneration: crypto.randomUUID(),
+  };
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -107,44 +411,84 @@ async function setOAuthTokenIfUserActive(
       logger.warn(`Skipping ${serviceName} OAuth token write for user ${userID} because the user is missing or deletion is in progress.`);
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_token_write:${serviceName}`);
     }
-    transaction.set(tokenDocRef, tokenData);
+    const tokenRootSnapshot = await transaction.get(tokenRootRef);
+    if (
+      !tokenRootSnapshot.exists
+      || tokenRootSnapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== expectedOAuthFlowGeneration
+    ) {
+      throw new OAuthFlowContextMismatchError(serviceName);
+    }
+    // A reauthorization replaces the credential generation atomically with
+    // the provider token. A refresh worker that started from an older
+    // snapshot can therefore never persist over the newly authorized token.
+    transaction.set(tokenRootRef, {
+      [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
+    }, { merge: true });
+    transaction.set(tokenDocRef, persistedTokenData);
   });
+  return {
+    rootGenerationGuard: {
+      documentRef: tokenRootRef,
+      fieldName: ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+      expectedGeneration: persistedTokenData.tokenCredentialGeneration,
+    },
+    oauthFlowGenerationGuard: {
+      documentRef: tokenRootRef,
+      fieldName: OAUTH_FLOW_GENERATION_FIELD,
+      expectedGeneration: expectedOAuthFlowGeneration,
+    },
+    tokenRef: tokenDocRef,
+    tokenCredentialGeneration: persistedTokenData.tokenCredentialGeneration,
+  };
 }
 
-async function cleanupOAuthFlowContext(
+/**
+ * Removes only the credential written by a callback that lost to a newer OAuth
+ * generation. If the same provider account reused the token document, the
+ * winning callback's generation makes this a no-op.
+ */
+async function deleteSupersededOAuthCredentialIfCurrent(
   userID: string,
   serviceName: ServiceNames,
-  tokenCollectionName: string,
-  tokenPersisted: boolean,
-): Promise<void> {
+  guard: PersistedOAuthCredentialGuard,
+): Promise<boolean> {
   const db = admin.firestore();
-  const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
-  let deletionGuard: UserDeletionGuardState;
-
-  try {
-    deletionGuard = await getUserDeletionGuardState(db, userID);
-  } catch (error) {
-    throw new UserDeletionGuardReadError(userID, `oauth_context_cleanup:${serviceName}`, error);
-  }
-
-  if (deletionGuard.shouldSkip) {
-    if (tokenPersisted) {
-      logger.info(`Preserving ${serviceName} OAuth token root for deleting user ${userID} because a token was already persisted for account-deletion deauthorization.`);
-      return;
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        userID,
+        `oauth_superseded_credential_cleanup:${serviceName}`,
+        error,
+      );
     }
-    const existingTokenSnapshot = await tokenRootRef.collection('tokens').limit(1).get();
-    if (!existingTokenSnapshot.empty) {
-      logger.info(`Preserving ${serviceName} OAuth token root unchanged for deleting user ${userID} because existing tokens remain for account-deletion deauthorization.`);
-      return;
+    if (deletionGuard.shouldSkip) {
+      // Account deletion owns provider deauthorization and recursive cleanup.
+      return false;
     }
-    await db.recursiveDelete(tokenRootRef);
-    logger.info(`Deleted ${serviceName} OAuth token root for deleting user ${userID} while cleaning temporary OAuth data.`);
-    return;
-  }
 
-  await tokenRootRef.update({
-    state: FieldValue.delete(),
-    codeVerifier: FieldValue.delete(),
+    const [tokenRootSnapshot, tokenSnapshot] = await Promise.all([
+      transaction.get(guard.rootGenerationGuard.documentRef),
+      transaction.get(guard.tokenRef),
+    ]);
+    if (
+      getActiveServiceDisconnectOperationGeneration(
+        tokenRootSnapshot.data() as Record<string, unknown> | undefined,
+      )
+      || !tokenSnapshot.exists
+      || tokenSnapshot.data()?.tokenCredentialGeneration !== guard.tokenCredentialGeneration
+    ) {
+      return false;
+    }
+
+    transaction.delete(guard.tokenRef);
+    return true;
   });
 }
 
@@ -256,21 +600,28 @@ export function getServiceConfig(serviceName: ServiceNames, refresh = false): { 
 export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string): Promise<string> {
   const adapter = getServiceAdapter(serviceName);
   const state = crypto.randomBytes(20).toString('hex');
-
-  const { options, context } = await adapter.getAuthorizationData(redirectUri, state);
-
-  const oauth2Client = adapter.getOAuth2Client();
-  const serviceRedirectURI = oauth2Client.authorizeURL(options);
-
-  const tokenData: any = {
-    state: state,
-    ...(context || {}),
-  };
-
   await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_state_prepare:${serviceName}`);
-  await setOAuthStateIfUserActive(userID, serviceName, adapter.tokenCollectionName, tokenData);
+  const generation = await beginOAuthFlowIfUserActive(
+    userID,
+    serviceName,
+    adapter.tokenCollectionName,
+    state,
+  );
 
-  return serviceRedirectURI;
+  try {
+    const { options, context } = await adapter.getAuthorizationData(redirectUri, state);
+    await completeOAuthFlowPreparationIfCurrent(
+      userID,
+      serviceName,
+      adapter.tokenCollectionName,
+      generation,
+      context,
+    );
+    return adapter.getOAuth2Client().authorizeURL(options);
+  } catch (error) {
+    await abandonOAuthFlowPreparationIfCurrent(userID, adapter.tokenCollectionName, generation);
+    throw error;
+  }
 }
 
 /**
@@ -303,112 +654,152 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
  * @param serviceName
  * @param redirectUri
  * @param code
+ * @param callbackState
  */
-export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
+export async function getAndSetServiceOAuth2AccessTokenForUser(
+  userID: string,
+  serviceName: ServiceNames,
+  redirectUri: string,
+  code: string,
+  callbackState: string,
+) {
   const adapter = getServiceAdapter(serviceName);
   let tokenPersisted = false;
-  let shouldCleanupOAuthContext = true;
+  let persistedOAuthCredentialGuard: PersistedOAuthCredentialGuard | null = null;
 
-  // Retrieve stored flow context (state, PKCE verifier, etc)
-  const tokensDocumentSnapshot = await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).get();
-  const tokensDocumentSnapshotData = tokensDocumentSnapshot.data ? tokensDocumentSnapshot.data() : undefined;
+  // Atomically validate and consume state plus PKCE context before the
+  // provider exchange. A second callback or an older callback loses here.
+  const claimedOAuthFlowContext = await claimOAuthFlowContext(
+    userID,
+    serviceName,
+    adapter.tokenCollectionName,
+    callbackState,
+  );
 
+  const tokenConfig = adapter.getTokenRequestConfig(
+    redirectUri,
+    code,
+    claimedOAuthFlowContext.data,
+  );
+
+  await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_exchange:${serviceName}`);
+
+  const oauth2Client = adapter.getOAuth2Client();
+  const results: AccessToken = await oauth2Client.getToken(tokenConfig);
+
+  if (!results || !results.token || !results.token.access_token) {
+    logger.error(`Failed to get a usable access token for ${serviceName}`);
+    throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
+  }
+
+  let uniqueId: string | undefined;
   try {
-    const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
+    await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
 
-    await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_exchange:${serviceName}`);
+    // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
+    const processedTokenData = await adapter.processNewToken(results, userID);
+    uniqueId = processedTokenData.uniqueId;
 
-    const oauth2Client = adapter.getOAuth2Client();
-    const results: AccessToken = await oauth2Client.getToken(tokenConfig);
-
-    if (!results || !results.token || !results.token.access_token) {
-      logger.error(`Failed to get a usable access token for ${serviceName}`);
-      throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
+    if (serviceName === ServiceNames.WahooAPI) {
+      await assertWahooOAuthAccountCompatible(userID, `${uniqueId || ''}`);
     }
 
-    let uniqueId: string | undefined;
-    try {
-      await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
+    const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
 
-      // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
-      const processedTokenData = await adapter.processNewToken(results, userID);
-      uniqueId = processedTokenData.uniqueId;
+    persistedOAuthCredentialGuard = await setOAuthTokenIfUserActive(
+      userID,
+      serviceName,
+      adapter.tokenCollectionName,
+      uniqueId || 'default',
+      tokenData,
+      claimedOAuthFlowContext.generation,
+    );
+    tokenPersisted = true;
+  } catch (error) {
+    if (!tokenPersisted) {
+      await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
+    }
+    throw error;
+  }
 
-      const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
-
-      await setOAuthTokenIfUserActive(
+  if (await hasProAccess(userID)) {
+    if (!persistedOAuthCredentialGuard) {
+      throw new Error(`Missing persisted ${serviceName} credential guard after OAuth token write.`);
+    }
+    await clearServiceDisconnectPending(
+      userID,
+      serviceName,
+      persistedOAuthCredentialGuard.rootGenerationGuard,
+      persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
+    );
+    const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
+      ? await markServiceConnected(
         userID,
         serviceName,
-        adapter.tokenCollectionName,
-        uniqueId || 'default',
-        tokenData,
+        uniqueId,
+        persistedOAuthCredentialGuard.rootGenerationGuard,
+        persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
+      )
+      : await markServiceConnected(
+        userID,
+        serviceName,
+        undefined,
+        persistedOAuthCredentialGuard.rootGenerationGuard,
+        persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
       );
-      tokenPersisted = true;
-    } catch (error) {
-      if (!tokenPersisted) {
+    if (!didMarkConnected) {
+      logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because a newer credential or account lifecycle transition won after token persistence.`);
+      const deletedSupersededCredential = await deleteSupersededOAuthCredentialIfCurrent(
+        userID,
+        serviceName,
+        persistedOAuthCredentialGuard,
+      );
+      if (deletedSupersededCredential) {
         await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
       }
-      throw error;
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
     }
-
-    if (await hasProAccess(userID)) {
-      await clearServiceDisconnectPending(userID, serviceName);
-      const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
-        ? await markServiceConnected(userID, serviceName, uniqueId)
-        : await markServiceConnected(userID, serviceName);
-      if (!didMarkConnected) {
-        logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
-        throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);
-      }
-    } else {
-      const outcome = await deauthorizeServiceForSubscriptionEnforcement(userID, serviceName, {
-        allowDisconnectPendingTokenUse: true,
-      });
-      logger.warn(`Immediately deauthorized ${serviceName} OAuth recovery token for non-Pro user ${userID}.`, {
-        deletedTokenCount: outcome.deletedTokenCount,
-        preservedTokenCount: outcome.preservedTokenCount,
-        localCleanupStatus: outcome.localCleanupStatus,
-        retryableDisconnectFailureCount: outcome.retryableDisconnectFailures?.length || 0,
-      });
-      const retryableFailure = outcome.retryableDisconnectFailures?.[0];
-      if (retryableFailure) {
-        const didResumeRetry = await resumeServiceDisconnectRetryAfterRecoveryFailure(userID, serviceName, retryableFailure);
-        if (!didResumeRetry) {
-          logger.warn(`Skipped pending ${serviceName} disconnect retry resume for non-Pro OAuth recovery because the user is missing or deletion is in progress.`, {
-            userID,
-            serviceName,
-            tokenID: retryableFailure.tokenID,
-            statusCode: retryableFailure.statusCode,
-          });
-        }
-      }
-      shouldCleanupOAuthContext = outcome.preservedTokenCount > 0 || outcome.localCleanupStatus === 'partial';
-      return;
-    }
-
-    // Remove any OTHER users connected to this same external account
-    if (uniqueId) {
-      try {
-        await removeDuplicateConnections(userID, serviceName, uniqueId);
-      } catch (e) {
-        logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
-        // Don't fail the auth flow for this, just log
+  } else {
+    const outcome = await deauthorizeServiceForSubscriptionEnforcement(userID, serviceName, {
+      allowDisconnectPendingTokenUse: true,
+    });
+    logger.warn(`Immediately deauthorized ${serviceName} OAuth recovery token for non-Pro user ${userID}.`, {
+      deletedTokenCount: outcome.deletedTokenCount,
+      preservedTokenCount: outcome.preservedTokenCount,
+      localCleanupStatus: outcome.localCleanupStatus,
+      retryableDisconnectFailureCount: outcome.retryableDisconnectFailures?.length || 0,
+    });
+    const retryableFailure = outcome.retryableDisconnectFailures?.[0];
+    if (retryableFailure) {
+      const didResumeRetry = await resumeServiceDisconnectRetryAfterRecoveryFailure(userID, serviceName, retryableFailure);
+      if (!didResumeRetry) {
+        logger.warn(`Skipped pending ${serviceName} disconnect retry resume for non-Pro OAuth recovery because the user is missing or deletion is in progress.`, {
+          userID,
+          serviceName,
+          tokenID: retryableFailure.tokenID,
+          statusCode: retryableFailure.statusCode,
+        });
       }
     }
+    await finishRejectedOAuthFlowIfCurrent(
+      userID,
+      adapter.tokenCollectionName,
+      claimedOAuthFlowContext.generation,
+    );
+    return;
+  }
 
-    logger.info(`User ${userID} successfully connected to ${serviceName}`);
-  } finally {
-    // Cleanup temporary fields (state, PKCE verifier)
+  // Remove any OTHER users connected to this same external account
+  if (uniqueId) {
     try {
-      if (shouldCleanupOAuthContext) {
-        await cleanupOAuthFlowContext(userID, serviceName, adapter.tokenCollectionName, tokenPersisted);
-        logger.info(`Finished temporary OAuth2 cleanup for User ${userID} and ${serviceName}`);
-      }
+      await removeDuplicateConnections(userID, serviceName, uniqueId);
     } catch (e) {
-      // Don't fail if cleanup fails, but log it
-      logger.warn(`Failed to cleanup temporary OAuth2 data for user ${userID}`, e);
+      logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
+      // Don't fail the auth flow for this, just log
     }
   }
+
+  logger.info(`User ${userID} successfully connected to ${serviceName}`);
 }
 
 interface DeauthorizeServiceForUserOptions {
@@ -424,17 +815,35 @@ export async function deauthorizeServiceForUser(
   serviceName: ServiceNames,
   options: DeauthorizeServiceForUserOptions = {},
 ) {
-  return cleanupServiceConnectionForUser(
+  const adapter = getServiceAdapter(serviceName);
+  // This transaction orders explicit disconnect against both a claimed
+  // callback and a newer authorization attempt. Whichever wins first leaves a
+  // generation the callback must still prove before recreating credentials.
+  const disconnectOperation = await beginExplicitDisconnectOperation(
     userID,
     serviceName,
-    SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
-    {
-      missingTokensBehavior: options.missingTokensBehavior || 'throw',
-      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
-        recoverTerminalAuthFailure: false,
-      }),
-    },
+    adapter.tokenCollectionName,
   );
+  const disconnectLifecycleGuard = disconnectOperation.lifecycleGuard;
+  try {
+    return await cleanupServiceConnectionForUser(
+      userID,
+      serviceName,
+      SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      {
+        missingTokensBehavior: options.missingTokensBehavior || 'throw',
+        disconnectLifecycleGuard,
+        initialTokenQuerySnapshot: disconnectOperation.tokenQuerySnapshot,
+        tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
+          recoverTerminalAuthFailure: false,
+          expectedDisconnectOperationGeneration:
+            disconnectLifecycleGuard.disconnectOperationGeneration || undefined,
+        }),
+      },
+    );
+  } finally {
+    await finishExplicitDisconnectOperation(userID, serviceName, disconnectLifecycleGuard);
+  }
 }
 
 export async function deauthorizeServiceForSubscriptionEnforcement(

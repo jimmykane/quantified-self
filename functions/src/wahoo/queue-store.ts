@@ -140,6 +140,7 @@ async function advanceWahooWorkoutQueueDispatchRecoveryGeneration(
 export async function upsertWahooWorkoutQueueItem(
   input: Omit<WahooAPIWorkoutQueueItemInterface, 'id' | 'dateCreated' | 'processed' | 'retryCount' | 'dispatchedToCloudTask'> & { id: string },
   dispatchMode: WahooQueueDispatchMode,
+  assertWriteAuthorizationInTransaction?: (transaction: admin.firestore.Transaction) => Promise<void>,
 ): Promise<{ ref: admin.firestore.DocumentReference; queued: boolean }> {
   const db = admin.firestore();
   const ref = db.collection(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME).doc(input.id);
@@ -152,6 +153,9 @@ export async function upsertWahooWorkoutQueueItem(
       throw new UserDeletionGuardReadError(input.firebaseUserID!, 'wahoo_queue_upsert', error);
     }
     if (deletionGuard.shouldSkip) return { queued: false, dateCreated: now };
+    if (assertWriteAuthorizationInTransaction) {
+      await assertWriteAuthorizationInTransaction(transaction);
+    }
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;

@@ -7,7 +7,8 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   disconnectServiceForUser,
-  validateOAuth2State
+  isOAuthFlowContextMismatchError,
+  validateOAuth2State,
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
@@ -124,11 +125,17 @@ export const requestAndSetGarminAPIAccessToken = functions
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
     return; // Success (return void/empty)
   } catch (e: any) {
     logger.error('Error exchanging Garmin token:', e);
     const status = e.statusCode || 500;
+    if (isOAuthFlowContextMismatchError(e)) {
+      throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
+    }
+    if (status === 403) {
+      throw new functions.https.HttpsError('permission-denied', 'Garmin rejected the authorization request');
+    }
     if (status === 502) {
       throw new functions.https.HttpsError('unavailable', 'Garmin service is temporarily unavailable');
     }

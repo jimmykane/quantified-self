@@ -541,7 +541,15 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
             expect(result).toBe('DEFERRED');
-            expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(queueItem, undefined);
+            expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+                queueItem,
+                undefined,
+                {},
+                {
+                    userID: firebaseUserID,
+                    serviceName: ServiceNames.GarminAPI,
+                },
+            );
             expect(mockMarkQueueItemSkipped).not.toHaveBeenCalledWith(
                 queueItem,
                 undefined,

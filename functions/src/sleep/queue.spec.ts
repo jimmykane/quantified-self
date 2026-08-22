@@ -42,6 +42,9 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: vi.fn(() => 'DELETE_SENTINEL'),
+    },
     Timestamp: {
         fromDate: (date: Date) => ({ date }),
     },
@@ -65,8 +68,22 @@ vi.mock('firebase-admin', () => {
     hoisted.collectionGroupLimit.mockReturnValue(collectionGroupQuery);
 
     hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
+        get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
+        set: typeof hoisted.docSet;
         update: typeof hoisted.transactionUpdate;
     }) => unknown) => runner({
+        get: async (ref) => (
+            typeof ref.get === 'function'
+                ? ref.get()
+                : {
+                    exists: true,
+                    data: () => ({
+                        processed: false,
+                        dateCreated: 1_700_000_000_000,
+                    }),
+                }
+        ),
+        set: hoisted.docSet,
         update: hoisted.transactionUpdate,
     }));
 
@@ -1324,8 +1341,18 @@ describe('sleep queue', () => {
             }],
             empty: false,
         });
-        const pendingDisconnectError = new Error('service disconnect is pending');
-        pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                disconnectState: 'disconnect_pending',
+                disconnectGeneration: 'suunto-pending-generation',
+            }),
+        });
+        const pendingDisconnectError = Object.assign(new Error('service disconnect is pending'), {
+            name: 'TokenUseSkippedForPendingDisconnectError',
+            firebaseUserID: 'test-user-uid',
+            serviceName: ServiceNames.SuuntoApp,
+        });
         hoisted.getTokenData.mockRejectedValueOnce(pendingDisconnectError);
         const update = vi.fn().mockResolvedValue(undefined);
 
@@ -1675,6 +1702,15 @@ describe('sleep queue', () => {
         const pendingDisconnectError = Object.assign(new Error('COROS disconnect is pending.'), {
             name: 'TokenUseSkippedForPendingDisconnectError',
             code: 'failed-precondition',
+            firebaseUserID: 'test-user-uid',
+            serviceName: ServiceNames.COROSAPI,
+        });
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                disconnectState: 'disconnect_pending',
+                disconnectGeneration: 'coros-pending-generation',
+            }),
         });
         hoisted.getActiveCOROSTokenSnapshot
             .mockResolvedValueOnce(activeToken)

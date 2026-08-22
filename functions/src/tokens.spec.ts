@@ -5,6 +5,7 @@ import {
     refreshTokens,
     refreshStaleTokens,
     TerminalServiceAuthError,
+    TokenRefreshInProgressError,
     TokenRefreshSkippedForDeletedUserError,
     TokenUseSkippedForPendingDisconnectError,
 } from './tokens';
@@ -15,12 +16,19 @@ const hoisted = vi.hoisted(() => ({
         deletionInProgress: false,
         shouldSkip: false,
     }),
-    isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+    getServiceDisconnectPendingData: vi.fn().mockResolvedValue({}),
     logger: {
         error: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
     },
+    claimTokenRefresh: vi.fn(),
+    persistTokenRefresh: vi.fn(),
+    releaseTokenRefreshClaim: vi.fn(),
+    assertWahooConnectionAvailable: vi.fn(),
+    assertWahooRefreshAllowed: vi.fn(),
+    toWahooRefreshFailureError: vi.fn(),
+    isOpaqueWahooRefreshFailure: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => hoisted.logger);
@@ -42,6 +50,15 @@ vi.mock('firebase-functions', () => ({
 
 const firestoreMock = {
     collectionGroup: vi.fn(),
+    collection: vi.fn((collectionName: string) => ({
+        doc: vi.fn((documentID: string) => ({
+            collection: vi.fn((subcollectionName: string) => ({
+                doc: vi.fn((subdocumentID: string) => ({
+                    path: `${collectionName}/${documentID}/${subcollectionName}/${subdocumentID}`,
+                })),
+            })),
+        })),
+    })),
 };
 
 vi.mock('firebase-admin', () => {
@@ -157,7 +174,30 @@ vi.mock('./shared/user-deletion-guard', () => ({
 }));
 
 vi.mock('./service-disconnect-pending', () => ({
-    isServiceDisconnectPendingForUser: hoisted.isServiceDisconnectPendingForUser,
+    getServiceDisconnectPendingData: hoisted.getServiceDisconnectPendingData,
+}));
+
+vi.mock('./token-refresh-coordinator', () => ({
+    TOKEN_REFRESH_REQUEST_TIMEOUT_MS: 60_000,
+    claimTokenRefresh: hoisted.claimTokenRefresh,
+    persistTokenRefresh: hoisted.persistTokenRefresh,
+    releaseTokenRefreshClaim: hoisted.releaseTokenRefreshClaim,
+    getTokenCredentialSnapshot: vi.fn((data: any) => ({
+        accessToken: data?.accessToken || '',
+        refreshToken: data?.refreshToken || '',
+        expiresAt: Number(data?.expiresAt || 0),
+        dateCreated: Number(data?.dateCreated || 0),
+        dateRefreshed: Number(data?.dateRefreshed || 0),
+        credentialGeneration: data?.tokenCredentialGeneration || null,
+    })),
+    areTokenCredentialSnapshotsEqual: vi.fn((left: any, right: any) => JSON.stringify(left) === JSON.stringify(right)),
+}));
+
+vi.mock('./wahoo/refresh-recovery', () => ({
+    assertWahooConnectionAvailable: hoisted.assertWahooConnectionAvailable,
+    assertWahooRefreshAllowed: hoisted.assertWahooRefreshAllowed,
+    isOpaqueWahooRefreshFailure: hoisted.isOpaqueWahooRefreshFailure,
+    toWahooRefreshFailureError: hoisted.toWahooRefreshFailureError,
 }));
 
 import { getServiceAdapter } from './auth/factory';
@@ -176,7 +216,11 @@ describe('tokens', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
-        hoisted.isServiceDisconnectPendingForUser.mockResolvedValue(false);
+        hoisted.getServiceDisconnectPendingData.mockResolvedValue({});
+        hoisted.assertWahooConnectionAvailable.mockResolvedValue(undefined);
+        hoisted.assertWahooRefreshAllowed.mockResolvedValue(undefined);
+        hoisted.toWahooRefreshFailureError.mockResolvedValue(new Error('Wahoo refresh unavailable'));
+        hoisted.isOpaqueWahooRefreshFailure.mockReturnValue(false);
         (handleTerminalServiceAuthFailure as any).mockReset().mockImplementation(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
             kind: 'terminal_error',
             error: new TerminalServiceAuthError(
@@ -203,10 +247,12 @@ describe('tokens', () => {
             }),
             ref: {
                 update: vi.fn(() => Promise.resolve()),
+                get: vi.fn(() => Promise.resolve(mockDoc)),
                 delete: vi.fn(() => Promise.resolve()),
                 parent: { parent: { id: 'firebase-user-123' } },
             },
         };
+        mockDoc.ref.__snapshot = mockDoc;
 
         mockToken = {
             expired: vi.fn().mockReturnValue(false),
@@ -233,6 +279,34 @@ describe('tokens', () => {
             getOAuth2Client: vi.fn().mockReturnValue(mockOAuthClient),
             tokenCollectionName: 'test-collection',
         });
+        hoisted.claimTokenRefresh.mockImplementation(async (ref: unknown, credential: unknown) => {
+            const tokenRef = ref as {
+                get?: ReturnType<typeof vi.fn>;
+                __snapshot: typeof mockDoc;
+            };
+            const get = tokenRef.get || vi.fn();
+            tokenRef.get = get;
+            get.mockResolvedValue({
+                id: tokenRef.__snapshot.id,
+                exists: true,
+                data: () => ({
+                    ...tokenRef.__snapshot.data(),
+                    tokenRefreshLeaseOwner: 'refresh-lease',
+                }),
+                ref: tokenRef,
+            });
+            return {
+                kind: 'owner',
+                leaseOwner: 'refresh-lease',
+                snapshot: tokenRef.__snapshot,
+                credential,
+            };
+        });
+        hoisted.persistTokenRefresh.mockImplementation(async (ref: any, _leaseOwner: string, _credential: any, tokenData: any) => {
+            await ref.update(tokenData);
+            return { kind: 'persisted' };
+        });
+        hoisted.releaseTokenRefreshClaim.mockResolvedValue(undefined);
     });
 
     describe('refreshStaleTokens', () => {
@@ -290,7 +364,9 @@ describe('tokens', () => {
 
         it('should not return an existing valid token when service disconnect is pending', async () => {
             mockToken.expired.mockReturnValue(false);
-            hoisted.isServiceDisconnectPendingForUser.mockResolvedValueOnce(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectState: 'disconnect_pending',
+            });
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
@@ -308,7 +384,36 @@ describe('tokens', () => {
 
             expect(result.accessToken).toBe('old-access');
             expect(mockToken.refresh).not.toHaveBeenCalled();
-            expect(hoisted.isServiceDisconnectPendingForUser).not.toHaveBeenCalled();
+            expect(hoisted.getServiceDisconnectPendingData).toHaveBeenCalled();
+        });
+
+        it('should reject ordinary token use while an explicit disconnect operation owns the lifecycle', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('should allow only the matching explicit-disconnect owner to use the fenced token', async () => {
+            mockToken.expired.mockReturnValue(false);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            expect(result.accessToken).toBe('old-access');
+            expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 
         it('should refresh token if forced', async () => {
@@ -327,9 +432,10 @@ describe('tokens', () => {
             const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, true);
 
             expect(mockToken.refresh).toHaveBeenCalled();
+            expect(mockToken.refresh).toHaveBeenCalledWith({}, { timeout: 60_000 });
             expect(result.accessToken).toBe('new-access');
             expect(mockDoc.ref.update).toHaveBeenCalled();
-            expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(2);
+            expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(3);
         });
 
         it('should not call provider refresh when user deletion is in progress before refresh', async () => {
@@ -350,6 +456,11 @@ describe('tokens', () => {
         it('should not persist a refreshed token when user deletion starts before save', async () => {
             mockToken.expired.mockReturnValue(true);
             hoisted.getUserDeletionGuardState
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: false,
+                    shouldSkip: false,
+                })
                 .mockResolvedValueOnce({
                     userExists: true,
                     deletionInProgress: false,
@@ -398,6 +509,113 @@ describe('tokens', () => {
 
             expect(mockToken.refresh).toHaveBeenCalled();
             expect(result.accessToken).toBe('new-access-exp');
+        });
+
+        it('defers a competing refresh while the stored credential is unchanged', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'busy' });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenRefreshInProgressError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.get).toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('parks a refresh when an explicit disconnect commits after the preliminary check', async () => {
+            mockToken.expired.mockReturnValue(true);
+            // The claim transaction is the atomic fence: model disconnect
+            // winning after the earlier root check but before this lease.
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'skipped_service_disconnect' });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('forwards the explicit-disconnect owner generation into the atomic refresh claim', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            });
+
+            await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            });
+
+            expect(hoisted.claimTokenRefresh).toHaveBeenCalledWith(
+                mockDoc.ref,
+                expect.any(Object),
+                { expectedDisconnectOperationGeneration: 'disconnect-operation-1' },
+            );
+            expect(mockToken.refresh).toHaveBeenCalled();
+        });
+
+        it('uses the newer credential snapshot when guarded refresh persistence is superseded', async () => {
+            const latestDoc = {
+                id: 'user-123',
+                exists: true,
+                data: vi.fn().mockReturnValue({
+                    accessToken: 'reauthorized-access',
+                    refreshToken: 'reauthorized-refresh',
+                    expiresAt: Date.now() + 3600000,
+                    serviceName: ServiceNames.SuuntoApp,
+                    userName: 'suunto-user',
+                    dateCreated: 2_000,
+                    dateRefreshed: 2_000,
+                    tokenCredentialGeneration: 'generation-2',
+                }),
+                ref: { parent: { parent: { id: 'firebase-user-123' } } },
+            } as any;
+            mockToken.expired.mockReturnValueOnce(true).mockReturnValue(false);
+            hoisted.persistTokenRefresh.mockResolvedValueOnce({
+                kind: 'superseded',
+                snapshot: latestDoc,
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
+
+            expect(result.accessToken).toBe('reauthorized-access');
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalled();
+        });
+
+        it('turns an opaque Wahoo refresh 400 into durable per-account recovery state', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-wahoo',
+                refreshToken: 'old-wahoo-refresh',
+                serviceName: ServiceNames.WahooAPI,
+                wahooUserID: 'wahoo-user',
+                expiresAt: 1_000,
+                dateCreated: 500,
+                dateRefreshed: 500,
+            });
+            mockToken.expired.mockReturnValue(true);
+            const providerError = Object.assign(new Error('Bad request'), { statusCode: 400 });
+            const recoveryError = Object.assign(new Error('Wahoo token refresh is temporarily paused.'), {
+                name: 'WahooRefreshBackoffError',
+            });
+            mockToken.refresh.mockRejectedValueOnce(providerError);
+            hoisted.isOpaqueWahooRefreshFailure.mockReturnValueOnce(true);
+            hoisted.toWahooRefreshFailureError.mockResolvedValueOnce(recoveryError);
+
+            await expect(getTokenData(mockDoc, ServiceNames.WahooAPI, false)).rejects.toBe(recoveryError);
+
+            expect(hoisted.toWahooRefreshFailureError).toHaveBeenCalledWith('firebase-user-123', expect.objectContaining({
+                tokenRef: mockDoc.ref,
+                leaseOwner: 'refresh-lease',
+                credential: expect.objectContaining({
+                    accessToken: 'old-wahoo',
+                    refreshToken: 'old-wahoo-refresh',
+                }),
+            }));
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.error.mock.calls)).not.toContain('old-wahoo-refresh');
         });
 
         it('should apply 600s buffer to expiresAt for Suunto tokens', async () => {
@@ -529,7 +747,11 @@ describe('tokens', () => {
             await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
                 .rejects.toBeInstanceOf(TerminalServiceAuthError);
             expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
-                mockDoc,
+                expect.objectContaining({
+                    id: 'user-123',
+                    ref: mockDoc.ref,
+                    data: expect.any(Function),
+                }),
                 ServiceNames.COROSAPI,
                 expect.objectContaining({ openId: 'coros-user' }),
                 expect.objectContaining({
@@ -540,6 +762,8 @@ describe('tokens', () => {
                 expect.objectContaining({ name: 'COROSTokenRefreshRejectedError' }),
             );
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(vi.mocked(handleTerminalServiceAuthFailure).mock.calls[0][0].data())
+                .toEqual(expect.objectContaining({ tokenRefreshLeaseOwner: 'refresh-lease' }));
         });
 
         it('does not mark other COROS refresh rejections as terminal', async () => {
@@ -597,6 +821,26 @@ describe('tokens', () => {
                 wahooUserID: 'wahoo-user',
             }));
             expect(mockDoc.ref.update).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: expiresAt.getTime() }));
+            expect(hoisted.persistTokenRefresh).toHaveBeenCalledWith(
+                mockDoc.ref,
+                'refresh-lease',
+                expect.any(Object),
+                expect.objectContaining({
+                    accessToken: 'new-wahoo',
+                    refreshToken: 'new-wahoo-refresh',
+                }),
+                expect.objectContaining({
+                    companionWrites: [expect.objectContaining({
+                        ref: expect.objectContaining({
+                            path: `users/firebase-user-123/meta/${ServiceNames.WahooAPI}`,
+                        }),
+                        data: expect.objectContaining({
+                            wahooRefreshFailureCount: expect.anything(),
+                            wahooRefreshRetryAt: expect.anything(),
+                        }),
+                    })],
+                }),
+            );
         });
 
         it('should delegate 401 Boom errors to the terminal auth lifecycle', async () => {
@@ -671,6 +915,7 @@ describe('tokens', () => {
 
             const replacementDoc = {
                 id: 'user-123',
+                exists: true,
                 data: vi.fn().mockReturnValue({
                     accessToken: 'replacement-access',
                     refreshToken: 'replacement-refresh',
@@ -686,6 +931,7 @@ describe('tokens', () => {
                     parent: { parent: { id: 'firebase-user-123' } },
                 },
             };
+            (replacementDoc.ref as any).__snapshot = replacementDoc;
 
             mockToken.refresh
                 .mockRejectedValueOnce(error)
