@@ -5,6 +5,29 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "userID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredReason",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredServiceName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "activitySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "processed",
           "order": "ASCENDING"
         },
@@ -691,6 +714,29 @@
         },
         {
           "fieldPath": "sportsLibVersionCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredReason",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredServiceName",
           "order": "ASCENDING"
         },
         {

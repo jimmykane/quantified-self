@@ -482,7 +482,9 @@ async function releaseQueueItemsDeferredForServiceState(
         releaseDeferredDocsForQuery(
             userID,
             serviceName,
-            db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID),
+            db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
+                .where('userID', '==', userID)
+                .where('deferredServiceName', '==', serviceName),
             (data) => isActivitySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'activity_sync' },
             releasedQueueItemPaths,
@@ -492,7 +494,9 @@ async function releaseQueueItemsDeferredForServiceState(
         releaseDeferredDocsForQuery(
             userID,
             serviceName,
-            routeDeliverySyncQueue.where('userID', '==', userID),
+            routeDeliverySyncQueue
+                .where('userID', '==', userID)
+                .where('deferredServiceName', '==', serviceName),
             (data) => isRouteDeliverySyncDeferredForService(data, serviceName),
             { userID, serviceName, queueType: 'route_delivery_sync' },
             releasedQueueItemPaths,
