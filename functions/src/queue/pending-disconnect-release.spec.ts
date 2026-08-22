@@ -319,6 +319,34 @@ describe('pending disconnect queue release', () => {
         expect(otherRouteSyncUpdate).not.toHaveBeenCalled();
     });
 
+    it('does not let another service consume the target service release page budget', async () => {
+        const deferredReason = QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+        const otherServiceUpdates = Array.from({ length: 500 }, (_, index) => addDoc(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            `garmin-${`${index}`.padStart(3, '0')}`,
+            {
+                userID: 'user-1',
+                deferredReason,
+                deferredServiceName: ServiceNames.GarminAPI,
+            },
+        ));
+        const targetUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'suunto-target', {
+            userID: 'user-1',
+            deferredReason,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+        )).resolves.toBe(1);
+
+        expect(targetUpdate).toHaveBeenCalledTimes(1);
+        for (const otherServiceUpdate of otherServiceUpdates) {
+            expect(otherServiceUpdate).not.toHaveBeenCalled();
+        }
+    });
+
     it('releases only Wahoo work parked for reconnect after a successful OAuth callback', async () => {
         setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
         const reconnectReason = QUEUE_DEFERRED_REASONS.ServiceReconnectRequired;

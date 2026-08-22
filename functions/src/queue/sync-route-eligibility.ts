@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import {
@@ -54,6 +54,21 @@ interface RouteRestoreDeferredContext {
   serviceName: ServiceNames;
   settingsKind: SyncRouteSettingsKind;
   routeId: string;
+}
+
+const ROUTE_RESTORE_RELEASE_PAGE_SIZE = 100;
+const ROUTE_RESTORE_RELEASE_MAX_PAGES_PER_QUEUE = 5;
+const ROUTE_RESTORE_RELEASE_CONCURRENCY = 10;
+
+/**
+ * The route-restore marker remains durable when a release reaches its bounded
+ * page budget, so the lifecycle repair scheduler can resume remaining rows.
+ */
+export class RouteRestoreQueueReleaseIncompleteError extends Error {
+  constructor(serviceName: ServiceNames) {
+    super(`Route-restore queue release for ${serviceName} reached its bounded page limit.`);
+    this.name = 'RouteRestoreQueueReleaseIncompleteError';
+  }
 }
 
 function routeRestoreDeferredContext(context: RouteRestoreDeferredContext): string {
@@ -164,6 +179,7 @@ export async function finalizeDisabledSyncRouteIfCurrent(
           settingsKind: params.settingsKind,
           routeId: params.routeId,
         }),
+        deferredServiceName: routeRestoreServiceName,
         dispatchedToCloudTask: null,
         providerOperationStartedAt: null,
         ...clearRevisionProcessingLeaseUpdate(),
@@ -178,6 +194,7 @@ export async function finalizeDisabledSyncRouteIfCurrent(
       skippedReason: 'route_disabled',
       deferredReason: FieldValue.delete(),
       deferredContext: FieldValue.delete(),
+      deferredServiceName: FieldValue.delete(),
       ...(params.settingsKind === 'activitySyncRoutes'
         ? { destinationUploadContinuation: null }
         : {}),
@@ -197,20 +214,7 @@ export async function releaseQueueItemsDeferredForRouteRestore(
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(`${serviceName}`);
   const settingsRef = db.collection('users').doc(userID).collection('config').doc('settings');
-  const queueSnapshots = await Promise.all([
-    db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID).get(),
-    db.collection(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME).where('userID', '==', userID).get(),
-  ]);
-  const candidates = queueSnapshots.flatMap(snapshot => snapshot.docs).filter(doc => {
-    const data = doc.data();
-    const context = parseRouteRestoreDeferredContext(data.deferredContext);
-    return data.processed === true
-      && data.resultStatus === 'deferred'
-      && data.deferredReason === QUEUE_DEFERRED_REASONS.RouteRestorePending
-      && context?.serviceName === serviceName;
-  });
-
-  const results = await Promise.all(candidates.map(doc => db.runTransaction(async transaction => {
+  const releaseQueueDocument = async (doc: admin.firestore.QueryDocumentSnapshot): Promise<boolean> => db.runTransaction(async transaction => {
     const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
     if (deletionGuard.shouldSkip) return false;
     const [metaSnapshot, settingsSnapshot, queueSnapshot, tokenRootSnapshot] = await Promise.all([
@@ -252,6 +256,7 @@ export async function releaseQueueItemsDeferredForRouteRestore(
         resultStatus: FieldValue.delete(),
         deferredReason: FieldValue.delete(),
         deferredContext: FieldValue.delete(),
+        deferredServiceName: FieldValue.delete(),
         dispatchedToCloudTask: null,
       });
     } else {
@@ -262,12 +267,73 @@ export async function releaseQueueItemsDeferredForRouteRestore(
         skippedReason: 'route_disabled',
         deferredReason: FieldValue.delete(),
         deferredContext: FieldValue.delete(),
+        deferredServiceName: FieldValue.delete(),
         ...(context.settingsKind === 'activitySyncRoutes'
           ? { destinationUploadContinuation: null }
           : {}),
       });
     }
     return true;
-  })));
-  return results.filter(Boolean).length;
+  });
+
+  const releaseQueuePages = async (queueName: string): Promise<number> => {
+    const deferredQuery = db.collection(queueName)
+      .where('userID', '==', userID)
+      .where('deferredReason', '==', QUEUE_DEFERRED_REASONS.RouteRestorePending)
+      .where('deferredServiceName', '==', serviceName);
+    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+    let releasedCount = 0;
+
+    for (let page = 0; page < ROUTE_RESTORE_RELEASE_MAX_PAGES_PER_QUEUE; page += 1) {
+      let pageQuery = deferredQuery
+        .orderBy(FieldPath.documentId())
+        .limit(ROUTE_RESTORE_RELEASE_PAGE_SIZE);
+      if (cursor) {
+        pageQuery = pageQuery.startAfter(cursor);
+      }
+      const snapshot = await pageQuery.get();
+      if (snapshot.empty) return releasedCount;
+
+      const results = await mapWithConcurrency(
+        snapshot.docs,
+        ROUTE_RESTORE_RELEASE_CONCURRENCY,
+        releaseQueueDocument,
+      );
+      releasedCount += results.filter(Boolean).length;
+      if (snapshot.docs.length < ROUTE_RESTORE_RELEASE_PAGE_SIZE) return releasedCount;
+      cursor = snapshot.docs[snapshot.docs.length - 1];
+    }
+
+    // Successful releases remove deferredReason, which makes the remaining
+    // query a durable progress check rather than a rescan of released rows.
+    // It avoids treating an exactly-full final page as an incomplete repair.
+    const remainingSnapshot = await deferredQuery
+      .orderBy(FieldPath.documentId())
+      .limit(1)
+      .get();
+    if (remainingSnapshot.empty) return releasedCount;
+    throw new RouteRestoreQueueReleaseIncompleteError(serviceName);
+  };
+
+  const activitySyncCount = await releaseQueuePages(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME);
+  const routeDeliverySyncCount = await releaseQueuePages(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME);
+  return activitySyncCount + routeDeliverySyncCount;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  operation: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await operation(values[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }

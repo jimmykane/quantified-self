@@ -13,12 +13,20 @@ const mocks = vi.hoisted(() => {
   let queueData: Record<string, unknown> = {};
   let tokenRootData: Record<string, unknown> = {};
   const queueDoc = { ref: queueRef, data: () => queueData };
+  const activityQueueLimit = vi.fn();
+  const routeDeliveryQueueLimit = vi.fn();
+  const activityQueueWhere = vi.fn();
+  const routeDeliveryQueueWhere = vi.fn();
   return {
     metaRef,
     settingsRef,
     queueRef,
     tokenRootRef,
     queueDoc,
+    activityQueueLimit,
+    routeDeliveryQueueLimit,
+    activityQueueWhere,
+    routeDeliveryQueueWhere,
     transactionUpdate,
     deletionGuard,
     get metaData() { return metaData; },
@@ -45,14 +53,36 @@ vi.mock('firebase-admin', () => ({
         };
       }
       if (collectionName === 'activitySyncQueue') {
-        return {
-          where: () => ({ get: async () => ({ docs: [mocks.queueDoc] }) }),
+        const query = {
+          where: vi.fn((...args: unknown[]) => {
+            mocks.activityQueueWhere(...args);
+            return query;
+          }),
+          orderBy: vi.fn(() => query),
+          limit: vi.fn((pageSize: number) => {
+            mocks.activityQueueLimit(pageSize);
+            return query;
+          }),
+          startAfter: vi.fn(() => query),
+          get: vi.fn(async () => ({ empty: false, docs: [mocks.queueDoc] })),
         };
+        return query;
       }
       if (collectionName === 'routeDeliverySyncQueue') {
-        return {
-          where: () => ({ get: async () => ({ docs: [] }) }),
+        const query = {
+          where: vi.fn((...args: unknown[]) => {
+            mocks.routeDeliveryQueueWhere(...args);
+            return query;
+          }),
+          orderBy: vi.fn(() => query),
+          limit: vi.fn((pageSize: number) => {
+            mocks.routeDeliveryQueueLimit(pageSize);
+            return query;
+          }),
+          startAfter: vi.fn(() => query),
+          get: vi.fn(async () => ({ empty: true, docs: [] })),
         };
+        return query;
       }
       throw new Error(`Unexpected collection ${collectionName}`);
     },
@@ -75,6 +105,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('firebase-admin/firestore', () => ({
+  FieldPath: { documentId: () => '__name__' },
   FieldValue: { delete: () => 'delete-field' },
 }));
 
@@ -133,7 +164,20 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
       dispatchedToCloudTask: null,
       resultStatus: 'delete-field',
       deferredReason: 'delete-field',
+      deferredServiceName: 'delete-field',
     }));
+    expect(mocks.activityQueueLimit).toHaveBeenCalledWith(100);
+    expect(mocks.routeDeliveryQueueLimit).toHaveBeenCalledWith(100);
+    expect(mocks.activityQueueWhere).toHaveBeenCalledWith(
+      'deferredServiceName',
+      '==',
+      ServiceNames.WahooAPI,
+    );
+    expect(mocks.routeDeliveryQueueWhere).toHaveBeenCalledWith(
+      'deferredServiceName',
+      '==',
+      ServiceNames.WahooAPI,
+    );
   });
 
   it('does not reopen work for a superseded connection generation', async () => {

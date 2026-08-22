@@ -126,6 +126,7 @@ describe('finalizeDisabledSyncRouteIfCurrent', () => {
         settingsKind: 'activitySyncRoutes',
         routeId: 'routeA',
       }),
+      deferredServiceName: ServiceNames.SuuntoApp,
       dispatchedToCloudTask: null,
     }));
   });
