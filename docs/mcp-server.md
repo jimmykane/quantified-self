@@ -628,6 +628,10 @@ transition preserves explicit Garmin dive sub-sports as canonical Scuba Diving f
 diving, and Free Diving for apnea diving and apnea hunting; MCP activity-type and Diving-group filters consume those
 persisted canonical values without adding another classification registry.
 
+The package also exports unit-derived dive presentation classes for frontend meters/feet and meters-per-second/
+feet-per-second display. Quantified Self persists and queries only their canonical source types, so these display-only
+classes do not create additional available MCP metrics or change MCP units, values, or registered output schemas.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing

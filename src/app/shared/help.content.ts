@@ -371,7 +371,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
 - Temperature, heart rate, next-stop depth/time, time to surface, no-decompression limit, CNS/N2 load, air time remaining, pressure/volume SAC, RMV, PO₂, and dive ascent rate are available one at a time from the standard chart overlay picker when the source records them. Overlays start turned off, and multi-activity events keep each selected dive separate.
 - The **Diving** summary tab shows the source-provided average/maximum depth, surface interval, bottom time, dive number and phase times/rates, CNS/N2 loads, oxygen toxicity, SAC, and RMV values that are present. **Maximum Depth** also appears in Overall and Environment. Missing values stay unavailable: the app does not infer summaries from samples or reconstruct samples from a summary.
-- **Depth** is also available as an advanced chart metric in **Settings -> Charts**. Dive depth uses meters when the first Swim pace preference is per 100 meters and feet when it is per 100 yards.
+- **Depth** is also available as an advanced chart metric in **Settings -> Charts**. The first Swim pace preference selects one dive display family: per 100 meters uses meters and meters per second, while per 100 yards uses feet and feet per second. Depth and dive-rate displays retain the FIT source's three decimal places; SAC/RMV and PO₂ retain two.
 
 ### Event chart defaults and controls
 

@@ -1820,6 +1820,11 @@ Diving; apnea diving and apnea hunting map to Free Diving; unrepresented dive su
 Profile streams are hydrated on demand from the retained source and need no Firestore rewrite. MCP exposes the persisted
 numeric summaries through its automatic catalog; its frozen continuous chart tools are unchanged.
 
+Sports Lib's dive presentation types do not change that persistence boundary. The first swim-pace preference selects
+meters/meters per second or feet/feet per second for Event Details display, and the data classes retain the FIT field
+precision. Those unit-derived display instances do not replace the canonical meter/meter-per-second stats in stored
+JSON, do not become Training inputs, and do not require a reparse or derived rebuild.
+
 These dive values are not Training inputs and do not change durability, Training schema 18, or any derived payload.
 Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
 new dive surfaces.

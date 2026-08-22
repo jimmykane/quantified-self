@@ -2,6 +2,8 @@ import {
   DataDepthMax,
   DataDepthMaxFeet,
   DataDepthAvg,
+  DataDepthAvgFeet,
+  DataDiveAscentRateAvgFeetPerSecond,
   DataAscent,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -127,6 +129,8 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataDepthMax.type)).toBe('scuba_diving');
     expect(component.getColumnHeaderIcon(DataDepthMaxFeet.type)).toBe('scuba_diving');
     expect(component.getColumnHeaderIcon(DataDepthAvg.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDepthAvgFeet.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDiveAscentRateAvgFeetPerSecond.type)).toBe('scuba_diving');
     expect(component.getColumnHeaderIcon(DataPressureSACAvg.type)).toBe('scuba_diving');
   });
 

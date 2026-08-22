@@ -2,7 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import {
   ActivityTypes,
+  DataDepthAvg,
+  DataDepthAvgFeet,
   DataDistance,
+  DataDiveAscentRateAvg,
+  DataDiveAscentRateAvgFeetPerSecond,
   DataHeartRateAvg,
   DataHeartRateMax,
   DataHeartRateMin,
@@ -13,6 +17,7 @@ import {
   DataSwimDistance,
   DistanceUnits,
   DynamicDataLoader,
+  SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderStatsComponent } from './header-stats.component';
@@ -240,6 +245,34 @@ describe('HeaderStatsComponent', () => {
       displayValue: `${expectedDistance.getDisplayValue()}`,
       displayUnit: 'm',
     }));
+  });
+
+  it('should display dive summaries with the source precision and selected dive unit family', () => {
+    vi.mocked(DynamicDataLoader.getUnitBasedDataFromDataInstance).mockRestore();
+    component.layout = 'grid';
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+    component.statsToShow = [DataDepthAvg.type, DataDiveAscentRateAvg.type];
+    component.stats = [new DataDepthAvg(3.86), new DataDiveAscentRateAvg(0.044)];
+
+    applyChanges(component);
+
+    const valueItems = component.displayedStatCards.flatMap(card => card.valueItems);
+    expect(valueItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: DataDepthAvgFeet.type,
+          displayType: DataDepthAvg.type,
+          displayValue: '12.664',
+          displayUnit: 'ft',
+        }),
+        expect.objectContaining({
+          type: DataDiveAscentRateAvgFeetPerSecond.type,
+          displayType: DataDiveAscentRateAvg.type,
+          displayValue: '0.144',
+          displayUnit: 'ft/s',
+        }),
+      ]),
+    );
   });
 
 });

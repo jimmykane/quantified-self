@@ -25,7 +25,9 @@ specific retained historical source must persist those new parser-owned summarie
 type. Do not enable the automatic scanner or enqueue a global historical reparse solely for this release. Event Details
 hydrates continuous dive streams on demand from retained originals, so that view requires no persistence rewrite. MCP
 exposes persisted numeric summaries through its automatic catalog while its frozen continuous chart tools remain
-unchanged. Saved routes, Training disciplines, durability, and Training-derived schemas are unchanged.
+unchanged. Unit-derived dive depth/rate classes are display-only: they convert canonical values after hydration and do
+not change serialized source stats. They therefore require no reparse or Firestore rewrite. Saved routes, Training
+disciplines, durability, and Training-derived schemas are unchanged.
 
 ### Sports Lib 19.0.0 stroke-rate semantics transition
 

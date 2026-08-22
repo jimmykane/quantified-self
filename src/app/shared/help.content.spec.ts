@@ -501,6 +501,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');
     expect(gettingStartedSection?.content).toContain('first Swim pace preference');
+    expect(gettingStartedSection?.content).toContain('meters and meters per second');
+    expect(gettingStartedSection?.content).toContain('feet and feet per second');
+    expect(gettingStartedSection?.content).toContain("FIT source's three decimal places");
+    expect(gettingStartedSection?.content).toContain('SAC/RMV and PO₂ retain two');
   });
 
   it('should document duration fallback for any activity without distance data', () => {

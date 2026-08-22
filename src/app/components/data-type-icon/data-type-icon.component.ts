@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgClass, NgStyle } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { DataDepthMaxFeet, DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
+import { DataDistance, DataDistanceFeet, DataDistanceMiles, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
@@ -154,8 +154,24 @@ export class DataTypeIconComponent {
     return null;
   }
 
-  getColumnHeaderIcon(statName): string {
+  private isDivingSummaryStat(statName: string): boolean {
     if (EVENT_SUMMARY_DIVING_STAT_TYPES.includes(statName)) {
+      return true;
+    }
+
+    try {
+      const DataClass = DynamicDataLoader.getDataClassFromDataType(statName) as { displayType?: unknown };
+      return (
+        typeof DataClass.displayType === 'string'
+        && EVENT_SUMMARY_DIVING_STAT_TYPES.includes(DataClass.displayType)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  getColumnHeaderIcon(statName): string {
+    if (this.isDivingSummaryStat(statName)) {
       return 'scuba_diving';
     }
     switch (statName) {
@@ -166,8 +182,6 @@ export class DataTypeIconComponent {
         return 'route';
       case DataDuration.type:
         return 'timer';
-      case DataDepthMaxFeet.type:
-        return 'scuba_diving';
       case '#':
         return 'tag';
       case 'Tags':

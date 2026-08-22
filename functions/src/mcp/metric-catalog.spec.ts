@@ -2,7 +2,10 @@ import {
   DataActivityTypes,
   DataAirTimeRemaining,
   DataDepthAvg,
+  DataDepthAvgFeet,
   DataDistance,
+  DataDiveAscentRateAvg,
+  DataDiveAscentRateAvgFeetPerSecond,
   DataLatitudeDegrees,
   DataPressureSACAvg,
   DataStrokeRate,
@@ -76,6 +79,25 @@ describe('MCP Sports Lib metric catalog', () => {
       4_294_961_197,
     )).toBe(4_294_961_197);
     expect(projectSportsLibNumericMetricValue('unknown metric', 42)).toBeNull();
+  });
+
+  it('keeps unit-derived dive display variants out of canonical persisted availability', () => {
+    const available = resolveAvailableSportsLibMetrics([
+      {
+        [DataDepthAvg.type]: 3.86,
+        [DataDiveAscentRateAvg.type]: 0.044,
+      },
+    ]);
+    const availableTypes = available.map(metric => metric.type);
+
+    expect(availableTypes).toEqual(
+      expect.arrayContaining([
+        DataDepthAvg.type,
+        DataDiveAscentRateAvg.type,
+      ]),
+    );
+    expect(availableTypes).not.toContain(DataDepthAvgFeet.type);
+    expect(availableTypes).not.toContain(DataDiveAscentRateAvgFeetPerSecond.type);
   });
 
   it('discovers a newly persisted numeric class without a manual MCP registry entry', () => {
