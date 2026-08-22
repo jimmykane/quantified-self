@@ -6,9 +6,11 @@ const mocks = vi.hoisted(() => {
   const settingsRef = { path: 'users/user-1/config/settings' };
   const queueRef = { path: 'activitySyncQueue/queue-1' };
   const tokenRootRef = { path: 'wahooAPIAccessTokens/user-1' };
+  const sourceMetaRef = { path: 'users/user-1/meta/suuntoApp' };
   const transactionUpdate = vi.fn();
   const deletionGuard = vi.fn();
   let metaData: Record<string, unknown> = {};
+  let sourceMetaData: Record<string, unknown> = {};
   let settingsData: Record<string, unknown> = {};
   let queueData: Record<string, unknown> = {};
   let tokenRootData: Record<string, unknown> = {};
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => {
   const routeDeliveryQueueWhere = vi.fn();
   return {
     metaRef,
+    sourceMetaRef,
     settingsRef,
     queueRef,
     tokenRootRef,
@@ -31,6 +34,8 @@ const mocks = vi.hoisted(() => {
     deletionGuard,
     get metaData() { return metaData; },
     set metaData(value: Record<string, unknown>) { metaData = value; },
+    get sourceMetaData() { return sourceMetaData; },
+    set sourceMetaData(value: Record<string, unknown>) { sourceMetaData = value; },
     get settingsData() { return settingsData; },
     set settingsData(value: Record<string, unknown>) { settingsData = value; },
     get queueData() { return queueData; },
@@ -47,7 +52,12 @@ vi.mock('firebase-admin', () => ({
         return {
           doc: () => ({
             collection: (nestedCollection: string) => ({
-              doc: () => nestedCollection === 'meta' ? mocks.metaRef : mocks.settingsRef,
+              doc: (documentID: string) => {
+                if (nestedCollection === 'config') return mocks.settingsRef;
+                if (documentID === ServiceNames.WahooAPI || documentID === 'Wahoo API') return mocks.metaRef;
+                if (documentID === ServiceNames.SuuntoApp || documentID === 'Suunto app') return mocks.sourceMetaRef;
+                throw new Error(`Unexpected metadata document ${documentID}`);
+              },
             }),
           }),
         };
@@ -89,6 +99,7 @@ vi.mock('firebase-admin', () => ({
     runTransaction: async (callback: (transaction: unknown) => unknown) => callback({
       get: vi.fn(async (target: unknown) => {
         if (target === mocks.metaRef) return { exists: true, data: () => mocks.metaData };
+        if (target === mocks.sourceMetaRef) return { exists: true, data: () => mocks.sourceMetaData };
         if (target === mocks.settingsRef) return { exists: true, data: () => mocks.settingsData };
         if (target === mocks.queueRef) return { exists: true, data: () => mocks.queueData };
         if (target === mocks.tokenRootRef) {
@@ -130,10 +141,11 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
       routeRestorePending: true,
       routeRestoreParkingClosed: true,
     };
+    mocks.sourceMetaData = {};
     mocks.settingsData = {
       serviceSyncSettings: {
         activitySyncRoutes: {
-          routeA: { enabled: true },
+          SuuntoApp_to_WahooAPI: { enabled: true },
         },
       },
     };
@@ -144,7 +156,7 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
       deferredContext: JSON.stringify({
         serviceName: ServiceNames.WahooAPI,
         settingsKind: 'activitySyncRoutes',
-        routeId: 'routeA',
+        routeId: 'SuuntoApp_to_WahooAPI',
       }),
     };
     mocks.tokenRootData = {
@@ -201,7 +213,7 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
       deferredContext: JSON.stringify({
         serviceName: ServiceNames.SuuntoApp,
         settingsKind: 'activitySyncRoutes',
-        routeId: 'routeA',
+        routeId: 'SuuntoApp_to_WahooAPI',
       }),
     };
 
@@ -213,6 +225,29 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
 
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
+
+  it.each(['reconnect_required', 'disconnect_pending'])(
+    'hands parked work to a peer service that is %s',
+    async (connectionState) => {
+      mocks.sourceMetaData = { connectionState };
+
+      await expect(releaseQueueItemsDeferredForRouteRestore(
+        'user-1',
+        ServiceNames.WahooAPI,
+        'connection-1',
+      )).resolves.toBe(0);
+
+      expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.queueRef, expect.objectContaining({
+        deferredContext: JSON.stringify({
+          serviceName: 'Suunto app',
+          settingsKind: 'activitySyncRoutes',
+          routeId: 'SuuntoApp_to_WahooAPI',
+        }),
+        deferredServiceName: 'Suunto app',
+        dispatchedToCloudTask: null,
+      }));
+    },
+  );
 
   it('does not reopen parked work after the token-root lifecycle changes', async () => {
     mocks.tokenRootData = {
@@ -238,7 +273,7 @@ describe('releaseQueueItemsDeferredForRouteRestore', () => {
     mocks.settingsData = {
       serviceSyncSettings: {
         activitySyncRoutes: {
-          routeA: { enabled: false },
+          SuuntoApp_to_WahooAPI: { enabled: false },
         },
       },
     };
