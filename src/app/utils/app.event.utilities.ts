@@ -81,11 +81,11 @@ export class AppEventUtilities {
     }
 
     /**
-     * Determines whether terrain-altitude summary metrics should be hidden for activity type(s).
-     * Diving-group vertical movement is represented by depth rather than terrain altitude.
+     * Determines whether terrain-derived summary metrics should be hidden for activity type(s).
+     * Diving-group vertical movement is represented by depth rather than terrain elevation.
      * @param activityTypes Array of activity types or a single activity type
      */
-    static shouldExcludeAltitudeSummary(activityTypes: ActivityTypes | ActivityTypes[]): boolean {
+    static shouldExcludeTerrainSummary(activityTypes: ActivityTypes | ActivityTypes[]): boolean {
         const types = Array.isArray(activityTypes) ? activityTypes : [activityTypes];
         return types.length > 0 && types.every(type => (
             ActivityTypesHelper.getActivityGroupForActivityType(type) === ActivityTypeGroups.DivingGroup

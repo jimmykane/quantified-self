@@ -11,7 +11,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   EVENT_SUMMARY_DEFAULT_STAT_TYPES,
-  EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
+  EVENT_SUMMARY_TERRAIN_STAT_TYPES,
   EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
   EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES,
 } from '../constants/event-summary-metric-groups';
@@ -161,8 +161,8 @@ export const getDefaultSummaryStatTypes = (
     || speedDerivedAverageTypes.includes(DataGradeAdjustedPaceAvg.type);
   const gradeAdjustedSpeedSet = new Set(EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES);
   const gradeAdjustedPaceSet = new Set(EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES);
-  const altitudeSummaryStatTypes = new Set(EVENT_SUMMARY_ALTITUDE_STAT_TYPES);
-  const shouldExcludeAltitudeSummary = AppEventUtilities.shouldExcludeAltitudeSummary(normalizedActivityTypes);
+  const terrainSummaryStatTypes = new Set(EVENT_SUMMARY_TERRAIN_STAT_TYPES);
+  const shouldExcludeTerrainSummary = AppEventUtilities.shouldExcludeTerrainSummary(normalizedActivityTypes);
 
   return EVENT_SUMMARY_DEFAULT_STAT_TYPES.reduce((statsAccu: string[], statType: string) => {
     if (statType === DataAscent.type) {
@@ -181,7 +181,7 @@ export const getDefaultSummaryStatTypes = (
         return statsAccu;
       }
     }
-    if (altitudeSummaryStatTypes.has(statType) && shouldExcludeAltitudeSummary) {
+    if (terrainSummaryStatTypes.has(statType) && shouldExcludeTerrainSummary) {
       return statsAccu;
     }
     if (gradeAdjustedSpeedSet.has(statType) && !hasSpeedActivity) {
@@ -194,7 +194,7 @@ export const getDefaultSummaryStatTypes = (
       const activityAwareGradeAdjustedTypes: string[] = [
         ...(hasSpeedActivity ? EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES : []),
         ...(hasPaceActivity ? EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES : []),
-      ];
+      ].filter((type) => !shouldExcludeTerrainSummary || !terrainSummaryStatTypes.has(type));
       return [...new Set([...statsAccu, ...speedDerivedAverageTypes, ...activityAwareGradeAdjustedTypes]).values()];
     }
     return [...new Set([...statsAccu, statType]).values()];

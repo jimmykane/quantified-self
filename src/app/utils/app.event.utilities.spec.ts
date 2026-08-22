@@ -161,7 +161,7 @@ describe('AppEventUtilities', () => {
             });
         });
 
-        describe('shouldExcludeAltitudeSummary', () => {
+        describe('shouldExcludeTerrainSummary', () => {
             it('should return true for every Diving-group activity', () => {
                 [
                     ActivityTypes.Diving,
@@ -170,13 +170,13 @@ describe('AppEventUtilities', () => {
                     ActivityTypes.Snorkeling,
                     ActivityTypes.Mermaiding,
                 ].forEach((activityType) => {
-                    expect(AppEventUtilities.shouldExcludeAltitudeSummary(activityType)).toBe(true);
+                    expect(AppEventUtilities.shouldExcludeTerrainSummary(activityType)).toBe(true);
                 });
             });
 
-            it('should retain altitude summaries for non-Diving and mixed activities', () => {
-                expect(AppEventUtilities.shouldExcludeAltitudeSummary(ActivityTypes.Running)).toBe(false);
-                expect(AppEventUtilities.shouldExcludeAltitudeSummary([
+            it('should retain terrain summaries for non-Diving and mixed activities', () => {
+                expect(AppEventUtilities.shouldExcludeTerrainSummary(ActivityTypes.Running)).toBe(false);
+                expect(AppEventUtilities.shouldExcludeTerrainSummary([
                     ActivityTypes.Diving,
                     ActivityTypes.Running,
                 ])).toBe(false);

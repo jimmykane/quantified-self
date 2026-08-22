@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAltitudeAvg, DataAltitudeMax, DataAltitudeMin, DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataAltitudeAvg, DataAltitudeMax, DataAltitudeMin, DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataGradeAvg, DataGradeMax, DataGradeMin, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
@@ -241,7 +241,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.displayedStatsToShow).toContain(DataDescent.type); // Descent should still be there for alpine skiing
     });
 
-    it('should auto-exclude terrain altitude summaries for Diving activities', () => {
+    it('should auto-exclude terrain-derived summaries for Diving activities', () => {
         const activityTypes = [ActivityTypes.ScubaDiving];
         const mockEvent = {
             getActivities: () => [{ type: ActivityTypes.ScubaDiving }],
@@ -260,6 +260,9 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.displayedStatsToShow).not.toContain(DataAltitudeMax.type);
         expect(component.displayedStatsToShow).not.toContain(DataAltitudeMin.type);
         expect(component.displayedStatsToShow).not.toContain(DataAltitudeAvg.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeAvg.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeMin.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeMax.type);
         expect(component.displayedStatsToShow).toContain(DataDepthMax.type);
     });
 

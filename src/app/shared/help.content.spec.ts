@@ -486,7 +486,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Event dive profiles');
     expect(gettingStartedSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
     expect(gettingStartedSection?.content).toContain('**Dive Profile**');
-    expect(gettingStartedSection?.content).toContain('**Altitude Minimum**, **Altitude Maximum**, and **Average Altitude**');
+    expect(gettingStartedSection?.content).toContain('**Altitude Minimum**, **Altitude Maximum**, **Average Altitude**, ascent/descent timing, grade and grade-adjusted values, VAM, and vertical speed');
     expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
