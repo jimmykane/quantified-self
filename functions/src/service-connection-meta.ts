@@ -20,7 +20,6 @@ import {
 import { releaseQueueItemsDeferredForReconnectRequired } from './queue/pending-disconnect-release';
 import { releaseQueueItemsDeferredForRouteRestore } from './queue/sync-route-eligibility';
 import {
-  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
   type TokenCredentialGuard,
@@ -29,8 +28,7 @@ import {
 } from './token-refresh-coordinator';
 import {
   getServiceTokenRootDocumentRef,
-  OAUTH_FLOW_GENERATION_FIELD,
-  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+  getServiceDisconnectOperationGeneration,
 } from './service-token-store';
 import {
   doesRootMatchServiceDisconnectLifecycleGuard,
@@ -83,7 +81,11 @@ async function restoreRoutesAndReleaseDeferredWork(
   );
   if (
     disconnectLifecycleGuard.disconnectGeneration
-    || disconnectLifecycleGuard.disconnectOperationGeneration
+    || getServiceDisconnectOperationGeneration(
+      tokenRootSnapshot.exists
+        ? tokenRootSnapshot.data() as Record<string, unknown>
+        : null,
+    )
   ) {
     throw new Error(`Cannot restore ${serviceName} routes while disconnect is still active.`);
   }
@@ -569,15 +571,7 @@ function matchesDisconnectLifecycleGuard(
   data: Record<string, unknown> | undefined,
   guard: ServiceDisconnectLifecycleGuard,
 ): boolean {
-  return (
-    (isServiceDisconnectPendingData(data) ? normalizedGeneration(data?.disconnectGeneration) : null)
-      === (guard.disconnectGeneration || null)
-    && normalizedGeneration(data?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD])
-      === (guard.oauthCredentialGeneration || null)
-    && normalizedGeneration(data?.[OAUTH_FLOW_GENERATION_FIELD]) === (guard.oauthFlowGeneration || null)
-    && normalizedGeneration(data?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD])
-      === (guard.disconnectOperationGeneration || null)
-  );
+  return doesRootMatchServiceDisconnectLifecycleGuard(data, guard);
 }
 
 export async function mirrorServiceDisconnectPendingToUserMeta(
@@ -778,7 +772,7 @@ export async function recordWahooOpaqueRefreshFailure(
       || data?.connectionState === SERVICE_CONNECTION_STATES.DisconnectPending
       || data?.connectionState === SERVICE_CONNECTION_STATES.ReconnectRequired
       || isServiceDisconnectPendingData(tokenRootData)
-      || normalizedGeneration(tokenRootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]) !== null
+      || getServiceDisconnectOperationGeneration(tokenRootData) !== null
     ) {
       return { failureCount: 0, retryAt: null, reconnectRequired: false, stale: true };
     }

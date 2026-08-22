@@ -32,8 +32,11 @@ import {
 import { archiveOrphanedServiceToken } from './orphaned-service-tokens';
 import { hasProAccess } from './utils';
 import {
+  EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
   OAUTH_FLOW_GENERATION_FIELD,
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD,
+  getActiveServiceDisconnectOperationGeneration,
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
 import {
@@ -138,10 +141,9 @@ async function beginOAuthFlowIfUserActive(
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_state_write:${serviceName}`);
     }
     const rootSnapshot = await transaction.get(tokenRootRef);
-    const disconnectOperationGeneration = typeof rootSnapshot.data()?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] === 'string'
-      ? `${rootSnapshot.data()?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]}`.trim()
-      : '';
-    if (disconnectOperationGeneration) {
+    if (getActiveServiceDisconnectOperationGeneration(
+      rootSnapshot.data() as Record<string, unknown> | undefined,
+    )) {
       throw new ServiceDisconnectInProgressError(serviceName);
     }
 
@@ -152,6 +154,11 @@ async function beginOAuthFlowIfUserActive(
       state,
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: generation,
+      // A prior process may have died after claiming an explicit disconnect.
+      // Starting a new OAuth episode is the safe recovery point for an
+      // expired fence and invalidates that old owner.
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
     }, { merge: true });
   });
   return generation;
@@ -181,13 +188,19 @@ async function completeOAuthFlowPreparationIfCurrent(
     if (
       !snapshot.exists
       || snapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== generation
-      || snapshot.data()?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]
+      || getActiveServiceDisconnectOperationGeneration(
+        snapshot.data() as Record<string, unknown> | undefined,
+      )
     ) {
       throw new OAuthFlowContextMismatchError(serviceName);
     }
-    if (context && Object.keys(context).length > 0) {
-      transaction.set(tokenRootRef, context, { merge: true });
-    }
+    transaction.set(tokenRootRef, {
+      ...(context && Object.keys(context).length > 0 ? context : {}),
+      // If a disconnect lease elapsed between OAuth start and this write, the
+      // winning OAuth flow fences the old cleanup before publishing context.
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
+    }, { merge: true });
   });
 }
 
@@ -310,12 +323,10 @@ async function beginExplicitDisconnectOperation(
     // The first explicit disconnect owns this root fence until its finally
     // block completes. A second request must not replace that generation: the
     // first may already be deauthorizing the provider credential.
-    const existingDisconnectGuard = getServiceDisconnectLifecycleGuardFromRootData(
-      rootSnapshot.exists
-        ? rootSnapshot.data() as Record<string, unknown>
-        : null,
-    );
-    if (existingDisconnectGuard.disconnectOperationGeneration) {
+    const rootData = rootSnapshot.exists
+      ? rootSnapshot.data() as Record<string, unknown>
+      : undefined;
+    if (getActiveServiceDisconnectOperationGeneration(rootData)) {
       throw new ServiceDisconnectInProgressError(serviceName);
     }
     const nowMs = Date.now();
@@ -334,6 +345,7 @@ async function beginExplicitDisconnectOperation(
       ...(rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : {}),
       [OAUTH_FLOW_GENERATION_FIELD]: invalidatedOAuthFlowGeneration,
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: disconnectOperationGeneration,
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: nowMs + EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
       state: FieldValue.delete(),
       codeVerifier: FieldValue.delete(),
     };
@@ -368,6 +380,7 @@ async function finishExplicitDisconnectOperation(
     transaction.set(rootRef, {
       [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
+      [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
     }, { merge: true });
   });
 }
@@ -464,11 +477,10 @@ async function deleteSupersededOAuthCredentialIfCurrent(
       transaction.get(guard.rootGenerationGuard.documentRef),
       transaction.get(guard.tokenRef),
     ]);
-    const disconnectOperationGeneration = `${
-      tokenRootSnapshot.data()?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] || ''
-    }`.trim();
     if (
-      disconnectOperationGeneration
+      getActiveServiceDisconnectOperationGeneration(
+        tokenRootSnapshot.data() as Record<string, unknown> | undefined,
+      )
       || !tokenSnapshot.exists
       || tokenSnapshot.data()?.tokenCredentialGeneration !== guard.tokenCredentialGeneration
     ) {

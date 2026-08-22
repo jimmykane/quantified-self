@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
-import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from './service-token-store';
+import { doesServiceDisconnectOperationPermitTokenUse } from './service-token-store';
 
 /**
  * A provider refresh can take several seconds. Keep the ownership lease short
@@ -93,16 +93,16 @@ function normalizedNumber(value: unknown): number {
   return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
-function normalizedGeneration(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function doesDisconnectOperationGenerationMatch(
+function doesDisconnectOperationGenerationPermitRefresh(
   rootData: Record<string, unknown> | undefined,
   expectedDisconnectOperationGeneration: string | undefined,
+  nowMs: number,
 ): boolean {
-  return normalizedGeneration(rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD])
-    === normalizedGeneration(expectedDisconnectOperationGeneration);
+  return doesServiceDisconnectOperationPermitTokenUse(
+    rootData,
+    expectedDisconnectOperationGeneration,
+    nowMs,
+  );
 }
 
 /**
@@ -196,9 +196,10 @@ export function createTokenRefreshCoordinator(
         transaction.get(ref) as Promise<TokenSnapshot>,
         transaction.get(tokenRootRef),
       ]);
-      if (!doesDisconnectOperationGenerationMatch(
+      if (!doesDisconnectOperationGenerationPermitRefresh(
         tokenRootSnapshot.data() as Record<string, unknown> | undefined,
         options.expectedDisconnectOperationGeneration,
+        nowMs,
       )) {
         return { kind: 'skipped_service_disconnect' };
       }

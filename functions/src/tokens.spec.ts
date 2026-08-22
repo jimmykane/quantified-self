@@ -391,6 +391,7 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(false);
             hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
                 disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
             });
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
@@ -404,6 +405,7 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(false);
             hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
                 disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
             });
 
             const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
@@ -538,6 +540,7 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(true);
             hoisted.getServiceDisconnectPendingData.mockResolvedValue({
                 disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
             });
 
             await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {

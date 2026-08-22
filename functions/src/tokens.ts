@@ -20,7 +20,7 @@ import {
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import { getServiceDisconnectPendingData } from './service-disconnect-pending';
 import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
-import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from './service-token-store';
+import { doesServiceDisconnectOperationPermitTokenUse } from './service-token-store';
 import { getWahooErrorLogDetails } from './wahoo/error-details';
 import {
   COROS_ACCESS_TOKEN_EXPIRY_BUFFER_MS,
@@ -168,14 +168,10 @@ async function assertTokenUseAllowedForUser(
   }
 
   const tokenRootData = await getServiceDisconnectPendingData(firebaseUserID, serviceName);
-  const disconnectOperationGeneration = typeof tokenRootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] === 'string'
-    ? `${tokenRootData[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]}`.trim()
-    : '';
-  const expectedDisconnectOperationGeneration = `${options.expectedDisconnectOperationGeneration || ''}`.trim();
-  if (
-    (disconnectOperationGeneration && disconnectOperationGeneration !== expectedDisconnectOperationGeneration)
-    || (expectedDisconnectOperationGeneration && disconnectOperationGeneration !== expectedDisconnectOperationGeneration)
-  ) {
+  if (!doesServiceDisconnectOperationPermitTokenUse(
+    tokenRootData,
+    options.expectedDisconnectOperationGeneration,
+  )) {
     logger.warn(
       `Skipping ${serviceName} token use for ${doc.id} during ${phase} because another disconnect lifecycle owns user ${firebaseUserID}.`,
     );

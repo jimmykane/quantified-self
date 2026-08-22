@@ -4,6 +4,7 @@ import type { ServiceDisconnectPendingMetaInput } from './service-connection-met
 import {
   OAUTH_FLOW_GENERATION_FIELD,
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+  getActiveServiceDisconnectOperationGeneration,
 } from './service-token-store';
 import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from './token-refresh-coordinator';
 
@@ -47,7 +48,11 @@ export function doesRootMatchServiceDisconnectLifecycleGuard(
   return current.disconnectGeneration === (guard.disconnectGeneration || null)
     && current.oauthCredentialGeneration === (guard.oauthCredentialGeneration || null)
     && current.oauthFlowGeneration === (guard.oauthFlowGeneration || null)
-    && current.disconnectOperationGeneration === (guard.disconnectOperationGeneration || null);
+    && current.disconnectOperationGeneration === (guard.disconnectOperationGeneration || null)
+    // An explicit-disconnect cleanup must not resume after its bounded lease
+    // has expired. A later OAuth or disconnect request may already have won.
+    && (!guard.disconnectOperationGeneration
+      || getActiveServiceDisconnectOperationGeneration(data) === guard.disconnectOperationGeneration);
 }
 
 export interface PendingServiceDisconnectFailure {
@@ -59,6 +64,7 @@ export interface PendingServiceDisconnectFailure {
 
 export interface PendingServiceDisconnectRootData {
   disconnectOperationGeneration?: string | null;
+  disconnectOperationLeaseExpiresAt?: number | null;
   disconnectGeneration?: string | null;
   disconnectState?: string | null;
   disconnectReason?: string | null;
