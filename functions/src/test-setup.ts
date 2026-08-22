@@ -22,13 +22,14 @@ process.env.WAHOOAPI_WEBHOOK_TOKEN = 'test-wahoo-webhook-token';
 
 // Mock firebase-functions - this will be hoisted
 vi.mock('firebase-functions/v1', () => {
+    const returnHandler = <Handler>(handler: Handler): Handler => handler;
     const regionFn = () => ({
-        https: { onRequest: (handler: any) => handler },
+        https: { onRequest: returnHandler },
         runWith: () => ({
-            https: { onRequest: (handler: any) => handler },
+            https: { onRequest: returnHandler },
             pubsub: {
                 schedule: () => ({
-                    onRun: (handler: any) => handler,
+                    onRun: returnHandler,
                 }),
             },
         }),
@@ -112,14 +113,14 @@ vi.mock('firebase-admin', () => {
 // Mock simple-oauth2
 vi.mock('simple-oauth2', () => ({
     AuthorizationCode: class MockAuthorizationCode {
-        constructor(config: any) { }
-        authorizeURL(params: any) {
+        constructor() { }
+        authorizeURL() {
             return 'https://mock-auth-url.com';
         }
-        getToken(params: any) {
+        getToken() {
             return Promise.resolve({ token: {} });
         }
-        createToken(token: any) {
+        createToken(token: unknown) {
             return {
                 expired: () => false,
                 refresh: () => Promise.resolve({ token: {} }),
@@ -172,6 +173,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         IndoorCycling: 'Indoor Cycling',
         IndoorClimbing: 'Indoor Climbing',
         Diving: 'Diving',
+        ScubaDiving: 'Scuba Diving',
+        FreeDiving: 'Free Diving',
+        Snorkeling: 'Snorkeling',
+        Mermaiding: 'Mermaiding',
         Yoga: 'Yoga',
         Training: 'Training',
         Rowing: 'Rowing',
@@ -203,6 +208,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         RunningGroup: 'running_group',
         TrailRunningGroup: 'trail_running_group',
         SwimmingGroup: 'swimming_group',
+        DivingGroup: 'diving_group',
+        UnspecifiedGroup: 'unspecified_group',
         WaterSportsGroup: 'water_sports_group',
     },
     ActivityTypesHelper: {
@@ -246,6 +253,14 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
             actual.ActivityTypesHelper.usesStrokeRate.bind(
                 actual.ActivityTypesHelper,
             ),
+        shouldExcludeAscent:
+            actual.ActivityTypesHelper.shouldExcludeAscent.bind(
+                actual.ActivityTypesHelper,
+            ),
+        shouldExcludeDescent:
+            actual.ActivityTypesHelper.shouldExcludeDescent.bind(
+                actual.ActivityTypesHelper,
+            ),
         getActivityTypesForActivityGroup: (group: string) => {
             switch (group) {
                 case 'cycling_group':
@@ -258,6 +273,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
                     return ['Trail Running'];
                 case 'swimming_group':
                     return ['Swimming', 'Open Water Swimming'];
+                case 'diving_group':
+                    return ['Diving', 'Scuba Diving', 'Free Diving', 'Snorkeling', 'Mermaiding'];
                 default:
                     return [];
             }
@@ -325,34 +342,51 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         return left.value + ((right.value - left.value) * ratio);
     },
     RoutePreviewUtilities: {
-        buildRouteFilePreview: (routeFile: any) => {
-            const routes = Array.isArray(routeFile?.routes)
-                ? routeFile.routes
-                : Array.isArray(routeFile?.toJSON?.()?.routes)
-                    ? routeFile.toJSON().routes
+        buildRouteFilePreview: (routeFile: unknown) => {
+            const routeFileRecord = routeFile && typeof routeFile === 'object'
+                ? routeFile as { routes?: unknown; toJSON?: () => unknown }
+                : {};
+            const serializedRouteFile = typeof routeFileRecord.toJSON === 'function'
+                ? routeFileRecord.toJSON()
+                : null;
+            const serializedRoutes = serializedRouteFile && typeof serializedRouteFile === 'object'
+                ? (serializedRouteFile as { routes?: unknown }).routes
+                : undefined;
+            const routes: unknown[] = Array.isArray(routeFileRecord.routes)
+                ? routeFileRecord.routes
+                : Array.isArray(serializedRoutes)
+                    ? serializedRoutes
                     : [];
             const segments = routes
-                .map((route: any, index: number) => {
-                    const points = Array.isArray(route?.points)
-                        ? route.points.filter((point: any) => (
-                            Number.isFinite(point?.latitudeDegrees)
-                            && Number.isFinite(point?.longitudeDegrees)
-                            && (point.latitudeDegrees !== 0 || point.longitudeDegrees !== 0)
+                .map((routeValue, index) => {
+                    const route = routeValue && typeof routeValue === 'object'
+                        ? routeValue as Record<string, unknown>
+                        : {};
+                    const routePoints = Array.isArray(route.points) ? route.points : [];
+                    const points = routePoints
+                        .filter((pointValue): pointValue is Record<string, unknown> => (
+                            !!pointValue
+                            && typeof pointValue === 'object'
+                            && Number.isFinite((pointValue as Record<string, unknown>).latitudeDegrees)
+                            && Number.isFinite((pointValue as Record<string, unknown>).longitudeDegrees)
+                            && (
+                                (pointValue as Record<string, unknown>).latitudeDegrees !== 0
+                                || (pointValue as Record<string, unknown>).longitudeDegrees !== 0
+                            )
                         ))
-                        : [];
                     if (points.length < 2) {
                         return null;
                     }
                     return {
-                        id: route.id || `segment-${index}`,
+                        id: typeof route.id === 'string' && route.id ? route.id : `segment-${index}`,
                         name: route.name ?? null,
                         activityType: route.activityType ?? null,
-                        sourcePointCount: Array.isArray(route?.points) ? route.points.length : points.length,
+                        sourcePointCount: routePoints.length,
                         pointCount: points.length,
                         encodedPolyline: 'mock-polyline',
                     };
                 })
-                .filter(Boolean);
+                .filter((segment): segment is NonNullable<typeof segment> => segment !== null);
             if (!segments.length) {
                 return null;
             }
@@ -360,8 +394,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
                 version: 1,
                 encoding: 'polyline5',
                 precision: 5,
-                sourcePointCount: segments.reduce((sum: number, segment: any) => sum + segment.sourcePointCount, 0),
-                pointCount: segments.reduce((sum: number, segment: any) => sum + segment.pointCount, 0),
+                sourcePointCount: segments.reduce((sum, segment) => sum + segment.sourcePointCount, 0),
+                pointCount: segments.reduce((sum, segment) => sum + segment.pointCount, 0),
                 segments,
             };
         },
