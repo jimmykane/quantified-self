@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgClass, NgStyle } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { DataDepthMax, DataDepthMaxFeet, DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
+import { DataDepthMaxFeet, DataDistance, DataDistanceFeet, DataDistanceMiles } from '@sports-alliance/sports-lib';
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
@@ -25,6 +25,7 @@ import {
   DataSpeedAvgKilometersPerHour, DataSpeedAvgKnots, DataSpeedAvgMetersPerMinute,
   DataSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib';
+import { EVENT_SUMMARY_DIVING_STAT_TYPES } from '../../constants/event-summary-metric-groups';
 import { DataPaceAvg, DataPaceAvgMinutesPerMile } from '@sports-alliance/sports-lib';
 import { DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard } from '@sports-alliance/sports-lib';
 import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
@@ -154,6 +155,9 @@ export class DataTypeIconComponent {
   }
 
   getColumnHeaderIcon(statName): string {
+    if (EVENT_SUMMARY_DIVING_STAT_TYPES.includes(statName)) {
+      return 'scuba_diving';
+    }
     switch (statName) {
       case DataDistance.type:
       case DataDistanceMiles.type:
@@ -162,7 +166,6 @@ export class DataTypeIconComponent {
         return 'route';
       case DataDuration.type:
         return 'timer';
-      case DataDepthMax.type:
       case DataDepthMaxFeet.type:
         return 'scuba_diving';
       case '#':

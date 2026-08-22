@@ -619,6 +619,12 @@ documents, bounded metric reads also select the matching Cadence field and canon
 activity type uses Sports Lib's stroke-rate semantics. Explicit Stroke Rate wins, and mixed or unresolved sport sets
 retain Cadence. This is read compatibility, not another metric registry or a Firestore migration.
 
+Sports Lib 19.1.0 adds source-native dive summary classes for average/maximum depth, surface interval, bottom time,
+dive number, descent/ascent/hang times, average/maximum descent and ascent rates, starting/ending CNS and N2 loads,
+oxygen toxicity, average pressure/volume SAC, and average RMV. These become MCP metrics through the same automatic
+catalog only when the corresponding numeric stat is actually persisted. MCP does not calculate a missing summary from
+a continuous stream, promote lap-only values to an activity, or expose gas/tank records as metrics.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
@@ -799,11 +805,11 @@ Stroke Rate so the source parser cannot silently return an empty or mislabeled s
 remains discoverable through `list_metrics` and the selected event/activity metric tools; adding a continuous
 `stroke_rate` chart ID would be a separate registered-contract change.
 
-Event Details also has a frontend-only pinned Dive Profile for continuous Sports Lib `Depth` streams. That stream is
-intentionally absent from `list_activity_chart_metrics` and `get_activity_chart_data`, so this feature does not change
-the registered MCP activity-chart schema or source-stream allowlist. The already discoverable persisted numeric
-`Maximum Depth` event statistic remains governed by the normal Sports Lib metric catalog; continuous samples are not
-projected through MCP.
+Event Details has a frontend-only pinned Dive Profile for source-native Depth, decompression, CNS/N2 load, air-time,
+SAC/RMV, PO₂, dive-ascent-rate, Temperature, and Heart Rate streams. Those continuous streams remain intentionally
+absent from `list_activity_chart_metrics` and `get_activity_chart_data`, preserving the frozen registered MCP chart
+schemas and source-stream allowlist. Persisted numeric dive summaries are governed by the automatic Sports Lib metric
+catalog described above; continuous samples are not projected through MCP.
 
 The service decrypts the connection-bound `activityRef`, reads only the target event source metadata and its bounded
 activity identity set, and validates every object path under `users/{uid}/events/{eventId}/` in an approved project

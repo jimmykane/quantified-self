@@ -1,6 +1,7 @@
 import {
   DataDepthMax,
   DataDepthMaxFeet,
+  DataDepthAvg,
   DataAscent,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -24,6 +25,7 @@ import {
   DataPotentialStaminaAvg,
   DataPotentialStaminaMax,
   DataPotentialStaminaMin,
+  DataPressureSACAvg,
   DataPowerMax,
   DataPowerMin,
   DataJumpCount,
@@ -124,6 +126,8 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon(DataDepthMax.type)).toBe('scuba_diving');
     expect(component.getColumnHeaderIcon(DataDepthMaxFeet.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDepthAvg.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataPressureSACAvg.type)).toBe('scuba_diving');
   });
 
   it('should map ascent and descent to elevation', () => {

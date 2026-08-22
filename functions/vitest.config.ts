@@ -19,7 +19,10 @@ export default defineConfig({
             exclude: ['src/**/*.spec.ts', 'src/index.ts'],
         },
         // Mock firebase-admin and firebase-functions by default
-        setupFiles: [resolve(__dirname, 'src/test-setup.ts')],
+        setupFiles: [
+            resolve(__dirname, 'src/test-setup.ts'),
+            resolve(__dirname, 'src/test-setup.sports-lib.ts'),
+        ],
 
     },
 });

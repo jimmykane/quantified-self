@@ -26,6 +26,18 @@ import {
     ActivityTypeGroups,
     DataPowerCurve,
     DataTemperature,
+    DataNextStopDepth,
+    DataNextStopTime,
+    DataTimeToSurface,
+    DataNoDecompressionLimit,
+    DataCNSLoad,
+    DataN2Load,
+    DataAirTimeRemaining,
+    DataPressureSAC,
+    DataVolumeSAC,
+    DataRMV,
+    DataPO2,
+    DataDiveAscentRate,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -951,6 +963,18 @@ describe('EventCardComponent', () => {
                 DataDepthFeet.type,
                 DataTemperature.type,
                 DataHeartRate.type,
+                DataNextStopDepth.type,
+                DataNextStopTime.type,
+                DataTimeToSurface.type,
+                DataNoDecompressionLimit.type,
+                DataCNSLoad.type,
+                DataN2Load.type,
+                DataAirTimeRemaining.type,
+                DataPressureSAC.type,
+                DataVolumeSAC.type,
+                DataRMV.type,
+                DataPO2.type,
+                DataDiveAscentRate.type,
             ]);
         });
 

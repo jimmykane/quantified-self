@@ -1,7 +1,10 @@
 import {
   DataActivityTypes,
+  DataAirTimeRemaining,
+  DataDepthAvg,
   DataDistance,
   DataLatitudeDegrees,
+  DataPressureSACAvg,
   DataStrokeRate,
   DynamicDataLoader,
   UnitSystem,
@@ -32,6 +35,18 @@ describe('MCP Sports Lib metric catalog', () => {
       unit: 'spm',
       unitSystem: 'metric',
     });
+    expect(resolveSportsLibNumericMetric(DataDepthAvg.type)).toEqual({
+      type: DataDepthAvg.type,
+      displayType: 'Average Depth',
+      unit: 'm',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataPressureSACAvg.type)).toEqual({
+      type: DataPressureSACAvg.type,
+      displayType: 'Average Pressure SAC',
+      unit: 'bar/min',
+      unitSystem: 'metric',
+    });
   });
 
   it('canonicalizes Sports Lib aliases through DynamicDataLoader', () => {
@@ -56,6 +71,10 @@ describe('MCP Sports Lib metric catalog', () => {
     expect(projectSportsLibNumericMetricValue(DataDistance.type, '12,345')).toBeNull();
     expect(projectSportsLibNumericMetricValue(DataDistance.type, Number.NaN)).toBeNull();
     expect(projectSportsLibNumericMetricValue(DataLatitudeDegrees.type, 39.665)).toBeNull();
+    expect(projectSportsLibNumericMetricValue(
+      DataAirTimeRemaining.type,
+      4_294_961_197,
+    )).toBe(4_294_961_197);
     expect(projectSportsLibNumericMetricValue('unknown metric', 42)).toBeNull();
   });
 

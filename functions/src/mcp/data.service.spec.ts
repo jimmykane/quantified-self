@@ -7,6 +7,7 @@ import {
   DataCadence,
   DataCadenceAvg,
   DataDistance,
+  DataDepthAvg,
   DataDuration,
   DataEndPosition,
   DataEnergy,
@@ -15,6 +16,7 @@ import {
   DataJumpEvent,
   DataLatitudeDegrees,
   DataPowerAvg,
+  DataPressureSACAvg,
   DataSpeedAvg,
   DataStartPosition,
   DataStrokeRate,
@@ -3131,6 +3133,41 @@ describe('MCP data service', () => {
     expect(result.derivedMetricKinds).toContain(DERIVED_METRIC_KINDS.TrainingReadiness);
     expect(result.derivedMetricKinds).toContain(DERIVED_METRIC_KINDS.BodyWeightTrend);
     expect(result.sleepCapabilities.providers).toContain(SLEEP_PROVIDERS.GarminAPI);
+  });
+
+  it('discovers only persisted source-native dive summary metrics', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
+      {
+        id: 'private-dive-1',
+        data: {
+          name: 'Private reef dive',
+          sourceKey: 'private-dive-source',
+          stats: {
+            [DataDepthAvg.type]: 12.4,
+            [DataPressureSACAvg.type]: 1.67,
+            Latitude: 60.1,
+          },
+          streams: {
+            AirTimeRemaining: [600, 540],
+          },
+          diveGases: [{ oxygenContent: 32 }],
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      search: 'average',
+      limit: 50,
+    });
+
+    expect(result.eventMetrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: DataDepthAvg.type, unit: 'm' }),
+      expect.objectContaining({ type: DataPressureSACAvg.type, unit: 'bar/min' }),
+    ]));
+    expect(JSON.stringify(result)).not.toMatch(
+      /Private reef dive|private-dive-source|AirTimeRemaining|oxygenContent|Latitude/,
+    );
   });
 
   it('discovers and queries pre-19 stroke-rate summaries through their canonical metric', async () => {

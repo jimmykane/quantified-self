@@ -88,10 +88,13 @@ still obeys Default chart metrics and the sport profile; the exception only ensu
 used as an overlay. The **Include all recorded metrics** toggle is shown checked and disabled with explanatory copy,
 and the user's global setting is not mutated.
 
-When the pinned Dive Profile is present, Depth, Temperature, and Heart Rate are automatic exclusions for the ordinary
-stack. The ordinary panels remain in **Visible charts** when discovery permits them, so a manual custom choice can
-still display them. Other specialized surfaces do not exclude metrics unless they render the same time-series and an
-explicit rule and test are added here.
+When the pinned Dive Profile is present, Depth and its source-recorded overlays are automatic exclusions for the
+ordinary stack: Temperature, Heart Rate, next-stop depth/time, time to surface, no-decompression limit, CNS/N2 load,
+air time remaining, pressure/volume SAC, RMV, PO₂, and dive ascent rate. One overlay can be selected at a time and all
+overlays start off. The ordinary panels remain in **Visible charts** when discovery permits them, so a manual custom
+choice can still display them. The shared dive-profile stream registry drives source hydration, overlay construction,
+and these exclusions so the three surfaces cannot drift. Other specialized surfaces do not exclude metrics unless they
+render the same time-series and an explicit rule and test are added here.
 
 ## UX and accessibility
 

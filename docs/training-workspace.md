@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `19.0.1`
+- `@sports-alliance/sports-lib`: `19.1.0`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1803,11 +1803,24 @@ Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details div
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
 not require a Training rebuild or historical reparse.
 
-The repository now pins Sports Lib `19.0.1`. Schema 18 replaces the Training profile metric named `cadence` with
+Sports Lib `19.0.0` introduced the semantics used by schema 18, which replaces the Training profile metric named
+`cadence` with
 `stroke-rate` for pool/open-water swimming, indoor/on-water rowing, canoeing, kayaking, paddling, and stand-up paddling.
 The builder prefers canonical `Average Stroke Rate` but accepts the pre-19 `Average Cadence` stat for those activity
 types, so existing derived snapshots rebuild from stored event/activity documents. No original-file reparse or
 historical Firestore rewrite is needed solely for this semantic transition.
+
+The repository now pins Sports Lib `19.1.0`. It adds parser-owned, source-native dive summaries and continuous dive
+streams for the Diving group. Quantified Self displays only values supplied by the retained source: it does not derive
+missing summaries from samples, reconstruct samples from summaries, fill gaps, apply plausibility thresholds, promote
+lap-only values, or flatten gas/tank messages. New imports persist the available summary stats; an ordinary targeted
+Sports Lib reparse is required only when an existing event must persist newly available parser summaries. Continuous
+Dive Profile streams are hydrated on demand from the retained source and need no Firestore rewrite. MCP exposes the
+persisted numeric summaries through its automatic catalog; its frozen continuous chart tools are unchanged.
+
+These dive values are not Training inputs and do not change durability, Training schema 18, or any derived payload.
+Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
+new dive surfaces.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

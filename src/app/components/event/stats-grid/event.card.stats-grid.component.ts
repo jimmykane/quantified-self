@@ -34,6 +34,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   overall: 'leaderboard',
   performance: 'monitoring',
   altitude: 'terrain',
+  diving: 'scuba_diving',
   environment: 'landscape_2',
   device: 'devices',
   physiological: 'demography',

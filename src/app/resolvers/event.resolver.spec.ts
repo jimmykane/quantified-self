@@ -2,13 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import {
     DataAltitude,
-    DataDepth,
     DataGrade,
     DataGradeSmooth,
-    DataHeartRate,
     DataPotentialStamina,
     DataStamina,
-    DataTemperature,
     User,
 } from '@sports-alliance/sports-lib';
 import { of, throwError } from 'rxjs';
@@ -19,6 +16,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 // Moved import to top of file
 import { eventResolver, EventResolverData } from './event.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES } from '../helpers/event-dive-profile.helper';
 
 describe('eventResolver', () => {
     // Update ResolveFn generic type to include EventResolverData
@@ -119,11 +117,9 @@ describe('eventResolver', () => {
 
         (executeResolver(route, {} as RouterStateSnapshot) as any).subscribe(() => {
             const streamTypes = eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2];
-            expect(streamTypes).toEqual(expect.arrayContaining([
-                DataDepth.type,
-                DataTemperature.type,
-                DataHeartRate.type,
-            ]));
+            expect(streamTypes).toEqual(expect.arrayContaining(
+                EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
+            ));
             done();
         });
     }));

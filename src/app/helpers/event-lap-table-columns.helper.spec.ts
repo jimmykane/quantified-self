@@ -1,5 +1,7 @@
 import {
   DataDistance,
+  DataDepthAvg,
+  DataDiveNumber,
   DataEnergy,
   DataPaceAvg,
   DataPaceMax,
@@ -91,8 +93,11 @@ describe('event lap table columns helper', () => {
 
     expect(optionGroups.map((group) => group.id)).toContain('overall');
     expect(optionGroups.map((group) => group.id)).toContain('performance');
+    expect(optionGroups.map((group) => group.id)).toContain('diving');
     expect(optionGroups.flatMap((group) => group.metrics).map((metric) => metric.type))
       .toContain(DataPaceAvg.type);
+    expect(optionGroups.flatMap((group) => group.metrics).map((metric) => metric.type))
+      .toEqual(expect.arrayContaining([DataDepthAvg.type, DataDiveNumber.type]));
     expect(optionGroups.flatMap((group) => group.metrics).filter((metric) => metric.type === DataSpeedAvg.type)).toHaveLength(1);
   });
 

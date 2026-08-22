@@ -7,6 +7,21 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 19.1.0 source-native dive metrics transition
+
+Sports Lib 19.1.0 imports parser-provided Diving-group summaries for average/maximum depth, dive timing and rates,
+CNS/N2 load, oxygen toxicity, SAC, and RMV, plus continuous Depth, decompression, load, air-time, SAC/RMV, PO₂, and
+dive-ascent-rate streams. The importer preserves sparse source values and parser-provided magnitudes. It does not derive
+missing summaries, reconstruct streams, fill gaps, apply plausibility thresholds, promote lap-only summaries, or
+flatten gas/tank messages.
+
+New imports persist only the summary stats actually supplied by the source. Run an ordinary targeted reparse when a
+specific retained historical source must persist those new parser-owned summaries. Do not enable the automatic scanner
+or enqueue a global historical reparse solely for this release. Event Details hydrates continuous dive streams on
+demand from retained originals, so that view requires no persistence rewrite. MCP exposes persisted numeric summaries
+through its automatic catalog while its frozen continuous chart tools remain unchanged. Saved routes, Training
+disciplines, durability, and Training-derived schemas are unchanged.
+
 ### Sports Lib 19.0.0 stroke-rate semantics transition
 
 Sports Lib 19.0.0 introduces canonical `Stroke Rate` stream and average/minimum/maximum stats for Swimming, Open Water
@@ -25,14 +40,13 @@ output schemas are unchanged.
 Sports Lib 18.1.4 maps FIT record depth from millimeters into a canonical meter-based `Depth` stream while preserving
 existing session maximum-depth statistics and Suunto depth behavior. New imports and ordinary reparses can therefore
 render Event Details dive profiles for Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding sources that
-actually contain continuous depth samples. Event Details hydrates Depth, Temperature, and Heart Rate directly from the
+actually contain continuous depth samples. At that release, Event Details hydrated Depth, Temperature, and Heart Rate directly from the
 retained original source; the stream is never added to compact Firestore event or activity documents.
 
 Do not enable the automatic scanner or enqueue a historical reparse solely for the dive-profile UI. Existing retained
 sources become chartable through Event Details source hydration without a persistence rewrite. An explicitly requested
 ordinary reparse may serialize parser-owned summary changes, but it is not required to display the continuous profile.
-Saved routes, Training disciplines, Training durability, derived-metric schemas, and MCP activity-chart contracts are
-unchanged.
+Saved routes, Training disciplines, Training durability, and derived-metric schemas were unchanged.
 
 ### Sports Lib 18.1.3 snorkeling and mermaiding classification transition
 

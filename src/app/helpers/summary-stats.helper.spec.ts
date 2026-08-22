@@ -11,6 +11,7 @@ import {
   DataBeginningPotentialStamina,
   DataDescent,
   DataDescentTime,
+  DataDepthAvg,
   DataEndingPotentialStamina,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
@@ -73,6 +74,7 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataJumpSpeedMax.type);
     expect(stats).toContain(DataJumpRotationsMin.type);
     expect(stats).toContain(DataJumpScoreAvg.type);
+    expect(stats).toContain(DataDepthAvg.type);
     expect(stats).toContain(DataStore.DataAvgVAM.type);
     expect(stats).toContain(DataStore.DataAvgRespirationRate.type);
     expect(stats).toContain(DataStore.DataMinRespirationRate.type);

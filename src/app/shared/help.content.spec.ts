@@ -490,8 +490,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
+    expect(gettingStartedSection?.content).toContain('no-decompression limit');
+    expect(gettingStartedSection?.content).toContain('air time remaining');
+    expect(gettingStartedSection?.content).toContain('pressure/volume SAC');
+    expect(gettingStartedSection?.content).toContain('**Diving** summary tab');
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
-    expect(gettingStartedSection?.content).toContain('both the Overall and Environment event-summary metrics');
+    expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');
+    expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');
     expect(gettingStartedSection?.content).toContain('first Swim pace preference');
   });
@@ -554,7 +559,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
     expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
     expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
-    expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth, Temperature, and Heart Rate');
+    expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 

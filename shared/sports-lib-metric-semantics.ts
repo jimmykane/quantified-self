@@ -1,5 +1,4 @@
 import {
-  DataActivityTypes,
   DataCadence,
   DataCadenceAvg,
   DataCadenceMax,
@@ -18,28 +17,28 @@ interface MetricSemanticCompatibilityMapping {
   persistedCompatibilityType: string;
 }
 
-const STROKE_RATE_PERSISTENCE_MAPPINGS: readonly MetricSemanticCompatibilityMapping[] = [
-  {
-    canonicalType: DataStrokeRate.type,
-    persistedCompatibilityType: DataCadence.type,
-  },
-  {
-    canonicalType: DataStrokeRateAvg.type,
-    persistedCompatibilityType: DataCadenceAvg.type,
-  },
-  {
-    canonicalType: DataStrokeRateMin.type,
-    persistedCompatibilityType: DataCadenceMin.type,
-  },
-  {
-    canonicalType: DataStrokeRateMax.type,
-    persistedCompatibilityType: DataCadenceMax.type,
-  },
-];
+const PERSISTED_ACTIVITY_TYPES_STAT_TYPE = 'Activity Types';
 
-const STROKE_RATE_PERSISTENCE_MAPPING_BY_CANONICAL_TYPE = new Map(
-  STROKE_RATE_PERSISTENCE_MAPPINGS.map(mapping => [mapping.canonicalType, mapping]),
-);
+function getStrokeRatePersistenceMappings(): readonly MetricSemanticCompatibilityMapping[] {
+  return [
+    {
+      canonicalType: DataStrokeRate.type,
+      persistedCompatibilityType: DataCadence.type,
+    },
+    {
+      canonicalType: DataStrokeRateAvg.type,
+      persistedCompatibilityType: DataCadenceAvg.type,
+    },
+    {
+      canonicalType: DataStrokeRateMin.type,
+      persistedCompatibilityType: DataCadenceMin.type,
+    },
+    {
+      canonicalType: DataStrokeRateMax.type,
+      persistedCompatibilityType: DataCadenceMax.type,
+    },
+  ];
+}
 
 /**
  * Returns the Firestore stat fields needed to read canonical metrics while retaining
@@ -47,9 +46,12 @@ const STROKE_RATE_PERSISTENCE_MAPPING_BY_CANONICAL_TYPE = new Map(
  */
 export function getPersistedSportsLibMetricReadTypes(metricTypes: readonly string[]): string[] {
   const readTypes: string[] = [];
+  const mappingByCanonicalType = new Map(
+    getStrokeRatePersistenceMappings().map(mapping => [mapping.canonicalType, mapping]),
+  );
   metricTypes.forEach((metricType) => {
     appendUnique(readTypes, metricType);
-    const mapping = STROKE_RATE_PERSISTENCE_MAPPING_BY_CANONICAL_TYPE.get(metricType);
+    const mapping = mappingByCanonicalType.get(metricType);
     if (mapping) {
       appendUnique(readTypes, mapping.persistedCompatibilityType);
     }
@@ -71,7 +73,7 @@ export function canonicalizePersistedSportsLibStats(
     return canonicalStats;
   }
 
-  STROKE_RATE_PERSISTENCE_MAPPINGS.forEach((mapping) => {
+  getStrokeRatePersistenceMappings().forEach((mapping) => {
     if (!Object.prototype.hasOwnProperty.call(canonicalStats, mapping.persistedCompatibilityType)) {
       return;
     }
@@ -86,7 +88,7 @@ export function canonicalizePersistedSportsLibStats(
 export function getPersistedEventActivityTypes(
   stats: Record<string, unknown> | null | undefined,
 ): readonly unknown[] {
-  const activityTypes = stats?.[DataActivityTypes.type];
+  const activityTypes = stats?.[PERSISTED_ACTIVITY_TYPES_STAT_TYPE];
   return Array.isArray(activityTypes) ? activityTypes : [];
 }
 
@@ -98,11 +100,14 @@ export function getPersistedEventActivityTypes(
 export function normalizePersistedEventMetricSemantics(
   event: EventInterface,
 ): EventInterface {
-  const activityTypesStat = event.getStat<unknown>(DataActivityTypes.type);
+  const activityTypesStat = event.getStat<unknown>(PERSISTED_ACTIVITY_TYPES_STAT_TYPE);
   const activityTypes = activityTypesStat ? activityTypesStat.getValue() : [];
+  if (!Array.isArray(activityTypes) || activityTypes.length === 0) {
+    return event;
+  }
   normalizeActivityMetricSemanticsForStats(
     event,
-    Array.isArray(activityTypes) ? activityTypes : [],
+    activityTypes,
   );
   return event;
 }

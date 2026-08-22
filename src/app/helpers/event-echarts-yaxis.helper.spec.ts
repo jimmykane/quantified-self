@@ -5,6 +5,7 @@ import {
   DataDepth,
   DataEffortPace,
   DataHeartRate,
+  DataNextStopDepth,
   DataPace,
   DataPotentialStamina,
   DataPower,
@@ -124,17 +125,20 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBeDefined();
   });
 
-  it('keeps depth zero at the top and increases downward', () => {
-    const config = buildEventPanelYAxisConfig({
-      panel: buildPanel(DataDepth.type, [0, 1.2, 3.86]),
-      visibleRange: null,
-    });
+  it.each([DataDepth.type, DataNextStopDepth.type])(
+    'keeps %s zero at the top and increases downward',
+    (dataType) => {
+      const config = buildEventPanelYAxisConfig({
+        panel: buildPanel(dataType, [0, 1.2, 3.86]),
+        visibleRange: null,
+      });
 
-    expect(config.inverse).toBe(true);
-    expect(config.min).toBe(0);
-    expect(config.max).toBeGreaterThanOrEqual(3.86);
-    expect(config.interval).toBeDefined();
-  });
+      expect(config.inverse).toBe(true);
+      expect(config.min).toBe(0);
+      expect(config.max).toBeGreaterThanOrEqual(3.86);
+      expect(config.interval).toBeDefined();
+    },
+  );
 
   it('keeps effort pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({

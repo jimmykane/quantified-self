@@ -3,6 +3,7 @@ import {
   DataCadence,
   DataDepth,
   DataDepthFeet,
+  DataNextStopDepth,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
@@ -50,6 +51,7 @@ const STAMINA_STREAM_TYPES = new Set<string>([
 const DEPTH_STREAM_TYPES = new Set<string>([
   DataDepth.type,
   DataDepthFeet.type,
+  DataNextStopDepth.type,
 ]);
 
 export interface EventPanelYAxisConfig {

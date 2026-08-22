@@ -135,8 +135,8 @@ describe('EventDiveProfileComponent', () => {
     expect(panel.xDomain).toEqual({ start: 0, end: 3 });
     expect(panel.strokeWidth).toBe(1.5);
     expect(panel.overlayOptions.map((option) => option.dataType)).toEqual([
-      DataTemperature.type,
       DataHeartRate.type,
+      DataTemperature.type,
     ]);
     expect(fixture.nativeElement.querySelector('mat-checkbox')).toBeNull();
   });

@@ -25,6 +25,25 @@ import {
   DataBatteryCurrent,
   DataBatteryVoltage,
   DataBeginningPotentialStamina,
+  DataBottomTime,
+  DataDepthAvg,
+  DataDiveAscentRateAvg,
+  DataDiveAscentRateMax,
+  DataDiveAscentTime,
+  DataDiveDescentRateAvg,
+  DataDiveDescentRateMax,
+  DataDiveDescentTime,
+  DataDiveHangTime,
+  DataDiveNumber,
+  DataEndingCNSLoad,
+  DataEndingN2Load,
+  DataOxygenToxicity,
+  DataPressureSACAvg,
+  DataRMVAvg,
+  DataStartingCNSLoad,
+  DataStartingN2Load,
+  DataSurfaceInterval,
+  DataVolumeSACAvg,
   DataCadenceAvg,
   DataCadenceMax,
   DataCadenceMin,
@@ -169,6 +188,7 @@ import {
 export type EventSummaryMetricGroupId =
   | 'overall'
   | 'performance'
+  | 'diving'
   | 'altitude'
   | 'environment'
   | 'device'
@@ -377,6 +397,29 @@ const ENVIRONMENT_DISTANCE_TYPE_STRINGS: string[] = [
   DataGNSSDistance.type,
 ];
 
+export const EVENT_SUMMARY_DIVING_STAT_TYPES: string[] = [
+  DataDepthAvg.type,
+  DataDepthMax.type,
+  DataSurfaceInterval.type,
+  DataBottomTime.type,
+  DataDiveNumber.type,
+  DataDiveDescentTime.type,
+  DataDiveAscentTime.type,
+  DataDiveHangTime.type,
+  DataDiveAscentRateAvg.type,
+  DataDiveAscentRateMax.type,
+  DataDiveDescentRateAvg.type,
+  DataDiveDescentRateMax.type,
+  DataStartingCNSLoad.type,
+  DataEndingCNSLoad.type,
+  DataStartingN2Load.type,
+  DataEndingN2Load.type,
+  DataOxygenToxicity.type,
+  DataPressureSACAvg.type,
+  DataVolumeSACAvg.type,
+  DataRMVAvg.type,
+];
+
 export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
 
 export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
@@ -455,6 +498,11 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     id: 'altitude',
     label: 'Altitude',
     metricTypes: [],
+  },
+  {
+    id: 'diving',
+    label: 'Diving',
+    metricTypes: EVENT_SUMMARY_DIVING_STAT_TYPES,
   },
   {
     id: 'environment',
@@ -538,7 +586,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataTemperatureAvg.type,
   DataTemperatureMax.type,
   DataTemperatureMin.type,
-  DataDepthMax.type,
+  ...EVENT_SUMMARY_DIVING_STAT_TYPES,
   ...ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS,
   ...ENVIRONMENT_GRADE_TYPE_STRINGS,
   ...ENVIRONMENT_DISTANCE_TYPE_STRINGS,

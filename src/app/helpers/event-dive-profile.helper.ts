@@ -2,10 +2,22 @@ import {
   ActivityInterface,
   ActivityTypeGroups,
   ActivityTypesHelper,
+  DataAirTimeRemaining,
+  DataCNSLoad,
   DataDepth,
   DataDepthFeet,
+  DataDiveAscentRate,
   DataHeartRate,
+  DataN2Load,
+  DataNextStopDepth,
+  DataNextStopTime,
+  DataNoDecompressionLimit,
+  DataPO2,
+  DataPressureSAC,
+  DataRMV,
   DataTemperature,
+  DataTimeToSurface,
+  DataVolumeSAC,
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
@@ -19,11 +31,34 @@ import type { EventChartPanelModel, EventChartPanelSeries } from './event-echart
 
 const DIVE_PROFILE_DEPTH_TYPES = new Set([DataDepth.type, DataDepthFeet.type]);
 
+export const EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES = [
+  DataDepth.type,
+  DataTemperature.type,
+  DataHeartRate.type,
+  DataNextStopDepth.type,
+  DataNextStopTime.type,
+  DataTimeToSurface.type,
+  DataNoDecompressionLimit.type,
+  DataCNSLoad.type,
+  DataN2Load.type,
+  DataAirTimeRemaining.type,
+  DataPressureSAC.type,
+  DataVolumeSAC.type,
+  DataRMV.type,
+  DataPO2.type,
+  DataDiveAscentRate.type,
+];
+
+export const EVENT_DIVE_PROFILE_CHART_DATA_TYPES = [
+  DataDepth.type,
+  DataDepthFeet.type,
+  ...EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES.slice(1),
+];
+
 export interface EventDiveProfileModel {
   activities: ActivityInterface[];
   depthPanel: EventChartPanelModel;
-  temperaturePanel: EventChartPanelModel | null;
-  heartRatePanel: EventChartPanelModel | null;
+  overlayPanels: EventChartPanelModel[];
 }
 
 export interface BuildEventDiveProfileInput {
@@ -62,7 +97,7 @@ export function buildEventDiveProfile(input: BuildEventDiveProfileInput): EventD
     allActivities: activities,
     xAxisType: XAxisTypes.Duration,
     showAllData: false,
-    dataTypesToUse: [DataDepth.type, DataTemperature.type, DataHeartRate.type],
+    dataTypesToUse: EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
     userUnitSettings: input.userUnitSettings,
     eventColorService: input.eventColorService,
   });
@@ -75,8 +110,7 @@ export function buildEventDiveProfile(input: BuildEventDiveProfileInput): EventD
   return {
     activities,
     depthPanel,
-    temperaturePanel: panels.find((panel) => panel.dataType === DataTemperature.type) || null,
-    heartRatePanel: panels.find((panel) => panel.dataType === DataHeartRate.type) || null,
+    overlayPanels: panels.filter((panel) => !DIVE_PROFILE_DEPTH_TYPES.has(panel.dataType)),
   };
 }
 
