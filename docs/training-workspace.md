@@ -1803,7 +1803,7 @@ Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details div
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
 not require a Training rebuild or historical reparse.
 
-The repository now pins Sports Lib `19.0.0`. Schema 18 replaces the Training profile metric named `cadence` with
+The repository now pins Sports Lib `19.0.1`. Schema 18 replaces the Training profile metric named `cadence` with
 `stroke-rate` for pool/open-water swimming, indoor/on-water rowing, canoeing, kayaking, paddling, and stand-up paddling.
 The builder prefers canonical `Average Stroke Rate` but accepts the pre-19 `Average Cadence` stat for those activity
 types, so existing derived snapshots rebuild from stored event/activity documents. No original-file reparse or
