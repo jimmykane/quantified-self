@@ -11,6 +11,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   EVENT_SUMMARY_DEFAULT_STAT_TYPES,
+  EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
   EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
   EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES,
 } from '../constants/event-summary-metric-groups';
@@ -160,6 +161,8 @@ export const getDefaultSummaryStatTypes = (
     || speedDerivedAverageTypes.includes(DataGradeAdjustedPaceAvg.type);
   const gradeAdjustedSpeedSet = new Set(EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES);
   const gradeAdjustedPaceSet = new Set(EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES);
+  const altitudeSummaryStatTypes = new Set(EVENT_SUMMARY_ALTITUDE_STAT_TYPES);
+  const shouldExcludeAltitudeSummary = AppEventUtilities.shouldExcludeAltitudeSummary(normalizedActivityTypes);
 
   return EVENT_SUMMARY_DEFAULT_STAT_TYPES.reduce((statsAccu: string[], statType: string) => {
     if (statType === DataAscent.type) {
@@ -177,6 +180,9 @@ export const getDefaultSummaryStatTypes = (
       ) {
         return statsAccu;
       }
+    }
+    if (altitudeSummaryStatTypes.has(statType) && shouldExcludeAltitudeSummary) {
+      return statsAccu;
     }
     if (gradeAdjustedSpeedSet.has(statType) && !hasSpeedActivity) {
       return statsAccu;

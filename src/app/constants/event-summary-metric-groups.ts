@@ -208,6 +208,12 @@ const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
   DataDescentTime.type,
 ];
 
+export const EVENT_SUMMARY_ALTITUDE_STAT_TYPES: string[] = [
+  DataAltitudeMax.type,
+  DataAltitudeMin.type,
+  DataAltitudeAvg.type,
+];
+
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
   DataAvgRespirationRate.type,
   DataMinRespirationRate.type,
@@ -434,9 +440,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataAscent.type,
       DataDescent.type,
       ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-      DataAltitudeMax.type,
-      DataAltitudeMin.type,
-      DataAltitudeAvg.type,
+      ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
@@ -501,9 +505,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataAscent.type,
   DataDescent.type,
   ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-  DataAltitudeMax.type,
-  DataAltitudeMin.type,
-  DataAltitudeAvg.type,
+  ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
   DataCadenceAvg.type,
   DataCadenceMax.type,
   DataCadenceMin.type,

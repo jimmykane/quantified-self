@@ -1,5 +1,8 @@
 import {
   ActivityTypes,
+  DataAltitudeAvg,
+  DataAltitudeMax,
+  DataAltitudeMin,
   DataStore,
   DataAscent,
   DataCadenceMin,
@@ -171,6 +174,9 @@ describe('getDefaultSummaryStatTypes', () => {
 
       expect(stats).not.toContain(DataAscent.type);
       expect(stats).not.toContain(DataDescent.type);
+      expect(stats).not.toContain(DataAltitudeMax.type);
+      expect(stats).not.toContain(DataAltitudeMin.type);
+      expect(stats).not.toContain(DataAltitudeAvg.type);
     });
   });
 });
