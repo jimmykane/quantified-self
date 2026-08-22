@@ -5,7 +5,10 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   isDisconnectPendingServiceConnection,
   isReconnectRequiredServiceConnection,
+  isServiceUnavailableForSyncConnection,
 } from '../../../shared/service-connection';
+import { ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { clearRevisionProcessingLeaseUpdate } from './revision-processing-lease';
 import { QUEUE_DEFERRED_REASONS } from '../queue-utils';
@@ -93,6 +96,24 @@ function parseRouteRestoreDeferredContext(value: unknown): RouteRestoreDeferredC
   } catch {
     return null;
   }
+}
+
+function getRouteServiceNames(context: RouteRestoreDeferredContext): ServiceNames[] | null {
+  const route = context.settingsKind === 'activitySyncRoutes'
+    ? ACTIVITY_SYNC_ROUTES[context.routeId as keyof typeof ACTIVITY_SYNC_ROUTES]
+    : ROUTE_DELIVERY_SYNC_ROUTES[context.routeId as keyof typeof ROUTE_DELIVERY_SYNC_ROUTES];
+  if (!route) return null;
+  return Array.from(new Set([route.sourceServiceName, route.destinationServiceName]));
+}
+
+function areServiceNamesEqual(left: unknown, right: unknown): boolean {
+  const normalize = (value: unknown): string => (
+    typeof value === 'string'
+      ? value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+      : ''
+  );
+  const normalizedLeft = normalize(left);
+  return normalizedLeft !== '' && normalizedLeft === normalize(right);
 }
 
 /**
@@ -228,6 +249,8 @@ export async function releaseQueueItemsDeferredForRouteRestore(
     const meta = asRecord(metaSnapshot.data());
     const queueData = asRecord(queueSnapshot.data());
     const context = parseRouteRestoreDeferredContext(queueData.deferredContext);
+    const routeServiceNames = context ? getRouteServiceNames(context) : null;
+    if (!context || !routeServiceNames) return false;
     if (
       meta.connectionStateGeneration !== expectedConnectionStateGeneration
       || meta.routeRestorePending !== true
@@ -243,8 +266,39 @@ export async function releaseQueueItemsDeferredForRouteRestore(
       || queueData.processed !== true
       || queueData.resultStatus !== 'deferred'
       || queueData.deferredReason !== QUEUE_DEFERRED_REASONS.RouteRestorePending
-      || context?.serviceName !== serviceName
+      || !areServiceNamesEqual(context.serviceName, serviceName)
+      || !routeServiceNames.some(routeServiceName => areServiceNamesEqual(routeServiceName, serviceName))
     ) return false;
+
+    const peerServiceNames = routeServiceNames.filter(
+      routeServiceName => !areServiceNamesEqual(routeServiceName, serviceName),
+    );
+    const peerMetaSnapshots = await Promise.all(peerServiceNames.map(routeServiceName => transaction.get(
+      db.collection('users').doc(userID).collection('meta').doc(`${routeServiceName}`),
+    )));
+    const unavailablePeerServiceName = peerMetaSnapshots
+      .map((snapshot, index) => ({
+        serviceName: peerServiceNames[index],
+        meta: snapshot.data(),
+      }))
+      .find(({ meta: peerMeta }) => isServiceUnavailableForSyncConnection(peerMeta))
+      ?.serviceName;
+    if (unavailablePeerServiceName) {
+      // Hand the row to the unavailable endpoint's lifecycle. Its later
+      // reconnect or pending-disconnect clear will restore the route and
+      // release this row; never turn it into a permanent route-disabled skip.
+      transaction.update(doc.ref, {
+        deferredContext: routeRestoreDeferredContext({
+          ...context,
+          serviceName: unavailablePeerServiceName,
+        }),
+        deferredServiceName: unavailablePeerServiceName,
+        dispatchedToCloudTask: null,
+        providerOperationStartedAt: null,
+        ...clearRevisionProcessingLeaseUpdate(),
+      });
+      return false;
+    }
 
     const settings = asRecord(settingsSnapshot.data());
     const serviceSyncSettings = asRecord(settings.serviceSyncSettings);
