@@ -17,7 +17,10 @@ import {
   disableActivitySyncRoutesForDisconnectedService,
   restoreActivitySyncRoutesForPendingDisconnectClear,
 } from './activity-sync/route-cleanup';
-import { releaseQueueItemsDeferredForReconnectRequired } from './queue/pending-disconnect-release';
+import {
+  releaseQueueItemsDeferredForPendingDisconnect,
+  releaseQueueItemsDeferredForReconnectRequired,
+} from './queue/pending-disconnect-release';
 import { releaseQueueItemsDeferredForRouteRestore } from './queue/sync-route-eligibility';
 import {
   areTokenCredentialSnapshotsEqual,
@@ -327,6 +330,233 @@ async function clearWahooReconnectReleasePendingIfConnected(
 }
 
 /**
+ * Durably starts the pending-disconnect queue-release hand-off before the
+ * lifecycle is cleared. This is intentionally separate from the queue work:
+ * if OAuth callbacks race or the invocation stops while releasing pages, the
+ * marker remains for the winner or scheduler to finish.
+ */
+export async function beginPendingDisconnectQueueReleaseRepair(
+  userID: string,
+  serviceName: ServiceNames,
+  pendingDisconnectGeneration: string,
+  expectedTokenCredentialGeneration?: DocumentGenerationGuard,
+  expectedOAuthFlowGeneration?: DocumentGenerationGuard,
+  nowMs = Date.now(),
+): Promise<boolean> {
+  const releaseGeneration = normalizedGeneration(pendingDisconnectGeneration);
+  if (!releaseGeneration) return false;
+
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  const tokenRootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'pending_disconnect_queue_release_repair', error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const [metaSnapshot, tokenRootSnapshot, credentialSnapshot, oauthFlowSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(tokenRootRef),
+      expectedTokenCredentialGeneration
+        ? transaction.get(expectedTokenCredentialGeneration.documentRef)
+        : Promise.resolve(null),
+      expectedOAuthFlowGeneration
+        ? transaction.get(expectedOAuthFlowGeneration.documentRef)
+        : Promise.resolve(null),
+    ]);
+    if (expectedTokenCredentialGeneration && credentialSnapshot && (
+      !credentialSnapshot.exists
+      || credentialSnapshot.data()?.[expectedTokenCredentialGeneration.fieldName]
+        !== expectedTokenCredentialGeneration.expectedGeneration
+    )) return false;
+    if (expectedOAuthFlowGeneration && oauthFlowSnapshot && (
+      !oauthFlowSnapshot.exists
+      || oauthFlowSnapshot.data()?.[expectedOAuthFlowGeneration.fieldName]
+        !== expectedOAuthFlowGeneration.expectedGeneration
+    )) return false;
+
+    const meta = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+    const rootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
+    const existingReleaseGeneration = normalizedGeneration(meta?.pendingDisconnectQueueReleaseGeneration);
+    const hasCurrentRootPendingDisconnect = isServiceDisconnectPendingData(rootData)
+      && normalizedGeneration(rootData?.disconnectGeneration) === releaseGeneration;
+    const hasCurrentMetaPendingDisconnect = meta?.connectionState === SERVICE_CONNECTION_STATES.DisconnectPending
+      && normalizedGeneration(meta.disconnectGeneration) === releaseGeneration;
+    if (
+      (!hasCurrentRootPendingDisconnect && !hasCurrentMetaPendingDisconnect)
+      || (isServiceDisconnectPendingData(rootData) && !hasCurrentRootPendingDisconnect)
+      || getServiceDisconnectOperationGeneration(rootData) !== null
+      || (existingReleaseGeneration && existingReleaseGeneration !== releaseGeneration)
+    ) return false;
+
+    if (meta?.pendingDisconnectQueueReleasePending === true
+      && existingReleaseGeneration === releaseGeneration) {
+      return true;
+    }
+
+    transaction.set(ref, {
+      pendingDisconnectQueueReleasePending: true,
+      pendingDisconnectQueueReleaseGeneration: releaseGeneration,
+      pendingDisconnectQueueReleaseLastAttemptAt: nowMs,
+      pendingDisconnectQueueReleaseAttemptCount: 0,
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function notePendingDisconnectQueueReleaseRepairAttempt(
+  userID: string,
+  serviceName: ServiceNames,
+  pendingDisconnectGeneration: string,
+  nowMs = Date.now(),
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'pending_disconnect_queue_release_retry', error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const snapshot = await transaction.get(ref);
+    const meta = snapshot.data() as ServiceConnectionMetaFields | undefined;
+    if (
+      meta?.pendingDisconnectQueueReleasePending !== true
+      || normalizedGeneration(meta.pendingDisconnectQueueReleaseGeneration) !== pendingDisconnectGeneration
+      || isServiceUnavailableForSyncConnection(meta)
+    ) return false;
+
+    transaction.set(ref, {
+      pendingDisconnectQueueReleaseLastAttemptAt: nowMs,
+      pendingDisconnectQueueReleaseAttemptCount: Math.max(
+        0,
+        Number(meta.pendingDisconnectQueueReleaseAttemptCount) || 0,
+      ) + 1,
+    }, { merge: true });
+    return true;
+  });
+}
+
+export async function completePendingDisconnectQueueReleaseRepair(
+  userID: string,
+  serviceName: ServiceNames,
+  pendingDisconnectGeneration: string,
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  const tokenRootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        userID,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'pending_disconnect_queue_release_complete', error);
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const [metaSnapshot, tokenRootSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(tokenRootRef),
+    ]);
+    const meta = metaSnapshot.data() as ServiceConnectionMetaFields | undefined;
+    const rootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
+    if (
+      meta?.pendingDisconnectQueueReleasePending !== true
+      || normalizedGeneration(meta.pendingDisconnectQueueReleaseGeneration) !== pendingDisconnectGeneration
+      || isServiceUnavailableForSyncConnection(meta)
+      || isServiceDisconnectPendingData(rootData)
+      || getServiceDisconnectOperationGeneration(rootData) !== null
+    ) return false;
+
+    transaction.set(ref, {
+      pendingDisconnectQueueReleasePending: FieldValue.delete(),
+      pendingDisconnectQueueReleaseGeneration: FieldValue.delete(),
+      pendingDisconnectQueueReleaseLastAttemptAt: FieldValue.delete(),
+      pendingDisconnectQueueReleaseAttemptCount: FieldValue.delete(),
+    }, { merge: true });
+    return true;
+  });
+}
+
+/** Continues a bounded pending-disconnect queue release after lifecycle recovery. */
+export async function retryPendingDisconnectQueueRelease(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  const meta = await getServiceConnectionMeta(userID, serviceName);
+  const pendingDisconnectGeneration = normalizedGeneration(meta?.pendingDisconnectQueueReleaseGeneration);
+  if (
+    meta?.pendingDisconnectQueueReleasePending !== true
+    || !pendingDisconnectGeneration
+    || isServiceUnavailableForSyncConnection(meta)
+  ) return false;
+
+  try {
+    await releaseQueueItemsDeferredForPendingDisconnect(
+      userID,
+      serviceName,
+      pendingDisconnectGeneration,
+    );
+  } catch (error) {
+    try {
+      await notePendingDisconnectQueueReleaseRepairAttempt(
+        userID,
+        serviceName,
+        pendingDisconnectGeneration,
+      );
+    } catch (attemptError) {
+      logger.error('[ServiceConnectionMeta] Failed to record pending-disconnect queue release repair attempt.', {
+        userID,
+        serviceName,
+        error: attemptError instanceof Error ? attemptError.message : `${attemptError}`,
+      });
+    }
+    logger.error('[ServiceConnectionMeta] Failed to continue a bounded pending-disconnect queue release.', {
+      userID,
+      serviceName,
+      error: error instanceof Error ? error.message : `${error}`,
+    });
+    return false;
+  }
+
+  try {
+    return await completePendingDisconnectQueueReleaseRepair(
+      userID,
+      serviceName,
+      pendingDisconnectGeneration,
+    );
+  } catch (error) {
+    // The release is already complete. Retaining the marker only schedules an
+    // idempotent retry, so do not report a failed recovery to the scheduler.
+    logger.error('[ServiceConnectionMeta] Failed to clear pending-disconnect queue release repair marker.', {
+      userID,
+      serviceName,
+      error: error instanceof Error ? error.message : `${error}`,
+    });
+    return true;
+  }
+}
+
+/**
  * Restores only routes that were enabled before Wahoo was parked, then opens
  * reconnect-required queue rows. A failed partial release is marked durably
  * so the scheduled repair path retries it after the OAuth callback returns.
@@ -545,6 +775,8 @@ interface ClearServiceConnectionStateOptions {
   expectedTokenCredentialGeneration?: DocumentGenerationGuard;
   expectedOAuthFlowGeneration?: DocumentGenerationGuard;
   expectedDisconnectLifecycleGuard?: ServiceDisconnectLifecycleGuard;
+  /** Keep an already-staged pending-disconnect queue-release marker intact. */
+  preservePendingDisconnectQueueReleaseRepair?: boolean;
 }
 
 function pendingDisconnectRootFieldDeletes(): Record<string, FieldValue> {
@@ -614,6 +846,10 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
       routeRestoreConnectionGeneration: FieldValue.delete(),
       routeRestoreLastAttemptAt: FieldValue.delete(),
       routeRestoreAttemptCount: FieldValue.delete(),
+      pendingDisconnectQueueReleasePending: FieldValue.delete(),
+      pendingDisconnectQueueReleaseLastAttemptAt: FieldValue.delete(),
+      pendingDisconnectQueueReleaseAttemptCount: FieldValue.delete(),
+      pendingDisconnectQueueReleaseGeneration: FieldValue.delete(),
       disconnectReason: input.reason,
       disconnectAttemptCount: input.attemptCount,
       disconnectNextAttemptAt: input.nextAttemptAt,
@@ -993,6 +1229,12 @@ export async function clearServiceConnectionState(
       wahooReconnectReleaseLastAttemptAt: FieldValue.delete(),
       wahooReconnectReleaseAttemptCount: FieldValue.delete(),
       wahooReconnectReleaseConnectionGeneration: FieldValue.delete(),
+      ...(options.preservePendingDisconnectQueueReleaseRepair ? {} : {
+        pendingDisconnectQueueReleasePending: FieldValue.delete(),
+        pendingDisconnectQueueReleaseLastAttemptAt: FieldValue.delete(),
+        pendingDisconnectQueueReleaseAttemptCount: FieldValue.delete(),
+        pendingDisconnectQueueReleaseGeneration: FieldValue.delete(),
+      }),
       disconnectReason: FieldValue.delete(),
       disconnectAttemptCount: FieldValue.delete(),
       disconnectNextAttemptAt: FieldValue.delete(),

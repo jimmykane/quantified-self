@@ -9,6 +9,7 @@ const hoisted = vi.hoisted(() => ({
   getTokenData: vi.fn(),
   clearServiceDisconnectPending: vi.fn(),
   recordServiceDisconnectRetryFailure: vi.fn(),
+  retryPendingDisconnectQueueRelease: vi.fn(),
   retryWahooReconnectQueueRelease: vi.fn(),
   retryPendingServiceRouteRestore: vi.fn(),
 }));
@@ -58,6 +59,7 @@ vi.mock('../service-auth-lifecycle', () => ({
 }));
 
 vi.mock('../service-connection-meta', () => ({
+  retryPendingDisconnectQueueRelease: hoisted.retryPendingDisconnectQueueRelease,
   retryWahooReconnectQueueRelease: hoisted.retryWahooReconnectQueueRelease,
   retryPendingServiceRouteRestore: hoisted.retryPendingServiceRouteRestore,
 }));
@@ -149,6 +151,7 @@ describe('retry-pending-service-disconnects', () => {
     hoisted.getTokenData.mockResolvedValue({ accessToken: 'pending-token' });
     hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
+    hoisted.retryPendingDisconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryPendingServiceRouteRestore.mockResolvedValue(true);
     hoisted.collectionGroup.mockReturnValue({
@@ -243,6 +246,40 @@ describe('retry-pending-service-disconnects', () => {
     expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
     expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-1');
     expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-2');
+  });
+
+  it('retries the current durable pending-disconnect queue-release page', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.SuuntoApp,
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.SuuntoApp),
+          },
+          {
+            id: ServiceNames.COROSAPI,
+            ref: buildUserServiceMetaRef('user-2', ServiceNames.COROSAPI),
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingDisconnectQueueReleases())
+      .resolves.toBe(2);
+
+    expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
+    expect(hoisted.retryPendingDisconnectQueueRelease).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
+    expect(hoisted.retryPendingDisconnectQueueRelease).toHaveBeenCalledWith(
+      'user-2',
+      ServiceNames.COROSAPI,
+    );
   });
 
   it('bounds and checkpoints lifecycle-repair pages', async () => {

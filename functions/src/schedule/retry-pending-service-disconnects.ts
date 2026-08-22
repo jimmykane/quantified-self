@@ -13,6 +13,7 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
 import {
+  retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
   retryWahooReconnectQueueRelease,
 } from '../service-connection-meta';
@@ -33,7 +34,7 @@ interface PendingDisconnectCollectionConfig {
 }
 
 type PendingDisconnectScanType = 'due_retry' | 'restored_entitlement';
-type LifecycleRepairScanType = 'wahoo_reconnect_release' | 'route_restore';
+type LifecycleRepairScanType = 'wahoo_reconnect_release' | 'route_restore' | 'pending_disconnect_queue_release';
 
 interface PendingDisconnectScanCursorData {
   documentId?: string;
@@ -139,7 +140,7 @@ function getLifecycleRepairScanCursorRef(
 
 async function getLifecycleRepairPage(
   scanType: LifecycleRepairScanType,
-  markerField: 'wahooReconnectReleasePending' | 'routeRestorePending',
+  markerField: 'wahooReconnectReleasePending' | 'routeRestorePending' | 'pendingDisconnectQueueReleasePending',
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
   const cursorRef = getLifecycleRepairScanCursorRef(scanType);
   const cursorSnapshot = await cursorRef.get();
@@ -508,6 +509,42 @@ async function retryPendingServiceRouteRestorations(): Promise<number> {
   return repairedCount;
 }
 
+/**
+ * Finishes queue pages released after a pending-disconnect lifecycle was
+ * already cleared. These markers are distinct from pending disconnect roots:
+ * the OAuth recovery succeeded and must never be rolled back for bounded
+ * queue work.
+ */
+async function retryPendingDisconnectQueueReleases(): Promise<number> {
+  const docs = await getLifecycleRepairPage(
+    'pending_disconnect_queue_release',
+    'pendingDisconnectQueueReleasePending',
+  );
+  const knownServiceNames = new Set<string>(Object.values(ServiceNames));
+  let repairedCount = 0;
+
+  await processWithBoundedConcurrency(docs, async metaSnapshot => {
+    if (!knownServiceNames.has(metaSnapshot.id)) return;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
+    if (!userID) return;
+
+    try {
+      if (await retryPendingDisconnectQueueRelease(userID, metaSnapshot.id as ServiceNames)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a bounded pending-disconnect queue release.', {
+        userID,
+        serviceName: metaSnapshot.id,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  });
+  await checkpointLifecycleRepairPage('pending_disconnect_queue_release', docs);
+
+  return repairedCount;
+}
+
 export const retryPendingServiceDisconnects = onSchedule({
   region: 'europe-west2',
   secrets: FUNCTION_SECRET_BINDINGS.retryPendingServiceDisconnects,
@@ -529,6 +566,11 @@ export const retryPendingServiceDisconnects = onSchedule({
   const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
   logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
     repairedCount: repairedRouteRestoreCount,
+  });
+
+  const repairedPendingDisconnectQueueReleaseCount = await retryPendingDisconnectQueueReleases();
+  logger.info('[RetryPendingServiceDisconnects] Repaired bounded pending-disconnect queue releases.', {
+    repairedCount: repairedPendingDisconnectQueueReleaseCount,
   });
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
@@ -566,6 +608,7 @@ export const retryPendingServiceDisconnectsTestInternals = {
   getLifecycleRepairPage,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
+  retryPendingDisconnectQueueReleases,
   retryPendingServiceRouteRestorations,
   retryPendingWahooReconnectQueueReleases,
   shouldKeepConnectionForCurrentEntitlement,

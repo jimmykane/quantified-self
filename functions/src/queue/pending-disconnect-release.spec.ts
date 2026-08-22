@@ -429,6 +429,26 @@ describe('pending disconnect queue release', () => {
         expect(activityUpdate).toHaveBeenCalled();
     });
 
+    it('does not release pending-disconnect work after an explicit disconnect fences the token root', async () => {
+        addDoc('suuntoAppAccessTokens', 'user-1', {
+            disconnectOperationGeneration: 'disconnect-operation-1',
+            disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+        });
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
     it('does not release reconnect-parked work after a concurrent Wahoo disconnect', async () => {
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
             userID: 'user-1',

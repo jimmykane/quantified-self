@@ -9,6 +9,7 @@ const hoisted = vi.hoisted(() => ({
   refreshTokenGet: vi.fn(),
   disableActivitySyncRoutesForDisconnectedService: vi.fn().mockResolvedValue(undefined),
   restoreActivitySyncRoutesForPendingDisconnectClear: vi.fn().mockResolvedValue(undefined),
+  releaseQueueItemsDeferredForPendingDisconnect: vi.fn().mockResolvedValue(0),
   releaseQueueItemsDeferredForReconnectRequired: vi.fn().mockResolvedValue(0),
   releaseQueueItemsDeferredForRouteRestore: vi.fn().mockResolvedValue(0),
   getUserDeletionGuardStateInTransaction: vi.fn().mockResolvedValue({
@@ -52,6 +53,7 @@ vi.mock('./activity-sync/route-cleanup', () => ({
 }));
 
 vi.mock('./queue/pending-disconnect-release', () => ({
+  releaseQueueItemsDeferredForPendingDisconnect: hoisted.releaseQueueItemsDeferredForPendingDisconnect,
   releaseQueueItemsDeferredForReconnectRequired: hoisted.releaseQueueItemsDeferredForReconnectRequired,
 }));
 
@@ -109,6 +111,8 @@ import {
   markServiceReconnectRequired,
   mirrorServiceDisconnectPendingToUserMeta,
   recordWahooOpaqueRefreshFailure,
+  beginPendingDisconnectQueueReleaseRepair,
+  retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
   setServiceConnectionProviderUserId,
   pinServiceConnectionProviderUserIdIfUnset,
@@ -687,6 +691,57 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('releases a bounded pending-disconnect remainder without restoring disconnect pending', async () => {
+    hoisted.metaData = {
+      connectionState: 'disconnect_pending',
+      disconnectGeneration: 'pending-generation-1',
+    };
+    await expect(beginPendingDisconnectQueueReleaseRepair(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-1',
+    )).resolves.toBe(true);
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      pendingDisconnectQueueReleasePending: true,
+      pendingDisconnectQueueReleaseGeneration: 'pending-generation-1',
+      pendingDisconnectQueueReleaseAttemptCount: 0,
+    }));
+    delete hoisted.metaData.connectionState;
+    delete hoisted.metaData.disconnectGeneration;
+
+    await expect(retryPendingDisconnectQueueRelease('user-1', ServiceNames.SuuntoApp))
+      .resolves.toBe(true);
+
+    expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-1',
+    );
+    expect(hoisted.metaData).not.toHaveProperty('pendingDisconnectQueueReleasePending');
+    expect(hoisted.metaData.connectionState).not.toBe('disconnect_pending');
+  });
+
+  it('stages the queue-release repair when the pending root is current before its metadata mirror exists', async () => {
+    hoisted.tokenRootGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'pending-generation-root-only',
+      }),
+    });
+
+    await expect(beginPendingDisconnectQueueReleaseRepair(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      'pending-generation-root-only',
+    )).resolves.toBe(true);
+
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      pendingDisconnectQueueReleasePending: true,
+      pendingDisconnectQueueReleaseGeneration: 'pending-generation-root-only',
+    }));
+  });
+
   it('stops reconnect release when disconnect supersedes restoration after the parking barrier closes', async () => {
     hoisted.restoreActivitySyncRoutesForPendingDisconnectClear
       .mockImplementationOnce(async () => undefined)
@@ -816,6 +871,26 @@ describe('service-connection-meta', () => {
       providerBindingCheckLeaseExpiresAt: 'delete-sentinel',
       providerBindingCheckNextRetryAt: 'delete-sentinel',
     }), { merge: true });
+  });
+
+  it('preserves the staged pending-disconnect queue-release repair while clearing recovery state', async () => {
+    hoisted.metaData = {
+      connectionState: 'disconnect_pending',
+      disconnectGeneration: 'pending-generation-1',
+      pendingDisconnectQueueReleasePending: true,
+      pendingDisconnectQueueReleaseGeneration: 'pending-generation-1',
+      pendingDisconnectQueueReleaseAttemptCount: 0,
+    };
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
+      preservePendingDisconnectQueueReleaseRepair: true,
+    })).resolves.toBe(true);
+
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      pendingDisconnectQueueReleasePending: true,
+      pendingDisconnectQueueReleaseGeneration: 'pending-generation-1',
+      pendingDisconnectQueueReleaseAttemptCount: 0,
+    }));
   });
 
   it('accepts a missing token root only when the guarded credential generation is null', async () => {
