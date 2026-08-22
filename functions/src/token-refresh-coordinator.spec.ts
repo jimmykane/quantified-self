@@ -221,7 +221,7 @@ describe('token refresh coordinator', () => {
   it('commits recovery-state resets only with the winning refresh persistence', async () => {
     const store = createInMemoryCoordinator(token());
     const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
-    const claim = await store.coordinator.claim(store.ref, credential, 1_000);
+    const claim = await store.coordinator.claim(store.ref, credential, Date.now());
     expect(claim.kind).toBe('owner');
     if (claim.kind !== 'owner') return;
     const metaRef = {
@@ -241,6 +241,64 @@ describe('token refresh coordinator', () => {
       data: { wahooRefreshFailureCount: 0 },
       options: { merge: true },
     }]);
+  });
+
+  it('does not persist a refresh after explicit disconnect fences the token root', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    const claim = await store.coordinator.claim(store.ref, credential, Date.now());
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+    store.beginExplicitDisconnect('disconnect-operation-1');
+
+    await expect(store.coordinator.persist(
+      store.ref,
+      claim.leaseOwner,
+      claim.credential,
+      { accessToken: 'late-access', refreshToken: 'late-refresh' },
+    )).resolves.toMatchObject({ kind: 'superseded' });
+    expect(store.getStoredToken()).toEqual(expect.objectContaining({ accessToken: 'access-1' }));
+  });
+
+  it('allows the matching explicit-disconnect owner to persist before its lease expires', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    store.beginExplicitDisconnect('disconnect-operation-1');
+    const claim = await store.coordinator.claim(store.ref, credential, Date.now(), {
+      expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+    });
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+
+    await expect(store.coordinator.persist(
+      store.ref,
+      claim.leaseOwner,
+      claim.credential,
+      { accessToken: 'disconnect-owner-access', refreshToken: 'disconnect-owner-refresh' },
+      { expectedDisconnectOperationGeneration: 'disconnect-operation-1' },
+    )).resolves.toEqual({ kind: 'persisted' });
+    expect(store.getStoredToken()).toEqual(expect.objectContaining({
+      accessToken: 'disconnect-owner-access',
+    }));
+  });
+
+  it('does not persist after its refresh lease expires', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    const claim = await store.coordinator.claim(
+      store.ref,
+      credential,
+      Date.now() - TOKEN_REFRESH_LEASE_MS,
+    );
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+
+    await expect(store.coordinator.persist(
+      store.ref,
+      claim.leaseOwner,
+      claim.credential,
+      { accessToken: 'late-access', refreshToken: 'late-refresh' },
+    )).resolves.toMatchObject({ kind: 'superseded' });
   });
 
   it('does not recreate a disconnected token when an old refresh finishes', async () => {

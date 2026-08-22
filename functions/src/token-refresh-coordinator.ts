@@ -48,6 +48,8 @@ export interface TokenRefreshCompanionWrite {
 export interface PersistTokenRefreshOptions {
   /** Writes committed atomically only when this refresh still owns the credential. */
   companionWrites?: readonly TokenRefreshCompanionWrite[];
+  /** Only explicit-disconnect cleanup may persist while its root fence is active. */
+  expectedDisconnectOperationGeneration?: string;
 }
 
 /** Only explicit-disconnect cleanup may refresh while its root fence is active. */
@@ -244,7 +246,22 @@ export function createTokenRefreshCoordinator(
         return { kind: 'skipped_user_deletion' };
       }
 
-      const snapshot = await transaction.get(ref) as TokenSnapshot;
+      const tokenRootRef = ref.parent?.parent;
+      if (!tokenRootRef) {
+        return { kind: 'superseded', snapshot: null };
+      }
+      const nowMs = Date.now();
+      const [snapshot, tokenRootSnapshot] = await Promise.all([
+        transaction.get(ref) as Promise<TokenSnapshot>,
+        transaction.get(tokenRootRef),
+      ]);
+      if (!doesDisconnectOperationGenerationPermitRefresh(
+        tokenRootSnapshot.data() as Record<string, unknown> | undefined,
+        options.expectedDisconnectOperationGeneration,
+        nowMs,
+      )) {
+        return { kind: 'superseded', snapshot: snapshot.exists ? snapshot : null };
+      }
       if (!snapshot.exists) {
         return { kind: 'superseded', snapshot: null };
       }
@@ -252,6 +269,7 @@ export function createTokenRefreshCoordinator(
       const data = snapshot.data() as Record<string, unknown> | undefined;
       if (
         data?.tokenRefreshLeaseOwner !== leaseOwner
+        || !isRefreshLeaseActive(data, nowMs)
         || !areTokenCredentialSnapshotsEqual(
           getTokenCredentialSnapshot(data),
           expectedCredential,
