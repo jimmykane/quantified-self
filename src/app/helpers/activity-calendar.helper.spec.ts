@@ -286,6 +286,45 @@ describe('activity-calendar helper', () => {
     expect(swimming?.metrics.descent.eligibleEventCount).toBe(0);
   });
 
+  it('excludes both elevation metrics for every Diving-group activity while retaining volume', () => {
+    const divingActivityTypes = [
+      ActivityTypes.Diving,
+      ActivityTypes.ScubaDiving,
+      ActivityTypes.FreeDiving,
+      ActivityTypes.Snorkeling,
+      ActivityTypes.Mermaiding,
+    ];
+    const model = buildActivityCalendarViewModel([
+      ...divingActivityTypes.map((activityType, index) => createEvent(
+        `dive-${index}`,
+        new Date(2026, 7, index + 3, 8),
+        [activityType],
+        3600,
+        { distanceMeters: 1000, ascentMeters: 25, descentMeters: 30 },
+      )),
+      createEvent('run', new Date(2026, 7, 8, 8), [ActivityTypes.Running], 1800, {
+        distanceMeters: 5000,
+        ascentMeters: 100,
+        descentMeters: 80,
+      }),
+    ], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 15),
+      startOfWeek: DaysOfTheWeek.Monday,
+      locale: 'en-US',
+    });
+    const diving = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.DivingGroup
+    ));
+
+    expect(model.summary.totalDurationSeconds).toBe(19_800);
+    expect(model.summary.totalDistanceMeters).toBe(10_000);
+    expect(model.summary.totalAscentMeters).toBe(100);
+    expect(model.summary.totalDescentMeters).toBe(80);
+    expect(diving?.metrics.ascent).toEqual({ value: 0, eligibleEventCount: 0, recordedEventCount: 0 });
+    expect(diving?.metrics.descent).toEqual({ value: 0, eligibleEventCount: 0, recordedEventCount: 0 });
+  });
+
   it('honors normalized user-configured ascent and descent summary exclusions', () => {
     const model = buildActivityCalendarViewModel([
       createEvent('run', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600, {

@@ -158,4 +158,19 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).not.toContain(DataAscent.type);
     expect(stats).not.toContain(DataDescent.type);
   });
+
+  it('should automatically exclude both elevation metrics for every Diving-group activity', () => {
+    [
+      ActivityTypes.Diving,
+      ActivityTypes.ScubaDiving,
+      ActivityTypes.FreeDiving,
+      ActivityTypes.Snorkeling,
+      ActivityTypes.Mermaiding,
+    ].forEach((activityType) => {
+      const stats = getDefaultSummaryStatTypes([activityType]);
+
+      expect(stats).not.toContain(DataAscent.type);
+      expect(stats).not.toContain(DataDescent.type);
+    });
+  });
 });

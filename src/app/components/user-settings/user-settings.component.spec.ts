@@ -23,6 +23,7 @@ import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
+    ActivityTypes,
     DistanceUnits,
     PaceUnits,
     DataPotentialStamina,
@@ -866,6 +867,25 @@ describe('UserSettingsComponent', () => {
 
         // Should be unique
         expect(new Set(formValue).size).toBe(formValue.length);
+    });
+
+    it('should make every Diving-group activity mandatory for both elevation exclusions', () => {
+        component.ngOnChanges();
+        const ascentFormValue = component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value;
+        const descentFormValue = component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value;
+
+        [
+            ActivityTypes.Diving,
+            ActivityTypes.ScubaDiving,
+            ActivityTypes.FreeDiving,
+            ActivityTypes.Snorkeling,
+            ActivityTypes.Mermaiding,
+        ].forEach((activityType) => {
+            expect(ascentFormValue).toContain(activityType);
+            expect(descentFormValue).toContain(activityType);
+            expect(component.isMandatoryExclusion(activityType)).toBe(true);
+            expect(component.isMandatoryDescentExclusion(activityType)).toBe(true);
+        });
     });
 
     it('keeps save actions visible and disabled when form is invalid', () => {
