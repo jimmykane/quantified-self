@@ -301,9 +301,20 @@ async function releaseDeferredQueueDocument(
                     return false;
                 }
             } else {
-                const pendingRootSnapshot = await transaction.get(
-                    getServiceTokenRootDocumentRef(userID, serviceName),
-                );
+                const [repairMetaSnapshot, pendingRootSnapshot] = await Promise.all([
+                    expectedGeneration
+                        ? transaction.get(db.collection('users').doc(userID).collection('meta').doc(serviceName))
+                        : Promise.resolve(null),
+                    transaction.get(getServiceTokenRootDocumentRef(userID, serviceName)),
+                ]);
+                const repairMetaData = repairMetaSnapshot?.data();
+                if (
+                    expectedGeneration
+                    && (
+                        repairMetaData?.pendingDisconnectQueueReleasePending !== true
+                        || repairMetaData.pendingDisconnectQueueReleaseGeneration !== expectedGeneration
+                    )
+                ) return false;
                 const pendingRootData = pendingRootSnapshot.data() as Record<string, unknown> | undefined;
                 if (
                     isServiceDisconnectPendingData(pendingRootData)

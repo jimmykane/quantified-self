@@ -20,7 +20,7 @@ const hoisted = vi.hoisted(() => {
     const collections = new Map<string, StoredDoc[]>();
     const getFailures = new Map<string, Error>();
     const beforeTransactionRead = new Map<string, () => void>();
-    const serviceConnectionStates = new Map<string, string>();
+    const serviceConnectionMeta = new Map<string, Record<string, unknown>>();
     const deleteSentinel = { delete: true };
     const timestampFromDate = vi.fn((date: Date) => date);
     const getUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
@@ -90,7 +90,7 @@ const hoisted = vi.hoisted(() => {
         collections,
         getFailures,
         beforeTransactionRead,
-        serviceConnectionStates,
+        serviceConnectionMeta,
         deleteSentinel,
         timestampFromDate,
         getUserDeletionGuardStateInTransaction,
@@ -111,11 +111,11 @@ const hoisted = vi.hoisted(() => {
                         beforeTransactionRead.delete(ref.path);
                         hook();
                     }
-                    const serviceConnectionState = serviceConnectionStates.get(ref.path);
-                    if (serviceConnectionState) {
+                    const serviceMeta = serviceConnectionMeta.get(ref.path);
+                    if (serviceMeta) {
                         return {
                             exists: true,
-                            data: () => ({ connectionState: serviceConnectionState }),
+                            data: () => serviceMeta,
                         };
                     }
                     const storedDoc = ref.storedDoc;
@@ -194,7 +194,7 @@ describe('pending disconnect queue release', () => {
         hoisted.collections.clear();
         hoisted.getFailures.clear();
         hoisted.beforeTransactionRead.clear();
-        hoisted.serviceConnectionStates.clear();
+        hoisted.serviceConnectionMeta.clear();
         hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -234,7 +234,18 @@ describe('pending disconnect queue release', () => {
     }
 
     function setServiceConnectionState(userID: string, serviceName: ServiceNames, connectionState: string): void {
-        hoisted.serviceConnectionStates.set(`users/${userID}/meta/${serviceName}`, connectionState);
+        hoisted.serviceConnectionMeta.set(`users/${userID}/meta/${serviceName}`, { connectionState });
+    }
+
+    function setPendingDisconnectQueueReleaseRepair(
+        userID: string,
+        serviceName: ServiceNames,
+        generation: string,
+    ): void {
+        hoisted.serviceConnectionMeta.set(`users/${userID}/meta/${serviceName}`, {
+            pendingDisconnectQueueReleasePending: true,
+            pendingDisconnectQueueReleaseGeneration: generation,
+        });
     }
 
     it('releases deferred queue items for the restored service without touching other services', async () => {
@@ -413,6 +424,7 @@ describe('pending disconnect queue release', () => {
     });
 
     it('releases older parked generations after the authoritative pending root is clear', async () => {
+        setPendingDisconnectQueueReleaseRepair('user-1', ServiceNames.SuuntoApp, 'pending-generation-1');
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
             userID: 'user-1',
             deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
@@ -427,6 +439,26 @@ describe('pending disconnect queue release', () => {
         )).resolves.toBe(1);
 
         expect(activityUpdate).toHaveBeenCalled();
+    });
+
+    it('does not reopen pending work after completed explicit disconnect removes the repair marker and token root', async () => {
+        setPendingDisconnectQueueReleaseRepair('user-1', ServiceNames.SuuntoApp, 'pending-generation-1');
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-suunto', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+            deferredServiceName: ServiceNames.SuuntoApp,
+        });
+        hoisted.beforeTransactionRead.set(`users/user-1/meta/${ServiceNames.SuuntoApp}`, () => {
+            hoisted.serviceConnectionMeta.delete(`users/user-1/meta/${ServiceNames.SuuntoApp}`);
+        });
+
+        await expect(releaseQueueItemsDeferredForPendingDisconnect(
+            'user-1',
+            ServiceNames.SuuntoApp,
+            'pending-generation-1',
+        )).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
     });
 
     it('does not release pending-disconnect work after an explicit disconnect fences the token root', async () => {
