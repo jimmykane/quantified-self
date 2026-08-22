@@ -1376,6 +1376,17 @@
       ]
     },
     {
+      "collectionGroup": "meta",
+      "fieldPath": "pendingDisconnectQueueReleasePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "fieldPath": "expireAt",
       "ttl": true,

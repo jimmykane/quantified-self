@@ -15,7 +15,11 @@ import {
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { getServiceTokenCollectionRef, getServiceTokenRootDocumentRef } from '../service-token-store';
+import {
+    getServiceDisconnectOperationGeneration,
+    getServiceTokenCollectionRef,
+    getServiceTokenRootDocumentRef,
+} from '../service-token-store';
 import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
 import {
     getUserDeletionGuardStateInTransaction,
@@ -40,7 +44,12 @@ const DEFERRED_QUEUE_RELEASE_PAGE_SIZE = 100;
 const DEFERRED_QUEUE_RELEASE_MAX_PAGES_PER_QUERY = 5;
 const DEFERRED_QUEUE_RELEASE_CONCURRENCY = 10;
 
-class DeferredQueueReleaseIncompleteError extends Error {
+/**
+ * A release made durable progress but hit its per-invocation work budget.
+ * Callers must retain their repair marker and retry, not restore a completed
+ * disconnect lifecycle.
+ */
+export class DeferredQueueReleaseIncompleteError extends Error {
     constructor(serviceName: ServiceNames, deferredReason: QueueDeferredReason) {
         super(`Deferred ${serviceName} queue release for ${deferredReason} reached its bounded page limit; retrying the remaining items.`);
         this.name = 'DeferredQueueReleaseIncompleteError';
@@ -295,7 +304,11 @@ async function releaseDeferredQueueDocument(
                 const pendingRootSnapshot = await transaction.get(
                     getServiceTokenRootDocumentRef(userID, serviceName),
                 );
-                if (isServiceDisconnectPendingData(pendingRootSnapshot.data())) return false;
+                const pendingRootData = pendingRootSnapshot.data() as Record<string, unknown> | undefined;
+                if (
+                    isServiceDisconnectPendingData(pendingRootData)
+                    || getServiceDisconnectOperationGeneration(pendingRootData) !== null
+                ) return false;
             }
 
             const currentSnapshot = await transaction.get(doc.ref);

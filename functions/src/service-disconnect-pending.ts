@@ -6,7 +6,9 @@ import {
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
 import {
+  beginPendingDisconnectQueueReleaseRepair,
   clearServiceConnectionState,
+  completePendingDisconnectQueueReleaseRepair,
   mirrorServiceDisconnectPendingToUserMeta,
 } from './service-connection-meta';
 import {
@@ -18,7 +20,10 @@ import {
   UserDeletionGuardReadError,
 } from './shared/user-deletion-guard';
 import type { DocumentGenerationGuard } from './token-refresh-coordinator';
-import { releaseQueueItemsDeferredForPendingDisconnect } from './queue/pending-disconnect-release';
+import {
+  DeferredQueueReleaseIncompleteError,
+  releaseQueueItemsDeferredForPendingDisconnect,
+} from './queue/pending-disconnect-release';
 import {
   buildPendingDisconnectMarkState,
   buildPendingDisconnectMetaInputFromRootData,
@@ -454,9 +459,22 @@ export async function clearServiceDisconnectPending(
     const pendingDisconnectGeneration = clearResult.status === 'pending_found'
       ? `${clearResult.pendingData.disconnectGeneration || ''}`.trim() || undefined
       : undefined;
+    if (clearResult.status === 'pending_found' && pendingDisconnectGeneration) {
+      const didStartQueueReleaseRepair = await beginPendingDisconnectQueueReleaseRepair(
+        userID,
+        serviceName,
+        pendingDisconnectGeneration,
+        expectedOAuthCredentialGeneration,
+        expectedOAuthFlowGeneration,
+      );
+      if (!didStartQueueReleaseRepair) {
+        return;
+      }
+    }
     const didClearConnectionState = await clearServiceConnectionState(userID, serviceName, {
       restorePendingDisconnectActivitySyncRoutes: true,
       clearPendingDisconnectRoot: true,
+      preservePendingDisconnectQueueReleaseRepair: !!pendingDisconnectGeneration,
       expectedDisconnectLifecycleGuard: clearResult.lifecycleGuard,
       ...(expectedOAuthCredentialGeneration ? {
         expectedTokenCredentialGeneration: expectedOAuthCredentialGeneration,
@@ -478,8 +496,37 @@ export async function clearServiceDisconnectPending(
         serviceName,
         pendingDisconnectGeneration,
       );
+      if (pendingDisconnectGeneration) {
+        try {
+          await completePendingDisconnectQueueReleaseRepair(
+            userID,
+            serviceName,
+            pendingDisconnectGeneration,
+          );
+        } catch (error) {
+          // The rows were already released. Retaining the marker only causes
+          // an idempotent scheduler retry, so OAuth recovery must continue.
+          logger.error('[ServiceDisconnectPending] Failed to clear completed pending-disconnect queue release repair marker.', {
+            userID,
+            serviceName,
+            pendingDisconnectGeneration,
+            error: error instanceof Error ? error.message : `${error}`,
+          });
+        }
+      }
     }
   } catch (error) {
+    if (
+      clearResult.status === 'pending_found'
+      && error instanceof DeferredQueueReleaseIncompleteError
+    ) {
+      logger.warn('[ServiceDisconnectPending] Bounded deferred queue release made partial progress; retained the durable repair marker without restoring disconnect pending.', {
+        userID,
+        serviceName,
+        pendingDisconnectGeneration: `${clearResult.pendingData.disconnectGeneration || ''}`.trim(),
+      });
+      return;
+    }
     if (clearResult.status === 'pending_found') {
       await restoreServiceDisconnectPendingAfterClearFailure(
         userID,

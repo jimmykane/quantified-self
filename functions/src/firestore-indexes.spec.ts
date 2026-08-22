@@ -146,6 +146,14 @@ describe('firestore indexes', () => {
                 { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
             ],
         });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
+            fieldPath: 'pendingDisconnectQueueReleasePending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
         expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
             collectionGroup: 'tokens',
             fieldPath: 'wahooUserID',
