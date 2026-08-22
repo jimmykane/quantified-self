@@ -112,10 +112,11 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
     setStoredToken: (nextToken: StoredToken) => {
       storedToken = nextToken ? { ...nextToken } : null;
     },
-    beginExplicitDisconnect: (generation: string) => {
+    beginExplicitDisconnect: (generation: string, leaseExpiresAt = Date.now() + 60_000) => {
       tokenRootData = {
         ...tokenRootData,
         disconnectOperationGeneration: generation,
+        disconnectOperationLeaseExpiresAt: leaseExpiresAt,
       };
     },
     beginDeletion: () => {
@@ -178,6 +179,15 @@ describe('token refresh coordinator', () => {
     });
 
     expect(claim.kind).toBe('owner');
+  });
+
+  it('does not resume normal token use from an expired explicit-disconnect lease', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    store.beginExplicitDisconnect('expired-disconnect-operation', 999);
+
+    await expect(store.coordinator.claim(store.ref, credential, 1_000))
+      .resolves.toEqual({ kind: 'skipped_service_disconnect' });
   });
 
   it('rejects a stale refresh result after reauthorization replaces the credential generation', async () => {

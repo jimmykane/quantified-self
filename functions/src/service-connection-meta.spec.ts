@@ -62,6 +62,12 @@ vi.mock('./queue/sync-route-eligibility', () => ({
 vi.mock('./service-token-store', () => ({
   OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
+  getServiceDisconnectOperationGeneration: (data: Record<string, unknown> | undefined) => {
+    const generation = typeof data?.disconnectOperationGeneration === 'string'
+      ? data.disconnectOperationGeneration.trim()
+      : '';
+    return generation || null;
+  },
   getServiceTokenRootDocumentRef: () => ({
     ...hoisted.tokenRootRef,
     get: hoisted.tokenRootGet,
@@ -453,7 +459,10 @@ describe('service-connection-meta', () => {
     };
     hoisted.tokenRootGet.mockResolvedValueOnce({
       exists: true,
-      data: () => ({ disconnectOperationGeneration: 'disconnect-operation-1' }),
+      data: () => ({
+        disconnectOperationGeneration: 'disconnect-operation-1',
+        disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+      }),
     });
 
     await expect(retryPendingServiceRouteRestore(
@@ -685,7 +694,10 @@ describe('service-connection-meta', () => {
     hoisted.releaseQueueItemsDeferredForRouteRestore.mockImplementationOnce(async () => {
       hoisted.tokenRootGet.mockResolvedValue({
         exists: true,
-        data: () => ({ disconnectOperationGeneration: 'disconnect-operation-new' }),
+        data: () => ({
+          disconnectOperationGeneration: 'disconnect-operation-new',
+          disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+        }),
       });
       return 0;
     });

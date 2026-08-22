@@ -608,6 +608,7 @@ describe('OAuth2', () => {
             mockTransactionDocumentData = {
                 oauthFlowGeneration: 'disconnect-flow-generation-1',
                 disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
             };
 
             await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
@@ -620,6 +621,24 @@ describe('OAuth2', () => {
             expect(mockTransactionDocumentData).toMatchObject({
                 disconnectOperationGeneration: 'disconnect-operation-1',
             });
+        });
+
+        it('reclaims an expired explicit disconnect operation lease', async () => {
+            mockTransactionDocumentData = {
+                oauthFlowGeneration: 'abandoned-disconnect-flow',
+                disconnectOperationGeneration: 'abandoned-disconnect-operation',
+                disconnectOperationLeaseExpiresAt: Date.now() - 1,
+            };
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.toEqual(
+                expect.objectContaining({ reason: 'user_disconnect' }),
+            );
+
+            expect(getTokenData).toHaveBeenCalled();
+            expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
+                disconnectOperationGeneration: expect.any(String),
+                disconnectOperationLeaseExpiresAt: expect.any(Number),
+            }), { merge: true });
         });
 
         it('should fail explicit disconnect when local token cleanup fails', async () => {
@@ -1101,6 +1120,27 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).not.toHaveBeenCalled();
         });
 
+        it('starts OAuth after reclaiming an expired explicit disconnect operation lease', async () => {
+            mockTransactionDocumentData = {
+                oauthFlowGeneration: 'abandoned-disconnect-flow',
+                disconnectOperationGeneration: 'abandoned-disconnect-operation',
+                disconnectOperationLeaseExpiresAt: Date.now() - 1,
+            };
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+            )).resolves.toContain('https://');
+
+            expect(mockTransactionDocumentData).toEqual(expect.objectContaining({
+                state: expect.any(String),
+                oauthFlowGeneration: expect.any(String),
+            }));
+            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationGeneration');
+            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
+        });
+
         it('does not publish delayed OAuth preparation after an explicit disconnect invalidates the flow', async () => {
             const { SuuntoAuthAdapter } = await import('./suunto/auth/adapter');
             const originalGetAuthorizationData = SuuntoAuthAdapter.prototype.getAuthorizationData;
@@ -1129,6 +1169,7 @@ describe('OAuth2', () => {
                 ...mockTransactionDocumentData,
                 oauthFlowGeneration: 'disconnect-fence-generation',
                 disconnectOperationGeneration: 'disconnect-operation-generation',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
             };
             releasePreparation();
 
@@ -1715,6 +1756,7 @@ describe('OAuth2', () => {
                     ...mockTransactionDocumentData,
                     oauthFlowGeneration: 'disconnect-flow-generation',
                     disconnectOperationGeneration: 'disconnect-operation-generation',
+                    disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
                 };
                 return false;
             });

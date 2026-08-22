@@ -19,7 +19,7 @@ import {
   getTokenCredentialSnapshot,
   type TokenCredentialSnapshot,
 } from '../token-refresh-coordinator';
-import { SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD } from '../service-token-store';
+import { getServiceDisconnectOperationGeneration } from '../service-token-store';
 import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
 
 type WahooTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
@@ -121,7 +121,7 @@ async function readWahooActiveAccountGuardInTransaction(
   const tokenRoot = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
   if (isDisconnectPendingServiceConnection(meta)
     || isServiceDisconnectPendingData(tokenRoot)
-    || normalizeGeneration(tokenRoot?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD])) {
+    || getServiceDisconnectOperationGeneration(tokenRoot)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, 'active_account_guard');
   }
   if (isReconnectRequiredServiceConnection(meta)) {

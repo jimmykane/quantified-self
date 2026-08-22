@@ -19,6 +19,7 @@ import {
   PendingServiceDisconnectFailure,
   ServiceDisconnectLifecycleGuard,
 } from './service-disconnect-pending';
+import { doesRootMatchServiceDisconnectLifecycleGuard } from './service-disconnect-pending-state';
 import {
   DeleteLocalServiceTokenOptions,
   deleteLocalServiceToken,
@@ -270,14 +271,11 @@ function addRetryableDisconnectFailure(
   });
 }
 
-function areServiceDisconnectLifecycleGuardsEqual(
-  left: ServiceDisconnectLifecycleGuard,
-  right: ServiceDisconnectLifecycleGuard,
+function isCurrentServiceDisconnectLifecycleGuard(
+  rootData: Record<string, unknown> | null,
+  lifecycleGuard: ServiceDisconnectLifecycleGuard,
 ): boolean {
-  return (left.disconnectGeneration || null) === (right.disconnectGeneration || null)
-    && (left.oauthCredentialGeneration || null) === (right.oauthCredentialGeneration || null)
-    && (left.oauthFlowGeneration || null) === (right.oauthFlowGeneration || null)
-    && (left.disconnectOperationGeneration || null) === (right.disconnectOperationGeneration || null);
+  return doesRootMatchServiceDisconnectLifecycleGuard(rootData, lifecycleGuard);
 }
 
 function resolvedServiceTokenMatchesSnapshot(
@@ -302,10 +300,8 @@ async function captureResolvedCleanupTokenSnapshotIfCurrent(
       transaction.get(rootRef),
       transaction.get(tokenRef),
     ]);
-    const currentGuard = getServiceDisconnectLifecycleGuardFromRootData(
-      rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : null,
-    );
-    if (!areServiceDisconnectLifecycleGuardsEqual(currentGuard, lifecycleGuard)
+    const rootData = rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : null;
+    if (!isCurrentServiceDisconnectLifecycleGuard(rootData, lifecycleGuard)
       || !resolvedServiceTokenMatchesSnapshot(serviceToken, tokenSnapshot)) {
       return null;
     }
@@ -321,10 +317,10 @@ async function isServiceDisconnectLifecycleGuardCurrent(
   const snapshot = transaction
     ? await transaction.get(rootRef)
     : await rootRef.get();
-  const current = getServiceDisconnectLifecycleGuardFromRootData(
+  return isCurrentServiceDisconnectLifecycleGuard(
     snapshot.exists ? snapshot.data() as Record<string, unknown> : null,
+    lifecycleGuard,
   );
-  return areServiceDisconnectLifecycleGuardsEqual(current, lifecycleGuard);
 }
 
 async function deleteEmptyTokenRootForDisconnectEpisode(
@@ -336,10 +332,10 @@ async function deleteEmptyTokenRootForDisconnectEpisode(
       transaction.get(rootRef),
       transaction.get(rootRef.collection('tokens').limit(1)),
     ]);
-    const currentGuard = getServiceDisconnectLifecycleGuardFromRootData(
+    if (!isCurrentServiceDisconnectLifecycleGuard(
       rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : null,
-    );
-    if (!areServiceDisconnectLifecycleGuardsEqual(currentGuard, lifecycleGuard)) {
+      lifecycleGuard,
+    )) {
       return 'stale';
     }
     if (!tokenSnapshot.empty) {
@@ -364,10 +360,10 @@ async function validateEmptyTokenRootForDisconnectEpisode(
       transaction.get(rootRef),
       transaction.get(rootRef.collection('tokens').limit(1)),
     ]);
-    const currentGuard = getServiceDisconnectLifecycleGuardFromRootData(
+    if (!isCurrentServiceDisconnectLifecycleGuard(
       rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : null,
-    );
-    if (!areServiceDisconnectLifecycleGuardsEqual(currentGuard, lifecycleGuard)) {
+      lifecycleGuard,
+    )) {
       return 'stale';
     }
     return tokenSnapshot.empty ? 'current_empty' : 'tokens_present';
@@ -1039,13 +1035,11 @@ export async function cleanupServiceConnectionForUser(
       oauthFlowGeneration: null,
       disconnectOperationGeneration: null,
     };
-  if (options.disconnectLifecycleGuard && !areServiceDisconnectLifecycleGuardsEqual(
+  if (options.disconnectLifecycleGuard && !isCurrentServiceDisconnectLifecycleGuard(
+    initialTokenRootSnapshot?.exists
+      ? initialTokenRootSnapshot.data() as Record<string, unknown>
+      : null,
     disconnectLifecycleGuard,
-    getServiceDisconnectLifecycleGuardFromRootData(
-      initialTokenRootSnapshot?.exists
-        ? initialTokenRootSnapshot.data() as Record<string, unknown>
-        : null,
-    ),
   )) {
     outcome.skippedByCondition = true;
     return outcome;

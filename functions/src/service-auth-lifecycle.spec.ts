@@ -115,6 +115,15 @@ vi.mock('./service-connection-meta', () => ({
 vi.mock('./service-token-store', () => ({
   OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
+  getActiveServiceDisconnectOperationGeneration: (data: Record<string, unknown> | undefined) => {
+    const generation = typeof data?.disconnectOperationGeneration === 'string'
+      ? data.disconnectOperationGeneration.trim()
+      : '';
+    const expiresAt = Number(data?.disconnectOperationLeaseExpiresAt || 0);
+    return generation && Number.isFinite(expiresAt) && expiresAt > Date.now()
+      ? generation
+      : null;
+  },
   deleteLocalServiceToken: mockDeleteLocalServiceToken,
   getServiceTokenCollectionRef: vi.fn(() => tokenCollectionRef),
   getServiceTokenRootDocumentRef: vi.fn(() => tokenRootRef),
@@ -1772,6 +1781,49 @@ describe('service-auth-lifecycle terminal auth handling', () => {
           accessToken: 'valid-access-token',
         }),
       },
+    );
+
+    expect(outcome.skippedByCondition).toBe(true);
+    expect(mockAdapterDeauthorize).not.toHaveBeenCalled();
+    expect(mockDeleteLocalServiceToken).not.toHaveBeenCalled();
+  });
+
+  it('does not resume expired explicit-disconnect cleanup', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [{
+        id: 'suunto-token-id',
+        ref: tokenRef,
+        data: () => ({
+          serviceName: ServiceNames.SuuntoApp,
+          accessToken: 'valid-access-token',
+          refreshToken: 'stored-refresh-token',
+          expiresAt: Date.now() + 120_000,
+          userName: 'suunto-user-id',
+        }),
+      }],
+    });
+    const guard = {
+      disconnectGeneration: null,
+      oauthCredentialGeneration: null,
+      oauthFlowGeneration: 'disconnect-flow-1',
+      disconnectOperationGeneration: 'disconnect-operation-1',
+    };
+    tokenRootRef.get.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        oauthFlowGeneration: guard.oauthFlowGeneration,
+        disconnectOperationGeneration: guard.disconnectOperationGeneration,
+        disconnectOperationLeaseExpiresAt: Date.now() - 1,
+      }),
+    });
+
+    const outcome = await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.SuuntoApp,
+      SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+      { disconnectLifecycleGuard: guard },
     );
 
     expect(outcome.skippedByCondition).toBe(true);
