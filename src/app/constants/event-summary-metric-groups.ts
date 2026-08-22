@@ -28,6 +28,9 @@ import {
   DataCadenceAvg,
   DataCadenceMax,
   DataCadenceMin,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   DataCriticalPower,
   DataDescent,
   DataDescentTime,
@@ -205,6 +208,35 @@ const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
   DataDescentTime.type,
 ];
 
+export const EVENT_SUMMARY_ALTITUDE_STAT_TYPES: string[] = [
+  DataAltitudeMax.type,
+  DataAltitudeMin.type,
+  DataAltitudeAvg.type,
+];
+
+/**
+ * Terrain-elevation metrics that are not meaningful for Diving activities.
+ * Keep raw source metrics intact; this list only controls Event Details defaults.
+ */
+export const EVENT_SUMMARY_TERRAIN_STAT_TYPES: string[] = [
+  DataAscent.type,
+  DataDescent.type,
+  ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
+  ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
+  DataGrade.type,
+  DataGradeAvg.type,
+  DataGradeMin.type,
+  DataGradeMax.type,
+  DataGradeAdjustedPaceAvg.type,
+  DataGradeAdjustedPaceMin.type,
+  DataGradeAdjustedPaceMax.type,
+  DataGradeAdjustedSpeedAvg.type,
+  DataGradeAdjustedSpeedMin.type,
+  DataGradeAdjustedSpeedMax.type,
+  DataAvgVAM.type,
+  DataVerticalSpeedMax.type,
+];
+
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
   DataAvgRespirationRate.type,
   DataMinRespirationRate.type,
@@ -368,6 +400,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPowerNormalized.type,
       DataPowerTrainingStressScore.type,
       DataCadenceAvg.type,
+      DataStrokeRateAvg.type,
       DataRecoveryTime.type,
       DataVO2Max.type,
       DataFTP.type,
@@ -379,6 +412,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPaceAvg.type,
       DataSwimPaceAvg.type,
       DataCadenceAvg.type,
+      DataStrokeRateAvg.type,
     ],
   },
   {
@@ -394,6 +428,9 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataCadenceAvg.type,
       DataCadenceMax.type,
       DataCadenceMin.type,
+      DataStrokeRateAvg.type,
+      DataStrokeRateMax.type,
+      DataStrokeRateMin.type,
       DataPower.type,
       DataPowerAvg.type,
       DataPowerMax.type,
@@ -426,9 +463,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataAscent.type,
       DataDescent.type,
       ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-      DataAltitudeMax.type,
-      DataAltitudeMin.type,
-      DataAltitudeAvg.type,
+      ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
@@ -493,12 +528,13 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataAscent.type,
   DataDescent.type,
   ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-  DataAltitudeMax.type,
-  DataAltitudeMin.type,
-  DataAltitudeAvg.type,
+  ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
   DataCadenceAvg.type,
   DataCadenceMax.type,
   DataCadenceMin.type,
+  DataStrokeRateAvg.type,
+  DataStrokeRateMax.type,
+  DataStrokeRateMin.type,
   DataTemperatureAvg.type,
   DataTemperatureMax.type,
   DataTemperatureMin.type,

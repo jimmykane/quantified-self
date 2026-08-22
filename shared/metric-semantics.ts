@@ -11,6 +11,7 @@ export type MetricSemanticsFamilyKey =
   | 'grade_adjusted_speed'
   | 'power'
   | 'cadence'
+  | 'stroke_rate'
   | 'heart_rate'
   | 'other';
 
@@ -86,6 +87,9 @@ export function resolveMetricSemanticsFamilyKey(
   }
   if (normalized.startsWith('cadence')) {
     return 'cadence';
+  }
+  if (normalized.startsWith('stroke rate')) {
+    return 'stroke_rate';
   }
 
   return 'other';

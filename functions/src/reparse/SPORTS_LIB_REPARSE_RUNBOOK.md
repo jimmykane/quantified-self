@@ -7,6 +7,19 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 19.0.0 stroke-rate semantics transition
+
+Sports Lib 19.0.0 introduces canonical `Stroke Rate` stream and average/minimum/maximum stats for Swimming, Open Water
+Swimming, Rowing, Indoor Rowing, Canoeing, Kayaking, Paddling, and Stand Up Paddling. New source imports and native JSON
+activity hydration translate the Cadence-shaped source fields for those sports to Stroke Rate while leaving locomotion
+Cadence unchanged for other sports.
+
+Do not enable the automatic scanner or enqueue a historical source reparse solely for this transition. Quantified Self
+canonicalizes pre-19 split event/activity documents at read time using their persisted activity type, and derived schema
+18 rebuilds Training stroke-rate summaries from the already stored average stat. New writes use the canonical type.
+Mixed or unresolved sport sets retain Cadence because its meaning is ambiguous. Saved routes and the registered MCP
+output schemas are unchanged.
+
 ### Sports Lib 18.1.4 continuous dive-depth transition
 
 Sports Lib 18.1.4 maps FIT record depth from millimeters into a canonical meter-based `Depth` stream while preserving

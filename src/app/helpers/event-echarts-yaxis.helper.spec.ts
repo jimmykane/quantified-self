@@ -11,6 +11,7 @@ import {
   DataPowerLeft,
   DataPowerRight,
   DataStamina,
+  DataStrokeRate,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -178,6 +179,17 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBe(15);
     expect(config.max).toBe(120);
     expect(config.max).not.toBe(140);
+  });
+
+  it('uses cadence-style logical steps for Stroke Rate', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataStrokeRate.type, [18, 22, 27, 31]),
+      visibleRange: null,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.interval).toBe(5);
+    expect(config.max).toBe(35);
   });
 
   it('uses coarser logical steps for heart-rate axes', () => {

@@ -18,6 +18,7 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { createParsingOptions } from '@shared/parsing-options';
+import { normalizePersistedEventMetricSemantics } from '@shared/sports-lib-metric-semantics';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -279,7 +280,9 @@ export class AppEventService implements OnDestroy {
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
     if (!eventSnapshot) return null;
     const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
-    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
+    const event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID),
+    ) as AppEventInterface;
 
     // Hydrate with original file(s) info if present
     const rawData = eventSnapshot as any;
@@ -315,8 +318,10 @@ export class AppEventService implements OnDestroy {
     let clonedEvent: AppEventInterface;
 
     if (typeof eventAny.toJSON === 'function') {
-      clonedEvent = EventImporterJSON.getEventFromJSON(event.toJSON() as EventJSONInterface)
-        .setID(event.getID()) as AppEventInterface;
+      clonedEvent = normalizePersistedEventMetricSemantics(
+        EventImporterJSON.getEventFromJSON(event.toJSON() as EventJSONInterface)
+          .setID(event.getID()),
+      ) as AppEventInterface;
     } else {
       const clonedFallbackEvent = Object.assign(
         Object.create(Object.getPrototypeOf(eventAny) || Object.prototype),
@@ -1918,7 +1923,10 @@ export class AppEventService implements OnDestroy {
         this.logger.captureMessage(unknownTypesMessage, { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
       }
     }
-    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
+    const event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson)
+        .setID(queryDocumentSnapshot.id),
+    ) as AppEventInterface;
 
     // Hydrate with original file(s) info if present
     const rawData = eventSnapshot as any;
@@ -2063,7 +2071,10 @@ export class AppEventService implements OnDestroy {
               this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
             }
           }
-          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+          const event = normalizePersistedEventMetricSemantics(
+            EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson)
+              .setID(eventSnapshot.id),
+          ) as AppEventInterface;
 
           // Hydrate with original file(s) info if present
           const rawData = eventSnapshot as any;

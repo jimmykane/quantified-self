@@ -1,5 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import {
+  DataPace,
+  DataPaceMinutesPerMile,
+  DataPower,
+  DataSpeed,
+  EventInterface,
+} from '@sports-alliance/sports-lib';
 import { afterEach, describe, expect, it } from 'vitest';
 import { APP_STORAGE } from './app.storage.token';
 import { MemoryStorage } from './memory.storage';
@@ -29,40 +35,76 @@ describe('AppChartSettingsLocalStorageService', () => {
     storage.clear();
   });
 
-  it('should persist and restore fully qualified series ids without normalization', () => {
-    const event = mockEvent('event-1');
-    const fullIds = [
-      'Average speed in kilometers per hour',
-      'Average speed in miles per hour',
-      'Average Power',
-    ];
+  it('persists custom visibility independently for each activity-type signature', () => {
+    const event = mockEvent('event-v2-custom');
 
-    service.setSeriesIDsToShow(event, fullIds);
-    expect(service.getSeriesIDsToShow(event)).toEqual(fullIds);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPaceMinutesPerMile.type]);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Cycling', [DataPower.type]);
+
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
+      mode: 'custom',
+      selectionKeys: [DataPace.type],
+    });
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Cycling')).toEqual({
+      mode: 'custom',
+      selectionKeys: [DataPower.type],
+    });
   });
 
-  it('should add and remove exact series ids (no label transformation)', () => {
-    const event = mockEvent('event-2');
-    const fullId = 'Average speed in kilometers per hour';
+  it('preserves an intentionally empty custom selection', () => {
+    const event = mockEvent('event-v2-empty');
 
-    service.showSeriesID(event, fullId);
-    expect(service.getSeriesIDsToShow(event)).toEqual([fullId]);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', []);
 
-    service.hideSeriesID(event, fullId);
-    expect(service.getSeriesIDsToShow(event)).toEqual([]);
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
+      mode: 'custom',
+      selectionKeys: [],
+    });
   });
 
-  it('should expose datatype id helpers over the same storage namespace', () => {
-    const event = mockEvent('event-3');
-    const ids = ['Power', 'Speed'];
+  it('ignores selections from the unversioned visibility store', () => {
+    const event = mockEvent('event-unversioned');
+    const unversionedKey = 'chart.settings.service.selectedDataTypesevent-unversioned';
+    const unversionedValue = [DataPaceMinutesPerMile.type, DataSpeed.type].join(',');
+    storage.setItem(unversionedKey, unversionedValue);
 
-    service.setDataTypeIDsToShow(event, ids);
-    expect(service.getDataTypeIDsToShow(event)).toEqual(ids);
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
+      mode: 'automatic',
+      selectionKeys: [],
+    });
+    expect(storage.getItem(unversionedKey)).toBe(unversionedValue);
+    expect(storage.getItem('chart.settings.service.selectedDataTypesV2event-unversioned')).toBeNull();
+  });
 
-    service.hideDataTypeID(event, 'Power');
-    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed']);
+  it('resets only the current signature and removes empty versioned state', () => {
+    const event = mockEvent('event-v2-reset');
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Running', [DataPace.type]);
+    service.setEventChartCustomVisibilityPreference(event, 'types-v1:Cycling', [DataPower.type]);
 
-    service.showDataTypeID(event, 'Power');
-    expect(service.getDataTypeIDsToShow(event)).toEqual(['Speed', 'Power']);
+    service.resetEventChartVisibilityPreference(event, 'types-v1:Running');
+
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
+      mode: 'automatic',
+      selectionKeys: [],
+    });
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Cycling')).toEqual({
+      mode: 'custom',
+      selectionKeys: [DataPower.type],
+    });
+
+    service.resetEventChartVisibilityPreference(event, 'types-v1:Cycling');
+
+    expect(storage.getItem('chart.settings.service.selectedDataTypesV2event-v2-reset')).toBeNull();
+  });
+
+  it('falls back safely from malformed v2 state to automatic visibility', () => {
+    const event = mockEvent('event-malformed');
+    storage.setItem('chart.settings.service.selectedDataTypesevent-malformed', DataSpeed.type);
+    storage.setItem('chart.settings.service.selectedDataTypesV2event-malformed', '{not-json');
+
+    expect(service.getEventChartVisibilityPreference(event, 'types-v1:Running')).toEqual({
+      mode: 'automatic',
+      selectionKeys: [],
+    });
   });
 });

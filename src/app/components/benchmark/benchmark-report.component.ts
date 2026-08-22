@@ -6,6 +6,7 @@ import {
     DataCadenceMax,
     DataHeartRateMax,
     DataPowerMax,
+    DataStrokeRateMax,
     EventInterface,
     UserSummariesSettingsInterface,
     UserUnitSettingsInterface
@@ -564,6 +565,7 @@ export class BenchmarkReportComponent implements OnChanges {
             DataCadenceMax.type,
             DataHeartRateMax.type,
             DataPowerMax.type,
+            DataStrokeRateMax.type,
         ];
 
         extraStatTypes.forEach((statType) => {

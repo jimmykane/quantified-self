@@ -9,6 +9,7 @@ import {
   DataPowerLeft,
   DataPowerRight,
   DataStamina,
+  DataStrokeRate,
 } from '@sports-alliance/sports-lib';
 import {
   EventChartPanelModel,
@@ -37,6 +38,7 @@ const POWER_STREAM_TYPES = new Set<string>([
 ]);
 const CADENCE_STREAM_TYPES = new Set<string>([
   DataCadence.type,
+  DataStrokeRate.type,
 ]);
 const HEART_RATE_STREAM_TYPES = new Set<string>([
   DataHeartRate.type,

@@ -17,6 +17,7 @@ import {
   DataStaminaAvg,
   DataStaminaMax,
   DataStaminaMin,
+  DataStrokeRateAvg,
   DataTemperatureAvg
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -40,6 +41,7 @@ describe('header-stats-composite.helper', () => {
       resolveMetricFamilyTypes(DataPowerAvg.type),
       resolveMetricFamilyTypes(DataHeartRateAvg.type),
       resolveMetricFamilyTypes(DataCadenceAvg.type),
+      resolveMetricFamilyTypes(DataStrokeRateAvg.type),
       resolveMetricFamilyTypes(DataTemperatureAvg.type),
       resolveMetricFamilyTypes(DataAltitudeAvg.type),
       resolveMetricFamilyTypes(DataSpeedAvgKilometersPerHour.type),

@@ -16,6 +16,7 @@ import {
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { CalendarPageComponent } from './calendar-page.component';
 
@@ -46,12 +47,20 @@ describe('CalendarPageComponent', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
+  let dayDetailsNavigation: {
+    restorationFor: ReturnType<typeof vi.fn>;
+    consumeRestoration: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     queryParams = new BehaviorSubject(convertToParamMap({ view: 'month', date: '2026-08-03' }));
     navigate = vi.fn().mockResolvedValue(true);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     openBottomSheet = vi.fn();
+    dayDetailsNavigation = {
+      restorationFor: vi.fn().mockReturnValue(null),
+      consumeRestoration: vi.fn().mockReturnValue(true),
+    };
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
       providers: [
@@ -62,6 +71,7 @@ describe('CalendarPageComponent', () => {
         } },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
+        { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).overrideComponent(CalendarPageComponent, {
       remove: { imports: [ActivityRangeTableSectionComponent] },
@@ -253,6 +263,24 @@ describe('CalendarPageComponent', () => {
         unitSettings: user.settings.unitSettings,
         summariesSettings: user.settings.summariesSettings,
       }),
+    }));
+  });
+
+  it('reopens day details after returning from an event route', async () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03' };
+    dayDetailsNavigation.restorationFor.mockReturnValue(restoration);
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    const componentBottomSheet = (fixture.componentInstance as unknown as {
+      bottomSheet: MatBottomSheet;
+    }).bottomSheet;
+    vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(dayDetailsNavigation.consumeRestoration).toHaveBeenCalledWith(restoration);
+    expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ day: expect.objectContaining({ dateKey: '2026-08-03' }) }),
     }));
   });
 

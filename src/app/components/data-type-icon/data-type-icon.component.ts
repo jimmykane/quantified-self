@@ -19,6 +19,7 @@ import { DataAirPower } from '@sports-alliance/sports-lib';
 import { DataCadenceAvg } from '@sports-alliance/sports-lib';
 import { DataCadenceMax } from '@sports-alliance/sports-lib';
 import { DataCadenceMin } from '@sports-alliance/sports-lib';
+import { DataStrokeRateAvg, DataStrokeRateMax, DataStrokeRateMin } from '@sports-alliance/sports-lib';
 import {
   DataSpeedAvg, DataSpeedAvgFeetPerMinute, DataSpeedAvgFeetPerSecond,
   DataSpeedAvgKilometersPerHour, DataSpeedAvgKnots, DataSpeedAvgMetersPerMinute,
@@ -236,6 +237,9 @@ export class DataTypeIconComponent {
       case DataCadenceAvg.type:
       case DataCadenceMax.type:
       case DataCadenceMin.type:
+      case DataStrokeRateAvg.type:
+      case DataStrokeRateMax.type:
+      case DataStrokeRateMin.type:
         return 'cadence';
       case DataAltitudeMax.type:
         return 'landscape';

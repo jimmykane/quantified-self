@@ -4,22 +4,26 @@ import {
   HostListener,
   LOCALE_ID,
   computed,
+  effect,
   inject,
   input,
   signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { Router } from '@angular/router';
 import type { EventInterface, User } from '@sports-alliance/sports-lib';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarViewModel,
   navigateActivityCalendarDate,
+  parseActivityCalendarDate,
   resolveActivityCalendarQueryWindow,
 } from '../../../helpers/activity-calendar.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
 import {
   CalendarDayDetailsComponent,
@@ -42,6 +46,8 @@ interface ActivityCalendarTileState {
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly router = inject(Router);
+  private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
   private readonly anchorDate = signal(startOfCurrentMonth());
   private readonly followsCurrentMonth = signal(true);
@@ -84,6 +90,35 @@ export class ActivityCalendarTileComponent {
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
+  private readonly restoreDayDetailsEffect = effect(() => {
+    const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
+    if (!restoration) {
+      return;
+    }
+
+    const restoredMonth = startOfCurrentMonth(parseActivityCalendarDate(restoration.dateKey));
+    if (restoredMonth.getTime() !== this.anchorDate().getTime()) {
+      this.followsCurrentMonth.set(false);
+      this.anchorDate.set(restoredMonth);
+      return;
+    }
+    if (this.eventState().status !== 'ready') {
+      return;
+    }
+
+    const day = this.calendarModel().months
+      .flatMap(month => month.days)
+      .find(candidate => candidate.dateKey === restoration.dateKey);
+    if (restoration.deletedEventId && day?.events.some(event => event.getID() === restoration.deletedEventId)) {
+      return;
+    }
+    if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
+      return;
+    }
+    if (day?.eventCount) {
+      this.openDay(day);
+    }
+  });
 
   @HostListener('window:focus')
   refreshCalendarDate(): void {

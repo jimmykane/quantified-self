@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Location } from '@angular/common';
 import { EventActionsComponent } from './event.actions.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
@@ -20,6 +21,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
 import { of } from 'rxjs';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -38,6 +40,8 @@ describe('EventActionsComponent', () => {
     let mockDialog: any;
     let mockEventSharingService: any;
     let mockRouter: any;
+    let mockLocation: any;
+    let mockDayDetailsNavigation: any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -128,7 +132,12 @@ describe('EventActionsComponent', () => {
             }),
             copyShareUrl: vi.fn(() => true),
         };
-        mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
+        mockRouter = {
+            navigate: vi.fn().mockResolvedValue(true),
+            lastSuccessfulNavigation: null,
+        };
+        mockLocation = { back: vi.fn() };
+        mockDayDetailsNavigation = { markEventDeleted: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
@@ -142,6 +151,8 @@ describe('EventActionsComponent', () => {
                 { provide: Analytics, useValue: null }, // Mock Analytics
                 { provide: Auth, useValue: { currentUser: { uid: 'test-user' } } }, // Mock Auth
                 { provide: Router, useValue: mockRouter },
+                { provide: Location, useValue: mockLocation },
+                { provide: CalendarDayDetailsNavigationService, useValue: mockDayDetailsNavigation },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
@@ -193,6 +204,17 @@ describe('EventActionsComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should return through browser history after deleting an event opened from another page', async () => {
+        mockRouter.lastSuccessfulNavigation = { previousNavigation: { id: 1 } };
+
+        await component.delete();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockLocation.back).toHaveBeenCalledOnce();
+        expect(mockDayDetailsNavigation.markEventDeleted).toHaveBeenCalledWith('event-123');
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
     it('should enable sharing and copy the event link after confirmation', async () => {

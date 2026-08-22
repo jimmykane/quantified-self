@@ -93,6 +93,9 @@ function createMockEvent(json: Record<string, unknown>) {
         getID() {
             return this.id;
         },
+        getStat() {
+            return undefined;
+        },
         getActivities() {
             return [];
         },
@@ -262,6 +265,7 @@ describe('AppEventService', () => {
             clearActivities: vi.fn(),
             addActivities: vi.fn(),
             getID: vi.fn().mockReturnValue('event1'),
+            getStat: vi.fn().mockReturnValue(undefined),
             toJSON: vi.fn().mockReturnValue({}),
             getActivities: vi.fn().mockReturnValue([]),
             startDate: new Date()
@@ -761,6 +765,7 @@ describe('AppEventService', () => {
                 }),
                 getActivities: vi.fn(() => event.activities),
                 getID: vi.fn(() => eventId),
+                getStat: vi.fn().mockReturnValue(undefined),
             };
             return event;
         });
@@ -806,6 +811,7 @@ describe('AppEventService', () => {
                 }),
                 getActivities: vi.fn(() => event.activities),
                 getID: vi.fn(() => eventId),
+                getStat: vi.fn().mockReturnValue(undefined),
             };
             return event;
         });
@@ -1743,6 +1749,7 @@ describe('AppEventService', () => {
             setID: vi.fn().mockReturnThis(),
             addActivities: vi.fn(),
             getID: vi.fn().mockReturnValue('event-hydrated'),
+            getStat: vi.fn().mockReturnValue(undefined),
             clearActivities: vi.fn(),
         } as any;
         mocks.getEventFromJSON.mockReturnValueOnce(importedEvent);

@@ -4,13 +4,31 @@
 }
 
 .calendar-family-volume-row {
+  position: relative;
   display: grid;
   min-height: 76px;
+  box-sizing: border-box;
   grid-template-columns: minmax(180px, 280px) minmax(88px, auto) minmax(180px, 1fr);
   align-items: center;
   column-gap: 18px;
   row-gap: 7px;
   padding: 10px 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.calendar-family-volume-row--link {
+  cursor: pointer;
+}
+
+.calendar-family-volume-row--link:hover,
+.calendar-family-volume-row--link:focus-visible {
+  background: var(--mat-sys-surface-container-high);
+}
+
+.calendar-family-volume-row--link:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
 }
 
 .calendar-family-volume-identity {
@@ -52,6 +70,11 @@
 .calendar-family-volume-copy > span {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
+}
+
+.calendar-family-volume-count-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .calendar-family-volume-value {

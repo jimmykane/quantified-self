@@ -6,6 +6,8 @@ import {
   DataGradeAdjustedPace,
   DataPowerBalanceRight,
   DataPowerRight,
+  DataStrokeRate,
+  DataStrokeRateAvg,
   DataSwimPace,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -25,6 +27,7 @@ describe('event-echarts-style.helper', () => {
     expect(resolveEventColorGroupKey(DataGradeAdjustedPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataEffortPace.type)).toBe('Pace');
     expect(resolveEventColorGroupKey(DataCadence.type)).toBe(DataCadence.type);
+    expect(resolveEventColorGroupKey(DataStrokeRate.type)).toBe(DataStrokeRate.type);
     expect(resolveEventColorGroupKey(DataDepth.type)).toBe(DataDepth.type);
     expect(resolveEventColorGroupKey(DataDepthFeet.type)).toBe(DataDepth.type);
     expect(resolveEventColorGroupKey('Unknown Data Type')).toBe('Unknown Data Type');
@@ -33,6 +36,7 @@ describe('event-echarts-style.helper', () => {
   it('maps AI aggregate metric labels into the canonical chart color groups', () => {
     expect(resolveMetricColorGroupKey('Average Power')).toBe('Power');
     expect(resolveMetricColorGroupKey('Average Cadence')).toBe(DataCadence.type);
+    expect(resolveMetricColorGroupKey(DataStrokeRateAvg.type)).toBe(DataStrokeRate.type);
     expect(resolveMetricColorGroupKey('Average Heart Rate')).toBe('Heart Rate');
     expect(resolveMetricColorGroupKey('Average Pace')).toBe('Pace');
     expect(resolveMetricColorGroupKey('Average Swim Pace')).toBe('Swim Pace');
@@ -50,6 +54,7 @@ describe('event-echarts-style.helper', () => {
     expect(resolveEventSeriesColor('Power', 0, 3)).toBe((AppDataColors as any).Power_0);
     expect(resolveEventSeriesColor('Power', 1, 3)).toBe((AppDataColors as any).Power_1);
     expect(resolveEventSeriesColor(DataCadence.type, 0, 1)).toBe((AppDataColors as any).Cadence);
+    expect(resolveEventSeriesColor(DataStrokeRate.type, 0, 1)).toBe((AppDataColors as any)['Stroke Rate']);
   });
 
   it('upgrades weak two-series compare variants to a higher-contrast pair', () => {

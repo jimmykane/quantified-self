@@ -16,6 +16,9 @@ import {
   DataDuration,
   DataEnergy,
   DataHeartRateAvg,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -294,6 +297,17 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
       DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
     ]);
+  });
+
+  it('offers canonical Stroke Rate summary metrics', () => {
+    expect(component.dataGroups).toContainEqual({
+      name: 'Stroke Rate',
+      data: [
+        DataStrokeRateMax.type,
+        DataStrokeRateMin.type,
+        DataStrokeRateAvg.type,
+      ],
+    });
   });
 
   it('adds a custom chart and persists dashboard settings', async () => {

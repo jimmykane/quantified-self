@@ -48,7 +48,7 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 - Duration is the bar metric. Positive recorded duration, distance, ascent, and descent values appear beneath the bar.
 - The day-details sheet reuses these exact group rows for the selected local day; its bars compare only that day's activity groups.
 - Missing values remain unavailable rather than being inferred. A group without recorded duration uses `--` and has no progressbar semantics.
-- `AppEventUtilities.shouldExcludeAscent` and `shouldExcludeDescent` apply shared sport rules. Lift-served downhill types can contribute descent without contributing ascent.
+- `AppEventUtilities.shouldExcludeAscent` and `shouldExcludeDescent` apply shared sport rules. Lift-served downhill types can contribute descent without contributing ascent; Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding contribute neither elevation metric because their vertical movement is depth.
 - User `removeAscentForEventTypes` and `removeDescentForEventTypes` summary settings are applied in addition to the shared sport rules.
 - Display values use the user's unit settings and the active locale.
 

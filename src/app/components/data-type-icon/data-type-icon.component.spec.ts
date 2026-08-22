@@ -8,6 +8,9 @@ import {
   DataBeginningPotentialStamina,
   DataCadenceMax,
   DataCadenceMin,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   DataDescent,
   DataDistance,
   DataDistanceFeet,
@@ -92,6 +95,9 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataPowerMin.type)).toBe('bolt');
     expect(component.getColumnHeaderIcon(DataCadenceMax.type)).toBe('cadence');
     expect(component.getColumnHeaderIcon(DataCadenceMin.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateAvg.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateMax.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateMin.type)).toBe('cadence');
     expect(component.getColumnHeaderIcon(DataTemperatureMax.type)).toBe('device_thermostat');
     expect(component.getColumnHeaderIcon(DataTemperatureMin.type)).toBe('device_thermostat');
     expect(component.getColumnHeaderIcon(DataAltitudeMax.type)).toBe('landscape');

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityInterface, DataPoolLength, DataSwimDistance } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  DataPoolLength,
+  DataStrokeRate,
+  DataSwimDistance,
+} from '@sports-alliance/sports-lib';
 import {
   getActivitySwimLengths,
   hasVisibleSwimLengths,
@@ -40,6 +45,8 @@ describe('event-swim-length.helper', () => {
     expect(swimLength?.distance?.getValue()).toBe(25);
     expect(swimLength?.poolLength).toBeInstanceOf(DataPoolLength);
     expect(swimLength?.poolLength?.getValue()).toBe(25);
+    expect(swimLength?.avgCadence).toBeInstanceOf(DataStrokeRate);
+    expect(swimLength?.avgCadence?.getDisplayUnit()).toBe('spm');
     expect(swimLength?.startDate).toBeInstanceOf(Date);
     expect(swimLength?.endDate).toBeInstanceOf(Date);
   });

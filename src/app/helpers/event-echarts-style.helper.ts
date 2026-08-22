@@ -66,6 +66,8 @@ import {
   DataStrydAltitude,
   DataStrydDistance,
   DataStrydSpeed,
+  DataStrokeRate,
+  DataStrokeRateAvg,
   DataSwimPaceAvg,
   DataSwimPaceMax,
   DataSwimPaceMin,
@@ -181,6 +183,10 @@ const CADENCE_GROUP = new Set<string>([
   DataCadence.type,
 ]);
 
+const STROKE_RATE_GROUP = new Set<string>([
+  DataStrokeRate.type,
+]);
+
 const FALLBACK_COLORS: string[] = [
   AppColors.Blue,
   AppColors.Orange,
@@ -241,6 +247,9 @@ export function resolveEventColorGroupKey(streamType: string): string {
   if (CADENCE_GROUP.has(streamType)) {
     return DataCadence.type;
   }
+  if (STROKE_RATE_GROUP.has(streamType)) {
+    return DataStrokeRate.type;
+  }
   return streamType;
 }
 
@@ -251,6 +260,7 @@ const AI_METRIC_COLOR_GROUP_KEYS: Readonly<Record<string, string>> = {
   [DataDescent.type]: DataAltitude.type,
   [DataEnergy.type]: 'Energy',
   [DataCadenceAvg.type]: DataCadence.type,
+  [DataStrokeRateAvg.type]: DataStrokeRate.type,
   [DataPowerAvg.type]: 'Power',
   [DataPowerNormalized.type]: 'Power',
   [DataPowerIntensityFactor.type]: 'Power',

@@ -1,5 +1,7 @@
 import {
   ActivityInterface,
+  ActivityTypeGroups,
+  ActivityTypesHelper,
   ActivityUtilities,
   convertSpeedToSwimPace,
   DataAltitude,
@@ -25,6 +27,7 @@ import {
   DataDescent,
   DataDepth,
   DataSpeed,
+  DataStrokeRateAvg,
   DataStrydDistance,
   DataStrydAltitude,
   DataSwimPace,
@@ -284,7 +287,11 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
   }
 
   const panelsMap = new Map<string, EventChartPanelModel>();
-  const preferredDataTypeOrder = buildPreferredDataTypeOrder(input.dataTypesToUse, input.userUnitSettings);
+  const preferredDataTypeOrder = buildPreferredDataTypeOrder(
+    input.dataTypesToUse,
+    input.userUnitSettings,
+    selectedActivities.map((activity) => activity.type),
+  );
 
   selectedActivities.forEach((activity) => {
     const streams = activity.getAllStreams() || [];
@@ -392,7 +399,7 @@ function snapshotEventChartActivity(
   const streamTypes = new Set<string>();
   const selectedStreamTypes = input.showAllData
     ? null
-    : buildEventChartSnapshotStreamTypeSet(input);
+    : buildEventChartSnapshotStreamTypeSet(input, activity.type);
   const appendStream = (stream: StreamInterface | null | undefined, preserveDuplicateType: boolean) => {
     const streamType = `${stream?.type || ''}`;
     if (!streamType || (!preserveDuplicateType && streamTypes.has(streamType))) {
@@ -430,7 +437,8 @@ function snapshotEventChartActivity(
 }
 
 function buildEventChartSnapshotStreamTypeSet(
-  input: Pick<BuildEventChartPanelsInput, 'dataTypesToUse' | 'userUnitSettings' | 'xAxisType'>
+  input: Pick<BuildEventChartPanelsInput, 'dataTypesToUse' | 'userUnitSettings' | 'xAxisType'>,
+  activityType: unknown,
 ): Set<string> {
   const streamTypes = new Set<string>();
   const appendExpandedType = (streamType: string | null | undefined) => {
@@ -459,9 +467,7 @@ function buildEventChartSnapshotStreamTypeSet(
   }
 
   const selectedDataTypes = Array.isArray(input.dataTypesToUse) ? input.dataTypesToUse : [];
-  selectedDataTypes.forEach((streamType) => appendExpandedType(streamType));
-  DynamicDataLoader
-    .getUnitBasedDataTypesFromDataTypes(selectedDataTypes, input.userUnitSettings, { includeDerivedTypes: true })
+  resolveEventChartConfiguredDataTypes(selectedDataTypes, input.userUnitSettings, [activityType])
     .forEach((streamType) => appendExpandedType(streamType));
 
   return streamTypes;
@@ -1105,9 +1111,7 @@ function getFilteredStreams(input: {
 }): StreamInterface[] {
   const allowedDataTypes = input.showAllData
     ? null
-    : DynamicDataLoader
-      .getUnitBasedDataTypesFromDataTypes(input.dataTypesToUse, input.userUnitSettings, { includeDerivedTypes: true })
-      .concat(input.dataTypesToUse);
+    : resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType]);
   const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
   const shouldRemoveSpeed = DynamicDataLoader
@@ -1129,7 +1133,7 @@ function getFilteredStreams(input: {
     { includeDerivedTypes: !input.showAllData }
   );
   const configuredTypes = input.showAllData
-    ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings)
+    ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType])
     : [];
   const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
@@ -1345,7 +1349,8 @@ function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolea
 
 export function resolveEventChartConfiguredDataTypes(
   dataTypesToUse: string[],
-  userUnitSettings: UserUnitSettingsInterface
+  userUnitSettings: UserUnitSettingsInterface,
+  activityTypes: readonly unknown[] = [],
 ): string[] {
   const canonicalDataTypes = getAppCanonicalChartDataTypes();
   const selectedDataTypeSet = new Set(dataTypesToUse || []);
@@ -1358,11 +1363,19 @@ export function resolveEventChartConfiguredDataTypes(
     );
   const orderedSelectedDataTypes = applyEventChartCanonicalOrderOverride(canonicalSelectedDataTypes);
   const resolvedDataTypes: string[] = [];
+  const usesSwimPace = activityTypes.some((activityType) => {
+    const canonicalActivityType = ActivityTypesHelper.resolveActivityType(activityType);
+    return canonicalActivityType !== null
+      && ActivityTypesHelper.getActivityGroupForActivityType(canonicalActivityType) === ActivityTypeGroups.SwimmingGroup;
+  });
 
   orderedSelectedDataTypes.forEach((dataType) => {
+    const logicalDataTypes = dataType === DataPace.type && usesSwimPace
+      ? [DataPace.type, DataSwimPace.type]
+      : [dataType];
     const resolvedTypes = DynamicDataLoader
-      .getUnitBasedDataTypesFromDataTypes([dataType], userUnitSettings, { includeDerivedTypes: true })
-      .concat(dataType);
+      .getUnitBasedDataTypesFromDataTypes(logicalDataTypes, userUnitSettings, { includeDerivedTypes: true })
+      .concat(logicalDataTypes);
 
     resolvedTypes.forEach((resolvedType) => {
       if (!resolvedType || resolvedDataTypes.includes(resolvedType)) {
@@ -1378,10 +1391,11 @@ export function resolveEventChartConfiguredDataTypes(
 
 function buildPreferredDataTypeOrder(
   dataTypesToUse: string[],
-  userUnitSettings: UserUnitSettingsInterface
+  userUnitSettings: UserUnitSettingsInterface,
+  activityTypes: readonly unknown[],
 ): Map<string, number> {
   const order = new Map<string, number>();
-  resolveEventChartConfiguredDataTypes(dataTypesToUse, userUnitSettings)
+  resolveEventChartConfiguredDataTypes(dataTypesToUse, userUnitSettings, activityTypes)
     .forEach((dataType, index) => order.set(dataType, index));
   return order;
 }
@@ -1799,7 +1813,12 @@ function buildLapTooltipDetails(
   appendLapDetail(details, 'Avg Power', lap.getStat(DataPowerAvg.type));
   appendLapDetail(details, 'Ascent', lap.getStat(DataAscent.type), unitSettings);
   appendLapDetail(details, 'Descent', lap.getStat(DataDescent.type), unitSettings);
-  appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
+  const averageStrokeRate = lap.getStat(DataStrokeRateAvg.type);
+  if (averageStrokeRate) {
+    appendLapDetail(details, 'Avg Stroke Rate', averageStrokeRate);
+  } else {
+    appendLapDetail(details, 'Avg Cadence', lap.getStat(DataCadenceAvg.type));
+  }
 
   return details;
 }
@@ -1817,7 +1836,12 @@ function buildSwimLengthTooltipDetails(
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
   appendLapDetail(details, 'Swim Pace', getSwimLengthPace(swimLength), unitSettings);
-  appendLapDetail(details, 'Avg Cadence', swimLength.avgCadence ?? undefined, unitSettings);
+  appendLapDetail(
+    details,
+    'Avg Stroke Rate',
+    swimLength.avgCadence ?? undefined,
+    unitSettings,
+  );
   appendLapDetail(details, 'Avg Heart Rate', swimLength.avgHeartRate ?? undefined, unitSettings);
   appendLapDetail(details, 'Max Heart Rate', swimLength.maxHeartRate ?? undefined, unitSettings);
   appendTextDetail(details, 'SWOLF', formatNullableNumber(swimLength.swolf));

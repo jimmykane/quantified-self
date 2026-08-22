@@ -36,6 +36,12 @@
   letter-spacing: 0;
 }
 
+.calendar-day-number,
+.calendar-day-event-metric {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
 .calendar-day-total strong {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.75rem;

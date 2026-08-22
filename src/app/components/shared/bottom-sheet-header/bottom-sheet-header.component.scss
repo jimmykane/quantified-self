@@ -36,6 +36,11 @@
   text-overflow: ellipsis;
 }
 
+.bottom-sheet-title-numeric {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
 .bottom-sheet-actions {
   display: flex;
   align-items: center;

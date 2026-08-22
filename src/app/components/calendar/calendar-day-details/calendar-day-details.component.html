@@ -1,5 +1,5 @@
 <section class="calendar-day-details" [attr.aria-label]="title">
-  <app-bottom-sheet-header [title]="title" icon="calendar_month">
+  <app-bottom-sheet-header [title]="title" [titleSegments]="titleSegments" icon="calendar_month">
     <button mat-icon-button type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
       <mat-icon>close</mat-icon>
     </button>
@@ -7,13 +7,14 @@
 
   <div class="bottom-sheet-content calendar-day-details-content">
     <div class="calendar-day-total" aria-label="Day total">
-      <span>{{ data.day.eventCount }} {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
+      <span><span class="calendar-day-number">{{ data.day.eventCount }}</span> {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
       <strong>{{ data.day.durationLabel }}</strong>
     </div>
 
     <section aria-labelledby="calendar-day-family-title">
       <h3 id="calendar-day-family-title">Activities</h3>
-      <app-activity-calendar-volume-list [rows]="familyVolumeRows"></app-activity-calendar-volume-list>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows" [emphasizeNumericText]="true"
+        (rowSelected)="prepareEventNavigation($event.route)"></app-activity-calendar-volume-list>
     </section>
 
     <mat-divider></mat-divider>
@@ -25,12 +26,19 @@
           @if (event.route) {
           <a mat-list-item class="calendar-day-event-item"
             [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
-            (click)="dismiss()">
+            (click)="prepareEventNavigation(event.route)">
             <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              <span class="calendar-day-event-detail">
+                @for (part of event.detailParts; track $index) {
+                  @if (!$first) {
+                    <span> - </span>
+                  }
+                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                }
+              </span>
               @if (event.metricStats.length) {
               <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
@@ -45,7 +53,14 @@
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              <span class="calendar-day-event-detail">
+                @for (part of event.detailParts; track $index) {
+                  @if (!$first) {
+                    <span> - </span>
+                  }
+                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                }
+              </span>
               @if (event.metricStats.length) {
               <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
