@@ -29,21 +29,38 @@ const hoisted = vi.hoisted(() => {
         shouldSkip: false,
     });
 
-    const makeQuery = (collectionName: string, filters: Filter[] = []) => ({
+    const makeQuery = (
+        collectionName: string,
+        filters: Filter[] = [],
+        startAfterID: string | null = null,
+        pageLimit: number | null = null,
+    ) => ({
         where: vi.fn((field: string, operator: string, value: unknown) => {
             if (operator !== '==') {
                 throw new Error(`Unexpected operator ${operator}`);
             }
             return makeQuery(collectionName, [...filters, { field, value }]);
         }),
+        orderBy: vi.fn(() => makeQuery(collectionName, filters, startAfterID, pageLimit)),
+        limit: vi.fn((limit: number) => makeQuery(collectionName, filters, startAfterID, limit)),
+        startAfter: vi.fn((doc: { id: string }) => makeQuery(collectionName, filters, doc.id, pageLimit)),
         get: vi.fn(async () => {
             const getFailure = getFailures.get(collectionName);
             if (getFailure) {
                 throw getFailure;
             }
 
-            const docs = (collections.get(collectionName) || [])
+            const matchingDocs = (collections.get(collectionName) || [])
                 .filter((doc) => filters.every((filter) => doc.data[filter.field] === filter.value))
+                .sort((left, right) => left.id.localeCompare(right.id));
+            const startIndex = startAfterID
+                ? matchingDocs.findIndex(doc => doc.id === startAfterID) + 1
+                : 0;
+            const docs = matchingDocs
+                .slice(
+                    Math.max(0, startIndex),
+                    pageLimit === null ? undefined : Math.max(0, startIndex) + pageLimit,
+                )
                 .map((doc) => ({
                     id: doc.id,
                     data: () => doc.data,
@@ -143,6 +160,9 @@ vi.mock('firebase-admin', () => {
 });
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldPath: {
+        documentId: () => '__name__',
+    },
     FieldValue: {
         delete: vi.fn(() => hoisted.deleteSentinel),
     },
@@ -324,6 +344,29 @@ describe('pending disconnect queue release', () => {
         }
         expect(pendingDisconnectUpdate).not.toHaveBeenCalled();
         expect(otherServiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('bounds reconnect releases and resumes from the remaining deferred page on retry', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        const updates = Array.from({ length: 501 }, (_, index) => addDoc(
+            ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
+            `activity-${`${index}`.padStart(3, '0')}`,
+            {
+                userID: 'user-1',
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+                deferredServiceName: ServiceNames.WahooAPI,
+            },
+        ));
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI))
+            .rejects.toThrow('reached its bounded page limit');
+
+        expect(updates.filter(update => update.mock.calls.length > 0)).toHaveLength(500);
+        expect(updates[500]).not.toHaveBeenCalled();
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI))
+            .resolves.toBe(1);
+        expect(updates[500]).toHaveBeenCalledTimes(1);
     });
 
     it('does not overwrite a queue item claimed after a reconnect-release query was read', async () => {

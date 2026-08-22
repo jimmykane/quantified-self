@@ -504,22 +504,25 @@ export async function getTokenData(
       claimResult.leaseOwner,
       claimResult.credential,
       newToken as unknown as Record<string, unknown>,
-      serviceName === ServiceNames.WahooAPI && firebaseUserID ? {
-        companionWrites: [{
-          ref: admin.firestore()
-            .collection('users')
-            .doc(firebaseUserID)
-            .collection('meta')
-            .doc(ServiceNames.WahooAPI),
-          data: {
-            wahooRefreshFailureCount: FieldValue.delete(),
-            wahooRefreshFailureLastAt: FieldValue.delete(),
-            wahooRefreshRetryAt: FieldValue.delete(),
-            lastAuthFailureCode: FieldValue.delete(),
-            lastAuthFailureMessage: FieldValue.delete(),
-          },
-        }],
-      } : {},
+      {
+        ...(serviceName === ServiceNames.WahooAPI && firebaseUserID ? {
+          companionWrites: [{
+            ref: admin.firestore()
+              .collection('users')
+              .doc(firebaseUserID)
+              .collection('meta')
+              .doc(ServiceNames.WahooAPI),
+            data: {
+              wahooRefreshFailureCount: FieldValue.delete(),
+              wahooRefreshFailureLastAt: FieldValue.delete(),
+              wahooRefreshRetryAt: FieldValue.delete(),
+              lastAuthFailureCode: FieldValue.delete(),
+              lastAuthFailureMessage: FieldValue.delete(),
+            },
+          }],
+        } : {}),
+        expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+      },
     );
     if (persistResult.kind === 'persisted') {
       releaseClaim = false;

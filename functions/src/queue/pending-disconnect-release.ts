@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
@@ -34,6 +34,17 @@ interface ReleaseQuerySpec {
     query: admin.firestore.Query;
     matchesService: (data: QueueDocData) => boolean;
     logContext: Record<string, unknown>;
+}
+
+const DEFERRED_QUEUE_RELEASE_PAGE_SIZE = 100;
+const DEFERRED_QUEUE_RELEASE_MAX_PAGES_PER_QUERY = 5;
+const DEFERRED_QUEUE_RELEASE_CONCURRENCY = 10;
+
+class DeferredQueueReleaseIncompleteError extends Error {
+    constructor(serviceName: ServiceNames, deferredReason: QueueDeferredReason) {
+        super(`Deferred ${serviceName} queue release for ${deferredReason} reached its bounded page limit; retrying the remaining items.`);
+        this.name = 'DeferredQueueReleaseIncompleteError';
+    }
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -160,92 +171,156 @@ async function releaseDeferredDocsForQuery(
     deferredReason: QueueDeferredReason,
     expectedGeneration?: string,
 ): Promise<number> {
-    const snapshot = await query.get();
-    if (snapshot.empty) {
-        return 0;
-    }
-
     const updateData = buildDeferredQueueReleaseUpdate();
-    const results = await Promise.all(snapshot.docs.map(async (doc) => {
-        const data = doc.data() as QueueDocData;
-        if (!isQueueItemDeferredForReason(data, deferredReason) || !matchesService(data)) {
-            return false;
+    const deferredQuery = query.where('deferredReason', '==', deferredReason);
+    let releasedCount = 0;
+    let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
+
+    for (let page = 0; page < DEFERRED_QUEUE_RELEASE_MAX_PAGES_PER_QUERY; page += 1) {
+        let pageQuery = deferredQuery
+            .orderBy(FieldPath.documentId())
+            .limit(DEFERRED_QUEUE_RELEASE_PAGE_SIZE);
+        if (cursor) {
+            pageQuery = pageQuery.startAfter(cursor);
+        }
+        const snapshot = await pageQuery.get();
+        if (snapshot.empty) {
+            return releasedCount;
         }
 
-        if (releasedQueueItemPaths.has(doc.ref.path)) {
-            return false;
+        const results = await mapWithConcurrency(
+            snapshot.docs,
+            DEFERRED_QUEUE_RELEASE_CONCURRENCY,
+            async (doc) => releaseDeferredQueueDocument(
+                userID,
+                serviceName,
+                doc,
+                matchesService,
+                logContext,
+                releasedQueueItemPaths,
+                deferredReason,
+                expectedGeneration,
+                updateData,
+            ),
+        );
+        const failedCount = results.filter(result => result === 'failed').length;
+        if (failedCount > 0) {
+            throw new Error(`Failed to release ${failedCount} deferred queue item(s) for pending disconnect.`);
         }
+        releasedCount += results.filter(result => result === true).length;
 
-        try {
-            // The broad query is necessarily non-transactional. Re-check the
-            // live row before reopening it: concurrent OAuth callbacks can
-            // otherwise apply a stale release after the scheduler has already
-            // dispatched the first released row to a provider worker.
-            const db = admin.firestore();
-            const released = await db.runTransaction(async transaction => {
-                let deletionGuard;
-                try {
-                    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
-                } catch (error) {
-                    throw new UserDeletionGuardReadError(
-                        userID,
-                        `queue_release:${deferredReason}`,
-                        error,
-                    );
-                }
-                if (deletionGuard.shouldSkip) {
-                    return false;
-                }
-
-                if (deferredReason === QUEUE_DEFERRED_REASONS.ServiceReconnectRequired) {
-                    const serviceMetaSnapshot = await transaction.get(
-                        db.collection('users').doc(userID).collection('meta').doc(serviceName),
-                    );
-                    if (
-                        serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected
-                        || (expectedGeneration
-                            && serviceMetaSnapshot.data()?.connectionStateGeneration !== expectedGeneration)
-                    ) {
-                        return false;
-                    }
-                } else {
-                    const pendingRootSnapshot = await transaction.get(
-                        getServiceTokenRootDocumentRef(userID, serviceName),
-                    );
-                    if (isServiceDisconnectPendingData(pendingRootSnapshot.data())) return false;
-                }
-
-                const currentSnapshot = await transaction.get(doc.ref);
-                if (!currentSnapshot.exists) {
-                    return false;
-                }
-                const currentData = currentSnapshot.data() as QueueDocData;
-                if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
-                    return false;
-                }
-                transaction.update(doc.ref, updateData);
-                return true;
-            });
-            if (released) {
-                releasedQueueItemPaths.add(doc.ref.path);
-            }
-            return released;
-        } catch (error) {
-            logger.error('[PendingDisconnectQueueRelease] Failed to release deferred queue item.', {
-                ...logContext,
-                queueItemPath: doc.ref.path,
-                error: error instanceof Error ? error.message : `${error}`,
-            });
-            return 'failed' as const;
+        if (snapshot.docs.length < DEFERRED_QUEUE_RELEASE_PAGE_SIZE) {
+            return releasedCount;
         }
-    }));
-
-    const failedCount = results.filter(result => result === 'failed').length;
-    if (failedCount > 0) {
-        throw new Error(`Failed to release ${failedCount} deferred queue item(s) for pending disconnect.`);
+        cursor = snapshot.docs[snapshot.docs.length - 1];
     }
 
-    return results.filter(result => result === true).length;
+    // Every successful release removes deferredReason, so the durable
+    // reconnect/pending marker can retry from the next remaining page without
+    // rescanning released rows or retaining an unbounded in-memory cursor.
+    throw new DeferredQueueReleaseIncompleteError(serviceName, deferredReason);
+}
+
+async function mapWithConcurrency<T, R>(
+    values: readonly T[],
+    concurrency: number,
+    operation: (value: T) => Promise<R>,
+): Promise<R[]> {
+    const results = new Array<R>(values.length);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+        while (nextIndex < values.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            results[index] = await operation(values[index]);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
+
+async function releaseDeferredQueueDocument(
+    userID: string,
+    serviceName: ServiceNames,
+    doc: admin.firestore.QueryDocumentSnapshot,
+    matchesService: (data: QueueDocData) => boolean,
+    logContext: Record<string, unknown>,
+    releasedQueueItemPaths: Set<string>,
+    deferredReason: QueueDeferredReason,
+    expectedGeneration: string | undefined,
+    updateData: Record<string, unknown>,
+): Promise<boolean | 'failed'> {
+    const data = doc.data() as QueueDocData;
+    if (!isQueueItemDeferredForReason(data, deferredReason) || !matchesService(data)) {
+        return false;
+    }
+
+    if (releasedQueueItemPaths.has(doc.ref.path)) {
+        return false;
+    }
+
+    try {
+        // The broad query is necessarily non-transactional. Re-check the
+        // live row before reopening it: concurrent OAuth callbacks can
+        // otherwise apply a stale release after the scheduler has already
+        // dispatched the first released row to a provider worker.
+        const db = admin.firestore();
+        const released = await db.runTransaction(async transaction => {
+            let deletionGuard;
+            try {
+                deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+            } catch (error) {
+                throw new UserDeletionGuardReadError(
+                    userID,
+                    `queue_release:${deferredReason}`,
+                    error,
+                );
+            }
+            if (deletionGuard.shouldSkip) {
+                return false;
+            }
+
+            if (deferredReason === QUEUE_DEFERRED_REASONS.ServiceReconnectRequired) {
+                const serviceMetaSnapshot = await transaction.get(
+                    db.collection('users').doc(userID).collection('meta').doc(serviceName),
+                );
+                if (
+                    serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+                    || (expectedGeneration
+                        && serviceMetaSnapshot.data()?.connectionStateGeneration !== expectedGeneration)
+                ) {
+                    return false;
+                }
+            } else {
+                const pendingRootSnapshot = await transaction.get(
+                    getServiceTokenRootDocumentRef(userID, serviceName),
+                );
+                if (isServiceDisconnectPendingData(pendingRootSnapshot.data())) return false;
+            }
+
+            const currentSnapshot = await transaction.get(doc.ref);
+            if (!currentSnapshot.exists) {
+                return false;
+            }
+            const currentData = currentSnapshot.data() as QueueDocData;
+            if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
+                return false;
+            }
+            transaction.update(doc.ref, updateData);
+            return true;
+        });
+        if (released) {
+            releasedQueueItemPaths.add(doc.ref.path);
+        }
+        return released;
+    } catch (error) {
+        logger.error('[PendingDisconnectQueueRelease] Failed to release deferred queue item.', {
+            ...logContext,
+            queueItemPath: doc.ref.path,
+            error: error instanceof Error ? error.message : `${error}`,
+        });
+        return 'failed' as const;
+    }
 }
 
 async function releaseDeferredDocsForQueries(
