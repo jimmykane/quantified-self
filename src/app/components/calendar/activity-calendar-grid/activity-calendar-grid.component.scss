@@ -261,10 +261,16 @@
 
 .activity-calendar--year .activity-calendar-marker-overflow,
 .activity-calendar--compact .activity-calendar-marker-overflow {
-  right: -5px;
-  bottom: -2px;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  min-width: 10px;
+  padding-inline: 1px;
+  border-radius: 5px;
+  background: var(--mat-sys-surface);
   font-size: 9px;
   line-height: 10px;
+  text-align: center;
 }
 
 .activity-calendar--week .activity-calendar-day {
