@@ -104,23 +104,35 @@ describe('EventCardComponent', () => {
         }
     } as any;
 
-    const createActivity = (id: string, hasData = false): ActivityInterface => ({
-        startDate: new Date('2024-01-01T00:00:00.000Z'),
-        type: 'Running',
-        getID: () => id,
-        getLaps: () => hasData ? [{ type: 'Manual' }] as any : [],
-        getAllEvents: () => hasData ? [{ timestamp: 90, jumpData: { distance: { getDisplayValue: () => '10', getDisplayUnit: () => 'm' } } }] as any : [],
-        intensityZones: hasData ? [{ zone: 1 }] as any : [],
-        creator: hasData
-            ? { devices: [{ name: 'HRM' }], name: `Device ${id}`, swInfo: '' }
-            : { devices: [], name: `Device ${id}`, swInfo: '' },
-        hasPositionData: () => hasData,
-        getStreams: () => [],
-        getAllStreams: () => [],
-        getStream: () => null,
-        clearStreams: vi.fn(),
-        addStreams: vi.fn(),
-    } as unknown as ActivityInterface);
+    const createActivity = (id: string, hasData = false): ActivityInterface => {
+        let diveSourceRecords: ReturnType<ActivityInterface['getDiveSourceRecords']> = {
+            gases: [],
+            tankSummaries: [],
+            tankUpdates: [],
+        };
+
+        return {
+            startDate: new Date('2024-01-01T00:00:00.000Z'),
+            type: 'Running',
+            getID: () => id,
+            getLaps: () => hasData ? [{ type: 'Manual' }] as any : [],
+            getAllEvents: () => hasData ? [{ timestamp: 90, jumpData: { distance: { getDisplayValue: () => '10', getDisplayUnit: () => 'm' } } }] as any : [],
+            intensityZones: hasData ? [{ zone: 1 }] as any : [],
+            creator: hasData
+                ? { devices: [{ name: 'HRM' }], name: `Device ${id}`, swInfo: '' }
+                : { devices: [], name: `Device ${id}`, swInfo: '' },
+            hasPositionData: () => hasData,
+            getStreams: () => [],
+            getAllStreams: () => [],
+            getStream: () => null,
+            clearStreams: vi.fn(),
+            addStreams: vi.fn(),
+            getDiveSourceRecords: () => diveSourceRecords,
+            setDiveSourceRecords: vi.fn((records: ReturnType<ActivityInterface['getDiveSourceRecords']>) => {
+                diveSourceRecords = records;
+            }),
+        } as unknown as ActivityInterface;
+    };
 
     const createEvent = (id: string, activities: ActivityInterface[], name = 'Event'): EventInterface => ({
         name,
