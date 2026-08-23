@@ -3,9 +3,13 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataActivityTypes,
+  DataAltitudeAvg,
+  DataAltitudeMax,
+  DataAltitudeMin,
   DataAscent,
   DataCadence,
   DataCadenceAvg,
+  DataDescent,
   DataDistance,
   DataDepthAvg,
   DataDuration,
@@ -18,6 +22,9 @@ import {
   DataMetabolicCalories,
   DataPowerAvg,
   DataPressureSACAvg,
+  DataGradeAvg,
+  DataGradeMax,
+  DataGradeMin,
   DataSpeedAvg,
   DataStartPosition,
   DataStrokeRate,
@@ -41,6 +48,7 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
+import { normalizePersistedEventMetricSemantics } from '../../../shared/sports-lib-metric-semantics';
 import { TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   createMcpDataService,
@@ -3236,6 +3244,82 @@ describe('MCP data service', () => {
       25,
       undefined,
     );
+  });
+
+  it('does not expose legacy all-Diving terrain summaries through event metrics', async () => {
+    const terrainSummaryMetricTypes = [
+      DataAscent.type,
+      DataDescent.type,
+      DataAltitudeMin.type,
+      DataAltitudeMax.type,
+      DataAltitudeAvg.type,
+      DataGradeMin.type,
+      DataGradeMax.type,
+      DataGradeAvg.type,
+    ];
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'legacy-dive-1',
+      data: {
+        startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+        endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+        stats: {
+          [DataActivityTypes.type]: [ActivityTypes.ScubaDiving],
+          [DataAscent.type]: 20,
+          [DataDescent.type]: 15,
+          [DataAltitudeMin.type]: -5,
+          [DataAltitudeMax.type]: 5,
+          [DataAltitudeAvg.type]: 1,
+          [DataGradeMin.type]: -10,
+          [DataGradeMax.type]: 10,
+          [DataGradeAvg.type]: 1,
+          privateSourceValue: 'do-not-return',
+        },
+      },
+    }]);
+    dependencies.importEvent = vi.fn((data, id) => normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(data).setID(id),
+    ));
+
+    const service = createMcpDataService(dependencies);
+    const metricBatches = [
+      terrainSummaryMetricTypes.slice(0, 4),
+      terrainSummaryMetricTypes.slice(4),
+    ];
+    const results = [];
+    for (const metricTypes of metricBatches) {
+      results.push(await service.queryMetrics({
+        uid: 'user-1',
+        metrics: metricTypes.map(metric => ({
+          metric,
+          aggregation: 'total' as const,
+        })),
+        startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+        endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+        groupBy: 'date',
+        interval: 'daily',
+        timeZone: 'UTC',
+      }));
+    }
+
+    const resultEntries = results.flatMap(result => result.results);
+    expect(resultEntries).toHaveLength(terrainSummaryMetricTypes.length);
+    resultEntries.forEach((entry) => {
+      expect(entry.matchedEventCount).toBe(1);
+      expect(entry.aggregation.buckets).toEqual([]);
+    });
+    metricBatches.forEach((metricTypes, index) => {
+      expect(dependencies.fetchEventDocuments).toHaveBeenNthCalledWith(
+        index + 1,
+        'user-1',
+        Date.parse('2026-07-01T00:00:00.000Z'),
+        Date.parse('2026-07-02T00:00:00.000Z'),
+        [...metricTypes, DataActivityTypes.type],
+        25,
+        undefined,
+      );
+    });
+    expect(JSON.stringify(results)).not.toContain('privateSourceValue');
+    expect(JSON.stringify(results)).not.toContain('do-not-return');
   });
 
   it('discovers and queries pre-19 stroke-rate summaries through their canonical metric', async () => {

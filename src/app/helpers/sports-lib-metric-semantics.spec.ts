@@ -1,11 +1,25 @@
 import {
+  type ActivityInterface,
   ActivityTypes,
   DataActivityTypes,
+  DataAltitudeAvg,
+  DataAltitudeMax,
+  DataAltitudeMin,
+  DataAscent,
   DataCadence,
   DataCadenceAvg,
+  DataDescent,
+  DataDistance,
+  DataDuration,
+  DataGradeAvg,
+  DataGradeMax,
+  DataGradeMin,
+  DataPause,
   DataStrokeRate,
   DataStrokeRateAvg,
   EventImporterJSON,
+  EventUtilities,
+  FileType,
   LapTypes,
   type EventJSONInterface,
 } from '@sports-alliance/sports-lib';
@@ -66,6 +80,58 @@ describe('persisted Sports Lib metric semantics', () => {
     expect(event.getStat(DataStrokeRateAvg.type)?.getValue()).toBe(30.8);
     expect(event.getStat(DataCadence.type)).toBeUndefined();
     expect(event.getStat(DataCadenceAvg.type)).toBeUndefined();
+  });
+
+  it('regenerates terrain summaries only from non-Diving activities', () => {
+    const allDiving = EventImporterJSON.getEventFromJSON(eventWithActivities([
+      ActivityTypes.ScubaDiving,
+      ActivityTypes.FreeDiving,
+    ]));
+    allDiving.getActivities().forEach((activity, index) => addRawTerrainSummaryStats(activity, index + 1));
+
+    EventUtilities.reGenerateStatsForEvent(allDiving);
+
+    terrainSummaryTypes.forEach(type => {
+      expect(allDiving.getStat(type)).toBeUndefined();
+    });
+
+    const mixed = EventImporterJSON.getEventFromJSON(eventWithActivities([
+      ActivityTypes.ScubaDiving,
+      ActivityTypes.Running,
+    ]));
+    addRawTerrainSummaryStats(mixed.getActivities()[0], 1);
+    addRawTerrainSummaryStats(mixed.getActivities()[1], 5);
+
+    EventUtilities.reGenerateStatsForEvent(mixed);
+
+    expect(mixed.getStat(DataAscent.type)?.getValue()).toBe(100);
+    expect(mixed.getStat(DataDescent.type)?.getValue()).toBe(75);
+    expect(mixed.getStat(DataAltitudeMin.type)?.getValue()).toBe(-25);
+    expect(mixed.getStat(DataAltitudeMax.type)?.getValue()).toBe(25);
+    expect(mixed.getStat(DataAltitudeAvg.type)?.getValue()).toBe(5);
+    expect(mixed.getStat(DataGradeMin.type)?.getValue()).toBe(-50);
+    expect(mixed.getStat(DataGradeMax.type)?.getValue()).toBe(50);
+    expect(mixed.getStat(DataGradeAvg.type)?.getValue()).toBe(5);
+  });
+
+  it('hides legacy all-Diving terrain summaries when restoring a split persisted event', () => {
+    const event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(eventJSON({
+        [DataActivityTypes.type]: [ActivityTypes.ScubaDiving],
+        [DataAscent.type]: 20,
+        [DataDescent.type]: 15,
+        [DataAltitudeMin.type]: -5,
+        [DataAltitudeMax.type]: 5,
+        [DataAltitudeAvg.type]: 1,
+        [DataGradeMin.type]: -10,
+        [DataGradeMax.type]: 10,
+        [DataGradeAvg.type]: 1,
+      })),
+    );
+
+    terrainSummaryTypes.forEach(type => {
+      expect(event.getStat(type)).toBeUndefined();
+    });
   });
 
   it('preserves cadence when a partial persisted event has no activity-type stat', () => {
@@ -132,4 +198,59 @@ function eventJSON(stats: Record<string, unknown>): EventJSONInterface {
     stats,
     activities: [],
   } as unknown as EventJSONInterface;
+}
+
+const terrainSummaryTypes = [
+  DataAscent.type,
+  DataDescent.type,
+  DataAltitudeMin.type,
+  DataAltitudeMax.type,
+  DataAltitudeAvg.type,
+  DataGradeMin.type,
+  DataGradeMax.type,
+  DataGradeAvg.type,
+];
+
+function eventWithActivities(activityTypes: ActivityTypes[]): EventJSONInterface {
+  return {
+    name: 'Re-generated event',
+    startDate: 0,
+    endDate: activityTypes.length * 60_000,
+    srcFileType: FileType.FIT,
+    description: null,
+    isMerge: activityTypes.length > 1,
+    privacy: 0,
+    stats: {},
+    activities: activityTypes.map((type, index) => ({
+      name: `${type} activity`,
+      startDate: index * 60_000,
+      endDate: (index + 1) * 60_000,
+      type,
+      powerMeter: false,
+      trainer: false,
+      stats: {
+        [DataDuration.type]: 60,
+        [DataPause.type]: 0,
+        [DataDistance.type]: 25,
+      },
+      streams: [],
+      laps: [],
+      creator: { name: 'test', devices: [] },
+      intensityZones: [],
+      events: [],
+    })),
+  } as unknown as EventJSONInterface;
+}
+
+function addRawTerrainSummaryStats(activity: ActivityInterface, scale: number): void {
+  [
+    new DataAscent(20 * scale),
+    new DataDescent(15 * scale),
+    new DataAltitudeMin(-5 * scale),
+    new DataAltitudeMax(5 * scale),
+    new DataAltitudeAvg(scale),
+    new DataGradeMin(-10 * scale),
+    new DataGradeMax(10 * scale),
+    new DataGradeAvg(scale),
+  ].forEach(stat => activity.addStat(stat));
 }

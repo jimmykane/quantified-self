@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `20.0.1`
+- `@sports-alliance/sports-lib`: `20.0.3`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1829,7 +1829,7 @@ These dive values are not Training inputs and do not change durability, Training
 Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
 new dive surfaces.
 
-The repository now pins Sports Lib `20.0.1`, including FIT parser `5.0.2`. New FIT imports persist session field 196
+The repository now pins Sports Lib `20.0.3`, including FIT parser `5.0.2`. New FIT imports persist session field 196
 as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat. Existing persisted Resting
 Calories values remain historical values until a source reparse replaces their source stats, and are neither renamed
 nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM` from its source
@@ -1837,11 +1837,16 @@ meters-per-second representation to Sports Lib's public meters-per-hour metric. 
 ascent/descent, altitude minimum/maximum/average, and grade minimum/maximum/average summaries for the Diving group
 while retaining the source streams needed for dive views.
 
-Use the existing targeted Sports Lib reparse lifecycle for retained original FIT files that should gain Metabolic
-Calories, corrected Average VAM, or corrected persisted dive terrain summaries. The target follows the installed
-package version automatically; keep the automatic scanner disabled unless a separately approved operational campaign
-is intended. These values are not Training inputs, so this parser upgrade does not require a Training schema bump,
-derived-snapshot rebuild, or a synthetic Firestore migration.
+Sports Lib `20.0.3` also applies that eight-metric Diving-group rule when regenerating a parent event summary. A parent
+made entirely of Diving-group activities omits `Ascent`, `Descent`, `Minimum Altitude`, `Maximum Altitude`, `Average
+Altitude`, `Minimum Grade`, `Maximum Grade`, and `Average Grade`; a mixed parent aggregates those values only from
+its non-Diving child activities. Quantified Self's existing source-backed reparse calls Sports Lib regeneration just
+before the sanitized event/activity write, and its event merge path uses the same library semantics. Use the existing
+targeted Sports Lib reparse lifecycle for a retained original that should gain Metabolic Calories, corrected Average
+VAM, or a corrected persisted parent terrain summary. The target follows the installed package version automatically;
+keep the automatic scanner disabled unless a separately approved operational campaign is intended. These values are
+not Training inputs, so this parser upgrade does not require a Training schema bump, derived-snapshot rebuild, or a
+synthetic Firestore migration.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

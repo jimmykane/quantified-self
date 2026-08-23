@@ -7,6 +7,20 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.0.3 regenerated-event summary correction
+
+Sports Lib 20.0.3 applies the Diving-group terrain rule when it regenerates a parent event summary. A parent made
+entirely of Diving-group activities omits `Ascent`, `Descent`, `Minimum Altitude`, `Maximum Altitude`, `Average
+Altitude`, `Minimum Grade`, `Maximum Grade`, and `Average Grade`. A mixed parent aggregates those eight values only
+from its non-Diving child activities. The correction does not alter raw source streams or child activity source stats.
+
+Quantified Self's ordinary source-backed reparse calls `EventUtilities.reGenerateStatsForEvent(...)` immediately before
+the sanitized event/activity writer persists the result; event merges use `EventUtilities.mergeEvents(...)` before the
+same writer. The installed Functions package advances the target version automatically. Use the normal targeted
+reparse lifecycle only when an existing persisted parent summary needs to be rewritten. Do not synthesize summary
+values or patch Firestore directly. Keep the automatic scanner disabled unless a separate operational campaign is
+approved; an event without its retained original remains an honest terminal `NO_ORIGINAL_FILES` outcome.
+
 ### Sports Lib 20.0.1 FIT parser transition
 
 Sports Lib 20.0.1 uses FIT parser 5.0.2. On new FIT imports, session field 196 persists as canonical `Metabolic

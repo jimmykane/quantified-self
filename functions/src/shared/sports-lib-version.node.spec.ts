@@ -5,6 +5,8 @@ import { describe, it, expect } from 'vitest';
 import { SPORTS_LIB_VERSION } from './sports-lib-version.node';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
+const browserPackageJsonPath = path.resolve(__dirname, '../../../package.json');
+
 describe('SPORTS_LIB_VERSION (node)', () => {
     it('matches the resolved sports-lib package.json version', () => {
         const nodeRequire = createRequire(__filename);
@@ -17,5 +19,13 @@ describe('SPORTS_LIB_VERSION (node)', () => {
 
     it('keeps the sports-lib reparse target aligned with the runtime package version', () => {
         expect(SPORTS_LIB_REPARSE_TARGET_VERSION).toBe(SPORTS_LIB_VERSION);
+    });
+
+    it('keeps the browser and Functions manifests pinned to the same version', () => {
+        const browserPackageJson = JSON.parse(readFileSync(browserPackageJsonPath, 'utf8')) as {
+            dependencies?: Record<string, string>;
+        };
+
+        expect(browserPackageJson.dependencies?.['@sports-alliance/sports-lib']).toBe(SPORTS_LIB_VERSION);
     });
 });

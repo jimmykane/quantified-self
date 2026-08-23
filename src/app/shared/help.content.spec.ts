@@ -498,6 +498,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('single-gas, multi-gas, or gauge diving');
     expect(gettingStartedSection?.content).toContain('apnea diving and apnea hunting');
     expect(gettingStartedSection?.content).toContain('**Altitude Minimum**, **Altitude Maximum**, **Average Altitude**, ascent/descent timing, grade and grade-adjusted values, VAM, and vertical speed');
+    expect(gettingStartedSection?.content).toContain('mixed Event is regenerated, its ascent, descent, altitude, and grade summaries use only non-Diving activities');
     expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
