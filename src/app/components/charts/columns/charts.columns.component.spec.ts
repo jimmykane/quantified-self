@@ -238,6 +238,26 @@ describe('ChartsColumnsComponent', () => {
     expect(trendSeries.lineStyle.type).toBe('dashed');
   });
 
+  it('should use compact weekly axis labels on narrow charts', async () => {
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Weekly;
+    component.data = [
+      { time: Date.UTC(2026, 4, 25), [ChartDataValueTypes.Total]: 10, count: 1 },
+      { time: Date.UTC(2026, 5, 1), [ChartDataValueTypes.Total]: 20, count: 1 },
+    ];
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 360,
+    });
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+
+    expect(option.xAxis.data).toEqual(['W22', 'W23']);
+  });
+
   it('should render summary meta as "per activity type" for activity categories', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();

@@ -46,6 +46,7 @@ import {
   resolveEChartsThemeName
 } from '../../../helpers/echarts-theme.helper';
 import {
+  formatDashboardAxisDateByInterval,
   formatDashboardAxisNumericValue,
   formatDashboardDataDisplay,
   formatDashboardNumericValue,
@@ -218,7 +219,15 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
       .filter((value): value is number => Number.isFinite(value));
     const valueAxisConfig = buildDashboardValueAxisConfig(values);
 
-    const categories = points.map(point => point.label);
+    const categories = points.map((point) => (
+      this.chartDataCategoryType === ChartDataCategoryTypes.DateType && point.time !== null
+        ? formatDashboardAxisDateByInterval(
+          point.time,
+          this.chartDataTimeInterval || TimeIntervals.Daily,
+          isCompactLayout,
+        )
+        : point.label
+    ));
     const lineData = points.map((point) => {
       const pointColor = this.getPointColor(point, point.index);
       return {
