@@ -22,14 +22,10 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   DataDistance,
-  DataDepth,
-  DataDepthFeet,
   DataGradeAdjustedSpeed,
-  DataHeartRate,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
   DataSpeed,
-  DataTemperature
 } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -50,7 +46,11 @@ import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-t
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventResolverData } from '../../resolvers/event.resolver';
-import { hasEventDiveProfileData } from '../../helpers/event-dive-profile.helper';
+import {
+  EVENT_DIVE_PROFILE_CHART_DATA_TYPES,
+  EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
+  hasEventDiveProfileData,
+} from '../../helpers/event-dive-profile.helper';
 
 @Component({
   selector: 'app-event-card',
@@ -198,7 +198,7 @@ export class EventCardComponent implements OnInit {
     'Calories'
   ];
 
-  public readonly diveProfileChartDataTypes = [DataDepth.type, DataDepthFeet.type];
+  public readonly diveProfileChartDataTypes = EVENT_DIVE_PROFILE_CHART_DATA_TYPES;
 
   ngOnInit() {
     this.logger.log('[EventCard] ngOnInit: initializing event details subscriptions');
@@ -503,9 +503,7 @@ export class EventCardComponent implements OnInit {
       DataSpeed.type,
       DataGradeAdjustedSpeed.type,
       DataDistance.type,
-      DataDepth.type,
-      DataTemperature.type,
-      DataHeartRate.type,
+      ...EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
     ];
 
     const user = this.currentUser();

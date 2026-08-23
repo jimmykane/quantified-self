@@ -5,12 +5,15 @@ import {
   DataDepth,
   DataEffortPace,
   DataHeartRate,
+  DataNextStopDepth,
+  DataNextStopDepthFeet,
   DataPace,
   DataPotentialStamina,
   DataPower,
   DataPowerLeft,
   DataPowerRight,
   DataStamina,
+  DataStrokeRate,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -123,17 +126,20 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBeDefined();
   });
 
-  it('keeps depth zero at the top and increases downward', () => {
-    const config = buildEventPanelYAxisConfig({
-      panel: buildPanel(DataDepth.type, [0, 1.2, 3.86]),
-      visibleRange: null,
-    });
+  it.each([DataDepth.type, DataNextStopDepth.type, DataNextStopDepthFeet.type])(
+    'keeps %s zero at the top and increases downward',
+    (dataType) => {
+      const config = buildEventPanelYAxisConfig({
+        panel: buildPanel(dataType, [0, 1.2, 3.86]),
+        visibleRange: null,
+      });
 
-    expect(config.inverse).toBe(true);
-    expect(config.min).toBe(0);
-    expect(config.max).toBeGreaterThanOrEqual(3.86);
-    expect(config.interval).toBeDefined();
-  });
+      expect(config.inverse).toBe(true);
+      expect(config.min).toBe(0);
+      expect(config.max).toBeGreaterThanOrEqual(3.86);
+      expect(config.interval).toBeDefined();
+    },
+  );
 
   it('keeps effort pace streams inverted while using the shared default numeric scale', () => {
     const config = buildEventPanelYAxisConfig({
@@ -178,6 +184,17 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBe(15);
     expect(config.max).toBe(120);
     expect(config.max).not.toBe(140);
+  });
+
+  it('uses cadence-style logical steps for Stroke Rate', () => {
+    const config = buildEventPanelYAxisConfig({
+      panel: buildPanel(DataStrokeRate.type, [18, 22, 27, 31]),
+      visibleRange: null,
+    });
+
+    expect(config.inverse).toBe(false);
+    expect(config.interval).toBe(5);
+    expect(config.max).toBe(35);
   });
 
   it('uses coarser logical steps for heart-rate axes', () => {

@@ -48,6 +48,10 @@ describe('metric-semantics', () => {
       familyKey: 'cadence',
       direction: 'direct',
     }));
+    expect(resolveMetricSemantics('Average Stroke Rate')).toEqual(expect.objectContaining({
+      familyKey: 'stroke_rate',
+      direction: 'direct',
+    }));
     expect(resolveMetricSemantics('Average Heart Rate')).toEqual(expect.objectContaining({
       familyKey: 'heart_rate',
       direction: 'direct',

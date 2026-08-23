@@ -25,9 +25,31 @@ import {
   DataBatteryCurrent,
   DataBatteryVoltage,
   DataBeginningPotentialStamina,
+  DataBottomTime,
+  DataDepthAvg,
+  DataDiveAscentRateAvg,
+  DataDiveAscentRateMax,
+  DataDiveAscentTime,
+  DataDiveDescentRateAvg,
+  DataDiveDescentRateMax,
+  DataDiveDescentTime,
+  DataDiveHangTime,
+  DataDiveNumber,
+  DataEndingCNSLoad,
+  DataEndingN2Load,
+  DataOxygenToxicity,
+  DataPressureSACAvg,
+  DataRMVAvg,
+  DataStartingCNSLoad,
+  DataStartingN2Load,
+  DataSurfaceInterval,
+  DataVolumeSACAvg,
   DataCadenceAvg,
   DataCadenceMax,
   DataCadenceMin,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   DataCriticalPower,
   DataDescent,
   DataDescentTime,
@@ -101,6 +123,7 @@ import {
   DataLegStiffnessMax,
   DataLegStiffnessMin,
   DataMaxRespirationRate,
+  DataMetabolicCalories,
   DataMinRespirationRate,
   DataMovingTime,
   DataNumberOfSatellites,
@@ -166,6 +189,7 @@ import {
 export type EventSummaryMetricGroupId =
   | 'overall'
   | 'performance'
+  | 'diving'
   | 'altitude'
   | 'environment'
   | 'device'
@@ -203,6 +227,35 @@ const POWER_LIB_EXTRA_TYPE_STRINGS: string[] = [
 const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
   DataAscentTime.type,
   DataDescentTime.type,
+];
+
+export const EVENT_SUMMARY_ALTITUDE_STAT_TYPES: string[] = [
+  DataAltitudeMax.type,
+  DataAltitudeMin.type,
+  DataAltitudeAvg.type,
+];
+
+/**
+ * Terrain-elevation metrics that are not meaningful for Diving activities.
+ * Keep raw source metrics intact; this list only controls Event Details defaults.
+ */
+export const EVENT_SUMMARY_TERRAIN_STAT_TYPES: string[] = [
+  DataAscent.type,
+  DataDescent.type,
+  ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
+  ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
+  DataGrade.type,
+  DataGradeAvg.type,
+  DataGradeMin.type,
+  DataGradeMax.type,
+  DataGradeAdjustedPaceAvg.type,
+  DataGradeAdjustedPaceMin.type,
+  DataGradeAdjustedPaceMax.type,
+  DataGradeAdjustedSpeedAvg.type,
+  DataGradeAdjustedSpeedMin.type,
+  DataGradeAdjustedSpeedMax.type,
+  DataAvgVAM.type,
+  DataVerticalSpeedMax.type,
 ];
 
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
@@ -345,6 +398,29 @@ const ENVIRONMENT_DISTANCE_TYPE_STRINGS: string[] = [
   DataGNSSDistance.type,
 ];
 
+export const EVENT_SUMMARY_DIVING_STAT_TYPES: string[] = [
+  DataDepthAvg.type,
+  DataDepthMax.type,
+  DataSurfaceInterval.type,
+  DataBottomTime.type,
+  DataDiveNumber.type,
+  DataDiveDescentTime.type,
+  DataDiveAscentTime.type,
+  DataDiveHangTime.type,
+  DataDiveAscentRateAvg.type,
+  DataDiveAscentRateMax.type,
+  DataDiveDescentRateAvg.type,
+  DataDiveDescentRateMax.type,
+  DataStartingCNSLoad.type,
+  DataEndingCNSLoad.type,
+  DataStartingN2Load.type,
+  DataEndingN2Load.type,
+  DataOxygenToxicity.type,
+  DataPressureSACAvg.type,
+  DataVolumeSACAvg.type,
+  DataRMVAvg.type,
+];
+
 export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
 
 export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
@@ -368,6 +444,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPowerNormalized.type,
       DataPowerTrainingStressScore.type,
       DataCadenceAvg.type,
+      DataStrokeRateAvg.type,
       DataRecoveryTime.type,
       DataVO2Max.type,
       DataFTP.type,
@@ -379,6 +456,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPaceAvg.type,
       DataSwimPaceAvg.type,
       DataCadenceAvg.type,
+      DataStrokeRateAvg.type,
     ],
   },
   {
@@ -394,6 +472,9 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataCadenceAvg.type,
       DataCadenceMax.type,
       DataCadenceMin.type,
+      DataStrokeRateAvg.type,
+      DataStrokeRateMax.type,
+      DataStrokeRateMin.type,
       DataPower.type,
       DataPowerAvg.type,
       DataPowerMax.type,
@@ -420,15 +501,18 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     metricTypes: [],
   },
   {
+    id: 'diving',
+    label: 'Diving',
+    metricTypes: EVENT_SUMMARY_DIVING_STAT_TYPES,
+  },
+  {
     id: 'environment',
     label: 'Environment',
     metricTypes: [
       DataAscent.type,
       DataDescent.type,
       ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-      DataAltitudeMax.type,
-      DataAltitudeMin.type,
-      DataAltitudeAvg.type,
+      ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
@@ -443,6 +527,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     label: 'Physiological',
     metricTypes: [
       DataEnergy.type,
+      DataMetabolicCalories.type,
       DataVO2Max.type,
       DataPeakEPOC.type,
       DataAerobicTrainingEffect.type,
@@ -478,6 +563,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   ...EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
   DataVerticalSpeedMax.type,
   DataEnergy.type,
+  DataMetabolicCalories.type,
   DataPower.type,
   DataPowerAvg.type,
   DataPowerMax.type,
@@ -493,16 +579,17 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataAscent.type,
   DataDescent.type,
   ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
-  DataAltitudeMax.type,
-  DataAltitudeMin.type,
-  DataAltitudeAvg.type,
+  ...EVENT_SUMMARY_ALTITUDE_STAT_TYPES,
   DataCadenceAvg.type,
   DataCadenceMax.type,
   DataCadenceMin.type,
+  DataStrokeRateAvg.type,
+  DataStrokeRateMax.type,
+  DataStrokeRateMin.type,
   DataTemperatureAvg.type,
   DataTemperatureMax.type,
   DataTemperatureMin.type,
-  DataDepthMax.type,
+  ...EVENT_SUMMARY_DIVING_STAT_TYPES,
   ...ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS,
   ...ENVIRONMENT_GRADE_TYPE_STRINGS,
   ...ENVIRONMENT_DISTANCE_TYPE_STRINGS,

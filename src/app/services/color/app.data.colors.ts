@@ -10,6 +10,7 @@ export enum AppDataColors {
   'Depth_1' = AppColors.Purple,
   'Duration' = AppColors.PurpleBlue,
   'Cadence' = AppColors.DeepBlue,
+  'Stroke Rate' = AppColors.DeepBlue,
   'Power' = AppColors.Orange,
   'Power_0' = AppColors.Orange,
   'Power_1' = AppColors.Blue,

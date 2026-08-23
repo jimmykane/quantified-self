@@ -1,5 +1,7 @@
 import {
   DataDistance,
+  DataDepthAvg,
+  DataDiveNumber,
   DataEnergy,
   DataPaceAvg,
   DataPaceMax,
@@ -14,6 +16,7 @@ import {
   DataSpeedAvg,
   DataSpeedMax,
   DataSpeedMin,
+  DataStrokeRateAvg,
   DataSwimPaceAvg,
   LapInterface,
   PaceUnits,
@@ -57,6 +60,7 @@ describe('event lap table columns helper', () => {
     expect(getDefaultEventLapMetricTypes('running')).not.toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('cycling')).toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataSwimPaceAvg.type);
+    expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataStrokeRateAvg.type);
     expect(getDefaultEventLapMetricTypes('other')).toContain(DataSpeedAvg.type);
     expect(EVENT_LAP_TABLE_FIXED_COLUMN).toBe('#');
   });
@@ -89,8 +93,11 @@ describe('event lap table columns helper', () => {
 
     expect(optionGroups.map((group) => group.id)).toContain('overall');
     expect(optionGroups.map((group) => group.id)).toContain('performance');
+    expect(optionGroups.map((group) => group.id)).toContain('diving');
     expect(optionGroups.flatMap((group) => group.metrics).map((metric) => metric.type))
       .toContain(DataPaceAvg.type);
+    expect(optionGroups.flatMap((group) => group.metrics).map((metric) => metric.type))
+      .toEqual(expect.arrayContaining([DataDepthAvg.type, DataDiveNumber.type]));
     expect(optionGroups.flatMap((group) => group.metrics).filter((metric) => metric.type === DataSpeedAvg.type)).toHaveLength(1);
   });
 

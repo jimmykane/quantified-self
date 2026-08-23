@@ -160,5 +160,27 @@ describe('AppEventUtilities', () => {
                 expect(AppEventUtilities.shouldExcludeDescent([ActivityTypes.Swimming, ActivityTypes['swimming_lap_swimming']])).toBe(true);
             });
         });
+
+        describe('shouldExcludeTerrainSummary', () => {
+            it('should return true for every Diving-group activity', () => {
+                [
+                    ActivityTypes.Diving,
+                    ActivityTypes.ScubaDiving,
+                    ActivityTypes.FreeDiving,
+                    ActivityTypes.Snorkeling,
+                    ActivityTypes.Mermaiding,
+                ].forEach((activityType) => {
+                    expect(AppEventUtilities.shouldExcludeTerrainSummary(activityType)).toBe(true);
+                });
+            });
+
+            it('should retain terrain summaries for non-Diving and mixed activities', () => {
+                expect(AppEventUtilities.shouldExcludeTerrainSummary(ActivityTypes.Running)).toBe(false);
+                expect(AppEventUtilities.shouldExcludeTerrainSummary([
+                    ActivityTypes.Diving,
+                    ActivityTypes.Running,
+                ])).toBe(false);
+            });
+        });
     });
 });

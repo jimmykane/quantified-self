@@ -110,6 +110,21 @@ describe('ActivityCalendarGridComponent', () => {
     expect(compactNumberRule).toContain('flex-basis: 18px;');
   });
 
+  it('fits all six compact calendar weeks inside the available mobile tile height', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+    const mobileStyles = styles.match(/@media \(max-width: 860px\)\s*\{([\s\S]*)\}\s*@media \(prefers-reduced-motion:/)?.[1];
+
+    expect(mobileStyles).toMatch(
+      /\.activity-calendar--compact \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-template-rows:\s*repeat\(6, minmax\(0, 1fr\)\);/s,
+    );
+    expect(mobileStyles).toMatch(
+      /\.activity-calendar--compact \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
+    );
+  });
+
   it('keeps activity days free of tooltips so touch scrolling remains native', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.html'),

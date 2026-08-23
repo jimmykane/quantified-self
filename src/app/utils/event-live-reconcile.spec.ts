@@ -4,18 +4,22 @@ import { reconcileEventDetailsLiveUpdate } from './event-live-reconcile';
 const createActivity = (
   id: string,
   streams: any[] = [],
-  streamGetter: 'getStreams' | 'getAllStreams' = 'getStreams',
+  sourceRecords: any = { gases: [], tankSummaries: [], tankUpdates: [] },
 ): any => {
   let currentStreams = [...streams];
-  const getter = () => currentStreams;
+  let currentSourceRecords = sourceRecords;
   return {
     getID: () => id,
-    ...(streamGetter === 'getStreams' ? { getStreams: getter } : { getAllStreams: getter }),
+    getAllStreams: () => currentStreams,
+    getDiveSourceRecords: () => currentSourceRecords,
     clearStreams: () => {
       currentStreams = [];
     },
     addStreams: (nextStreams: any[]) => {
       currentStreams = [...nextStreams];
+    },
+    setDiveSourceRecords: (nextSourceRecords: any) => {
+      currentSourceRecords = nextSourceRecords;
     },
   };
 };
@@ -25,8 +29,13 @@ const createEvent = (activities: any[]): any => ({
 });
 
 describe('event-live-reconcile', () => {
-  it('preserves selected activity IDs and existing streams when activity IDs match', () => {
-    const currentActivity = createActivity('a1', [{ type: 'Speed', values: [1, 2, 3] }]);
+  it('preserves selected activity IDs, streams, and legacy source-hydrated records when activity IDs match', () => {
+    const sourceRecords = {
+      gases: [{ oxygenContent: 32, heliumContent: 0 }],
+      tankSummaries: [{ startPressure: 200, endPressure: 75, volumeUsed: 1250 }],
+      tankUpdates: [{ pressure: 200 }],
+    };
+    const currentActivity = createActivity('a1', [{ type: 'Speed', values: [1, 2, 3] }], sourceRecords);
     const incomingActivity = createActivity('a1');
     const currentEvent = createEvent([currentActivity]);
     const incomingEvent = createEvent([incomingActivity]);
@@ -35,7 +44,8 @@ describe('event-live-reconcile', () => {
 
     expect(result.needsFullReload).toBe(false);
     expect(result.selectedActivityIDs).toEqual(['a1']);
-    expect(incomingActivity.getStreams()).toEqual([{ type: 'Speed', values: [1, 2, 3] }]);
+    expect(incomingActivity.getAllStreams()).toEqual([{ type: 'Speed', values: [1, 2, 3] }]);
+    expect(incomingActivity.getDiveSourceRecords()).toEqual(sourceRecords);
   });
 
   it('flags full reload when activity IDs changed', () => {
@@ -58,15 +68,26 @@ describe('event-live-reconcile', () => {
     expect(result.selectedActivityIDs).toEqual(['a1']);
   });
 
-  it('preserves streams when source activity exposes getAllStreams', () => {
-    const currentActivity = createActivity('a1', [{ type: 'LatitudeDegrees', values: [1] }], 'getAllStreams');
-    const incomingActivity = createActivity('a1');
+  it('keeps persisted source records from a matching live activity', () => {
+    const sourceHydratedRecords = {
+      gases: [{ oxygenContent: 32, status: 'enabled' }],
+      tankSummaries: [],
+      tankUpdates: [],
+    };
+    const persistedRecords = {
+      gases: [{ oxygenContent: 50, status: 'enabled' }],
+      tankSummaries: [{ startPressure: 200, endPressure: 75, volumeUsed: 1250 }],
+      tankUpdates: [{ pressure: 198.4 }],
+    };
+    const currentActivity = createActivity('a1', [{ type: 'LatitudeDegrees', values: [1] }], sourceHydratedRecords);
+    const incomingActivity = createActivity('a1', [], persistedRecords);
     const currentEvent = createEvent([currentActivity]);
     const incomingEvent = createEvent([incomingActivity]);
 
     const result = reconcileEventDetailsLiveUpdate(currentEvent, incomingEvent, ['a1']);
 
     expect(result.needsFullReload).toBe(false);
-    expect(incomingActivity.getStreams()).toEqual([{ type: 'LatitudeDegrees', values: [1] }]);
+    expect(incomingActivity.getAllStreams()).toEqual([{ type: 'LatitudeDegrees', values: [1] }]);
+    expect(incomingActivity.getDiveSourceRecords()).toEqual(persistedRecords);
   });
 });

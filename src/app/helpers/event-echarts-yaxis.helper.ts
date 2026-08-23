@@ -3,12 +3,15 @@ import {
   DataCadence,
   DataDepth,
   DataDepthFeet,
+  DataNextStopDepth,
+  DataNextStopDepthFeet,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
   DataPowerLeft,
   DataPowerRight,
   DataStamina,
+  DataStrokeRate,
 } from '@sports-alliance/sports-lib';
 import {
   EventChartPanelModel,
@@ -37,6 +40,7 @@ const POWER_STREAM_TYPES = new Set<string>([
 ]);
 const CADENCE_STREAM_TYPES = new Set<string>([
   DataCadence.type,
+  DataStrokeRate.type,
 ]);
 const HEART_RATE_STREAM_TYPES = new Set<string>([
   DataHeartRate.type,
@@ -48,6 +52,8 @@ const STAMINA_STREAM_TYPES = new Set<string>([
 const DEPTH_STREAM_TYPES = new Set<string>([
   DataDepth.type,
   DataDepthFeet.type,
+  DataNextStopDepth.type,
+  DataNextStopDepthFeet.type,
 ]);
 
 export interface EventPanelYAxisConfig {

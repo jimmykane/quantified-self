@@ -164,6 +164,7 @@ export interface StatRowElement {
   'Average Heart Rate'?: string,
   'Average Speed'?: string,
   'Average Cadence'?: string,
+  'Average Stroke Rate'?: string,
   'Average Power'?: string,
   'Device Names'?: string,
   'Device Name Items'?: Array<{ label: string; color: string; trackKey: string }>,

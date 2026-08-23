@@ -18,6 +18,7 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { createParsingOptions } from '@shared/parsing-options';
+import { normalizePersistedEventMetricSemantics } from '@shared/sports-lib-metric-semantics';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -82,14 +83,14 @@ interface EventQuerySeed {
 
 /**
  * Controls how parsed data from original files is applied to an existing event.
- * - `attach_streams_only` keeps existing activities and updates their streams.
+ * - `attach_source_data` keeps existing activities and updates their source-hydrated data.
  * - `replace_activities` clears existing activities and replaces them with parsed activities.
  *
  * Use `replace_activities` only in regeneration/rebuild flows where callers explicitly
  * require full activity replacement from source files. For normal read/load flows,
- * use `attach_streams_only`.
+ * use `attach_source_data`.
  */
-export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
+export type SourceHydrationMode = 'attach_source_data' | 'replace_activities';
 
 const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
   'originalFile',
@@ -279,7 +280,9 @@ export class AppEventService implements OnDestroy {
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
     if (!eventSnapshot) return null;
     const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
-    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
+    const event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID),
+    ) as AppEventInterface;
 
     // Hydrate with original file(s) info if present
     const rawData = eventSnapshot as any;
@@ -315,8 +318,10 @@ export class AppEventService implements OnDestroy {
     let clonedEvent: AppEventInterface;
 
     if (typeof eventAny.toJSON === 'function') {
-      clonedEvent = EventImporterJSON.getEventFromJSON(event.toJSON() as EventJSONInterface)
-        .setID(event.getID()) as AppEventInterface;
+      clonedEvent = normalizePersistedEventMetricSemantics(
+        EventImporterJSON.getEventFromJSON(event.toJSON() as EventJSONInterface)
+          .setID(event.getID()),
+      ) as AppEventInterface;
     } else {
       const clonedFallbackEvent = Object.assign(
         Object.create(Object.getPrototypeOf(eventAny) || Object.prototype),
@@ -1000,7 +1005,7 @@ export class AppEventService implements OnDestroy {
     streamTypes?: string[],
     merge: boolean = true,
     skipEnrichment: boolean = false,
-    hydrationMode: StreamHydrationMode = 'attach_streams_only',
+    hydrationMode: SourceHydrationMode = 'attach_source_data',
     downloadFileOptions?: DownloadFileOptions,
   ): Observable<EventInterface> {
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
@@ -1048,7 +1053,7 @@ export class AppEventService implements OnDestroy {
           return event;
         }
 
-        this.attachParsedStreamsToExistingActivities(event, fullEvent);
+        this.attachParsedSourceDataToExistingActivities(event, fullEvent);
         return event;
       }),
       catchError((error) => {
@@ -1062,7 +1067,7 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  private attachParsedStreamsToExistingActivities(
+  private attachParsedSourceDataToExistingActivities(
     event: AppEventInterface,
     parsedEvent: EventInterface,
   ): void {
@@ -1101,6 +1106,7 @@ export class AppEventService implements OnDestroy {
       const parsedStreams = parsedActivity.getAllStreams();
       existingActivity.clearStreams();
       existingActivity.addStreams(parsedStreams);
+      existingActivity.setDiveSourceRecords(parsedActivity.getDiveSourceRecords());
       parsedActivitiesByID.delete(existingActivityID);
       attachedCount += 1;
     });
@@ -1112,7 +1118,7 @@ export class AppEventService implements OnDestroy {
       || parsedActivitiesMissingID > 0
       || duplicateParsedIDs.size > 0
     ) {
-      this.logger.warn('[AppEventService] Stream-only hydration attached matched activity IDs only', {
+      this.logger.warn('[AppEventService] Source hydration attached matched activity IDs only', {
         eventID: event.getID(),
         attachedCount,
         existingActivitiesCount: existingActivities.length,
@@ -1918,7 +1924,10 @@ export class AppEventService implements OnDestroy {
         this.logger.captureMessage(unknownTypesMessage, { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
       }
     }
-    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
+    const event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson)
+        .setID(queryDocumentSnapshot.id),
+    ) as AppEventInterface;
 
     // Hydrate with original file(s) info if present
     const rawData = eventSnapshot as any;
@@ -2063,7 +2072,10 @@ export class AppEventService implements OnDestroy {
               this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
             }
           }
-          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+          const event = normalizePersistedEventMetricSemantics(
+            EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson)
+              .setID(eventSnapshot.id),
+          ) as AppEventInterface;
 
           // Hydrate with original file(s) info if present
           const rawData = eventSnapshot as any;

@@ -98,6 +98,12 @@
 }
 
 @media (max-width: 599.98px) {
+  .lap-duration-cell {
+    flex-basis: 88px;
+    width: 88px;
+    max-width: 88px;
+  }
+
   .lap-tab-label {
     justify-content: center;
   }

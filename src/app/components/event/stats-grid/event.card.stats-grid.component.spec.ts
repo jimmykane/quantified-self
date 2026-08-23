@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataAltitudeAvg, DataAltitudeMax, DataAltitudeMin, DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataGradeAvg, DataGradeMax, DataGradeMin, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
@@ -239,6 +239,35 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.displayedStatsToShow).not.toContain(DataAscent.type);
         expect(component.displayedStatsToShow).toContain(DataDescent.type); // Descent should still be there for alpine skiing
+    });
+
+    it('should auto-exclude terrain-derived summaries for Diving activities', () => {
+        const activityTypes = [ActivityTypes.ScubaDiving];
+        const activity = {
+            type: ActivityTypes.ScubaDiving,
+            getDiveSourceRecords: () => ({ gases: [], tankSummaries: [], tankUpdates: [] }),
+        };
+        const mockEvent = {
+            getActivities: () => [activity],
+            getActivityTypesAsArray: () => activityTypes,
+            getStat: (type: string) => ({ getDisplayValue: () => 100, getDisplayUnit: () => 'm', getValue: () => 100 }),
+            getStats: () => [],
+        } as any;
+        component.event = mockEvent;
+        component.selectedActivities = mockEvent.getActivities();
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.displayedStatsToShow).not.toContain(DataAltitudeMax.type);
+        expect(component.displayedStatsToShow).not.toContain(DataAltitudeMin.type);
+        expect(component.displayedStatsToShow).not.toContain(DataAltitudeAvg.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeAvg.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeMin.type);
+        expect(component.displayedStatsToShow).not.toContain(DataGradeMax.type);
+        expect(component.displayedStatsToShow).toContain(DataDepthMax.type);
     });
 
     it('should compute diff map when event is a merge and two activities are selected', () => {
@@ -733,6 +762,7 @@ describe('EventCardStatsGridComponent', () => {
         const activity = {
             type: ActivityTypes.Mermaiding,
             getStats: () => new Map([[DataDepthMax.type, maximumDepthStat]]),
+            getDiveSourceRecords: () => ({ gases: [], tankSummaries: [], tankUpdates: [] }),
         } as any;
         const mockEvent = {
             isMerge: false,
@@ -758,6 +788,36 @@ describe('EventCardStatsGridComponent', () => {
                 metricTypes: [DataDepthMax.type],
             }),
         ]));
+    });
+
+    it('shows the Diving tab for source-native gas and tank records without summary stats', () => {
+        const activity = {
+            type: ActivityTypes.ScubaDiving,
+            getStats: () => new Map(),
+            getDiveSourceRecords: () => ({
+                gases: [{ oxygenContent: 32 }],
+                tankSummaries: [],
+                tankUpdates: [],
+            }),
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [];
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.metricTabs).toEqual([
+            expect.objectContaining({ id: 'diving', metricTypes: [] }),
+        ]);
     });
 
     it('should restore remembered tab when it is visible', () => {

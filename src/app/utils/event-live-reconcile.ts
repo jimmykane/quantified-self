@@ -1,4 +1,5 @@
 import { AppEventInterface } from '@shared/app-event.interface';
+import { hasActivityDiveSourceRecords } from '../helpers/event-dive-source-records.helper';
 
 type EventActivity = NonNullable<ReturnType<AppEventInterface['getActivities']>>[number];
 
@@ -16,22 +17,16 @@ function filterSelectedIDsByAvailableActivities(activities: EventActivity[], sel
   return selectedActivityIDs.filter((activityID) => availableIDs.has(activityID));
 }
 
-function preserveActivityStreams(sourceActivity: EventActivity, targetActivity: EventActivity): void {
-  const sourceGetStreams = (sourceActivity as any)?.getAllStreams ?? (sourceActivity as any)?.getStreams;
-  const targetClearStreams = (targetActivity as any)?.clearStreams;
-  const targetAddStreams = (targetActivity as any)?.addStreams;
+function preserveActivitySourceHydrationData(sourceActivity: EventActivity, targetActivity: EventActivity): void {
+  targetActivity.clearStreams();
+  targetActivity.addStreams(sourceActivity.getAllStreams());
 
-  if (
-    typeof sourceGetStreams !== 'function'
-    || typeof targetClearStreams !== 'function'
-    || typeof targetAddStreams !== 'function'
-  ) {
-    return;
+  // Streams are deliberately absent from Firestore. Dive source records are
+  // persisted from Sports Lib 20.1.1 onward, so an incoming persisted payload wins.
+  // Keep the retained-source copy only as a fallback for older activity docs.
+  if (!hasActivityDiveSourceRecords(targetActivity)) {
+    targetActivity.setDiveSourceRecords(sourceActivity.getDiveSourceRecords());
   }
-
-  const streams = sourceGetStreams.call(sourceActivity) || [];
-  targetClearStreams.call(targetActivity);
-  targetAddStreams.call(targetActivity, streams);
 }
 
 export function reconcileEventDetailsLiveUpdate(
@@ -70,7 +65,7 @@ export function reconcileEventDetailsLiveUpdate(
     if (!currentActivity) {
       return;
     }
-    preserveActivityStreams(currentActivity, incomingActivity);
+    preserveActivitySourceHydrationData(currentActivity, incomingActivity);
   });
 
   return {

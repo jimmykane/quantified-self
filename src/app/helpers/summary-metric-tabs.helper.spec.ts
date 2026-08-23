@@ -31,6 +31,7 @@ import {
   DataEnergy,
   DataDuration,
   DataDepthMax,
+  DataDepthAvg,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
   DataHeartRateAvg,
@@ -38,6 +39,7 @@ import {
   DataHeartRateMin,
   DataPaceAvg,
   DataPowerAvg,
+  DataPressureSACAvg,
   DataPotentialStaminaAvg,
   DataPotentialStaminaMin,
   DataPowerTrainingStressScore,
@@ -73,6 +75,14 @@ describe('buildSummaryMetricTabs', () => {
   it('should remove empty groups', () => {
     const tabs = buildSummaryMetricTabs([DataPowerAvg.type]);
     expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'performance']);
+  });
+
+  it('can include a configured empty group for source-native records', () => {
+    const tabs = buildSummaryMetricTabs([], { includeEmptyGroupIds: ['diving'] });
+
+    expect(tabs).toEqual([
+      expect.objectContaining({ id: 'diving', metricTypes: [] }),
+    ]);
   });
 
   it('should send unknown metric types to Other', () => {
@@ -159,12 +169,17 @@ describe('buildSummaryMetricTabs', () => {
     ]);
   });
 
-  it('should expose maximum dive depth in both Overall and Environment', () => {
+  it('should expose source-native dive summaries in the Diving tab', () => {
     const tabs = buildSummaryMetricTabs([DataDepthMax.type]);
 
-    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'environment']);
+    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'diving', 'environment']);
     expect(tabs.find((tab) => tab.id === 'overall')?.metricTypes).toEqual([DataDepthMax.type]);
+    expect(tabs.find((tab) => tab.id === 'diving')?.metricTypes).toEqual([DataDepthMax.type]);
     expect(tabs.find((tab) => tab.id === 'environment')?.metricTypes).toEqual([DataDepthMax.type]);
+
+    const diveOnlyTabs = buildSummaryMetricTabs([DataDepthAvg.type, DataPressureSACAvg.type]);
+    expect(diveOnlyTabs.map((tab) => tab.id)).toEqual(['diving']);
+    expect(diveOnlyTabs[0].metricTypes).toEqual([DataDepthAvg.type, DataPressureSACAvg.type]);
   });
 
   it('should copy recovery/vo2 to overall and calories to physiological', () => {

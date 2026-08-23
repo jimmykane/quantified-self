@@ -7,19 +7,102 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.1.1 native dive gas and tank record persistence
+
+Sports Lib 20.1.0 introduced parser-provided FIT `dive_gas`, `tank_summary`, and `tank_update` messages as structured
+source records on each Diving-group activity. Sports Lib 20.1.1 serializes those optional records in native Activity
+JSON as `diveSourceRecords`. Gas percentages, tank pressures in bar, volume used in litres, timestamps, packed sensor
+values, and parser enum values remain source-owned. The library does not turn them into numeric summary stats, infer
+gas names or nitrogen values, associate a gas with a tank, or calculate consumption.
+
+New imports and source-backed targeted reparses write the records through the normal sanitized activity writer. The
+writer still removes streams, but retains `diveSourceRecords` in the activity document. Event Details also hydrates the
+retained original as a legacy fallback for activity documents created before 20.1.1. The Diving summary tab renders the
+records separately for each selected dive in **Gas & Tanks**.
+
+The records remain nonnumeric source data: they do not become Training inputs, durability fields, derived schemas, or
+MCP metrics and are not projected through MCP activity-detail responses. Use an ordinary targeted reparse only when a
+specific retained original should persist its legacy records. A reparse cannot recover records for an original source
+that is no longer retained; do not enable the automatic scanner or launch a global reparse for this release.
+
+### Sports Lib 20.0.3 regenerated-event summary correction
+
+Sports Lib 20.0.3 applies the Diving-group terrain rule when it regenerates a parent event summary. A parent made
+entirely of Diving-group activities omits `Ascent`, `Descent`, `Minimum Altitude`, `Maximum Altitude`, `Average
+Altitude`, `Minimum Grade`, `Maximum Grade`, and `Average Grade`. A mixed parent aggregates those eight values only
+from its non-Diving child activities. The correction does not alter raw source streams or child activity source stats.
+
+Quantified Self's ordinary source-backed reparse calls `EventUtilities.reGenerateStatsForEvent(...)` immediately before
+the sanitized event/activity writer persists the result; event merges use `EventUtilities.mergeEvents(...)` before the
+same writer. The installed Functions package advances the target version automatically. Use the normal targeted
+reparse lifecycle only when an existing persisted parent summary needs to be rewritten. Do not synthesize summary
+values or patch Firestore directly. Keep the automatic scanner disabled unless a separate operational campaign is
+approved; an event without its retained original remains an honest terminal `NO_ORIGINAL_FILES` outcome.
+
+### Sports Lib 20.0.1 FIT parser transition
+
+Sports Lib 20.0.1 uses FIT parser 5.0.2. On new FIT imports, session field 196 persists as canonical `Metabolic
+Calories` (`kcal`), not `Resting Calories`. Existing native JSON `Resting Calories` values remain readable as their
+recorded historical stat until a reparse replaces the source stats; the reparse path must not rename them or infer
+`Metabolic Calories` from them. FIT `Average VAM` is converted from the parser's meters-per-second source value to the
+public meters-per-hour metric before it is persisted.
+
+The same version removes terrain ascent/descent, altitude minimum/maximum/average, and grade
+minimum/maximum/average summaries from Diving-group event, activity, and lap data during FIT import and native JSON
+hydration. It leaves raw source streams available for the existing dive views.
+
+Run the ordinary targeted reparse for retained original FIT files that need these new or corrected persisted values.
+The installed package version advances the reparse target automatically. Do not enable the automatic scanner or start a
+global campaign solely for this transition without separate operational approval; missing original files remain an
+honest terminal `NO_ORIGINAL_FILES` outcome.
+
+### Sports Lib 19.1.0 source-native dive metrics transition
+
+Sports Lib 19.1.0 imports parser-provided Diving-group summaries for average/maximum depth, dive timing and rates,
+CNS/N2 load, oxygen toxicity, SAC, and RMV, plus continuous Depth, decompression, load, air-time, SAC/RMV, PO₂, and
+dive-ascent-rate streams. The importer preserves sparse source values and parser-provided magnitudes. It does not derive
+missing summaries, reconstruct streams, fill gaps, apply plausibility thresholds, promote lap-only summaries, or
+flatten gas/tank messages.
+
+The FIT importer also preserves Garmin's explicit dive sub-sport semantics: single-gas, multi-gas, and gauge diving
+become canonical Scuba Diving activities, while apnea diving and apnea hunting become Free Diving. Other dive
+sub-sports without an exact Sports Lib activity type remain canonical Diving instead of being guessed into a nearby
+type.
+
+New imports persist only the summary stats actually supplied by the source. Run an ordinary targeted reparse when a
+specific retained historical source must persist those new parser-owned summaries or corrected explicit dive activity
+type. Do not enable the automatic scanner or enqueue a global historical reparse solely for this release. Event Details
+hydrates continuous dive streams on demand from retained originals, so that view requires no persistence rewrite. MCP
+exposes persisted numeric summaries through its automatic catalog while its frozen continuous chart tools remain
+unchanged. Unit-derived dive depth/rate classes are display-only: they convert canonical values after hydration and do
+not change serialized source stats. They therefore require no reparse or Firestore rewrite. Saved routes, Training
+disciplines, durability, and Training-derived schemas are unchanged.
+
+### Sports Lib 19.0.0 stroke-rate semantics transition
+
+Sports Lib 19.0.0 introduces canonical `Stroke Rate` stream and average/minimum/maximum stats for Swimming, Open Water
+Swimming, Rowing, Indoor Rowing, Canoeing, Kayaking, Paddling, and Stand Up Paddling. New source imports and native JSON
+activity hydration translate the Cadence-shaped source fields for those sports to Stroke Rate while leaving locomotion
+Cadence unchanged for other sports.
+
+Do not enable the automatic scanner or enqueue a historical source reparse solely for this transition. Quantified Self
+canonicalizes pre-19 split event/activity documents at read time using their persisted activity type, and derived schema
+18 rebuilds Training stroke-rate summaries from the already stored average stat. New writes use the canonical type.
+Mixed or unresolved sport sets retain Cadence because its meaning is ambiguous. Saved routes and the registered MCP
+output schemas are unchanged.
+
 ### Sports Lib 18.1.4 continuous dive-depth transition
 
 Sports Lib 18.1.4 maps FIT record depth from millimeters into a canonical meter-based `Depth` stream while preserving
 existing session maximum-depth statistics and Suunto depth behavior. New imports and ordinary reparses can therefore
 render Event Details dive profiles for Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding sources that
-actually contain continuous depth samples. Event Details hydrates Depth, Temperature, and Heart Rate directly from the
+actually contain continuous depth samples. At that release, Event Details hydrated Depth, Temperature, and Heart Rate directly from the
 retained original source; the stream is never added to compact Firestore event or activity documents.
 
 Do not enable the automatic scanner or enqueue a historical reparse solely for the dive-profile UI. Existing retained
 sources become chartable through Event Details source hydration without a persistence rewrite. An explicitly requested
 ordinary reparse may serialize parser-owned summary changes, but it is not required to display the continuous profile.
-Saved routes, Training disciplines, Training durability, derived-metric schemas, and MCP activity-chart contracts are
-unchanged.
+Saved routes, Training disciplines, Training durability, and derived-metric schemas were unchanged.
 
 ### Sports Lib 18.1.3 snorkeling and mermaiding classification transition
 

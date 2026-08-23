@@ -1,6 +1,9 @@
 import {
   DataDepthMax,
   DataDepthMaxFeet,
+  DataDepthAvg,
+  DataDepthAvgFeet,
+  DataDiveAscentRateAvgFeetPerSecond,
   DataAscent,
   DataAltitudeAvg,
   DataAltitudeMax,
@@ -8,12 +11,16 @@ import {
   DataBeginningPotentialStamina,
   DataCadenceMax,
   DataCadenceMin,
+  DataStrokeRateAvg,
+  DataStrokeRateMax,
+  DataStrokeRateMin,
   DataDescent,
   DataDistance,
   DataDistanceFeet,
   DataDistanceMiles,
   DataEndingPotentialStamina,
   DataEnergy,
+  DataMetabolicCalories,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
   DataPaceAvg,
@@ -21,6 +28,7 @@ import {
   DataPotentialStaminaAvg,
   DataPotentialStaminaMax,
   DataPotentialStaminaMin,
+  DataPressureSACAvg,
   DataPowerMax,
   DataPowerMin,
   DataJumpCount,
@@ -92,6 +100,9 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataPowerMin.type)).toBe('bolt');
     expect(component.getColumnHeaderIcon(DataCadenceMax.type)).toBe('cadence');
     expect(component.getColumnHeaderIcon(DataCadenceMin.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateAvg.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateMax.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataStrokeRateMin.type)).toBe('cadence');
     expect(component.getColumnHeaderIcon(DataTemperatureMax.type)).toBe('device_thermostat');
     expect(component.getColumnHeaderIcon(DataTemperatureMin.type)).toBe('device_thermostat');
     expect(component.getColumnHeaderIcon(DataAltitudeMax.type)).toBe('landscape');
@@ -118,6 +129,10 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon(DataDepthMax.type)).toBe('scuba_diving');
     expect(component.getColumnHeaderIcon(DataDepthMaxFeet.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDepthAvg.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDepthAvgFeet.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataDiveAscentRateAvgFeetPerSecond.type)).toBe('scuba_diving');
+    expect(component.getColumnHeaderIcon(DataPressureSACAvg.type)).toBe('scuba_diving');
   });
 
   it('should map ascent and descent to elevation', () => {
@@ -322,6 +337,7 @@ describe('DataTypeIconComponent', () => {
     const component = new DataTypeIconComponent();
 
     expect(component.getColumnHeaderIcon(DataEnergy.type)).toBe('metabolism');
+    expect(component.getColumnHeaderIcon(DataMetabolicCalories.type)).toBe('metabolism');
     expect(component.getColumnHeaderIcon('Weight')).toBe('monitor_weight');
     expect(component.getColumnHeaderIcon('Height')).toBe('height');
     expect(component.getColumnHeaderIcon('Gender')).toBe('wc');

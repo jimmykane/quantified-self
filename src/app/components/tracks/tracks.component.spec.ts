@@ -543,7 +543,7 @@ describe('TracksComponent', () => {
         [expect.any(String), expect.any(String)],
         true,
         false,
-        'attach_streams_only',
+        'attach_source_data',
         { metadataCacheTtlMs: 60 * 60 * 1000 },
       );
     });

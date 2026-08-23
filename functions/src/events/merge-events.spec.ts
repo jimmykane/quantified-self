@@ -50,6 +50,7 @@ const hoisted = vi.hoisted(() => {
         eventState.id = id;
         return event;
       }),
+      getStat: vi.fn(() => undefined),
       getActivities: vi.fn(() => eventState.activities),
       clearActivities: vi.fn(() => {
         eventState.activities = [];

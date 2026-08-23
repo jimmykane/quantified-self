@@ -23,6 +23,7 @@ import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
+    ActivityTypes,
     DistanceUnits,
     PaceUnits,
     DataPotentialStamina,
@@ -646,7 +647,7 @@ describe('UserSettingsComponent', () => {
         expect(presetGroup.hasAttribute('hideSingleSelectionIndicator')).toBe(true);
         expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeFalsy();
         expect(fixture.nativeElement.textContent).toContain('Fine-tune units');
-        expect(fixture.nativeElement.textContent).toContain('first preference also selects dive depth in meters or feet');
+        expect(fixture.nativeElement.textContent).toContain('first preference also selects dive depth and rate units');
         expect(formFields.length).toBeGreaterThanOrEqual(5);
         expect(fixture.nativeElement.querySelector('.unit-simple-settings')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.unit-advanced-settings')).toBeFalsy();
@@ -866,6 +867,25 @@ describe('UserSettingsComponent', () => {
 
         // Should be unique
         expect(new Set(formValue).size).toBe(formValue.length);
+    });
+
+    it('should make every Diving-group activity mandatory for both elevation exclusions', () => {
+        component.ngOnChanges();
+        const ascentFormValue = component.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value;
+        const descentFormValue = component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value;
+
+        [
+            ActivityTypes.Diving,
+            ActivityTypes.ScubaDiving,
+            ActivityTypes.FreeDiving,
+            ActivityTypes.Snorkeling,
+            ActivityTypes.Mermaiding,
+        ].forEach((activityType) => {
+            expect(ascentFormValue).toContain(activityType);
+            expect(descentFormValue).toContain(activityType);
+            expect(component.isMandatoryExclusion(activityType)).toBe(true);
+            expect(component.isMandatoryDescentExclusion(activityType)).toBe(true);
+        });
     });
 
     it('keeps save actions visible and disabled when form is invalid', () => {

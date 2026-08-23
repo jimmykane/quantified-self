@@ -14,9 +14,6 @@ import {
     DataStrydAltitude,
     DataGradeAdjustedSpeed,
     DataDistance,
-    DataDepth,
-    DataHeartRate,
-    DataTemperature
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
 import { of, EMPTY } from 'rxjs';
@@ -24,6 +21,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
 import { getAppNonUnitBasedChartDataTypes } from '../helpers/app-chart-data-types.helper';
+import { EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES } from '../helpers/event-dive-profile.helper';
 
 export interface EventResolverData {
     event: EventInterface | null;
@@ -95,9 +93,7 @@ export const eventResolver: ResolveFn<EventResolverData> = (
                 DataSpeed.type,
                 DataGradeAdjustedSpeed.type,
                 DataDistance.type,
-                DataDepth.type,
-                DataTemperature.type,
-                DataHeartRate.type
+                ...EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES,
             ];
 
             if (user) {

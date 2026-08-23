@@ -1,7 +1,12 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { EventJSONSanitizer } from './event-json-sanitizer';
-import { DynamicDataLoader, UnitSystem } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    DynamicDataLoader,
+    EventImporterJSON,
+    UnitSystem,
+} from '@sports-alliance/sports-lib';
 
 // Mock Data class
 class MockData {
@@ -131,6 +136,62 @@ describe('EventJSONSanitizer', () => {
         expect(u2).toEqual([]);
     });
 
+    it('retains native dive gas and tank records for Sports Lib JSON hydration', () => {
+        const diveSourceRecords = {
+            gases: [{
+                messageIndex: { value: 2, selected: true },
+                oxygenContent: 32,
+                heliumContent: 15,
+                status: 'enabled',
+                mode: 'open_circuit',
+            }],
+            tankSummaries: [{
+                timestamp: 1787211300000,
+                sensor: 3578158576,
+                startPressure: 199.46,
+                endPressure: 74.67,
+                volumeUsed: 1396.01,
+            }],
+            tankUpdates: [{
+                timestamp: 1787211360000,
+                sensor: 3578158576,
+                pressure: 198.4,
+            }],
+        };
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize({
+            name: 'Stored dive',
+            startDate: 0,
+            endDate: 60_000,
+            type: ActivityTypes.ScubaDiving,
+            powerMeter: false,
+            trainer: false,
+            stats: {},
+            streams: [],
+            laps: [],
+            creator: { name: 'test', devices: [] },
+            intensityZones: [],
+            events: [],
+            diveSourceRecords,
+        });
+
+        const activity = EventImporterJSON.getActivityFromJSON(sanitizedJson);
+
+        expect(unknownTypes).toEqual([]);
+        expect(issues).toEqual([]);
+        expect(activity.getDiveSourceRecords()).toEqual({
+            gases: diveSourceRecords.gases,
+            tankSummaries: [{
+                ...diveSourceRecords.tankSummaries[0],
+                timestamp: new Date(diveSourceRecords.tankSummaries[0].timestamp),
+            }],
+            tankUpdates: [{
+                ...diveSourceRecords.tankUpdates[0],
+                timestamp: new Date(diveSourceRecords.tankUpdates[0].timestamp),
+            }],
+        });
+        expect(activity.toJSON()).toEqual(expect.objectContaining({ diveSourceRecords }));
+    });
+
     it('should retain Durability Evidence stats registered by the real sports-lib bundle', () => {
         // Keep the persisted type literal here and avoid importing DataDurabilityEvidence.
         // Importing the class could register it as a side effect and hide a bundle regression.
@@ -171,6 +232,52 @@ describe('EventJSONSanitizer', () => {
                 kind: 'unknown_data_type',
                 type: durabilityEvidenceType
             })
+        ]));
+    });
+
+    it('should retain Stroke Rate stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here so this verifies eager registry coverage.
+        const strokeRateType = 'Stroke Rate';
+        const json = {
+            stats: { [strokeRateType]: 31 },
+            activities: [{ stats: { [strokeRateType]: 32 } }],
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(strokeRateType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(registeredClass?.type).toBe(strokeRateType);
+        expect(sanitizedJson.stats[strokeRateType]).toBe(31);
+        expect(sanitizedJson.activities[0].stats[strokeRateType]).toBe(32);
+        expect(unknownTypes).not.toContain(strokeRateType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: strokeRateType,
+            }),
+        ]));
+    });
+
+    it('should retain Metabolic Calories stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here so this verifies eager registry coverage.
+        const metabolicCaloriesType = 'Metabolic Calories';
+        const json = {
+            stats: { [metabolicCaloriesType]: 412 },
+            activities: [{ stats: { [metabolicCaloriesType]: 413 } }],
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(metabolicCaloriesType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(registeredClass?.type).toBe(metabolicCaloriesType);
+        expect(sanitizedJson.stats[metabolicCaloriesType]).toBe(412);
+        expect(sanitizedJson.activities[0].stats[metabolicCaloriesType]).toBe(413);
+        expect(unknownTypes).not.toContain(metabolicCaloriesType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: metabolicCaloriesType,
+            }),
         ]));
     });
 

@@ -10,9 +10,11 @@ import {
     ChartTypes,
     DataPotentialStamina,
     DataRecoveryTime,
+    DataCadence,
     DataDistance,
     DataHeartRateAvg,
     DataStamina,
+    DataStrokeRate,
     DistanceUnits,
     TileTypes,
     TimeIntervals
@@ -1177,6 +1179,35 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings.tableSettings.direction).toBe('desc');
             expect(settings.dashboardSettings.tableSettings.eventsPerPage).toBe(10);
             expect(settings.dashboardSettings.tableSettings.selectedColumns.length).toBeGreaterThan(0);
+        });
+
+        it('carries an existing Cadence visibility choice to the new Stroke Rate metric', () => {
+            const settings = AppUserUtilities.fillMissingAppSettings({
+                settings: {
+                    chartSettings: {
+                        dataTypeSettings: {
+                            [DataCadence.type]: { enabled: true },
+                        },
+                    },
+                },
+            } as unknown as User);
+
+            expect(settings.chartSettings.dataTypeSettings[DataStrokeRate.type]).toEqual({ enabled: true });
+        });
+
+        it('preserves an explicit disabled Stroke Rate visibility choice', () => {
+            const settings = AppUserUtilities.fillMissingAppSettings({
+                settings: {
+                    chartSettings: {
+                        dataTypeSettings: {
+                            [DataCadence.type]: { enabled: true },
+                            [DataStrokeRate.type]: { enabled: false },
+                        },
+                    },
+                },
+            } as unknown as User);
+
+            expect(settings.chartSettings.dataTypeSettings[DataStrokeRate.type]).toEqual({ enabled: false });
         });
 
         it('should normalize legacy distance unit strings', () => {

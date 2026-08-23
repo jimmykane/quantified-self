@@ -242,12 +242,17 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
+    expect(calendarSection?.content).toContain('activity group containing exactly one activity opens that activity directly');
+    expect(calendarSection?.content).toContain('Browser **Back** restores the same day\'s details sheet');
+    expect(calendarSection?.content).toContain('Deleting an activity from its details page returns to the previous in-app page');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
     expect(calendarSection?.content).toContain('scaled against the longest-duration group');
     expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');
+    expect(calendarSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
+    expect(calendarSection?.content).toContain('do not contribute either elevation metric; their vertical movement is recorded as depth');
     expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
@@ -443,7 +448,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
     expect(gettingStartedSection?.content).toContain('grouped into collapsed sets through the next idle/rest length');
-    expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, stroke rate, heart rate, SWOLF, and energy');
+    expect(gettingStartedSection?.content).toContain('use **Stroke Rate** rather than Cadence');
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
   });
 
@@ -474,19 +480,47 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
   });
 
+  it('should document source-recorded FIT metabolic calories', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('FIT calorie metrics');
+    expect(gettingStartedSection?.content).toContain('**Metabolic Calories**');
+    expect(gettingStartedSection?.content).toContain('**Physiological** Event Details summary tab');
+    expect(gettingStartedSection?.content).toContain('separate from total **Energy**');
+  });
+
   it('should document event dive profiles, depth availability, and units', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Event dive profiles');
     expect(gettingStartedSection?.content).toContain('Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding');
     expect(gettingStartedSection?.content).toContain('**Dive Profile**');
+    expect(gettingStartedSection?.content).toContain('single-gas, multi-gas, or gauge diving');
+    expect(gettingStartedSection?.content).toContain('apnea diving and apnea hunting');
+    expect(gettingStartedSection?.content).toContain('**Altitude Minimum**, **Altitude Maximum**, **Average Altitude**, ascent/descent timing, grade and grade-adjusted values, VAM, and vertical speed');
+    expect(gettingStartedSection?.content).toContain('mixed Event is regenerated, its ascent, descent, altitude, and grade summaries use only non-Diving activities');
     expect(gettingStartedSection?.content).toContain('below Performance Charts and above the normal Event Details charts');
     expect(gettingStartedSection?.content).toContain('standard Event Details chart controls and height');
     expect(gettingStartedSection?.content).toContain('standard chart overlay picker');
+    expect(gettingStartedSection?.content).toContain('no-decompression limit');
+    expect(gettingStartedSection?.content).toContain('air time remaining');
+    expect(gettingStartedSection?.content).toContain('pressure/volume SAC');
+    expect(gettingStartedSection?.content).toContain('**Diving** summary tab');
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
-    expect(gettingStartedSection?.content).toContain('both the Overall and Environment event-summary metrics');
+    expect(gettingStartedSection?.content).toContain('**Gas & Tanks**');
+    expect(gettingStartedSection?.content).toContain('tank pressure updates');
+    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities retain those records with the activity');
+    expect(gettingStartedSection?.content).toContain('older activities can display them while their original source remains available');
+    expect(gettingStartedSection?.content).toContain('does not invent a gas mixture name or nitrogen value');
+    expect(gettingStartedSection?.content).toContain('associate a gas with a tank');
+    expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');
+    expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');
     expect(gettingStartedSection?.content).toContain('first Swim pace preference');
+    expect(gettingStartedSection?.content).toContain('meters and meters per second');
+    expect(gettingStartedSection?.content).toContain('feet and feet per second');
+    expect(gettingStartedSection?.content).toContain("FIT source's three decimal places");
+    expect(gettingStartedSection?.content).toContain('SAC/RMV and PO₂ retain two');
   });
 
   it('should document duration fallback for any activity without distance data', () => {
@@ -539,7 +573,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
     expect(gettingStartedSection?.content).toContain('**Include all recorded metrics**');
     expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
-    expect(gettingStartedSection?.content).toContain('does not change which charts are currently visible');
+    expect(gettingStartedSection?.content).toContain('global allow-list for automatic chart visibility');
+    expect(gettingStartedSection?.content).toContain('first up to three relevant recorded metrics');
+    expect(gettingStartedSection?.content).toContain('adds choices but does not show them automatically');
+    expect(gettingStartedSection?.content).toContain('Merged events and benchmark comparisons always make all recorded chartable metrics available');
+    expect(gettingStartedSection?.content).toContain('recommendations combine the selected sport, recorded metrics, and your Default chart metrics');
+    expect(gettingStartedSection?.content).toContain('custom override for that event and selected-sport combination');
+    expect(gettingStartedSection?.content).toContain('**Show all charts** is an explicit custom choice');
+    expect(gettingStartedSection?.content).toContain('**Reset to <sport> defaults**');
+    expect(gettingStartedSection?.content).toContain('pinned **Dive Profile** owns Depth and every available dive overlay');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 

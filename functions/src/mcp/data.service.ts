@@ -68,6 +68,12 @@ import {
 } from '../../../shared/event-stat-aggregation';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import {
+  canonicalizePersistedSportsLibStats,
+  getPersistedEventActivityTypes,
+  getPersistedSportsLibMetricReadTypes,
+  normalizePersistedEventMetricSemantics,
+} from '../../../shared/sports-lib-metric-semantics';
+import {
   SLEEP_PROVIDERS,
   SLEEP_STAGES,
   SleepProvider,
@@ -834,6 +840,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(1)
       .select(
         'eventID',
+        'type',
         detailField,
         ...(detailKind === 'jumps' ? ['startDate'] : []),
       )
@@ -845,6 +852,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     } : null;
   },
   fetchActivityMetricDocument: async (uid, activityId, metricTypes) => {
+    const persistedMetricTypes = getPersistedSportsLibMetricReadTypes(metricTypes);
     const snapshot = await admin.firestore()
       .collection('users')
       .doc(uid)
@@ -853,7 +861,8 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(1)
       .select(
         'eventID',
-        ...metricTypes.map(metricType => new FieldPath('stats', metricType)),
+        'type',
+        ...persistedMetricTypes.map(metricType => new FieldPath('stats', metricType)),
       )
       .get();
     const doc = snapshot.docs[0];
@@ -911,6 +920,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     limit,
     cursor,
   ) => {
+    const persistedMetricTypes = getPersistedSportsLibMetricReadTypes([metricType]);
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
@@ -938,7 +948,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'startDate',
         'endDate',
         'type',
-        new FieldPath('stats', metricType),
+        ...persistedMetricTypes.map(type => new FieldPath('stats', type)),
       );
     if (cursor) {
       query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
@@ -1115,7 +1125,9 @@ const defaultDependencies: McpDataServiceDependencies = {
   consumeGeocodingRateLimit: (uid, connectionId) => (
     consumeMcpGeocodingRateLimit(uid, connectionId)
   ),
-  importEvent: (data, id) => EventImporterJSON.getEventFromJSON(data).setID(id),
+  importEvent: (data, id) => normalizePersistedEventMetricSemantics(
+    EventImporterJSON.getEventFromJSON(data).setID(id),
+  ),
 };
 
 function asFiniteNumber(value: unknown): number | null {
@@ -1757,10 +1769,19 @@ interface SafePosition {
   longitudeDegrees: number;
 }
 
-function projectActivityStats(value: unknown): SafeActivityStats {
-  const stats = value && typeof value === 'object' && !Array.isArray(value)
+function projectActivityStats(value: unknown, activityType?: unknown): SafeActivityStats {
+  const rawStats = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+  const stats = canonicalizePersistedSportsLibStats(
+    rawStats,
+    activityType === undefined || activityType === null ? [] : [activityType],
+  );
+  const resolvedActivityType = typeof activityType === 'string'
+    ? ActivityTypesHelper.resolveActivityType(activityType)
+    : null;
+  const usesStrokeRate = resolvedActivityType !== null
+    && ActivityTypesHelper.usesStrokeRate(resolvedActivityType);
   return {
     durationSeconds: asNonNegativeNumber(stats[DataDuration.type]),
     distanceMeters: asNonNegativeNumber(stats[DataDistance.type]),
@@ -1772,8 +1793,12 @@ function projectActivityStats(value: unknown): SafeActivityStats {
     maximumHeartRateBpm: asNonNegativeNumber(stats[DataHeartRateMax.type]),
     averagePowerWatts: asNonNegativeNumber(stats[DataPowerAvg.type]),
     maximumPowerWatts: asNonNegativeNumber(stats[DataPowerMax.type]),
-    averageCadenceRpm: asNonNegativeNumber(stats[DataCadenceAvg.type]),
-    maximumCadenceRpm: asNonNegativeNumber(stats[DataCadenceMax.type]),
+    averageCadenceRpm: usesStrokeRate
+      ? null
+      : asNonNegativeNumber(stats[DataCadenceAvg.type]),
+    maximumCadenceRpm: usesStrokeRate
+      ? null
+      : asNonNegativeNumber(stats[DataCadenceMax.type]),
     energyKilocalories: asNonNegativeNumber(stats[DataEnergy.type]),
   };
 }
@@ -1847,7 +1872,7 @@ function projectBounds(value: unknown): RouteBounds | null {
   };
 }
 
-function projectLap(value: unknown, index: number) {
+function projectLap(value: unknown, index: number, activityType?: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
@@ -1869,7 +1894,7 @@ function projectLap(value: unknown, index: number) {
     endTimeMs,
     startSampleIndex: asSafeInteger(lap.startIndex),
     endSampleIndex: asSafeInteger(lap.endIndex),
-    stats: projectActivityStats(lap.stats),
+    stats: projectActivityStats(lap.stats, activityType),
   };
 }
 
@@ -2543,8 +2568,11 @@ function buildMetricAggregationEventJson(
   const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
     ? data.stats as Record<string, unknown>
     : {};
-  const stats = Object.fromEntries(
-    [...new Set([...metricTypes, DataActivityTypes.type])].flatMap((type) => {
+  const selectedStats = Object.fromEntries(
+    [...new Set([
+      ...getPersistedSportsLibMetricReadTypes(metricTypes),
+      DataActivityTypes.type,
+    ])].flatMap((type) => {
       const value = rawStats[type];
       if (value === undefined) {
         return [];
@@ -2556,6 +2584,10 @@ function buildMetricAggregationEventJson(
         return [];
       }
     }),
+  );
+  const stats = canonicalizePersistedSportsLibStats(
+    selectedStats,
+    getPersistedEventActivityTypes(selectedStats),
   );
 
   return {
@@ -2792,7 +2824,10 @@ async function querySelectedMetrics(
   const docs = await fetchBoundedEventDocuments(
     dependencies,
     input,
-    [...metricTypes, DataActivityTypes.type],
+    [
+      ...getPersistedSportsLibMetricReadTypes(metricTypes),
+      DataActivityTypes.type,
+    ],
   );
   const events = docs.flatMap((doc) => {
     if (isBenchmarkEventForTrainingMetrics(doc.data)) {
@@ -4716,7 +4751,7 @@ function projectActivityListEntry(
   ) {
     return null;
   }
-  const stats = projectActivityStats(document.data.stats);
+  const stats = projectActivityStats(document.data.stats, document.data.type);
   const rawStats = document.data.stats
     && typeof document.data.stats === 'object'
     && !Array.isArray(document.data.stats)
@@ -4860,7 +4895,7 @@ async function listActivityDetail(
     : null;
   const projected = candidates.flatMap((candidate, index) => {
     const item = detailKind === 'laps'
-      ? projectLap(candidate, index)
+      ? projectLap(candidate, index, document.data.type)
       : detailKind === 'jumps'
         ? projectJump(
             candidate,
@@ -4973,11 +5008,14 @@ async function getActivityMetrics(
       'The requested activity metrics are not available.',
     );
   }
-  const persistedStats = stats as Record<string, unknown> | undefined;
+  const persistedStats = canonicalizePersistedSportsLibStats(
+    stats as Record<string, unknown> | undefined,
+    [document.data.type],
+  );
   const projectedMetrics = metrics.map(metric => {
     const value = projectSportsLibNumericMetricValue(
       metric.type,
-      persistedStats?.[metric.type],
+      persistedStats[metric.type],
     );
     return {
       ...metric,
@@ -5101,14 +5139,17 @@ async function getActivityOverview(
     MAX_ACTIVITY_OVERVIEW_DETAIL_BYTES,
     'The activity details exceed the MCP overview processing limit.',
   );
-  const safeStats = rawStats as Record<string, unknown> | undefined;
+  const safeStats = canonicalizePersistedSportsLibStats(
+    rawStats as Record<string, unknown> | undefined,
+    [document.data.type],
+  );
   const availableMetrics = resolveAvailableSportsLibMetrics([
     safeStats,
   ]).filter(metric => (
     !isFirstClassMcpMeasurementMetric(metric.type)
     && projectSportsLibNumericMetricValue(
       metric.type,
-      safeStats?.[metric.type],
+      safeStats[metric.type],
     ) !== null
   ));
   const activityType = normalizeActivityType(document.data.type);
@@ -5273,10 +5314,16 @@ async function rankActivitiesByMetric(
     const startTime = startTimeMs === null ? null : asIsoTimestamp(startTimeMs);
     const activityType = normalizeActivityType(document.data.type);
     const rawStats = document.data.stats;
-    const value = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
+    const canonicalStats = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
+      ? canonicalizePersistedSportsLibStats(
+          rawStats as Record<string, unknown>,
+          [document.data.type],
+        )
+      : null;
+    const value = canonicalStats
       ? projectSportsLibNumericMetricValue(
           metric.type,
-          (rawStats as Record<string, unknown>)[metric.type],
+          canonicalStats[metric.type],
         )
       : null;
     if (
@@ -5579,7 +5626,13 @@ export function createMcpDataService(
       const available = resolveAvailableSportsLibMetrics(
         scannedDocs
           .filter(doc => !isBenchmarkEventForTrainingMetrics(doc.data))
-          .map(doc => doc.data.stats as Record<string, unknown> | undefined),
+          .map((doc) => {
+            const stats = doc.data.stats as Record<string, unknown> | undefined;
+            return canonicalizePersistedSportsLibStats(
+              stats,
+              getPersistedEventActivityTypes(stats),
+            );
+          }),
       ).filter(metric => !isFirstClassMcpMeasurementMetric(metric.type));
       const search = `${input.search || ''}`.trim().toLowerCase();
       const filtered = available.filter(metric => (

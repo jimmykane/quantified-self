@@ -112,7 +112,6 @@ export class EventDiveProfileComponent implements OnChanges {
     if (!model) {
       return [];
     }
-    return [model.temperaturePanel, model.heartRatePanel]
-      .filter((panel): panel is EventChartPanelModel => panel !== null);
+    return model.overlayPanels;
   }
 }

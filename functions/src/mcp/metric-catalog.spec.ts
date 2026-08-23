@@ -1,7 +1,16 @@
 import {
   DataActivityTypes,
+  DataAirTimeRemaining,
+  DataDepthAvg,
+  DataDepthAvgFeet,
   DataDistance,
+  DataDiveAscentRateAvg,
+  DataDiveAscentRateAvgFeetPerSecond,
   DataLatitudeDegrees,
+  DataMetabolicCalories,
+  DataPressureSACAvg,
+  DataRestingCalories,
+  DataStrokeRate,
   DynamicDataLoader,
   UnitSystem,
 } from '@sports-alliance/sports-lib';
@@ -25,6 +34,36 @@ describe('MCP Sports Lib metric catalog', () => {
       unitSystem: 'metric',
     }));
     expect(getSportsLibNumericMetricCatalog().length).toBeGreaterThan(300);
+    expect(resolveSportsLibNumericMetric(DataStrokeRate.type)).toEqual({
+      type: DataStrokeRate.type,
+      displayType: DataStrokeRate.type,
+      unit: 'spm',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataDepthAvg.type)).toEqual({
+      type: DataDepthAvg.type,
+      displayType: 'Average Depth',
+      unit: 'm',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataPressureSACAvg.type)).toEqual({
+      type: DataPressureSACAvg.type,
+      displayType: 'Average Pressure SAC',
+      unit: 'bar/min',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataMetabolicCalories.type)).toEqual({
+      type: DataMetabolicCalories.type,
+      displayType: DataMetabolicCalories.type,
+      unit: 'kcal',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataRestingCalories.type)?.type).toBe(
+      DataRestingCalories.type,
+    );
+    expect(resolveSportsLibNumericMetric(DataRestingCalories.type)?.type).not.toBe(
+      DataMetabolicCalories.type,
+    );
   });
 
   it('canonicalizes Sports Lib aliases through DynamicDataLoader', () => {
@@ -49,7 +88,30 @@ describe('MCP Sports Lib metric catalog', () => {
     expect(projectSportsLibNumericMetricValue(DataDistance.type, '12,345')).toBeNull();
     expect(projectSportsLibNumericMetricValue(DataDistance.type, Number.NaN)).toBeNull();
     expect(projectSportsLibNumericMetricValue(DataLatitudeDegrees.type, 39.665)).toBeNull();
+    expect(projectSportsLibNumericMetricValue(
+      DataAirTimeRemaining.type,
+      4_294_961_197,
+    )).toBe(4_294_961_197);
     expect(projectSportsLibNumericMetricValue('unknown metric', 42)).toBeNull();
+  });
+
+  it('keeps unit-derived dive display variants out of canonical persisted availability', () => {
+    const available = resolveAvailableSportsLibMetrics([
+      {
+        [DataDepthAvg.type]: 3.86,
+        [DataDiveAscentRateAvg.type]: 0.044,
+      },
+    ]);
+    const availableTypes = available.map(metric => metric.type);
+
+    expect(availableTypes).toEqual(
+      expect.arrayContaining([
+        DataDepthAvg.type,
+        DataDiveAscentRateAvg.type,
+      ]),
+    );
+    expect(availableTypes).not.toContain(DataDepthAvgFeet.type);
+    expect(availableTypes).not.toContain(DataDiveAscentRateAvgFeetPerSecond.type);
   });
 
   it('discovers a newly persisted numeric class without a manual MCP registry entry', () => {

@@ -65,7 +65,8 @@
 
 app-activity-calendar-grid {
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  overflow: hidden;
 }
 
 .activity-calendar-tile-status {

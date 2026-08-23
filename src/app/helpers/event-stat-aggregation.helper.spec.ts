@@ -214,6 +214,24 @@ describe('event-stat-aggregation shared core', () => {
     expect(manuallyFiltered).toEqual([cyclingEvent]);
   });
 
+  it('should filter both elevation metrics for Diving activities automatically', () => {
+    const divingEvent = makeEvent({
+      startDate: new Date('2024-01-01T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.FreeDiving],
+      stats: { [DataAscent.type]: 20, [DataDescent.type]: 30 },
+    });
+    const runningEvent = makeEvent({
+      startDate: new Date('2024-01-02T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.Running],
+      stats: { [DataAscent.type]: 150, [DataDescent.type]: 120 },
+    });
+
+    expect(filterEventStatsForAggregation([divingEvent, runningEvent], DataAscent.type, {}))
+      .toEqual([runningEvent]);
+    expect(filterEventStatsForAggregation([divingEvent, runningEvent], DataDescent.type, {}))
+      .toEqual([runningEvent]);
+  });
+
   it('should return empty buckets for zero totals and non-finite aggregates', () => {
     const zeroTotal = buildEventStatAggregation([
       makeEvent({

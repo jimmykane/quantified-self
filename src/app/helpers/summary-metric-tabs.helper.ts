@@ -11,11 +11,19 @@ export interface SummaryMetricTab {
   singleValueTypes?: string[];
 }
 
+export interface BuildSummaryMetricTabsOptions {
+  includeEmptyGroupIds?: readonly EventSummaryMetricGroupId[];
+}
+
 const OTHER_GROUP_ID: EventSummaryMetricGroupId = 'other';
 const OVERALL_GROUP_ID: EventSummaryMetricGroupId = 'overall';
 
-export const buildSummaryMetricTabs = (resolvedMetricTypes: string[]): SummaryMetricTab[] => {
-  if (!resolvedMetricTypes.length) {
+export const buildSummaryMetricTabs = (
+  resolvedMetricTypes: string[],
+  options: BuildSummaryMetricTabsOptions = {},
+): SummaryMetricTab[] => {
+  const includedEmptyGroupIds = new Set(options.includeEmptyGroupIds || []);
+  if (!resolvedMetricTypes.length && includedEmptyGroupIds.size === 0) {
     return [];
   }
 
@@ -76,5 +84,7 @@ export const buildSummaryMetricTabs = (resolvedMetricTypes: string[]): SummaryMe
 
   return EVENT_SUMMARY_METRIC_GROUPS
     .map((group) => tabsMap.get(group.id))
-    .filter((tab): tab is SummaryMetricTab => !!tab && tab.metricTypes.length > 0);
+    .filter((tab): tab is SummaryMetricTab => !!tab && (
+      tab.metricTypes.length > 0 || includedEmptyGroupIds.has(tab.id)
+    ));
 };

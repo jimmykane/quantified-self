@@ -613,6 +613,52 @@ This is intentionally not a curated MCP metric list. A correctly exported and pe
 becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
 expose precise position.
 
+Sports Lib 19.0.0 adds canonical `Stroke Rate` (`spm`) metrics for swimming, rowing, canoeing, kayaking, paddling, and
+stand-up paddling. Quantified Self includes that class through the same automatic catalog. For pre-19 event/activity
+documents, bounded metric reads also select the matching Cadence field and canonicalize it only when every represented
+activity type uses Sports Lib's stroke-rate semantics. Explicit Stroke Rate wins, and mixed or unresolved sport sets
+retain Cadence. This is read compatibility, not another metric registry or a Firestore migration.
+
+Sports Lib 19.1.0 introduced source-native dive summary classes for average/maximum depth, surface interval, bottom time,
+dive number, descent/ascent/hang times, average/maximum descent and ascent rates, starting/ending CNS and N2 loads,
+oxygen toxicity, average pressure/volume SAC, and average RMV. These become MCP metrics through the same automatic
+catalog only when the corresponding numeric stat is actually persisted. MCP does not calculate a missing summary from
+a continuous stream, promote lap-only values to an activity, or expose gas/tank records as metrics. The same FIT import
+transition preserves explicit Garmin dive sub-sports as canonical Scuba Diving for single-gas, multi-gas, and gauge
+diving, and Free Diving for apnea diving and apnea hunting; MCP activity-type and Diving-group filters consume those
+persisted canonical values without adding another classification registry.
+
+The package also exports unit-derived dive presentation classes for frontend meters/feet and meters-per-second/
+feet-per-second display. Quantified Self persists and queries only their canonical source types, so these display-only
+classes do not create additional available MCP metrics or change MCP units, values, or registered output schemas.
+
+Sports Lib 20.0.1 adopts FIT parser 5.0.2 and adds canonical `Metabolic Calories` (`kcal`) from FIT session field
+196. It becomes available through this same automatic catalog only after a source import or reparse persists that stat.
+The parser no longer emits a new `Resting Calories` value for the field; an existing persisted `Resting Calories` stat
+remains readable as its own historical value until a source reparse replaces its source stats, and is never renamed or
+synthesized as `Metabolic Calories`. FIT `Average VAM` source values are converted from meters per second to the public
+meters-per-hour metric before persistence. For the Diving group, terrain ascent/descent, altitude
+minimum/maximum/average, and grade minimum/maximum/average summaries
+are removed during import and native JSON hydration; raw source streams remain outside this MCP summary surface. A
+retained original FIT file must use the normal targeted reparse lifecycle to gain those new or corrected persisted
+values. This is an implementation/data correction within the existing generic metric schemas, so no registered MCP
+tool or output-schema change is required.
+
+Sports Lib 20.0.3 applies the same eight-metric rule whenever it regenerates a parent event summary: an all-Diving
+parent omits the terrain summaries, while a mixed parent aggregates them only from non-Diving child activities. The
+normal targeted source-reparse lifecycle rewrites a retained stored parent when that correction is needed; no metric
+is synthesized from a stream or created by the MCP read path. For a legacy all-Diving event/activity projection,
+MCP applies the same canonical semantics before metric discovery and selected-metric projection, so stale terrain
+fields are neither advertised nor returned; mixed and unresolved activity sets remain unchanged. This remains within
+the existing generic metric schemas, so no registered MCP tool or output-schema change is required.
+
+Sports Lib 20.1.0 introduced nonnumeric source-native FIT gas, tank-summary, and tank-pressure-update records for the
+frontend Event Details **Gas & Tanks** section. Sports Lib 20.1.1 serializes the optional records in native Activity
+JSON as `diveSourceRecords`, so new imports and source-backed targeted reparses persist their raw values in activity
+documents. They remain excluded from DataStore metric discovery and every MCP response projection; MCP does not infer
+mixtures, gas-to-tank associations, or consumption. This persistence and presentation change remains outside the
+registered MCP contract, so no registered MCP tool or output-schema change is required.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
@@ -627,7 +673,9 @@ does not create a metric catalog document or any other persisted cache.
 `get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
 by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
-Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
+Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry. A selected
+Stroke Rate read includes only its canonical field, the pre-19 Cadence compatibility field, and the activity type needed
+to decide semantics; the compatibility field is never exposed as provenance.
 
 `get_activity_overview` reads one reference-bound activity projection and returns only its canonical activity type,
 redaction marker, the numeric metrics actually present, allowlisted lap/jump/swim-length availability,
@@ -724,8 +772,11 @@ Per-activity metric calls select only `eventID` plus the requested canonical `st
 whole activity document or position map.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
-average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
-distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
+average/maximum speed, heart rate, power, locomotion cadence, and energy. Canonical Stroke Rate is available through
+the selected numeric metric surface rather than being mislabeled in the fixed cadence summary field. Swim lengths expose
+only their normalized timing, distance, pool, stroke, SWOLF, energy, speed, cadence-shaped rate, and heart-rate fields.
+For swimming, the frozen `averageCadenceRpm` wire field contains the source stroke rate; its compatibility name cannot be
+renamed without a registered-contract transition. Jump records expose timestamp, distance,
 height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in
 milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
@@ -782,14 +833,17 @@ are not globally sorted by distance.
 
 `list_activity_chart_metrics(activityType?)` is a static catalog. `get_activity_chart_data` accepts one to four metrics,
 an `elapsed_time` or `distance` axis, at most 400 points per metric, and an optional breadcrumb of at most 1,000 points.
-The catalog covers heart rate, power, cadence, altitude, grade, distance, speed, running pace, swim pace, and trail
-grade-adjusted pace/speed with canonical units.
+The frozen catalog covers heart rate, power, cadence, altitude, grade, distance, speed, running pace, swim pace, and trail
+grade-adjusted pace/speed with canonical units. Cadence is omitted for activity types whose Sports Lib semantic is
+Stroke Rate so the source parser cannot silently return an empty or mislabeled series. Canonical persisted Stroke Rate
+remains discoverable through `list_metrics` and the selected event/activity metric tools; adding a continuous
+`stroke_rate` chart ID would be a separate registered-contract change.
 
-Event Details also has a frontend-only pinned Dive Profile for continuous Sports Lib `Depth` streams. That stream is
-intentionally absent from `list_activity_chart_metrics` and `get_activity_chart_data`, so this feature does not change
-the registered MCP activity-chart schema or source-stream allowlist. The already discoverable persisted numeric
-`Maximum Depth` event statistic remains governed by the normal Sports Lib metric catalog; continuous samples are not
-projected through MCP.
+Event Details has a frontend-only pinned Dive Profile for source-native Depth, decompression, CNS/N2 load, air-time,
+SAC/RMV, PO₂, dive-ascent-rate, Temperature, and Heart Rate streams. Those continuous streams remain intentionally
+absent from `list_activity_chart_metrics` and `get_activity_chart_data`, preserving the frozen registered MCP chart
+schemas and source-stream allowlist. Persisted numeric dive summaries are governed by the automatic Sports Lib metric
+catalog described above; continuous samples are not projected through MCP.
 
 The service decrypts the connection-bound `activityRef`, reads only the target event source metadata and its bounded
 activity identity set, and validates every object path under `users/{uid}/events/{eventId}/` in an approved project
@@ -883,9 +937,10 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 17 includes the eight sport families and context/profile summaries introduced in schema 16,
-plus the reusable maximum aggregation used for MTB longest-jump distance. The registered MCP contract maps current
-snapshots to its frozen wire schema version 15 and legacy three-family shape through an explicit projection before
+Internal derived schema 18 includes the eight sport families and context/profile summaries introduced in schema 16,
+the reusable maximum aggregation used for MTB longest-jump distance in schema 17, and canonical swimming, rowing, and
+paddling stroke-rate profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
+current snapshots to its frozen wire schema version 15 and three-family shape through an explicit projection before
 redaction and strict validation:
 
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
@@ -895,8 +950,8 @@ redaction and strict validation:
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
-eight internal families, gravity/rowing contexts, the internal maximum-jump profile metric, and undeclared private
-fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
+eight internal families, gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
+undeclared private fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
 instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
 registered-app rescan nor a local plugin sync.
 

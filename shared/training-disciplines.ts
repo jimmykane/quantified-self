@@ -14,6 +14,7 @@ import {
   DataJumpCount,
   DataJumpDistanceMax,
   DataMovingTime,
+  DataStrokeRateAvg,
   DataSwimDistance,
   type ActivityTypes as ActivityType,
 } from '@sports-alliance/sports-lib';
@@ -53,7 +54,7 @@ export type TrainingProfileMetricId =
   | 'grit'
   | 'flow'
   | 'pace-500m'
-  | 'cadence'
+  | 'stroke-rate'
   | 'stroke-distance';
 
 export type TrainingProfileMetricAggregation = 'sum' | 'mean' | 'maximum' | 'distance-weighted-pace';
@@ -64,7 +65,7 @@ export type TrainingProfileMetricUnit =
   | 'count'
   | 'jump-distance'
   | 'score'
-  | 'cadence'
+  | 'stroke-rate'
   | 'stroke-distance'
   | 'pace-500m';
 
@@ -160,11 +161,11 @@ export const TRAINING_PROFILE_METRIC_DEFINITIONS = [
     statTypes: [],
   },
   {
-    id: 'cadence',
-    label: 'Average cadence',
+    id: 'stroke-rate',
+    label: 'Average stroke rate',
     aggregation: 'mean',
-    unit: 'cadence',
-    statTypes: [DataCadenceAvg.type],
+    unit: 'stroke-rate',
+    statTypes: [DataStrokeRateAvg.type, DataCadenceAvg.type],
   },
   {
     id: 'stroke-distance',
@@ -320,7 +321,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate'],
       },
       {
         id: 'open-water-swimming',
@@ -330,7 +331,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate'],
       },
     ],
   },
@@ -350,7 +351,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'stroke-rate', 'stroke-distance'],
       },
       {
         id: 'on-water-rowing',
@@ -360,7 +361,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'pace-500m', 'stroke-rate', 'stroke-distance'],
       },
     ],
   },
@@ -460,7 +461,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
       {
         id: 'kayaking',
@@ -470,7 +471,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
       {
         id: 'paddling',
@@ -480,7 +481,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
       {
         id: 'stand-up-paddling',
@@ -490,7 +491,7 @@ export const TRAINING_SPORT_DEFINITIONS = [
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
-        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'cadence', 'stroke-distance'],
+        profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
       },
     ],
   },

@@ -31,6 +31,7 @@ import {
   stripStreamsRecursivelyInPlace,
 } from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { normalizePersistedEventMetricSemantics } from '../../../shared/sports-lib-metric-semantics';
 import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 import {
   buildMergeRequestFingerprint,
@@ -510,7 +511,10 @@ async function loadSourceEvent(
 
   let event: EventInterface;
   try {
-    event = EventImporterJSON.getEventFromJSON(eventData as unknown as EventJSONInterface).setID(eventID);
+    event = normalizePersistedEventMetricSemantics(
+      EventImporterJSON.getEventFromJSON(eventData as unknown as EventJSONInterface)
+        .setID(eventID),
+    );
   } catch (error) {
     throw new HttpsError('internal', `Could not parse event ${eventID}.`);
   }

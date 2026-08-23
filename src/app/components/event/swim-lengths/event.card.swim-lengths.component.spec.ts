@@ -154,7 +154,7 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[0].summaryRow.Type).toBe('Set + Rest');
     expect(groups[0].summaryRow.Stroke).toBe('Freestyle');
     expect(groups[0].summaryRow.Strokes).toBe('17');
-    expect(groups[0].summaryRow['Average Cadence']).toContain('22');
+    expect(groups[0].summaryRow['Average Stroke Rate']).toBe('22 spm');
     expect(groups[0].summaryRow['Average Heart Rate']).toContain('110');
     expect(groups[0].summaryRow.SWOLF).toBe('34');
     expect(groups[0].summaryRow.Energy).toContain('9');

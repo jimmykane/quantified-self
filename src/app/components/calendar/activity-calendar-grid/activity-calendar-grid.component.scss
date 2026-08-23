@@ -318,6 +318,30 @@
   }
 }
 
+@media (max-width: 860px) {
+  .activity-calendar--compact,
+  .activity-calendar--compact .activity-calendar-months,
+  .activity-calendar--compact .activity-calendar-month {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .activity-calendar--compact .activity-calendar-month {
+    display: grid;
+    grid-template-rows: 28px minmax(0, 1fr);
+  }
+
+  .activity-calendar--compact .activity-calendar-days {
+    min-height: 0;
+    grid-template-rows: repeat(6, minmax(0, 1fr));
+  }
+
+  .activity-calendar--compact .activity-calendar-day {
+    min-height: 0;
+    padding-block: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .activity-calendar-day-button {
     scroll-behavior: auto;

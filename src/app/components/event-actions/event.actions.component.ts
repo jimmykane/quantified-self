@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
@@ -26,6 +27,7 @@ import {
 } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventSharingService } from '../../services/app.event-sharing.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -54,12 +56,14 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   private eventReprocessService = inject(AppEventReprocessService);
   private processingService = inject(AppProcessingService);
   private eventSharingService = inject(AppEventSharingService);
+  private dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
 
 
   constructor(
     private eventService: AppEventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
+    private location: Location,
     private snackBar: MatSnackBar,
     private fileService: AppFileService,
     private dialog: MatDialog) {
@@ -416,14 +420,23 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return;
       }
       await this.eventService.deleteAllEventData(this.user, this.event.getID());
+      this.dayDetailsNavigation.markEventDeleted(this.event.getID());
       this.eventDeleted.emit(this.event.getID());
       if (this.navigateAfterDelete) {
-        await this.router.navigate(['/dashboard']);
+        await this.leaveDeletedEventRoute();
       }
       this.snackBar.open('Event deleted', undefined, {
         duration: 2000,
       });
     });
+  }
+
+  private async leaveDeletedEventRoute(): Promise<void> {
+    if (this.router.lastSuccessfulNavigation?.previousNavigation) {
+      this.location.back();
+      return;
+    }
+    await this.router.navigate(['/dashboard']);
   }
 
   ngOnDestroy(): void {
