@@ -3303,6 +3303,7 @@ describe('MCP data service', () => {
 
     const resultEntries = results.flatMap(result => result.results);
     expect(resultEntries).toHaveLength(terrainSummaryMetricTypes.length);
+    expect(resultEntries.map(entry => entry.metric.type)).toEqual(terrainSummaryMetricTypes);
     resultEntries.forEach((entry) => {
       expect(entry.matchedEventCount).toBe(1);
       expect(entry.aggregation.buckets).toEqual([]);

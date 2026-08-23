@@ -83,16 +83,18 @@ describe('persisted Sports Lib metric semantics', () => {
   });
 
   it('regenerates terrain summaries only from non-Diving activities', () => {
-    const allDiving = EventImporterJSON.getEventFromJSON(eventWithActivities([
-      ActivityTypes.ScubaDiving,
-      ActivityTypes.FreeDiving,
-    ]));
-    allDiving.getActivities().forEach((activity, index) => addRawTerrainSummaryStats(activity, index + 1));
+    [
+      [ActivityTypes.ScubaDiving],
+      [ActivityTypes.ScubaDiving, ActivityTypes.FreeDiving],
+    ].forEach((activityTypes) => {
+      const allDiving = EventImporterJSON.getEventFromJSON(eventWithActivities(activityTypes));
+      allDiving.getActivities().forEach((activity, index) => addRawTerrainSummaryStats(activity, index + 1));
 
-    EventUtilities.reGenerateStatsForEvent(allDiving);
+      EventUtilities.reGenerateStatsForEvent(allDiving);
 
-    terrainSummaryTypes.forEach(type => {
-      expect(allDiving.getStat(type)).toBeUndefined();
+      terrainSummaryTypes.forEach(type => {
+        expect(allDiving.getStat(type)).toBeUndefined();
+      });
     });
 
     const mixed = EventImporterJSON.getEventFromJSON(eventWithActivities([
