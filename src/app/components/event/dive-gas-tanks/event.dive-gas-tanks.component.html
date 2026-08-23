@@ -1,0 +1,70 @@
+@if (sourceActivityViews.length > 0) {
+<section class="dive-gas-tanks-section" aria-label="Dive gas and tank records">
+  <app-event-section-header icon="scuba_diving" title="Gas &amp; Tanks"></app-event-section-header>
+
+  @for (view of sourceActivityViews; track view.key) {
+  <section class="dive-source-activity" [attr.aria-label]="view.label">
+    @if (sourceActivityViews.length > 1) {
+    <h3 class="dive-source-activity-title">{{ view.label }}</h3>
+    }
+    <ng-container *ngTemplateOutlet="sourceActivityTables; context: { $implicit: view }"></ng-container>
+  </section>
+  }
+</section>
+}
+
+<ng-template #sourceActivityTables let-view>
+  @if (view.gasRows.length > 0) {
+  <section class="dive-source-record-group">
+    <h3 class="dive-source-record-title">Gases</h3>
+    <div class="dive-source-record-table-container">
+      <table mat-table [dataSource]="view.gasRows" class="dive-source-record-table" aria-label="Dive gases">
+        @for (column of gasColumns; track column) {
+        <ng-container [matColumnDef]="column">
+          <mat-header-cell *matHeaderCellDef>{{ gasColumnLabels[column] }}</mat-header-cell>
+          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        </ng-container>
+        }
+        <mat-header-row *matHeaderRowDef="gasColumns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: gasColumns;"></mat-row>
+      </table>
+    </div>
+  </section>
+  }
+
+  @if (view.tankSummaryRows.length > 0) {
+  <section class="dive-source-record-group">
+    <h3 class="dive-source-record-title">Tank summaries</h3>
+    <div class="dive-source-record-table-container">
+      <table mat-table [dataSource]="view.tankSummaryRows" class="dive-source-record-table" aria-label="Dive tank summaries">
+        @for (column of tankSummaryColumns; track column) {
+        <ng-container [matColumnDef]="column">
+          <mat-header-cell *matHeaderCellDef>{{ tankSummaryColumnLabels[column] }}</mat-header-cell>
+          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        </ng-container>
+        }
+        <mat-header-row *matHeaderRowDef="tankSummaryColumns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: tankSummaryColumns;"></mat-row>
+      </table>
+    </div>
+  </section>
+  }
+
+  @if (view.tankUpdateRows.length > 0) {
+  <section class="dive-source-record-group">
+    <h3 class="dive-source-record-title">Tank pressure updates</h3>
+    <div class="dive-source-record-table-container">
+      <table mat-table [dataSource]="view.tankUpdateRows" class="dive-source-record-table" aria-label="Dive tank pressure updates">
+        @for (column of tankUpdateColumns; track column) {
+        <ng-container [matColumnDef]="column">
+          <mat-header-cell *matHeaderCellDef>{{ tankUpdateColumnLabels[column] }}</mat-header-cell>
+          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        </ng-container>
+        }
+        <mat-header-row *matHeaderRowDef="tankUpdateColumns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: tankUpdateColumns;"></mat-row>
+      </table>
+    </div>
+  </section>
+  }
+</ng-template>

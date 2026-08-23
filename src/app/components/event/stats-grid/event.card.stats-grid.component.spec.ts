@@ -243,8 +243,12 @@ describe('EventCardStatsGridComponent', () => {
 
     it('should auto-exclude terrain-derived summaries for Diving activities', () => {
         const activityTypes = [ActivityTypes.ScubaDiving];
+        const activity = {
+            type: ActivityTypes.ScubaDiving,
+            getDiveSourceRecords: () => ({ gases: [], tankSummaries: [], tankUpdates: [] }),
+        };
         const mockEvent = {
-            getActivities: () => [{ type: ActivityTypes.ScubaDiving }],
+            getActivities: () => [activity],
             getActivityTypesAsArray: () => activityTypes,
             getStat: (type: string) => ({ getDisplayValue: () => 100, getDisplayUnit: () => 'm', getValue: () => 100 }),
             getStats: () => [],
@@ -758,6 +762,7 @@ describe('EventCardStatsGridComponent', () => {
         const activity = {
             type: ActivityTypes.Mermaiding,
             getStats: () => new Map([[DataDepthMax.type, maximumDepthStat]]),
+            getDiveSourceRecords: () => ({ gases: [], tankSummaries: [], tankUpdates: [] }),
         } as any;
         const mockEvent = {
             isMerge: false,
@@ -783,6 +788,36 @@ describe('EventCardStatsGridComponent', () => {
                 metricTypes: [DataDepthMax.type],
             }),
         ]));
+    });
+
+    it('shows the Diving tab for source-native gas and tank records without summary stats', () => {
+        const activity = {
+            type: ActivityTypes.ScubaDiving,
+            getStats: () => new Map(),
+            getDiveSourceRecords: () => ({
+                gases: [{ oxygenContent: 32 }],
+                tankSummaries: [],
+                tankUpdates: [],
+            }),
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [];
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.metricTabs).toEqual([
+            expect.objectContaining({ id: 'diving', metricTypes: [] }),
+        ]);
     });
 
     it('should restore remembered tab when it is visible', () => {

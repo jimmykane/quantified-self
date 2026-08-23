@@ -83,14 +83,14 @@ interface EventQuerySeed {
 
 /**
  * Controls how parsed data from original files is applied to an existing event.
- * - `attach_streams_only` keeps existing activities and updates their streams.
+ * - `attach_source_data` keeps existing activities and updates their source-hydrated data.
  * - `replace_activities` clears existing activities and replaces them with parsed activities.
  *
  * Use `replace_activities` only in regeneration/rebuild flows where callers explicitly
  * require full activity replacement from source files. For normal read/load flows,
- * use `attach_streams_only`.
+ * use `attach_source_data`.
  */
-export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
+export type SourceHydrationMode = 'attach_source_data' | 'replace_activities';
 
 const SERVER_OWNED_EVENT_UPDATE_FIELDS = [
   'originalFile',
@@ -1005,7 +1005,7 @@ export class AppEventService implements OnDestroy {
     streamTypes?: string[],
     merge: boolean = true,
     skipEnrichment: boolean = false,
-    hydrationMode: StreamHydrationMode = 'attach_streams_only',
+    hydrationMode: SourceHydrationMode = 'attach_source_data',
     downloadFileOptions?: DownloadFileOptions,
   ): Observable<EventInterface> {
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
@@ -1053,7 +1053,7 @@ export class AppEventService implements OnDestroy {
           return event;
         }
 
-        this.attachParsedStreamsToExistingActivities(event, fullEvent);
+        this.attachParsedSourceDataToExistingActivities(event, fullEvent);
         return event;
       }),
       catchError((error) => {
@@ -1067,7 +1067,7 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  private attachParsedStreamsToExistingActivities(
+  private attachParsedSourceDataToExistingActivities(
     event: AppEventInterface,
     parsedEvent: EventInterface,
   ): void {
@@ -1106,6 +1106,7 @@ export class AppEventService implements OnDestroy {
       const parsedStreams = parsedActivity.getAllStreams();
       existingActivity.clearStreams();
       existingActivity.addStreams(parsedStreams);
+      existingActivity.setDiveSourceRecords(parsedActivity.getDiveSourceRecords());
       parsedActivitiesByID.delete(existingActivityID);
       attachedCount += 1;
     });
@@ -1117,7 +1118,7 @@ export class AppEventService implements OnDestroy {
       || parsedActivitiesMissingID > 0
       || duplicateParsedIDs.size > 0
     ) {
-      this.logger.warn('[AppEventService] Stream-only hydration attached matched activity IDs only', {
+      this.logger.warn('[AppEventService] Source hydration attached matched activity IDs only', {
         eventID: event.getID(),
         attachedCount,
         existingActivitiesCount: existingActivities.length,

@@ -29,6 +29,7 @@ import {
 import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summary-metric-tabs.helper';
 import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-composite.helper';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
+import { hasEventDiveSourceRecords } from '../../../helpers/event-dive-source-records.helper';
 
 const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   overall: 'leaderboard',
@@ -258,12 +259,16 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   private updateTabs() {
     const availableStatTypes = new Set(this.stats.map((stat) => stat.getType()));
-    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow)
+    const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
+      ? ['diving']
+      : [];
+
+    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, { includeEmptyGroupIds })
       .map((tab) => ({
         ...tab,
         metricTypes: tab.metricTypes.filter((metricType) => availableStatTypes.has(metricType)),
       }))
-      .filter((tab) => tab.metricTypes.length > 0);
+      .filter((tab) => tab.metricTypes.length > 0 || includeEmptyGroupIds.includes(tab.id));
     this.resetSelectedTab();
     this.invalidateTabBodyLayoutSignature();
     this.setupTabBodyResizeObserver();

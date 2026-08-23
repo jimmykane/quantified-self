@@ -16,22 +16,10 @@ function filterSelectedIDsByAvailableActivities(activities: EventActivity[], sel
   return selectedActivityIDs.filter((activityID) => availableIDs.has(activityID));
 }
 
-function preserveActivityStreams(sourceActivity: EventActivity, targetActivity: EventActivity): void {
-  const sourceGetStreams = (sourceActivity as any)?.getAllStreams ?? (sourceActivity as any)?.getStreams;
-  const targetClearStreams = (targetActivity as any)?.clearStreams;
-  const targetAddStreams = (targetActivity as any)?.addStreams;
-
-  if (
-    typeof sourceGetStreams !== 'function'
-    || typeof targetClearStreams !== 'function'
-    || typeof targetAddStreams !== 'function'
-  ) {
-    return;
-  }
-
-  const streams = sourceGetStreams.call(sourceActivity) || [];
-  targetClearStreams.call(targetActivity);
-  targetAddStreams.call(targetActivity, streams);
+function preserveActivitySourceHydrationData(sourceActivity: EventActivity, targetActivity: EventActivity): void {
+  targetActivity.clearStreams();
+  targetActivity.addStreams(sourceActivity.getAllStreams());
+  targetActivity.setDiveSourceRecords(sourceActivity.getDiveSourceRecords());
 }
 
 export function reconcileEventDetailsLiveUpdate(
@@ -70,7 +58,7 @@ export function reconcileEventDetailsLiveUpdate(
     if (!currentActivity) {
       return;
     }
-    preserveActivityStreams(currentActivity, incomingActivity);
+    preserveActivitySourceHydrationData(currentActivity, incomingActivity);
   });
 
   return {

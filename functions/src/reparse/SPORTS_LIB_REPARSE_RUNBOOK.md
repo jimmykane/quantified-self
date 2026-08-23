@@ -7,6 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.1.0 source-hydrated dive gas and tank records
+
+Sports Lib 20.1.0 keeps parser-provided FIT `dive_gas`, `tank_summary`, and `tank_update` messages as structured
+source records on each in-memory Diving-group activity. Gas percentages, tank pressures in bar, volume used in litres,
+timestamps, packed sensor values, and parser enum values remain source-owned. The library does not turn them into
+numeric summary stats, infer gas names or nitrogen values, associate a gas with a tank, or calculate consumption.
+
+Quantified Self copies those records from the retained original into the matched Event Details activity alongside its
+streams, and preserves them across same-activity live updates. The Diving summary tab renders the records separately
+for each selected dive in **Gas & Tanks**. They are deliberately excluded from Sports Lib native JSON and therefore
+from Firestore event/activity documents, regular imports, reparse writers, Training, durability, and derived schemas.
+MCP does not expose them as metrics or activity detail records.
+
+No historical reparse or Training rebuild is required to display the section: opening an Event Details page with a
+retained original source hydrates the records on demand. A reparse cannot persist the records for a source that is no
+longer retained, so do not enable the automatic scanner or launch a global reparse for this release.
+
 ### Sports Lib 20.0.3 regenerated-event summary correction
 
 Sports Lib 20.0.3 applies the Diving-group terrain rule when it regenerates a parent event summary. A parent made

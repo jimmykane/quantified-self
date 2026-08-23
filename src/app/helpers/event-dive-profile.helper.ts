@@ -1,7 +1,5 @@
 import {
   ActivityInterface,
-  ActivityTypeGroups,
-  ActivityTypesHelper,
   DataAirTimeRemaining,
   DataCNSLoad,
   DataDepth,
@@ -21,6 +19,7 @@ import {
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
+import { isDivingActivity } from './event-diving.helper';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
 import {
   buildEventChartPanels,
@@ -65,13 +64,6 @@ export interface BuildEventDiveProfileInput {
   activities: ActivityInterface[];
   userUnitSettings: UserUnitSettingsInterface;
   eventColorService: AppEventColorService;
-}
-
-export function isDivingActivity(activity: ActivityInterface | null | undefined): boolean {
-  if (!activity) {
-    return false;
-  }
-  return ActivityTypesHelper.getActivityGroupForActivityType(activity.type) === ActivityTypeGroups.DivingGroup;
 }
 
 export function hasEventDiveProfileData(activities: ActivityInterface[]): boolean {

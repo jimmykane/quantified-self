@@ -19,8 +19,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildEventDiveProfile,
   hasEventDiveProfileData,
-  isDivingActivity,
 } from './event-dive-profile.helper';
+import { isDivingActivity } from './event-diving.helper';
 import { getEventChartSeriesY } from './event-echarts-data.helper';
 
 function unitSettings(swimPaceUnit: SwimPaceUnits) {

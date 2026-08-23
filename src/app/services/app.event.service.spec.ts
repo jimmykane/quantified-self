@@ -2141,19 +2141,26 @@ describe('AppEventService', () => {
             )).rejects.toThrow('No positional data found for GPX export.');
         });
 
-        it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {
+        it('should delegate attachStreamsToEventWithActivities to parsing and attach source-hydrated activity data by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const oldAscentStat = { getValue: () => 280.8 };
             const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }] as any[];
+            const parsedDiveSourceRecords = {
+                gases: [{ oxygenContent: 32, status: 'enabled' }],
+                tankSummaries: [{ startPressure: 200, endPressure: 75, volumeUsed: 1250 }],
+                tankUpdates: [{ pressure: 200 }],
+            };
             const existingActivity = {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
+                setDiveSourceRecords: vi.fn(),
                 getStat: vi.fn().mockImplementation((type: string) => type === 'Ascent' ? oldAscentStat : undefined),
             } as any;
             const parsedActivity = {
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+                getDiveSourceRecords: vi.fn().mockReturnValue(parsedDiveSourceRecords),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -2187,6 +2194,7 @@ describe('AppEventService', () => {
             );
             expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
             expect(existingActivity.addStreams).toHaveBeenCalledWith(parsedStreams);
+            expect(existingActivity.setDiveSourceRecords).toHaveBeenCalledWith(parsedDiveSourceRecords);
             expect(existingActivity.getStat('Ascent')).toBe(originalAscentStat);
             expect(event.clearActivities).not.toHaveBeenCalled();
             expect(event.addActivities).not.toHaveBeenCalled();
@@ -2200,10 +2208,12 @@ describe('AppEventService', () => {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
+                setDiveSourceRecords: vi.fn(),
             } as any;
             const parsedActivity = {
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+                getDiveSourceRecords: vi.fn().mockReturnValue({ gases: [], tankSummaries: [], tankUpdates: [] }),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -2231,7 +2241,7 @@ describe('AppEventService', () => {
                     undefined,
                     true,
                     false,
-                    'attach_streams_only',
+                    'attach_source_data',
                     { metadataCacheTtlMs: 3600000 },
                 ),
             );
@@ -2255,10 +2265,12 @@ describe('AppEventService', () => {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
+                setDiveSourceRecords: vi.fn(),
             } as any;
             const parsedActivity = {
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(filteredParsedStreams),
+                getDiveSourceRecords: vi.fn().mockReturnValue({ gases: [], tankSummaries: [], tankUpdates: [] }),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -2293,25 +2305,29 @@ describe('AppEventService', () => {
         });
 
 
-        it('should attach matched IDs only and warn on ID mismatch in stream-only mode', async () => {
+        it('should attach matched IDs only and warn on ID mismatch in source-hydration mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const existingActivityA = {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
+                setDiveSourceRecords: vi.fn(),
             } as any;
             const existingActivityB = {
                 getID: () => 'a-2',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
+                setDiveSourceRecords: vi.fn(),
             } as any;
             const parsedActivityA = {
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue([{ type: 'Speed' }]),
+                getDiveSourceRecords: vi.fn().mockReturnValue({ gases: [], tankSummaries: [], tankUpdates: [] }),
             } as any;
             const parsedActivityOther = {
                 getID: () => 'b-9',
                 getAllStreams: vi.fn().mockReturnValue([{ type: 'Power' }]),
+                getDiveSourceRecords: vi.fn().mockReturnValue({ gases: [], tankSummaries: [], tankUpdates: [] }),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -2338,7 +2354,7 @@ describe('AppEventService', () => {
             expect(existingActivityB.clearStreams).not.toHaveBeenCalled();
             expect(existingActivityB.addStreams).not.toHaveBeenCalled();
             expect(mockLogger.warn).toHaveBeenCalledWith(
-                '[AppEventService] Stream-only hydration attached matched activity IDs only',
+                '[AppEventService] Source hydration attached matched activity IDs only',
                 expect.objectContaining({
                     eventID: 'event-1',
                     unmatchedExistingActivityIDs: ['a-2'],
@@ -2422,7 +2438,7 @@ describe('AppEventService', () => {
             );
         });
 
-        it('should rethrow when parser throws in stream-only mode', async () => {
+        it('should rethrow when parser throws in source-hydration mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockRejectedValue(new Error('parse blew up'));
             const event = {
@@ -2461,7 +2477,7 @@ describe('AppEventService', () => {
             )).rejects.toThrow('parse blew up');
         });
 
-        it('should rethrow when parser returns no finalEvent in stream-only mode', async () => {
+        it('should rethrow when parser returns no finalEvent in source-hydration mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
                 finalEvent: null,

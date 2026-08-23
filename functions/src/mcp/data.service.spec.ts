@@ -3196,7 +3196,7 @@ describe('MCP data service', () => {
     expect(result.sleepCapabilities.providers).toContain(SLEEP_PROVIDERS.GarminAPI);
   });
 
-  it('discovers only persisted source-native dive summary metrics', async () => {
+  it('discovers persisted dive summaries without leaking source-hydrated gas or tank records', async () => {
     vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
       {
         id: 'private-dive-1',
@@ -3211,7 +3211,16 @@ describe('MCP data service', () => {
           streams: {
             AirTimeRemaining: [600, 540],
           },
-          diveGases: [{ oxygenContent: 32 }],
+          diveSourceRecords: {
+            gases: [{ oxygenContent: 32, heliumContent: 15, status: 'enabled' }],
+            tankSummaries: [{
+              sensor: 3578158576,
+              startPressure: 199.46,
+              endPressure: 74.67,
+              volumeUsed: 1396.01,
+            }],
+            tankUpdates: [{ sensor: 3578158576, pressure: 198.4 }],
+          },
         },
       },
     ]);
@@ -3227,7 +3236,7 @@ describe('MCP data service', () => {
       expect.objectContaining({ type: DataPressureSACAvg.type, unit: 'bar/min' }),
     ]));
     expect(JSON.stringify(result)).not.toMatch(
-      /Private reef dive|private-dive-source|AirTimeRemaining|oxygenContent|Latitude/,
+      /Private reef dive|private-dive-source|AirTimeRemaining|diveSourceRecords|oxygenContent|heliumContent|startPressure|endPressure|volumeUsed|tankUpdates|3578158576|Latitude/,
     );
   });
 

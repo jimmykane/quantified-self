@@ -1204,7 +1204,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         ],
         true,
         false,
-        'attach_streams_only',
+        'attach_source_data',
         { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
       ).pipe(take(1)));
       return hydratedEvent || event;

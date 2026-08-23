@@ -507,6 +507,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('pressure/volume SAC');
     expect(gettingStartedSection?.content).toContain('**Diving** summary tab');
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
+    expect(gettingStartedSection?.content).toContain('**Gas & Tanks**');
+    expect(gettingStartedSection?.content).toContain('tank pressure updates');
+    expect(gettingStartedSection?.content).toContain('does not invent a gas mixture name or nitrogen value');
+    expect(gettingStartedSection?.content).toContain('associate a gas with a tank');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');
     expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');

@@ -1,0 +1,48 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.dive-gas-tanks-section {
+  margin-top: 16px;
+}
+
+.dive-source-activity + .dive-source-activity {
+  margin-top: 24px;
+}
+
+.dive-source-activity-title {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+  margin: 0 0 12px;
+}
+
+.dive-source-record-group + .dive-source-record-group {
+  margin-top: 20px;
+}
+
+.dive-source-record-title {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+  margin: 0 0 8px;
+}
+
+.dive-source-record-table-container {
+  max-width: 100%;
+  overflow: auto;
+  width: 100%;
+}
+
+.dive-source-record-table {
+  min-width: max-content;
+}
+
+.dive-source-record-table mat-header-cell {
+  white-space: nowrap;
+}
+
+.dive-source-record-table mat-cell {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

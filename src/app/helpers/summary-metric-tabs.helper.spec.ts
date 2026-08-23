@@ -77,6 +77,14 @@ describe('buildSummaryMetricTabs', () => {
     expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'performance']);
   });
 
+  it('can include a configured empty group for source-native records', () => {
+    const tabs = buildSummaryMetricTabs([], { includeEmptyGroupIds: ['diving'] });
+
+    expect(tabs).toEqual([
+      expect.objectContaining({ id: 'diving', metricTypes: [] }),
+    ]);
+  });
+
   it('should send unknown metric types to Other', () => {
     const tabs = buildSummaryMetricTabs(['Custom Stat']);
     expect(tabs.map((tab) => tab.id)).toEqual(['other']);
