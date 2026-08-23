@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   getEventDiveSourceRecordActivities,
+  hasActivityDiveSourceRecords,
   hasEventDiveSourceRecords,
 } from './event-dive-source-records.helper';
 
@@ -38,6 +39,8 @@ describe('event-dive-source-records.helper', () => {
       }),
     ];
 
+    expect(hasActivityDiveSourceRecords(activities[0])).toBe(true);
+    expect(hasActivityDiveSourceRecords(activities[2])).toBe(false);
     expect(hasEventDiveSourceRecords(activities)).toBe(true);
     expect(getEventDiveSourceRecordActivities(activities)).toEqual([
       { activity: activities[0], records: diveRecords },

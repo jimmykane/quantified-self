@@ -7,22 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
-### Sports Lib 20.1.0 source-hydrated dive gas and tank records
+### Sports Lib 20.1.1 native dive gas and tank record persistence
 
-Sports Lib 20.1.0 keeps parser-provided FIT `dive_gas`, `tank_summary`, and `tank_update` messages as structured
-source records on each in-memory Diving-group activity. Gas percentages, tank pressures in bar, volume used in litres,
-timestamps, packed sensor values, and parser enum values remain source-owned. The library does not turn them into
-numeric summary stats, infer gas names or nitrogen values, associate a gas with a tank, or calculate consumption.
+Sports Lib 20.1.0 introduced parser-provided FIT `dive_gas`, `tank_summary`, and `tank_update` messages as structured
+source records on each Diving-group activity. Sports Lib 20.1.1 serializes those optional records in native Activity
+JSON as `diveSourceRecords`. Gas percentages, tank pressures in bar, volume used in litres, timestamps, packed sensor
+values, and parser enum values remain source-owned. The library does not turn them into numeric summary stats, infer
+gas names or nitrogen values, associate a gas with a tank, or calculate consumption.
 
-Quantified Self copies those records from the retained original into the matched Event Details activity alongside its
-streams, and preserves them across same-activity live updates. The Diving summary tab renders the records separately
-for each selected dive in **Gas & Tanks**. They are deliberately excluded from Sports Lib native JSON and therefore
-from Firestore event/activity documents, regular imports, reparse writers, Training, durability, and derived schemas.
-MCP does not expose them as metrics or activity detail records.
+New imports and source-backed targeted reparses write the records through the normal sanitized activity writer. The
+writer still removes streams, but retains `diveSourceRecords` in the activity document. Event Details also hydrates the
+retained original as a legacy fallback for activity documents created before 20.1.1. The Diving summary tab renders the
+records separately for each selected dive in **Gas & Tanks**.
 
-No historical reparse or Training rebuild is required to display the section: opening an Event Details page with a
-retained original source hydrates the records on demand. A reparse cannot persist the records for a source that is no
-longer retained, so do not enable the automatic scanner or launch a global reparse for this release.
+The records remain nonnumeric source data: they do not become Training inputs, durability fields, derived schemas, or
+MCP metrics and are not projected through MCP activity-detail responses. Use an ordinary targeted reparse only when a
+specific retained original should persist its legacy records. A reparse cannot recover records for an original source
+that is no longer retained; do not enable the automatic scanner or launch a global reparse for this release.
 
 ### Sports Lib 20.0.3 regenerated-event summary correction
 

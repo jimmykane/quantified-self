@@ -1,4 +1,5 @@
 import { AppEventInterface } from '@shared/app-event.interface';
+import { hasActivityDiveSourceRecords } from '../helpers/event-dive-source-records.helper';
 
 type EventActivity = NonNullable<ReturnType<AppEventInterface['getActivities']>>[number];
 
@@ -19,7 +20,13 @@ function filterSelectedIDsByAvailableActivities(activities: EventActivity[], sel
 function preserveActivitySourceHydrationData(sourceActivity: EventActivity, targetActivity: EventActivity): void {
   targetActivity.clearStreams();
   targetActivity.addStreams(sourceActivity.getAllStreams());
-  targetActivity.setDiveSourceRecords(sourceActivity.getDiveSourceRecords());
+
+  // Streams are deliberately absent from Firestore. Dive source records are
+  // persisted from Sports Lib 20.1.1 onward, so an incoming persisted payload wins.
+  // Keep the retained-source copy only as a fallback for older activity docs.
+  if (!hasActivityDiveSourceRecords(targetActivity)) {
+    targetActivity.setDiveSourceRecords(sourceActivity.getDiveSourceRecords());
+  }
 }
 
 export function reconcileEventDetailsLiveUpdate(

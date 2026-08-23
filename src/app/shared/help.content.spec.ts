@@ -509,6 +509,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
     expect(gettingStartedSection?.content).toContain('**Gas & Tanks**');
     expect(gettingStartedSection?.content).toContain('tank pressure updates');
+    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities retain those records with the activity');
+    expect(gettingStartedSection?.content).toContain('older activities can display them while their original source remains available');
     expect(gettingStartedSection?.content).toContain('does not invent a gas mixture name or nitrogen value');
     expect(gettingStartedSection?.content).toContain('associate a gas with a tank');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');

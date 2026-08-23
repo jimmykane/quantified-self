@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `20.0.3`
+- `@sports-alliance/sports-lib`: `20.1.1`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1825,17 +1825,22 @@ meters/meters per second or feet/feet per second for Event Details display, and 
 precision. Those unit-derived display instances do not replace the canonical meter/meter-per-second stats in stored
 JSON, do not become Training inputs, and do not require a reparse or derived rebuild.
 
-These dive values are not Training inputs and do not change durability, Training schema 18, or any derived payload.
-Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
-new dive surfaces.
+Sports Lib `20.1.0` introduced nonnumeric parser-owned FIT `dive_gas`, `tank_summary`, and `tank_update` records for
+the Event Details **Gas & Tanks** section. Sports Lib `20.1.1` serializes them in optional activity
+`diveSourceRecords` JSON, so new imports and source-backed targeted reparses persist the exact records alongside the
+activity. Older activity documents can still display their records while their retained original is available. The
+records remain nonnumeric source data: they are not Training inputs and do not change durability, Training schema 18,
+or any derived payload. Use a targeted reparse only when a specific retained original should persist its legacy
+records; do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a global historical reparse
+solely for these dive records.
 
-The repository now pins Sports Lib `20.0.3`, including FIT parser `5.0.2`. New FIT imports persist session field 196
-as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat. Existing persisted Resting
-Calories values remain historical values until a source reparse replaces their source stats, and are neither renamed
-nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM` from its source
-meters-per-second representation to Sports Lib's public meters-per-hour metric. Sports Lib also removes terrain
-ascent/descent, altitude minimum/maximum/average, and grade minimum/maximum/average summaries for the Diving group
-while retaining the source streams needed for dive views.
+The repository now pins Sports Lib `20.1.1`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
+persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat.
+Existing persisted Resting Calories values remain historical values until a source reparse replaces their source stats.
+They are neither renamed nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM`
+from its source meters-per-second representation to Sports Lib's public meters-per-hour metric. Sports Lib also removes
+Diving-group terrain summaries for ascent/descent, altitude minimum/maximum/average, and grade
+minimum/maximum/average while retaining the source streams needed for dive views.
 
 Sports Lib `20.0.3` also applies that eight-metric Diving-group rule when regenerating a parent event summary. A parent
 made entirely of Diving-group activities omits `Ascent`, `Descent`, `Minimum Altitude`, `Maximum Altitude`, `Average

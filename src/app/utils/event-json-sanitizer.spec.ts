@@ -1,7 +1,12 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { EventJSONSanitizer } from './event-json-sanitizer';
-import { DynamicDataLoader, UnitSystem } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    DynamicDataLoader,
+    EventImporterJSON,
+    UnitSystem,
+} from '@sports-alliance/sports-lib';
 
 // Mock Data class
 class MockData {
@@ -129,6 +134,62 @@ describe('EventJSONSanitizer', () => {
         const { sanitizedJson: s2, unknownTypes: u2 } = EventJSONSanitizer.sanitize(undefined);
         expect(s2).toBeUndefined();
         expect(u2).toEqual([]);
+    });
+
+    it('retains native dive gas and tank records for Sports Lib JSON hydration', () => {
+        const diveSourceRecords = {
+            gases: [{
+                messageIndex: { value: 2, selected: true },
+                oxygenContent: 32,
+                heliumContent: 15,
+                status: 'enabled',
+                mode: 'open_circuit',
+            }],
+            tankSummaries: [{
+                timestamp: 1787211300000,
+                sensor: 3578158576,
+                startPressure: 199.46,
+                endPressure: 74.67,
+                volumeUsed: 1396.01,
+            }],
+            tankUpdates: [{
+                timestamp: 1787211360000,
+                sensor: 3578158576,
+                pressure: 198.4,
+            }],
+        };
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize({
+            name: 'Stored dive',
+            startDate: 0,
+            endDate: 60_000,
+            type: ActivityTypes.ScubaDiving,
+            powerMeter: false,
+            trainer: false,
+            stats: {},
+            streams: [],
+            laps: [],
+            creator: { name: 'test', devices: [] },
+            intensityZones: [],
+            events: [],
+            diveSourceRecords,
+        });
+
+        const activity = EventImporterJSON.getActivityFromJSON(sanitizedJson);
+
+        expect(unknownTypes).toEqual([]);
+        expect(issues).toEqual([]);
+        expect(activity.getDiveSourceRecords()).toEqual({
+            gases: diveSourceRecords.gases,
+            tankSummaries: [{
+                ...diveSourceRecords.tankSummaries[0],
+                timestamp: new Date(diveSourceRecords.tankSummaries[0].timestamp),
+            }],
+            tankUpdates: [{
+                ...diveSourceRecords.tankUpdates[0],
+                timestamp: new Date(diveSourceRecords.tankUpdates[0].timestamp),
+            }],
+        });
+        expect(activity.toJSON()).toEqual(expect.objectContaining({ diveSourceRecords }));
     });
 
     it('should retain Durability Evidence stats registered by the real sports-lib bundle', () => {

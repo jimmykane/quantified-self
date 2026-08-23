@@ -9,6 +9,15 @@ export interface EventDiveSourceRecordActivity {
   records: DiveSourceRecords;
 }
 
+export function hasActivityDiveSourceRecords(
+  activity: Pick<ActivityInterface, 'getDiveSourceRecords'>,
+): boolean {
+  const records = activity.getDiveSourceRecords();
+  return records.gases.length > 0
+    || records.tankSummaries.length > 0
+    || records.tankUpdates.length > 0;
+}
+
 export function hasEventDiveSourceRecords(
   activities: readonly ActivityInterface[] | null | undefined,
 ): boolean {
@@ -17,10 +26,7 @@ export function hasEventDiveSourceRecords(
       return false;
     }
 
-    const records = activity.getDiveSourceRecords();
-    return records.gases.length > 0
-      || records.tankSummaries.length > 0
-      || records.tankUpdates.length > 0;
+    return hasActivityDiveSourceRecords(activity);
   });
 }
 
@@ -32,15 +38,11 @@ export function getEventDiveSourceRecordActivities(
       return sourceActivities;
     }
 
-    const records = activity.getDiveSourceRecords();
-    if (
-      records.gases.length === 0
-      && records.tankSummaries.length === 0
-      && records.tankUpdates.length === 0
-    ) {
+    if (!hasActivityDiveSourceRecords(activity)) {
       return sourceActivities;
     }
 
+    const records = activity.getDiveSourceRecords();
     sourceActivities.push({ activity, records });
     return sourceActivities;
   }, []);

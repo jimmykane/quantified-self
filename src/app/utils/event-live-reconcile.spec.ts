@@ -29,7 +29,7 @@ const createEvent = (activities: any[]): any => ({
 });
 
 describe('event-live-reconcile', () => {
-  it('preserves selected activity IDs and existing streams when activity IDs match', () => {
+  it('preserves selected activity IDs, streams, and legacy source-hydrated records when activity IDs match', () => {
     const sourceRecords = {
       gases: [{ oxygenContent: 32, heliumContent: 0 }],
       tankSummaries: [{ startPressure: 200, endPressure: 75, volumeUsed: 1250 }],
@@ -68,14 +68,19 @@ describe('event-live-reconcile', () => {
     expect(result.selectedActivityIDs).toEqual(['a1']);
   });
 
-  it('replaces existing source-hydrated records on a matching activity', () => {
-    const sourceRecords = {
-      gases: [{ oxygenContent: 50, status: 'enabled' }],
+  it('keeps persisted source records from a matching live activity', () => {
+    const sourceHydratedRecords = {
+      gases: [{ oxygenContent: 32, status: 'enabled' }],
       tankSummaries: [],
       tankUpdates: [],
     };
-    const currentActivity = createActivity('a1', [{ type: 'LatitudeDegrees', values: [1] }], sourceRecords);
-    const incomingActivity = createActivity('a1');
+    const persistedRecords = {
+      gases: [{ oxygenContent: 50, status: 'enabled' }],
+      tankSummaries: [{ startPressure: 200, endPressure: 75, volumeUsed: 1250 }],
+      tankUpdates: [{ pressure: 198.4 }],
+    };
+    const currentActivity = createActivity('a1', [{ type: 'LatitudeDegrees', values: [1] }], sourceHydratedRecords);
+    const incomingActivity = createActivity('a1', [], persistedRecords);
     const currentEvent = createEvent([currentActivity]);
     const incomingEvent = createEvent([incomingActivity]);
 
@@ -83,6 +88,6 @@ describe('event-live-reconcile', () => {
 
     expect(result.needsFullReload).toBe(false);
     expect(incomingActivity.getAllStreams()).toEqual([{ type: 'LatitudeDegrees', values: [1] }]);
-    expect(incomingActivity.getDiveSourceRecords()).toEqual(sourceRecords);
+    expect(incomingActivity.getDiveSourceRecords()).toEqual(persistedRecords);
   });
 });

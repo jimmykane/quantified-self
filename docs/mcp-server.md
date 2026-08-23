@@ -652,12 +652,12 @@ MCP applies the same canonical semantics before metric discovery and selected-me
 fields are neither advertised nor returned; mixed and unresolved activity sets remain unchanged. This remains within
 the existing generic metric schemas, so no registered MCP tool or output-schema change is required.
 
-Sports Lib 20.1.0 adds nonnumeric source-hydrated FIT gas, tank-summary, and tank-pressure-update records for the
-frontend Event Details **Gas & Tanks** section. They are excluded from Sports Lib native JSON and are never persisted
-to Firestore, discovered as metrics, or projected through any MCP activity-detail response. The records retain raw
-source values only; MCP does not infer mixtures, gas-to-tank associations, or consumption. This is an implementation
-and presentation change outside the registered MCP contract, so no registered MCP tool or output-schema change is
-required.
+Sports Lib 20.1.0 introduced nonnumeric source-native FIT gas, tank-summary, and tank-pressure-update records for the
+frontend Event Details **Gas & Tanks** section. Sports Lib 20.1.1 serializes the optional records in native Activity
+JSON as `diveSourceRecords`, so new imports and source-backed targeted reparses persist their raw values in activity
+documents. They remain excluded from DataStore metric discovery and every MCP response projection; MCP does not infer
+mixtures, gas-to-tank associations, or consumption. This persistence and presentation change remains outside the
+registered MCP contract, so no registered MCP tool or output-schema change is required.
 
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
