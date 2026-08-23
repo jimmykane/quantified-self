@@ -363,6 +363,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Stamina metrics appear in Detailed Statistics, in event summary metric tabs, and as selectable chart metrics from **Settings -> Charts**.
 - Garmin session-level stamina values such as **Minimum Stamina**, **Beginning Potential Stamina**, and **Ending Potential Stamina** are shown when present.
 
+### FIT calorie metrics
+
+- FIT activities that record it show **Metabolic Calories** in the **Physiological** Event Details summary tab. It is a source-recorded metric and remains separate from total **Energy**.
+
 ### Event dive profiles
 
 - Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding activities show a pinned **Dive Profile** below Performance Charts and above the normal Event Details charts when the original source contains continuous depth samples.

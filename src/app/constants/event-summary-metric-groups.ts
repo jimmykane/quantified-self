@@ -123,6 +123,7 @@ import {
   DataLegStiffnessMax,
   DataLegStiffnessMin,
   DataMaxRespirationRate,
+  DataMetabolicCalories,
   DataMinRespirationRate,
   DataMovingTime,
   DataNumberOfSatellites,
@@ -526,6 +527,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     label: 'Physiological',
     metricTypes: [
       DataEnergy.type,
+      DataMetabolicCalories.type,
       DataVO2Max.type,
       DataPeakEPOC.type,
       DataAerobicTrainingEffect.type,
@@ -561,6 +563,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   ...EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
   DataVerticalSpeedMax.type,
   DataEnergy.type,
+  DataMetabolicCalories.type,
   DataPower.type,
   DataPowerAvg.type,
   DataPowerMax.type,

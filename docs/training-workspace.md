@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `19.1.0`
+- `@sports-alliance/sports-lib`: `20.0.1`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1810,7 +1810,7 @@ The builder prefers canonical `Average Stroke Rate` but accepts the pre-19 `Aver
 types, so existing derived snapshots rebuild from stored event/activity documents. No original-file reparse or
 historical Firestore rewrite is needed solely for this semantic transition.
 
-The repository now pins Sports Lib `19.1.0`. It adds parser-owned, source-native dive summaries and continuous dive
+Sports Lib `19.1.0` introduced parser-owned, source-native dive summaries and continuous dive
 streams for the Diving group. Quantified Self displays only values supplied by the retained source: it does not derive
 missing summaries from samples, reconstruct samples from summaries, fill gaps, apply plausibility thresholds, promote
 lap-only values, or flatten gas/tank messages. New imports persist the available summary stats; an ordinary targeted
@@ -1828,6 +1828,20 @@ JSON, do not become Training inputs, and do not require a reparse or derived reb
 These dive values are not Training inputs and do not change durability, Training schema 18, or any derived payload.
 Do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a historical reparse solely for the
 new dive surfaces.
+
+The repository now pins Sports Lib `20.0.1`, including FIT parser `5.0.2`. New FIT imports persist session field 196
+as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat. Existing persisted Resting
+Calories values remain historical values until a source reparse replaces their source stats, and are neither renamed
+nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM` from its source
+meters-per-second representation to Sports Lib's public meters-per-hour metric. Sports Lib also removes terrain
+ascent/descent, altitude minimum/maximum/average, and grade minimum/maximum/average summaries for the Diving group
+while retaining the source streams needed for dive views.
+
+Use the existing targeted Sports Lib reparse lifecycle for retained original FIT files that should gain Metabolic
+Calories, corrected Average VAM, or corrected persisted dive terrain summaries. The target follows the installed
+package version automatically; keep the automatic scanner disabled unless a separately approved operational campaign
+is intended. These values are not Training inputs, so this parser upgrade does not require a Training schema bump,
+derived-snapshot rebuild, or a synthetic Firestore migration.
 
 A new parser-owned activity stat may additionally require a reparse; changing only the derived schema cannot create a
 missing activity stat or reconstruct a missing continuous stream.

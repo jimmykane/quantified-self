@@ -15,6 +15,7 @@ import {
   DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
+  DataMetabolicCalories,
   DataPowerAvg,
   DataPressureSACAvg,
   DataSpeedAvg,
@@ -3167,6 +3168,73 @@ describe('MCP data service', () => {
     ]));
     expect(JSON.stringify(result)).not.toMatch(
       /Private reef dive|private-dive-source|AirTimeRemaining|oxygenContent|Latitude/,
+    );
+  });
+
+  it('discovers the canonical FIT metabolic-calorie metric only when persisted', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
+      {
+        id: 'fit-1',
+        data: {
+          stats: {
+            [DataMetabolicCalories.type]: 412,
+          },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      search: 'metabolic',
+      limit: 10,
+    });
+
+    expect(result.eventMetrics).toEqual([
+      expect.objectContaining({
+        type: DataMetabolicCalories.type,
+        unit: 'kcal',
+      }),
+    ]);
+  });
+
+  it('queries a persisted canonical FIT metabolic-calorie metric', async () => {
+    const stats = {
+      [DataActivityTypes.type]: [ActivityTypes.Cycling],
+      [DataMetabolicCalories.type]: 412,
+    };
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'fit-1',
+      data: {
+        startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+        endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+        stats,
+      },
+    }]);
+    dependencies.importEvent = vi.fn((data, id) => (
+      EventImporterJSON.getEventFromJSON(data).setID(id)
+    ));
+
+    const result = await createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataMetabolicCalories.type,
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      aggregation: 'total',
+      groupBy: 'date',
+      interval: 'daily',
+      timeZone: 'UTC',
+    });
+
+    expect(result.aggregation.buckets).toEqual([
+      expect.objectContaining({ aggregateValue: 412 }),
+    ]);
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-07-01T00:00:00.000Z'),
+      Date.parse('2026-07-02T00:00:00.000Z'),
+      [DataMetabolicCalories.type, DataActivityTypes.type],
+      25,
+      undefined,
     );
   });
 

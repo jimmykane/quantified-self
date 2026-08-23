@@ -34,7 +34,7 @@ import { DataTemperatureMin } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import { DataDescent } from '@sports-alliance/sports-lib';
 import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
-import { DataEnergy } from '@sports-alliance/sports-lib';
+import { DataEnergy, DataMetabolicCalories } from '@sports-alliance/sports-lib';
 import { DataAltitudeMax } from '@sports-alliance/sports-lib';
 import { DataAltitudeMin } from '@sports-alliance/sports-lib';
 import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
@@ -378,6 +378,7 @@ export class DataTypeIconComponent {
       case 'Age':
         return 'cake';
       case DataEnergy.type:
+      case DataMetabolicCalories.type:
         return 'metabolism';
       case DataSwimPaceAvg.type:
       case DataSwimPaceAvgMinutesPer100Yard.type:

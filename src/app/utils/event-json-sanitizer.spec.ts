@@ -197,6 +197,29 @@ describe('EventJSONSanitizer', () => {
         ]));
     });
 
+    it('should retain Metabolic Calories stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here so this verifies eager registry coverage.
+        const metabolicCaloriesType = 'Metabolic Calories';
+        const json = {
+            stats: { [metabolicCaloriesType]: 412 },
+            activities: [{ stats: { [metabolicCaloriesType]: 413 } }],
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(metabolicCaloriesType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(registeredClass?.type).toBe(metabolicCaloriesType);
+        expect(sanitizedJson.stats[metabolicCaloriesType]).toBe(412);
+        expect(sanitizedJson.activities[0].stats[metabolicCaloriesType]).toBe(413);
+        expect(unknownTypes).not.toContain(metabolicCaloriesType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: metabolicCaloriesType,
+            }),
+        ]));
+    });
+
     it('should retain Three Dimensional Strain Evidence stats registered by the real sports-lib bundle', () => {
         // Keep the persisted type literal here and avoid importing the data class. Importing it
         // could register the type as a side effect and hide a production bundle regression.

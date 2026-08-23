@@ -619,7 +619,7 @@ documents, bounded metric reads also select the matching Cadence field and canon
 activity type uses Sports Lib's stroke-rate semantics. Explicit Stroke Rate wins, and mixed or unresolved sport sets
 retain Cadence. This is read compatibility, not another metric registry or a Firestore migration.
 
-Sports Lib 19.1.0 adds source-native dive summary classes for average/maximum depth, surface interval, bottom time,
+Sports Lib 19.1.0 introduced source-native dive summary classes for average/maximum depth, surface interval, bottom time,
 dive number, descent/ascent/hang times, average/maximum descent and ascent rates, starting/ending CNS and N2 loads,
 oxygen toxicity, average pressure/volume SAC, and average RMV. These become MCP metrics through the same automatic
 catalog only when the corresponding numeric stat is actually persisted. MCP does not calculate a missing summary from
@@ -631,6 +631,18 @@ persisted canonical values without adding another classification registry.
 The package also exports unit-derived dive presentation classes for frontend meters/feet and meters-per-second/
 feet-per-second display. Quantified Self persists and queries only their canonical source types, so these display-only
 classes do not create additional available MCP metrics or change MCP units, values, or registered output schemas.
+
+Sports Lib 20.0.1 adopts FIT parser 5.0.2 and adds canonical `Metabolic Calories` (`kcal`) from FIT session field
+196. It becomes available through this same automatic catalog only after a source import or reparse persists that stat.
+The parser no longer emits a new `Resting Calories` value for the field; an existing persisted `Resting Calories` stat
+remains readable as its own historical value until a source reparse replaces its source stats, and is never renamed or
+synthesized as `Metabolic Calories`. FIT `Average VAM` source values are converted from meters per second to the public
+meters-per-hour metric before persistence. For the Diving group, terrain ascent/descent, altitude
+minimum/maximum/average, and grade minimum/maximum/average summaries
+are removed during import and native JSON hydration; raw source streams remain outside this MCP summary surface. A
+retained original FIT file must use the normal targeted reparse lifecycle to gain those new or corrected persisted
+values. This is an implementation/data correction within the existing generic metric schemas, so no registered MCP
+tool or output-schema change is required.
 
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat

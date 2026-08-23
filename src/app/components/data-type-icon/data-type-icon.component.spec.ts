@@ -20,6 +20,7 @@ import {
   DataDistanceMiles,
   DataEndingPotentialStamina,
   DataEnergy,
+  DataMetabolicCalories,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
   DataPaceAvg,
@@ -336,6 +337,7 @@ describe('DataTypeIconComponent', () => {
     const component = new DataTypeIconComponent();
 
     expect(component.getColumnHeaderIcon(DataEnergy.type)).toBe('metabolism');
+    expect(component.getColumnHeaderIcon(DataMetabolicCalories.type)).toBe('metabolism');
     expect(component.getColumnHeaderIcon('Weight')).toBe('monitor_weight');
     expect(component.getColumnHeaderIcon('Height')).toBe('height');
     expect(component.getColumnHeaderIcon('Gender')).toBe('wc');

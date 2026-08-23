@@ -480,6 +480,15 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Ending Potential Stamina**');
   });
 
+  it('should document source-recorded FIT metabolic calories', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('FIT calorie metrics');
+    expect(gettingStartedSection?.content).toContain('**Metabolic Calories**');
+    expect(gettingStartedSection?.content).toContain('**Physiological** Event Details summary tab');
+    expect(gettingStartedSection?.content).toContain('separate from total **Energy**');
+  });
+
   it('should document event dive profiles, depth availability, and units', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

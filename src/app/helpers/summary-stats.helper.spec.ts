@@ -31,6 +31,7 @@ import {
   DataJumpRotationsMin,
   DataJumpScoreAvg,
   DataJumpSpeedMax,
+  DataMetabolicCalories,
   DataPaceAvg,
   DataPotentialStaminaAvg,
   DataPotentialStaminaMin,
@@ -75,6 +76,7 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataJumpRotationsMin.type);
     expect(stats).toContain(DataJumpScoreAvg.type);
     expect(stats).toContain(DataDepthAvg.type);
+    expect(stats).toContain(DataMetabolicCalories.type);
     expect(stats).toContain(DataStore.DataAvgVAM.type);
     expect(stats).toContain(DataStore.DataAvgRespirationRate.type);
     expect(stats).toContain(DataStore.DataMinRespirationRate.type);

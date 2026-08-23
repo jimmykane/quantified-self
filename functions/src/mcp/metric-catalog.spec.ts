@@ -7,7 +7,9 @@ import {
   DataDiveAscentRateAvg,
   DataDiveAscentRateAvgFeetPerSecond,
   DataLatitudeDegrees,
+  DataMetabolicCalories,
   DataPressureSACAvg,
+  DataRestingCalories,
   DataStrokeRate,
   DynamicDataLoader,
   UnitSystem,
@@ -50,6 +52,18 @@ describe('MCP Sports Lib metric catalog', () => {
       unit: 'bar/min',
       unitSystem: 'metric',
     });
+    expect(resolveSportsLibNumericMetric(DataMetabolicCalories.type)).toEqual({
+      type: DataMetabolicCalories.type,
+      displayType: DataMetabolicCalories.type,
+      unit: 'kcal',
+      unitSystem: 'metric',
+    });
+    expect(resolveSportsLibNumericMetric(DataRestingCalories.type)?.type).toBe(
+      DataRestingCalories.type,
+    );
+    expect(resolveSportsLibNumericMetric(DataRestingCalories.type)?.type).not.toBe(
+      DataMetabolicCalories.type,
+    );
   });
 
   it('canonicalizes Sports Lib aliases through DynamicDataLoader', () => {

@@ -7,6 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.0.1 FIT parser transition
+
+Sports Lib 20.0.1 uses FIT parser 5.0.2. On new FIT imports, session field 196 persists as canonical `Metabolic
+Calories` (`kcal`), not `Resting Calories`. Existing native JSON `Resting Calories` values remain readable as their
+recorded historical stat until a reparse replaces the source stats; the reparse path must not rename them or infer
+`Metabolic Calories` from them. FIT `Average VAM` is converted from the parser's meters-per-second source value to the
+public meters-per-hour metric before it is persisted.
+
+The same version removes terrain ascent/descent, altitude minimum/maximum/average, and grade
+minimum/maximum/average summaries from Diving-group event, activity, and lap data during FIT import and native JSON
+hydration. It leaves raw source streams available for the existing dive views.
+
+Run the ordinary targeted reparse for retained original FIT files that need these new or corrected persisted values.
+The installed package version advances the reparse target automatically. Do not enable the automatic scanner or start a
+global campaign solely for this transition without separate operational approval; missing original files remain an
+honest terminal `NO_ORIGINAL_FILES` outcome.
+
 ### Sports Lib 19.1.0 source-native dive metrics transition
 
 Sports Lib 19.1.0 imports parser-provided Diving-group summaries for average/maximum depth, dive timing and rates,
