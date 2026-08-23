@@ -4,6 +4,7 @@ import {
   DataDepth,
   DataDepthFeet,
   DataNextStopDepth,
+  DataNextStopDepthFeet,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
@@ -52,6 +53,7 @@ const DEPTH_STREAM_TYPES = new Set<string>([
   DataDepth.type,
   DataDepthFeet.type,
   DataNextStopDepth.type,
+  DataNextStopDepthFeet.type,
 ]);
 
 export interface EventPanelYAxisConfig {

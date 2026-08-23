@@ -1,8 +1,16 @@
 import {
+  DataAltitudeAvg,
+  DataAltitudeMax,
+  DataAltitudeMin,
+  DataAscent,
   DataCadence,
   DataCadenceAvg,
   DataCadenceMax,
   DataCadenceMin,
+  DataDescent,
+  DataGradeAvg,
+  DataGradeMax,
+  DataGradeMin,
   DataStrokeRate,
   DataStrokeRateAvg,
   DataStrokeRateMax,
@@ -18,6 +26,17 @@ interface MetricSemanticCompatibilityMapping {
 }
 
 const PERSISTED_ACTIVITY_TYPES_STAT_TYPE = 'Activity Types';
+
+const SPORTS_LIB_DIVING_TERRAIN_SUMMARY_STAT_TYPES = [
+  DataAscent.type,
+  DataDescent.type,
+  DataAltitudeMin.type,
+  DataAltitudeMax.type,
+  DataAltitudeAvg.type,
+  DataGradeMin.type,
+  DataGradeMax.type,
+  DataGradeAvg.type,
+] as const;
 
 function getStrokeRatePersistenceMappings(): readonly MetricSemanticCompatibilityMapping[] {
   return [
@@ -69,19 +88,24 @@ export function canonicalizePersistedSportsLibStats(
   activityTypes: readonly unknown[],
 ): Record<string, unknown> {
   const canonicalStats = { ...(stats || {}) };
-  if (!usesStrokeRateSemantics(activityTypes)) {
-    return canonicalStats;
+  if (usesStrokeRateSemantics(activityTypes)) {
+    getStrokeRatePersistenceMappings().forEach((mapping) => {
+      if (!Object.prototype.hasOwnProperty.call(canonicalStats, mapping.persistedCompatibilityType)) {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(canonicalStats, mapping.canonicalType)) {
+        canonicalStats[mapping.canonicalType] = canonicalStats[mapping.persistedCompatibilityType];
+      }
+      delete canonicalStats[mapping.persistedCompatibilityType];
+    });
   }
 
-  getStrokeRatePersistenceMappings().forEach((mapping) => {
-    if (!Object.prototype.hasOwnProperty.call(canonicalStats, mapping.persistedCompatibilityType)) {
-      return;
-    }
-    if (!Object.prototype.hasOwnProperty.call(canonicalStats, mapping.canonicalType)) {
-      canonicalStats[mapping.canonicalType] = canonicalStats[mapping.persistedCompatibilityType];
-    }
-    delete canonicalStats[mapping.persistedCompatibilityType];
-  });
+  if (usesDivingTerrainExclusionSemantics(activityTypes)) {
+    SPORTS_LIB_DIVING_TERRAIN_SUMMARY_STAT_TYPES.forEach((type) => {
+      delete canonicalStats[type];
+    });
+  }
+
   return canonicalStats;
 }
 
@@ -121,6 +145,18 @@ function usesStrokeRateSemantics(activityTypes: readonly unknown[]): boolean {
   ));
   return resolvedTypes.every(activityType => (
     activityType !== null && ActivityTypesHelper.usesStrokeRate(activityType)
+  ));
+}
+
+function usesDivingTerrainExclusionSemantics(activityTypes: readonly unknown[]): boolean {
+  if (!Array.isArray(activityTypes) || activityTypes.length === 0) {
+    return false;
+  }
+  const resolvedTypes = activityTypes.map(activityType => (
+    ActivityTypesHelper.resolveActivityType(activityType)
+  ));
+  return resolvedTypes.every(activityType => (
+    activityType !== null && ActivityTypesHelper.shouldExcludeTerrainSummaryMetrics(activityType)
   ));
 }
 

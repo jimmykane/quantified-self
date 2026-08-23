@@ -6,6 +6,7 @@ import {
   DataEffortPace,
   DataHeartRate,
   DataNextStopDepth,
+  DataNextStopDepthFeet,
   DataPace,
   DataPotentialStamina,
   DataPower,
@@ -125,7 +126,7 @@ describe('event-echarts-yaxis.helper', () => {
     expect(config.interval).toBeDefined();
   });
 
-  it.each([DataDepth.type, DataNextStopDepth.type])(
+  it.each([DataDepth.type, DataNextStopDepth.type, DataNextStopDepthFeet.type])(
     'keeps %s zero at the top and increases downward',
     (dataType) => {
       const config = buildEventPanelYAxisConfig({

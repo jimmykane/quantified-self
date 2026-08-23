@@ -647,8 +647,10 @@ tool or output-schema change is required.
 Sports Lib 20.0.3 applies the same eight-metric rule whenever it regenerates a parent event summary: an all-Diving
 parent omits the terrain summaries, while a mixed parent aggregates them only from non-Diving child activities. The
 normal targeted source-reparse lifecycle rewrites a retained stored parent when that correction is needed; no metric
-is synthesized from a stream or created by the MCP read path. This remains within the existing generic metric schemas,
-so no registered MCP tool or output-schema change is required.
+is synthesized from a stream or created by the MCP read path. For a legacy all-Diving event/activity projection,
+MCP applies the same canonical semantics before metric discovery and selected-metric projection, so stale terrain
+fields are neither advertised nor returned; mixed and unresolved activity sets remain unchanged. This remains within
+the existing generic metric schemas, so no registered MCP tool or output-schema change is required.
 
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat

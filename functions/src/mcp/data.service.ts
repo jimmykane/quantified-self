@@ -1770,9 +1770,13 @@ interface SafePosition {
 }
 
 function projectActivityStats(value: unknown, activityType?: unknown): SafeActivityStats {
-  const stats = value && typeof value === 'object' && !Array.isArray(value)
+  const rawStats = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+  const stats = canonicalizePersistedSportsLibStats(
+    rawStats,
+    activityType === undefined || activityType === null ? [] : [activityType],
+  );
   const resolvedActivityType = typeof activityType === 'string'
     ? ActivityTypesHelper.resolveActivityType(activityType)
     : null;

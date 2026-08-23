@@ -26,6 +26,8 @@ import {
   DataSpeedAvg,
   DataDescent,
   DataDepth,
+  DataDiveAscentRate,
+  DataNextStopDepth,
   DataSpeed,
   DataStrokeRateAvg,
   DataStrydDistance,
@@ -1126,6 +1128,12 @@ function getFilteredStreams(input: {
   const shouldRemoveDepth = DynamicDataLoader
     .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)
     .indexOf(DataDepth.type) === -1;
+  const shouldRemoveNextStopDepth = DynamicDataLoader
+    .getUnitBasedDataTypesFromDataType(DataNextStopDepth.type, input.userUnitSettings)
+    .indexOf(DataNextStopDepth.type) === -1;
+  const shouldRemoveDiveAscentRate = DynamicDataLoader
+    .getUnitBasedDataTypesFromDataType(DataDiveAscentRate.type, input.userUnitSettings)
+    .indexOf(DataDiveAscentRate.type) === -1;
 
   const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
     input.streams.map((stream) => stream.type),
@@ -1171,6 +1179,10 @@ function getFilteredStreams(input: {
           return !shouldRemoveDistance;
         case DataDepth.type:
           return !shouldRemoveDepth;
+        case DataNextStopDepth.type:
+          return !shouldRemoveNextStopDepth;
+        case DataDiveAscentRate.type:
+          return !shouldRemoveDiveAscentRate;
         case DataSpeed.type:
           return !shouldRemoveSpeed;
         case DataGradeAdjustedSpeed.type:

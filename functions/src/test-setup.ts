@@ -261,6 +261,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
             actual.ActivityTypesHelper.shouldExcludeDescent.bind(
                 actual.ActivityTypesHelper,
             ),
+        shouldExcludeTerrainSummaryMetrics:
+            actual.ActivityTypesHelper.shouldExcludeTerrainSummaryMetrics.bind(
+                actual.ActivityTypesHelper,
+            ),
         getActivityTypesForActivityGroup: (group: string) => {
             switch (group) {
                 case 'cycling_group':

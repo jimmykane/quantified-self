@@ -1076,6 +1076,58 @@ describe('MCP data service', () => {
     });
   });
 
+  it('hides terrain summaries from all-Diving activity and lap projections', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({
+        type: ActivityTypes.ScubaDiving,
+        stats: {
+          [DataAscent.type]: 20,
+          [DataDescent.type]: 15,
+        },
+      }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    });
+
+    expect(listed.activities[0].stats).toMatchObject({
+      ascentMeters: null,
+      descentMeters: null,
+    });
+
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        type: ActivityTypes.ScubaDiving,
+        laps: [{
+          lapId: 1,
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:10:00.000Z'),
+          stats: {
+            [DataAscent.type]: 10,
+            [DataDescent.type]: 8,
+          },
+        }],
+      },
+    });
+
+    const laps = await service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+    });
+
+    expect(laps.items[0].stats).toMatchObject({
+      ascentMeters: null,
+      descentMeters: null,
+    });
+  });
+
   it('rejects oversized activity overview projections before chart-source reads', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -3177,6 +3229,44 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /Private reef dive|private-dive-source|AirTimeRemaining|oxygenContent|Latitude/,
     );
+  });
+
+  it('does not advertise legacy all-Diving terrain summary metrics', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
+      {
+        id: 'legacy-dive-1',
+        data: {
+          stats: {
+            [DataActivityTypes.type]: [ActivityTypes.ScubaDiving],
+            [DataAscent.type]: 20,
+            [DataDescent.type]: 15,
+            [DataAltitudeMin.type]: -5,
+            [DataAltitudeMax.type]: 5,
+            [DataAltitudeAvg.type]: 1,
+            [DataGradeMin.type]: -10,
+            [DataGradeMax.type]: 10,
+            [DataGradeAvg.type]: 1,
+          },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      limit: 50,
+    });
+    const discoveredTypes = result.eventMetrics.map(metric => metric.type);
+
+    expect(discoveredTypes).not.toEqual(expect.arrayContaining([
+      DataAscent.type,
+      DataDescent.type,
+      DataAltitudeMin.type,
+      DataAltitudeMax.type,
+      DataAltitudeAvg.type,
+      DataGradeMin.type,
+      DataGradeMax.type,
+      DataGradeAvg.type,
+    ]));
   });
 
   it('discovers the canonical FIT metabolic-calorie metric only when persisted', async () => {

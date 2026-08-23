@@ -136,6 +136,26 @@ describe('persisted Sports Lib metric semantics', () => {
     });
   });
 
+  it('canonicalizes raw legacy terrain stats only for all-Diving projections', () => {
+    const legacyTerrainStats = Object.fromEntries(
+      terrainSummaryTypes.map((type, index) => [type, index + 1]),
+    );
+
+    const allDiving = canonicalizePersistedSportsLibStats(
+      legacyTerrainStats,
+      [ActivityTypes.ScubaDiving, ActivityTypes.FreeDiving],
+    );
+    const mixed = canonicalizePersistedSportsLibStats(
+      legacyTerrainStats,
+      [ActivityTypes.ScubaDiving, ActivityTypes.Running],
+    );
+
+    terrainSummaryTypes.forEach((type) => {
+      expect(allDiving[type]).toBeUndefined();
+      expect(mixed[type]).toBeDefined();
+    });
+  });
+
   it('preserves cadence when a partial persisted event has no activity-type stat', () => {
     const event = normalizePersistedEventMetricSemantics(
       EventImporterJSON.getEventFromJSON(eventJSON({
