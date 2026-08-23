@@ -259,10 +259,10 @@
 }
 
 .activity-calendar--compact .activity-calendar-marker-stage {
-  /* Leave a full CSS pixel above and below the 18 px marker so adjacent grid rows cannot clip its curve. */
+  /* Keep the 18 px marker and its vertical buffer intact inside the fixed-height dashboard tile. */
   width: 20px;
   height: 20px;
-  flex-basis: 20px;
+  flex: 0 0 20px;
 }
 
 .activity-calendar--year .activity-calendar-marker-overflow,

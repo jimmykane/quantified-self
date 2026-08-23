@@ -136,7 +136,7 @@ describe('ActivityCalendarGridComponent', () => {
     )?.[1];
 
     expect(compactStageRule).toContain('height: 20px;');
-    expect(compactStageRule).toContain('flex-basis: 20px;');
+    expect(compactStageRule).toContain('flex: 0 0 20px;');
   });
 
   it('fits all six compact calendar weeks inside the available mobile tile height', () => {

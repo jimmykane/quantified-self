@@ -30,6 +30,7 @@ import { PageHeaderComponent } from '../shared/page-header/page-header.component
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
@@ -194,6 +195,50 @@ describe('SummariesComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('marks only the Activity Calendar board for the mobile calendar row height', () => {
+    const activityCalendarTile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      dataType: DataDuration.type,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
+      dataValueType: ChartDataValueTypes.Total,
+      data: [],
+      timeInterval: TimeIntervals.Daily,
+      size: { columns: 1, rows: 1 },
+    } as any;
+    const mapTile = {
+      type: TileTypes.Map,
+      order: 1,
+      events: [],
+      mapStyle: 'default',
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    } as any;
+
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = false;
+    component.tiles = [activityCalendarTile, mapTile];
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const activitySection = component.mainGridSections.find(section => section.id === 'activityOverview');
+    const routesSection = component.mainGridSections.find(section => section.id === 'routesMaps');
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const activityBoard = nativeElement.querySelector(
+      '[aria-labelledby="dashboard-section-activityOverview"] app-dashboard-tile-board',
+    );
+    const routesBoard = nativeElement.querySelector(
+      '[aria-labelledby="dashboard-section-routesMaps"] app-dashboard-tile-board',
+    );
+
+    expect(activitySection?.hasActivityCalendar).toBe(true);
+    expect(routesSection?.hasActivityCalendar).toBe(false);
+    expect(activityBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
+    expect(routesBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(false);
   });
 
   it('renders the owner greeting from the first display-name part', () => {

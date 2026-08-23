@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DashboardTileBoardComponent } from './dashboard-tile-board.component';
 
 describe('DashboardTileBoardComponent', () => {
@@ -39,5 +41,16 @@ describe('DashboardTileBoardComponent', () => {
     expect(host.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('1');
     expect(host.style.getPropertyValue('--dashboard-tile-board-row-height')).toBe('150px');
     expect(host.style.getPropertyValue('--dashboard-tile-cell-inline-divider')).toBe('0');
+  });
+
+  it('reserves a full-height mobile row only for activity-calendar boards', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/summaries/dashboard-tile-board/dashboard-tile-board.component.css'),
+      'utf8',
+    );
+
+    expect(styles).toContain('@media (max-width: 860px)');
+    expect(styles).toContain(':host(.dashboard-tile-board--activity-calendar)');
+    expect(styles).toContain('grid-auto-rows: max(var(--dashboard-tile-board-row-height, 150px), 360px);');
   });
 });

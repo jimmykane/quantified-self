@@ -166,6 +166,7 @@
         [cdkDropListData]="section.tiles"
         [cdkDropListDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
         [class.desktop-tile-drop-list]="desktopTileDragEnabled && section.tiles.length > 1"
+        [class.dashboard-tile-board--activity-calendar]="section.hasActivityCalendar"
         [cols]="section.columns"
         [rowHeight]="rowHeight"
         (cdkDropListDropped)="onTilesDrop($event, section.id)">
