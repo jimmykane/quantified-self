@@ -12,7 +12,10 @@ import {
 } from '../service-connection-meta';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
-import { WahooReconnectRequiredError } from './refresh-recovery';
+import {
+  WahooCredentialSupersededError,
+  WahooReconnectRequiredError,
+} from './refresh-recovery';
 import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
@@ -147,7 +150,11 @@ async function readWahooActiveAccountGuardInTransaction(
   );
   if ((activeCredentialGeneration && activeCredentialGeneration !== credential.credentialGeneration)
     || (expectedAccessToken !== undefined && credential.accessToken !== expectedAccessToken)) {
-    throw new HttpsError('unauthenticated', 'The selected Wahoo credential changed before data could be sent.');
+    // A normal coordinated refresh preserves the account and its OAuth
+    // credential generation while changing the access token. Do not collapse
+    // that race into a permanent authentication failure: callers must retry
+    // with the current token before issuing provider I/O.
+    throw new WahooCredentialSupersededError();
   }
   return {
     providerUserId,
@@ -161,7 +168,8 @@ async function readWahooActiveAccountGuardInTransaction(
  * Captures the Wahoo account and optional credential in one Firestore read
  * transaction. Reusing the returned guard immediately before provider work
  * prevents a disconnect/reconnect or rotating refresh from switching the
- * account underneath an already prepared operation.
+ * account underneath an already prepared operation. Credential-only changes
+ * are surfaced as retryable supersession, never as a disconnected account.
  */
 export async function captureWahooActiveAccountGuard(
   userID: string,
@@ -188,11 +196,14 @@ export async function assertWahooActiveAccountGuardCurrent(
     expected.credential?.accessToken,
   );
   if (current.connectionStateGeneration !== expected.connectionStateGeneration
-    || current.activeCredentialGeneration !== expected.activeCredentialGeneration
+  ) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+  }
+  if (current.activeCredentialGeneration !== expected.activeCredentialGeneration
     || (expected.credential !== null
       && (current.credential === null
         || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {
-    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+    throw new WahooCredentialSupersededError();
   }
 }
 
@@ -209,11 +220,14 @@ export async function assertWahooActiveAccountGuardCurrentInTransaction(
     expected.credential?.accessToken,
   );
   if (current.connectionStateGeneration !== expected.connectionStateGeneration
-    || current.activeCredentialGeneration !== expected.activeCredentialGeneration
+  ) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+  }
+  if (current.activeCredentialGeneration !== expected.activeCredentialGeneration
     || (expected.credential !== null
       && (current.credential === null
         || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {
-    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+    throw new WahooCredentialSupersededError();
   }
 }
 

@@ -1,11 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
+interface MockTokenSnapshot {
+  exists: boolean;
+  id: string;
+  ref: { path: string };
+  data: () => Record<string, unknown>;
+}
+
+interface MockTokenReference {
+  id: string;
+  path: string;
+  get: ReturnType<typeof vi.fn>;
+}
+
+interface MockTransaction {
+  get: ReturnType<typeof vi.fn>;
+}
+
 const mocks = vi.hoisted(() => ({
   getServiceConnectionMeta: vi.fn(),
   pinServiceConnectionProviderUserIdIfUnset: vi.fn(),
-  tokenDocs: new Map<string, any>(),
-  tokenRefs: new Map<string, any>(),
+  tokenDocs: new Map<string, MockTokenSnapshot>(),
+  tokenRefs: new Map<string, MockTokenReference>(),
   transactionMeta: null as Record<string, unknown> | null,
   tokenRootData: {} as Record<string, unknown>,
   runTransaction: vi.fn(),
@@ -13,7 +30,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('firebase-admin', () => ({
   firestore: () => {
-    const getTokenRef = (id: string) => {
+    const getTokenRef = (id: string): MockTokenReference => {
       if (!mocks.tokenRefs.has(id)) {
         mocks.tokenRefs.set(id, {
           id,
@@ -77,7 +94,7 @@ function tokenSnapshot(
   id: string,
   dateRefreshed: number,
   overrides: Record<string, unknown> = {},
-) {
+): MockTokenSnapshot {
   const data = {
     wahooUserID: id,
     dateCreated: dateRefreshed - 1,
@@ -99,7 +116,7 @@ describe('Wahoo active account resolution', () => {
     mocks.tokenRefs.clear();
     mocks.transactionMeta = null;
     mocks.tokenRootData = {};
-    mocks.runTransaction.mockImplementation(async (callback: any) => callback({
+    mocks.runTransaction.mockImplementation(async (callback: (transaction: MockTransaction) => unknown) => callback({
       get: vi.fn(async (target: { get: () => Promise<unknown> }) => target.get()),
     }));
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
@@ -183,11 +200,14 @@ describe('Wahoo active account resolution', () => {
     await expect(assertWahooOAuthAccountCompatible('user-1', 'account-b')).resolves.toBeUndefined();
   });
 
-  it('rejects a captured account guard after the same token document is replaced', async () => {
+  it('returns a retryable supersession when a healthy refresh rotates the selected credential', async () => {
     mocks.transactionMeta = {
       connectionState: 'connected',
       connectionStateGeneration: 'connection-a',
       providerUserId: 'account-a',
+    };
+    mocks.tokenRootData = {
+      activeOAuthCredentialGeneration: 'credential-a',
     };
     mocks.tokenDocs.set('account-a', tokenSnapshot('account-a', 100, {
       accessToken: 'access-a',
@@ -201,11 +221,12 @@ describe('Wahoo active account resolution', () => {
       accessToken: 'access-b',
       refreshToken: 'refresh-b',
       expiresAt: 456,
-      tokenCredentialGeneration: 'credential-b',
+      tokenCredentialGeneration: 'credential-a',
     }));
 
     await expect(assertWahooActiveAccountGuardCurrent('user-1', guard)).rejects.toMatchObject({
-      code: 'unauthenticated',
+      name: 'WahooCredentialSupersededError',
+      code: 'unavailable',
     });
   });
 

@@ -292,13 +292,23 @@ async function releaseDeferredQueueDocument(
             }
 
             if (deferredReason === QUEUE_DEFERRED_REASONS.ServiceReconnectRequired) {
-                const serviceMetaSnapshot = await transaction.get(
-                    db.collection('users').doc(userID).collection('meta').doc(serviceName),
-                );
+                // Metadata can remain Connected briefly after explicit
+                // disconnect commits its authoritative token-root fence. Read
+                // both in this row transaction so reconnect repair never
+                // reopens work for a service whose disconnect already won.
+                const [serviceMetaSnapshot, tokenRootSnapshot] = await Promise.all([
+                    transaction.get(
+                        db.collection('users').doc(userID).collection('meta').doc(serviceName),
+                    ),
+                    transaction.get(getServiceTokenRootDocumentRef(userID, serviceName)),
+                ]);
+                const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
                 if (
                     serviceMetaSnapshot.data()?.connectionState !== SERVICE_CONNECTION_STATES.Connected
                     || (expectedGeneration
                         && serviceMetaSnapshot.data()?.connectionStateGeneration !== expectedGeneration)
+                    || isServiceDisconnectPendingData(tokenRootData)
+                    || getServiceDisconnectOperationGeneration(tokenRootData) !== null
                 ) {
                     return false;
                 }

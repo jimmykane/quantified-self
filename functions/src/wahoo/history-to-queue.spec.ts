@@ -5,7 +5,7 @@ const firestoreMocks = vi.hoisted(() => {
   const transactionGet = vi.fn();
   const transactionSet = vi.fn();
   const transaction = { get: transactionGet, set: transactionSet };
-  const runTransaction = vi.fn(async (runner: any) => runner(transaction));
+  const runTransaction = vi.fn(async (runner: (value: typeof transaction) => unknown) => runner(transaction));
   const firestore = {
     collection: vi.fn(() => ({
       doc: vi.fn(() => ({
@@ -57,6 +57,13 @@ vi.mock('./refresh-recovery', () => ({
   ),
   isWahooRefreshBackoffError: (error: unknown) => (
     error instanceof Error && error.name === 'WahooRefreshBackoffError'
+  ),
+  isWahooRefreshContentionError: (error: unknown) => (
+    error instanceof Error && (
+      error.name === 'TokenRefreshInProgressError'
+      || error.name === 'TokenRefreshSupersededError'
+      || error.name === 'WahooCredentialSupersededError'
+    )
   ),
 }));
 vi.mock('../tokens', () => ({ getTokenData: historyMocks.getTokenData }));
@@ -165,6 +172,19 @@ describe('toWahooHistoryCallableError', () => {
     expect(toWahooHistoryCallableError(terminalError)).toMatchObject({
       code: 'unauthenticated',
       message: 'Reconnect Wahoo before importing history.',
+    });
+  });
+
+  it.each([
+    'TokenRefreshInProgressError',
+    'TokenRefreshSupersededError',
+    'WahooCredentialSupersededError',
+  ])('maps %s to an unavailable history callable error', (name) => {
+    const error = Object.assign(new Error('refresh contention'), { name });
+
+    expect(toWahooHistoryCallableError(error)).toMatchObject({
+      code: 'unavailable',
+      message: 'Wahoo credentials are being refreshed. Please retry shortly.',
     });
   });
 });

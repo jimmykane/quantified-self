@@ -97,6 +97,19 @@ async function restoreRoutesAndReleaseDeferredWork(
     expectedConnectionStateGeneration: connectionStateGeneration,
     expectedDisconnectLifecycleGuard: disconnectLifecycleGuard,
   };
+  // Wahoo reconnect recovery has a second, independently retryable queue
+  // release stage. Once routes for this exact connection generation have
+  // already been restored, that later repair must continue to the Wahoo queue
+  // release instead of treating the cleared route marker as a supersession.
+  if (await isRouteRestoreCompleteForLifecycle(
+    userID,
+    serviceName,
+    connectionStateGeneration,
+    requireServiceConnected,
+    disconnectLifecycleGuard,
+  )) {
+    return;
+  }
   // Keep routeRestorePending durable until every parked row has been either
   // reopened or finalized against the restored settings. Any failure before
   // the final transaction therefore remains visible to the repair scheduler.

@@ -114,13 +114,14 @@ import {
   beginPendingDisconnectQueueReleaseRepair,
   retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
+  retryWahooReconnectQueueRelease,
   setServiceConnectionProviderUserId,
   pinServiceConnectionProviderUserIdIfUnset,
 } from './service-connection-meta';
 
 function getCurrentWahooRefreshClaim() {
   return {
-    tokenRef: hoisted.refreshTokenRef as any,
+    tokenRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
     leaseOwner: 'lease-1',
     credential: {
       accessToken: 'access-1',
@@ -339,7 +340,7 @@ describe('service-connection-meta', () => {
       123,
       {
         providerUserId: 'wahoo-account-a',
-        requireMissingToken: hoisted.refreshTokenRef as any,
+        requireMissingToken: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
       },
     )).resolves.toBe(true);
 
@@ -360,7 +361,7 @@ describe('service-connection-meta', () => {
       123,
       {
         providerUserId: 'wahoo-account-a',
-        requireMissingToken: hoisted.refreshTokenRef as any,
+        requireMissingToken: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
       },
     )).resolves.toBe(false);
 
@@ -391,7 +392,7 @@ describe('service-connection-meta', () => {
       123,
       {
         expectedTokenRootCredentialGeneration: {
-          documentRef: tokenRoot as any,
+          documentRef: tokenRoot as unknown as admin.firestore.DocumentReference,
           fieldName: 'activeOAuthCredentialGeneration',
           expectedGeneration: 'failed-generation',
         },
@@ -496,7 +497,7 @@ describe('service-connection-meta', () => {
       ServiceNames.WahooAPI,
       'provider-1',
       {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: 'old-generation',
       },
@@ -519,7 +520,7 @@ describe('service-connection-meta', () => {
       ServiceNames.WahooAPI,
       'provider-1',
       {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: 'oauth-generation',
       },
@@ -691,6 +692,28 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('continues a Wahoo reconnect queue release after routes were already restored', async () => {
+    hoisted.releaseQueueItemsDeferredForReconnectRequired
+      .mockRejectedValueOnce(new Error('one queue write failed'));
+
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      wahooReconnectReleasePending: true,
+    }));
+    expect(hoisted.metaData).not.toHaveProperty('routeRestorePending');
+
+    await expect(retryWahooReconnectQueueRelease('user-1')).resolves.toBe(true);
+
+    // The route stage cleared its marker successfully during the OAuth
+    // callback. The repair resumes the second Wahoo queue-release stage,
+    // rather than treating that completed route stage as stale.
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).toHaveBeenCalledTimes(2);
+    expect(hoisted.releaseQueueItemsDeferredForRouteRestore).toHaveBeenCalledTimes(1);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledTimes(2);
+    expect(hoisted.metaData).not.toHaveProperty('wahooReconnectReleasePending');
+  });
+
   it('releases a bounded pending-disconnect remainder without restoring disconnect pending', async () => {
     hoisted.metaData = {
       connectionState: 'disconnect_pending',
@@ -816,7 +839,7 @@ describe('service-connection-meta', () => {
       'wahoo-account-a',
       {
         expectedProviderToken: {
-          documentRef: hoisted.refreshTokenRef as any,
+          documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
           providerUserIdField: 'wahooUserID',
         },
       },
@@ -837,7 +860,7 @@ describe('service-connection-meta', () => {
       'wahoo-account-a',
       {
         expectedProviderToken: {
-          documentRef: hoisted.refreshTokenRef as any,
+          documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
           providerUserIdField: 'wahooUserID',
         },
       },
@@ -898,7 +921,7 @@ describe('service-connection-meta', () => {
 
     await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
       expectedTokenCredentialGeneration: {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: null,
       },
@@ -912,7 +935,7 @@ describe('service-connection-meta', () => {
 
     await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
       expectedTokenCredentialGeneration: {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: 'credential-generation-a',
       },
@@ -931,7 +954,7 @@ describe('service-connection-meta', () => {
     await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
       expectedPendingDisconnectGeneration: 'disconnect-generation-a',
       expectedTokenCredentialGeneration: {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: 'credential-generation-a',
       },
@@ -953,7 +976,7 @@ describe('service-connection-meta', () => {
     await expect(clearServiceConnectionState('user-1', ServiceNames.SuuntoApp, {
       expectedPendingDisconnectGeneration: 'disconnect-generation-a',
       expectedTokenCredentialGeneration: {
-        documentRef: hoisted.refreshTokenRef as any,
+        documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
         fieldName: 'activeOAuthCredentialGeneration',
         expectedGeneration: 'credential-generation-a',
       },

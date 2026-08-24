@@ -98,6 +98,13 @@ vi.mock('./refresh-recovery', () => ({
   assertWahooConnectionAvailable: mocks.assertWahooConnectionAvailable,
   isWahooReconnectRequiredError: (error: unknown) => (error as { name?: string } | null)?.name === 'WahooReconnectRequiredError',
   isWahooRefreshBackoffError: () => false,
+  isWahooRefreshContentionError: (error: unknown) => (
+    error instanceof Error && (
+      error.name === 'TokenRefreshInProgressError'
+      || error.name === 'TokenRefreshSupersededError'
+      || error.name === 'WahooCredentialSupersededError'
+    )
+  ),
 }));
 vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: mocks.getUserDeletionGuardState,
@@ -317,6 +324,30 @@ describe('Wahoo activity uploads', () => {
       data: { file: Buffer.from('FIT').toString('base64') },
     } as never)).rejects.toMatchObject({ code: 'unauthenticated' });
     expect(mocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'TokenRefreshInProgressError',
+    'TokenRefreshSupersededError',
+  ])('maps %s to a retryable Wahoo activity callable error', async (name) => {
+    mocks.getTokenData.mockRejectedValueOnce(Object.assign(new Error('refresh contention'), { name }));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('maps a credential rotation before Wahoo activity I/O to a retryable error', async () => {
+    mocks.assertWahooActiveAccountGuardCurrent.mockRejectedValueOnce(Object.assign(
+      new Error('credential rotated'),
+      { name: 'WahooCredentialSupersededError' },
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unavailable' });
+
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 

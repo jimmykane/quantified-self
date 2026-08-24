@@ -521,6 +521,23 @@ describe('pending disconnect queue release', () => {
         expect(activityUpdate).not.toHaveBeenCalled();
     });
 
+    it('does not reopen reconnect-parked work after an explicit Wahoo disconnect fences the token root', async () => {
+        setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
+        addDoc('wahooAPIAccessTokens', 'user-1', {
+            disconnectOperationGeneration: 'disconnect-operation-1',
+            disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+        });
+        const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {
+            userID: 'user-1',
+            deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+            deferredServiceName: ServiceNames.WahooAPI,
+        });
+
+        await expect(releaseQueueItemsDeferredForReconnectRequired('user-1', ServiceNames.WahooAPI)).resolves.toBe(0);
+
+        expect(activityUpdate).not.toHaveBeenCalled();
+    });
+
     it('does not recreate a deferred queue item when account deletion begins before the release transaction', async () => {
         setServiceConnectionState('user-1', ServiceNames.WahooAPI, 'connected');
         const activityUpdate = addDoc(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'activity-wahoo', {

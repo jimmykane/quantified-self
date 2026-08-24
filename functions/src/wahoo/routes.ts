@@ -44,6 +44,7 @@ import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicate
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import {
   assertWahooConnectionAvailable,
+  isWahooRefreshContentionError,
   isWahooReconnectRequiredError,
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
@@ -389,6 +390,9 @@ function toWahooRouteHttpsError(error: unknown): never {
     throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
       retryAt: error.retryAt,
     });
+  }
+  if (isWahooRefreshContentionError(error)) {
+    throw new HttpsError('unavailable', 'Wahoo credentials are being refreshed. Please retry shortly.');
   }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');

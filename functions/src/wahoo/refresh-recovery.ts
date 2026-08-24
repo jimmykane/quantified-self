@@ -46,6 +46,40 @@ export function isWahooReconnectRequiredError(error: unknown): error is WahooRec
     || (error instanceof Error && error.name === 'WahooReconnectRequiredError');
 }
 
+/**
+ * The selected Wahoo account is still current, but a coordinated refresh or
+ * OAuth replacement rotated its credential before an irreversible request.
+ * Callers must obtain the latest token rather than treating this as a user
+ * disconnect.
+ */
+export class WahooCredentialSupersededError extends Error {
+  readonly name = 'WahooCredentialSupersededError';
+  readonly code = 'unavailable';
+  readonly statusCode = 503;
+
+  constructor() {
+    super('The Wahoo credential rotated before the provider request could begin.');
+  }
+}
+
+export function isWahooCredentialSupersededError(error: unknown): error is WahooCredentialSupersededError {
+  return error instanceof WahooCredentialSupersededError
+    || (error instanceof Error && error.name === 'WahooCredentialSupersededError');
+}
+
+/**
+ * Token-refresh coordination is provider-neutral, so its errors are ordinary
+ * Error subclasses. Normalize the Wahoo-facing subset at every callable
+ * boundary instead of leaking it as an INTERNAL Firebase error.
+ */
+export function isWahooRefreshContentionError(error: unknown): boolean {
+  return isWahooCredentialSupersededError(error)
+    || (error instanceof Error && (
+      error.name === 'TokenRefreshInProgressError'
+      || error.name === 'TokenRefreshSupersededError'
+    ));
+}
+
 export function isOpaqueWahooRefreshFailure(
   failure: Pick<RefreshFailureDetails, 'statusCode' | 'isInvalidGrant' | 'providerErrorCode'>,
 ): boolean {

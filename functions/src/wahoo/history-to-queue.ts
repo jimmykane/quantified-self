@@ -31,6 +31,7 @@ import {
 } from './account';
 import {
   assertWahooConnectionAvailable,
+  isWahooRefreshContentionError,
   isWahooReconnectRequiredError,
   isWahooRefreshBackoffError,
 } from './refresh-recovery';
@@ -66,6 +67,9 @@ export function toWahooHistoryCallableError(error: unknown): HttpsError | null {
       'Wahoo token refresh is temporarily paused. Please retry later.',
       { retryAt: error.retryAt },
     );
+  }
+  if (isWahooRefreshContentionError(error)) {
+    return new HttpsError('unavailable', 'Wahoo credentials are being refreshed. Please retry shortly.');
   }
   return null;
 }
