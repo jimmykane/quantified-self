@@ -1,6 +1,12 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { SERVICE_CONNECTION_STATES } from '../../shared/service-connection';
 import type { ServiceDisconnectPendingMetaInput } from './service-connection-meta';
+import {
+  OAUTH_FLOW_GENERATION_FIELD,
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+  getActiveServiceDisconnectOperationGeneration,
+} from './service-token-store';
+import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from './token-refresh-coordinator';
 
 export const SERVICE_DISCONNECT_PENDING_REASON = {
   SubscriptionEnforcement: 'subscription_enforcement',
@@ -8,13 +14,58 @@ export const SERVICE_DISCONNECT_PENDING_REASON = {
 
 export type ServiceDisconnectPendingReason = typeof SERVICE_DISCONNECT_PENDING_REASON[keyof typeof SERVICE_DISCONNECT_PENDING_REASON];
 
+export interface ServiceDisconnectLifecycleGuard {
+  disconnectGeneration: string | null;
+  oauthCredentialGeneration: string | null;
+  oauthFlowGeneration: string | null;
+  disconnectOperationGeneration: string | null;
+}
+
+function normalizeGeneration(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || null;
+}
+
+export function getServiceDisconnectLifecycleGuardFromRootData(
+  data: Record<string, unknown> | null | undefined,
+): ServiceDisconnectLifecycleGuard {
+  return {
+    disconnectGeneration: isServiceDisconnectPendingData(data as PendingServiceDisconnectRootData | null)
+      ? normalizeGeneration(data?.disconnectGeneration)
+      : null,
+    oauthCredentialGeneration: normalizeGeneration(data?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]),
+    oauthFlowGeneration: normalizeGeneration(data?.[OAUTH_FLOW_GENERATION_FIELD]),
+    disconnectOperationGeneration: normalizeGeneration(data?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]),
+  };
+}
+
+export function doesRootMatchServiceDisconnectLifecycleGuard(
+  data: Record<string, unknown> | null | undefined,
+  guard: ServiceDisconnectLifecycleGuard | undefined,
+): boolean {
+  if (!guard) return true;
+  const current = getServiceDisconnectLifecycleGuardFromRootData(data);
+  return current.disconnectGeneration === (guard.disconnectGeneration || null)
+    && current.oauthCredentialGeneration === (guard.oauthCredentialGeneration || null)
+    && current.oauthFlowGeneration === (guard.oauthFlowGeneration || null)
+    && current.disconnectOperationGeneration === (guard.disconnectOperationGeneration || null)
+    // An explicit-disconnect cleanup must not resume after its bounded lease
+    // has expired. A later OAuth or disconnect request may already have won.
+    && (!guard.disconnectOperationGeneration
+      || getActiveServiceDisconnectOperationGeneration(data) === guard.disconnectOperationGeneration);
+}
+
 export interface PendingServiceDisconnectFailure {
   tokenID: string;
   statusCode: number | null;
   errorMessage: string;
+  lifecycleGuard?: ServiceDisconnectLifecycleGuard;
 }
 
 export interface PendingServiceDisconnectRootData {
+  disconnectOperationGeneration?: string | null;
+  disconnectOperationLeaseExpiresAt?: number | null;
+  disconnectGeneration?: string | null;
   disconnectState?: string | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
@@ -107,6 +158,7 @@ export function buildPendingDisconnectMetaInputFromRootData(
   nowMs = Date.now(),
 ): ServiceDisconnectPendingMetaInput {
   return {
+    generation: `${data.disconnectGeneration || ''}`.trim(),
     reason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     attemptCount: typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0,
     nextAttemptAt: data.disconnectNextAttemptAt || null,
@@ -125,6 +177,7 @@ export function buildRestoredPendingDisconnectData(
   const attemptCount = typeof data.disconnectAttemptCount === 'number' ? data.disconnectAttemptCount : 0;
   const manualReviewRequired = data.disconnectManualReviewRequired === true;
   return {
+    disconnectGeneration: data.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: data.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: attemptCount,
@@ -161,6 +214,7 @@ export function buildPendingDisconnectMarkState(
 
   return {
     rootData: {
+      disconnectGeneration: existing.disconnectGeneration || null,
       disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
       disconnectReason: reason,
       disconnectAttemptCount: attemptCount,
@@ -186,6 +240,7 @@ export function buildPendingDisconnectRecoveryRetryData(
   const attemptCount = 0;
 
   return {
+    disconnectGeneration: existing.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: attemptCount,
@@ -214,6 +269,7 @@ export function buildPendingDisconnectRetryFailureTransition(
   const retryableNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(nextAttemptCount, nowMs);
 
   const rootData: PendingServiceDisconnectRootData = {
+    disconnectGeneration: existing.disconnectGeneration || null,
     disconnectState: SERVICE_CONNECTION_STATES.DisconnectPending,
     disconnectReason: existing.disconnectReason || SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
     disconnectAttemptCount: nextAttemptCount,

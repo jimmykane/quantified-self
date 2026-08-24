@@ -39,6 +39,14 @@ export class EventJSONSanitizer {
         if (sanitizedJson.events) {
             sanitizedJson.events = EventJSONSanitizer.sanitizeEvents(sanitizedJson.events, unknownTypes, issues, 'events');
         }
+        if (sanitizedJson.laps) {
+            sanitizedJson.laps = EventJSONSanitizer.sanitizeLapStats(
+                sanitizedJson.laps,
+                unknownTypes,
+                issues,
+                'laps'
+            );
+        }
 
         // 2. Sanitize Activities
         if (sanitizedJson.activities && Array.isArray(sanitizedJson.activities)) {
@@ -52,6 +60,15 @@ export class EventJSONSanitizer {
                         unknownTypes,
                         issues,
                         `activities[${activityIndex}].stats`
+                    );
+                }
+
+                if (sanitizedActivity.laps) {
+                    sanitizedActivity.laps = EventJSONSanitizer.sanitizeLapStats(
+                        sanitizedActivity.laps,
+                        unknownTypes,
+                        issues,
+                        `activities[${activityIndex}].laps`
                     );
                 }
 
@@ -80,6 +97,38 @@ export class EventJSONSanitizer {
         }
 
         return { sanitizedJson, unknownTypes: Array.from(unknownTypes), issues };
+    }
+
+    private static sanitizeLapStats(
+        laps: unknown,
+        unknownTypes: Set<string>,
+        issues: EventJSONSanitizerIssue[],
+        pathPrefix: string
+    ): unknown {
+        if (!Array.isArray(laps)) {
+            return laps;
+        }
+
+        return laps.map((lap, lapIndex) => {
+            if (!EventJSONSanitizer.isRecord(lap)) {
+                return lap;
+            }
+
+            const sanitizedLap = { ...lap };
+            if (sanitizedLap.stats) {
+                sanitizedLap.stats = EventJSONSanitizer.sanitizeStats(
+                    sanitizedLap.stats,
+                    unknownTypes,
+                    issues,
+                    `${pathPrefix}[${lapIndex}].stats`
+                );
+            }
+            return sanitizedLap;
+        });
+    }
+
+    private static isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
     }
 
     private static sanitizeStats(stats: any, unknownTypes: Set<string>, issues: EventJSONSanitizerIssue[], pathPrefix: string): any {

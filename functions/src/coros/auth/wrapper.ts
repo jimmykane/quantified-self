@@ -7,6 +7,8 @@ import {
   disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
+  isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
@@ -102,10 +104,16 @@ export const requestAndSetCOROSAPIAccessToken = functions
     }
 
     try {
-      await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+      await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
     } catch (e: any) {
       logger.error(e);
       const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+      if (isOAuthFlowContextMismatchError(e)) {
+        throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
+      }
+      if (status === 403) {
+        throw new functions.https.HttpsError('permission-denied', 'COROS rejected the authorization request');
+      }
       if (status === 502) {
         throw new functions.https.HttpsError('unavailable', 'COROS service is temporarily unavailable');
       }
@@ -142,7 +150,11 @@ export const deauthorizeCOROSAPI = functions
 
     try {
       await disconnectServiceForUser(userID, SERVICE_NAME);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      if (isServiceDisconnectInProgressError(e)) {
+        logger.warn(`COROS disconnect is waiting for another connection operation for user ${userID}.`);
+        throw new functions.https.HttpsError('unavailable', e.message, e.details);
+      }
       logger.error(e);
       throw new functions.https.HttpsError('internal', 'Deauthorization Error');
     }

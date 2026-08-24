@@ -12,9 +12,29 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('documents the supported activity catalog without overpromising source data', () => {
+    const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
+
+    expect(supportedActivitiesSection?.content).toContain('[Supported activity types page](/features/supported-activities)');
+    expect(supportedActivitiesSection?.content).toContain('## What you see when you open an activity');
+    expect(supportedActivitiesSection?.content).toContain('We do not add missing information.');
+    expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when the data includes individual pool lengths');
+    expect(supportedActivitiesSection?.content).toContain('Jumps** when the activity includes jump events');
+    expect(supportedActivitiesSection?.content).toContain('Boating is listed in Motorized but can use sailing-oriented charts');
+    expect(supportedActivitiesSection?.content).toContain('Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts');
+    expect(supportedActivitiesSection?.content).toContain('We do not estimate or fill in missing dive data.');
+    expect(supportedActivitiesSection?.links).toContainEqual({
+      label: 'Supported activity types',
+      icon: 'category',
+      kind: 'route',
+      target: '/features/supported-activities',
+    });
+  });
+
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'supported-activities',
       'activity-calendar',
       'training-analysis',
       'ai-insights',
@@ -26,8 +46,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define nine unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(9);
+  it('should define ten unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(10);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -179,6 +199,15 @@ describe('help.content', () => {
 
     expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
+  });
+
+  it('should document My Tracks trip sorting and the inferred Home entry', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('inferred **Home** area first when available');
+    expect(gettingStartedSection?.content).toContain('lists only trackable types in the selected date range');
+    expect(gettingStartedSection?.content).toContain('newest-first or oldest-first');
+    expect(gettingStartedSection?.content).toContain('choice is saved');
   });
 
   it('should document dashboard manager curated/custom/map categories', () => {
@@ -510,10 +539,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
     expect(gettingStartedSection?.content).toContain('**Gas & Tanks**');
     expect(gettingStartedSection?.content).toContain('tank pressure updates');
-    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities retain those records with the activity');
-    expect(gettingStartedSection?.content).toContain('older activities can display them while their original source remains available');
-    expect(gettingStartedSection?.content).toContain('does not invent a gas mixture name or nitrogen value');
-    expect(gettingStartedSection?.content).toContain('associate a gas with a tank');
+    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities keep those details with the activity');
+    expect(gettingStartedSection?.content).toContain('older activities can still show them while the original file is available');
+    expect(gettingStartedSection?.content).toContain('does not make up a gas mixture name or nitrogen value');
+    expect(gettingStartedSection?.content).toContain('match a gas to a tank');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');
     expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');
@@ -859,6 +888,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('authorize the same Wahoo account');
+    expect(serviceConnectionsSection?.content).toContain('disconnect the retained account first');
     expect(serviceConnectionsSection?.content).toContain('Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin, Wahoo, or COROS');
     expect(serviceConnectionsSection?.content).toContain('COROS activity upload, activity delivery, and route delivery are available to all eligible connected Pro users');
     expect(serviceConnectionsSection?.content).not.toMatch(/COROS[^.]*\bpilot\b|\bpilot\b[^.]*COROS/i);
@@ -1003,6 +1034,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('checks that same upload instead of sending the FIT again');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo rejects repeated token refreshes');
+    expect(serviceConnectionsSection?.content).toContain('keeps unaccepted automatic activity and saved-route deliveries parked');
+    expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');

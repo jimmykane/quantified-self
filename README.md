@@ -220,6 +220,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
+- [Supported activities and metrics catalog](docs/supported-activities.md)
 - [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [Read-only MCP server](docs/mcp-server.md)

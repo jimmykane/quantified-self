@@ -5,6 +5,29 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "userID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredReason",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredServiceName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "activitySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "processed",
           "order": "ASCENDING"
         },
@@ -705,6 +728,29 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "userID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredReason",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferredServiceName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routeDeliverySyncQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "processed",
           "order": "ASCENDING"
         },
@@ -1353,6 +1399,39 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "wahooReconnectReleasePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "routeRestorePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "pendingDisconnectQueueReleasePending",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
     {
       "collectionGroup": "activitySyncQueue",
       "fieldPath": "expireAt",

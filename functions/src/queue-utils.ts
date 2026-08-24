@@ -1,6 +1,8 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueItemInterface } from './queue/queue-item.interface';
 
 import { MAX_RETRY_COUNT } from './shared/queue-config';
@@ -18,6 +20,9 @@ import {
     isCurrentQueueRevision,
     normalizeQueueRevision,
 } from './queue/revision-identity';
+import { isReconnectRequiredServiceConnection } from '../../shared/service-connection';
+import { getServiceTokenRootDocumentRef } from './service-token-store';
+import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
 
 
 export enum QueueResult {
@@ -35,7 +40,9 @@ export const QUEUE_SKIPPED_REASONS = {
 } as const;
 
 export const QUEUE_DEFERRED_REASONS = {
-    ServiceDisconnectPending: 'service_disconnect_pending',
+  ServiceDisconnectPending: 'service_disconnect_pending',
+  ServiceReconnectRequired: 'service_reconnect_required',
+  RouteRestorePending: 'route_restore_pending',
 } as const;
 
 export type QueueSkippedReason = typeof QUEUE_SKIPPED_REASONS[keyof typeof QUEUE_SKIPPED_REASONS] | string;
@@ -102,7 +109,13 @@ export function isProviderOperationInFlightLeaseActive(
 export function isPendingDisconnectQueueItemDeferred(queueItem: {
     deferredReason?: unknown;
 } | null | undefined): boolean {
-    return queueItem?.deferredReason === QUEUE_DEFERRED_REASONS.ServiceDisconnectPending;
+    return isQueueItemDeferredForReason(queueItem, QUEUE_DEFERRED_REASONS.ServiceDisconnectPending);
+}
+
+export function isQueueItemDeferredForReason(queueItem: {
+    deferredReason?: unknown;
+} | null | undefined, deferredReason: QueueDeferredReason): boolean {
+    return queueItem?.deferredReason === deferredReason;
 }
 
 function buildFailedQueueItem(
@@ -353,7 +366,18 @@ export interface DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams {
     phase: string;
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
+    /** The authoritative token root whose pending generation authorizes parking. */
+    serviceName: ServiceNames;
 }
+
+export interface DeferQueueItemForReconnectRequiredIfCurrentUserActiveParams
+    extends DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams {
+    /** The meta document whose reconnect-required state authorizes parking. */
+    serviceName: ServiceNames;
+}
+
+const RECONNECT_REQUIRED_ALREADY_RESOLVED = 'reconnect_required_already_resolved';
+const PENDING_DISCONNECT_ALREADY_RESOLVED = 'pending_disconnect_already_resolved';
 
 /**
  * Defers only the expected live queue revision. This prevents a provider
@@ -362,23 +386,200 @@ export interface DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams {
 export async function deferQueueItemForPendingDisconnectIfCurrentUserActive(
     params: DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    return deferQueueItemForServiceStateIfCurrentUserActive(params);
+}
+
+/**
+ * Keeps queued work durable while an account needs a new authorization. The
+ * caller must provide the same current-revision predicate used for ordinary
+ * provider transitions so an older worker cannot park newer work.
+ */
+export async function deferQueueItemForReconnectRequiredIfCurrentUserActive(
+    params: DeferQueueItemForReconnectRequiredIfCurrentUserActiveParams,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const nowMs = Date.now();
+    const queueItemRef = params.queueItem.ref;
+    if (!queueItemRef) {
+        throw new Error(`No document reference supplied for queue item ${params.queueItem.id}`);
+    }
+
+    const db = admin.firestore();
+    const connectionMetaRef = db
+        .collection('users')
+        .doc(params.userID)
+        .collection('meta')
+        .doc(params.serviceName);
+
     try {
-        const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
-            ...params,
-            actionDescription: 'pending-disconnect deferral',
-        }, transaction => {
-            transaction.update(params.queueItem.ref!, {
+        const transitionResult = await db.runTransaction(async transaction => {
+            let deletionGuard;
+            try {
+                deletionGuard = await getUserDeletionGuardStateInTransaction(
+                    db,
+                    transaction,
+                    params.userID,
+                );
+            } catch (error) {
+                throw new UserDeletionGuardReadError(params.userID, params.phase, error);
+            }
+            if (deletionGuard.shouldSkip) {
+                return QueueItemUserGuardedUpdateResult.SkippedDeletedUser;
+            }
+
+            const [queueItemSnapshot, connectionMetaSnapshot] = await Promise.all([
+                transaction.get(queueItemRef),
+                transaction.get(connectionMetaRef),
+            ]);
+            const currentQueueItem = queueItemSnapshot.exists
+                ? queueItemSnapshot.data() as Record<string, unknown>
+                : null;
+            if (!currentQueueItem || !params.isCurrent(currentQueueItem)) {
+                return QueueItemUserGuardedUpdateResult.NotCurrent;
+            }
+
+            if (!isReconnectRequiredServiceConnection(connectionMetaSnapshot.data())) {
+                // OAuth completed after this worker observed the old failure.
+                // Re-open the unchanged revision for the scheduler instead of
+                // stranding it behind a reconnect state that is now resolved.
+                transaction.update(queueItemRef, {
+                    processed: false,
+                    processedAt: FieldValue.delete(),
+                    resultStatus: FieldValue.delete(),
+                    deferredReason: FieldValue.delete(),
+                    deferredContext: FieldValue.delete(),
+                    serviceReconnectRequiredDeferredAt: FieldValue.delete(),
+                    deferredServiceName: FieldValue.delete(),
+                    dispatchedToCloudTask: null,
+                    providerOperationStartedAt: null,
+                    expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+                    ...clearRevisionProcessingLeaseUpdate(),
+                });
+                return RECONNECT_REQUIRED_ALREADY_RESOLVED;
+            }
+
+            transaction.update(queueItemRef, {
+                ...params.additionalData,
+                processed: true,
+                resultStatus: 'deferred',
+                deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+                deferredContext: 'SERVICE_RECONNECT_REQUIRED',
+                serviceReconnectRequiredDeferredAt: nowMs,
+                dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+                providerOperationStartedAt: null,
+                expireAt: getExpireAtTimestamp(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS),
+                ...clearRevisionProcessingLeaseUpdate(),
+            });
+            return QueueItemUserGuardedUpdateResult.Updated;
+        });
+
+        if (transitionResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+            await cleanupQueueItemAfterUserDeletionGuard({
+                queueItemDocument: queueItemRef,
+                queueItemId: params.queueItem.id,
+                logPrefix: params.logPrefix,
+                actionDescription: 'reconnect-required deferral',
+            });
+            return QueueResult.Processed;
+        }
+        if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
+            logger.info(
+                `[${params.logPrefix}] Skipping stale reconnect-required deferral for queue item ${params.queueItem.id}; its live state has already advanced or been replaced.`,
+            );
+            return QueueResult.Processed;
+        }
+        if (transitionResult === RECONNECT_REQUIRED_ALREADY_RESOLVED) {
+            logger.info(
+                `[${params.logPrefix}] Re-opened queue item ${params.queueItem.id} because ${params.serviceName} reconnected before it could be parked.`,
+            );
+            return QueueResult.Processed;
+        }
+
+        logger.info(`Deferred queue item ${params.queueItem.id} because service state is service_reconnect_required.`);
+        return QueueResult.Deferred;
+    } catch (error) {
+        logger.error(new Error(`Could not update guarded reconnect-required state for ${params.queueItem.id}: ${error}`));
+        return QueueResult.Failed;
+    }
+}
+
+async function deferQueueItemForServiceStateIfCurrentUserActive(
+    params: DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    const nowMs = Date.now();
+    const proposedGeneration = crypto.randomUUID();
+    const queueItemRef = params.queueItem.ref;
+    if (!queueItemRef) {
+        throw new Error(`No document reference supplied for queue item ${params.queueItem.id}`);
+    }
+    const db = admin.firestore();
+    const tokenRootRef = getServiceTokenRootDocumentRef(params.userID, params.serviceName);
+    try {
+        const transitionResult = await db.runTransaction(async transaction => {
+            let deletionGuard;
+            try {
+                deletionGuard = await getUserDeletionGuardStateInTransaction(
+                    db,
+                    transaction,
+                    params.userID,
+                );
+            } catch (error) {
+                throw new UserDeletionGuardReadError(params.userID, params.phase, error);
+            }
+            if (deletionGuard.shouldSkip) {
+                return QueueItemUserGuardedUpdateResult.SkippedDeletedUser;
+            }
+
+            const [queueItemSnapshot, pendingRootSnapshot] = await Promise.all([
+                transaction.get(queueItemRef),
+                transaction.get(tokenRootRef),
+            ]);
+            const currentQueueItem = queueItemSnapshot.exists
+                ? queueItemSnapshot.data() as Record<string, unknown>
+                : null;
+            if (!currentQueueItem || !params.isCurrent(currentQueueItem)) {
+                return QueueItemUserGuardedUpdateResult.NotCurrent;
+            }
+
+            const pendingRootData = pendingRootSnapshot.data() as Record<string, unknown> | undefined;
+            if (!isServiceDisconnectPendingData(pendingRootData)) {
+                transaction.update(queueItemRef, {
+                    processed: false,
+                    processedAt: FieldValue.delete(),
+                    resultStatus: FieldValue.delete(),
+                    deferredReason: FieldValue.delete(),
+                    deferredContext: FieldValue.delete(),
+                    deferredServiceName: FieldValue.delete(),
+                    serviceDisconnectPendingDeferredAt: FieldValue.delete(),
+                    serviceDisconnectPendingGeneration: FieldValue.delete(),
+                    dispatchedToCloudTask: null,
+                    providerOperationStartedAt: null,
+                    expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+                    ...clearRevisionProcessingLeaseUpdate(),
+                });
+                return PENDING_DISCONNECT_ALREADY_RESOLVED;
+            }
+
+            const generation = typeof pendingRootData?.disconnectGeneration === 'string'
+                && pendingRootData.disconnectGeneration.trim()
+                ? pendingRootData.disconnectGeneration.trim()
+                : proposedGeneration;
+            if (generation === proposedGeneration) {
+                transaction.set(tokenRootRef, { disconnectGeneration: generation }, { merge: true });
+            }
+            transaction.update(queueItemRef, {
                 ...params.additionalData,
                 processed: true,
                 resultStatus: 'deferred',
                 deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
                 deferredContext: 'SERVICE_DISCONNECT_PENDING',
                 serviceDisconnectPendingDeferredAt: nowMs,
+                serviceDisconnectPendingGeneration: generation,
                 dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+                providerOperationStartedAt: null,
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS),
                 ...clearRevisionProcessingLeaseUpdate(),
             });
+            return QueueItemUserGuardedUpdateResult.Updated;
         });
 
         if (transitionResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
@@ -393,11 +594,17 @@ export async function deferQueueItemForPendingDisconnectIfCurrentUserActive(
             );
             return QueueResult.Processed;
         }
+        if (transitionResult === PENDING_DISCONNECT_ALREADY_RESOLVED) {
+            logger.info(
+                `[${params.logPrefix}] Re-opened queue item ${params.queueItem.id} because ${params.serviceName} pending disconnect cleared before it could be parked.`,
+            );
+            return QueueResult.Processed;
+        }
 
-        logger.info(`Deferred queue item ${params.queueItem.id} because service disconnect is pending.`);
+        logger.info(`Deferred queue item ${params.queueItem.id} because service state is service_disconnect_pending.`);
         return QueueResult.Deferred;
     } catch (error) {
-        logger.error(new Error(`Could not update guarded deferred state for ${params.queueItem.id}: ${error}`));
+        logger.error(new Error(`Could not update guarded pending-disconnect state for ${params.queueItem.id}: ${error}`));
         return QueueResult.Failed;
     }
 }
@@ -666,47 +873,33 @@ export async function deferQueueItemForPendingDisconnect(
     queueItem: QueueItemInterface,
     bulkWriter?: admin.firestore.BulkWriter,
     additionalData: Record<string, unknown> = {},
+    context?: { userID: string; serviceName: ServiceNames },
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
 
     const revisionGuard = getQueueRevisionGuard(queueItem);
-    if (revisionGuard) {
-        return deferQueueItemForPendingDisconnectIfCurrentUserActive({
-            queueItem,
-            additionalData,
-            bulkWriter,
-            userID: revisionGuard.userID,
-            phase: 'workout_queue_revision_pending_disconnect',
-            logPrefix: 'WorkoutQueueRevision',
-            isCurrent: revisionGuard.isCurrent,
-        });
+    const resolvedContext = context && context.userID.trim()
+        ? context
+        : null;
+    if (!resolvedContext) {
+        throw new Error(`No pending-disconnect service context supplied for queue item ${queueItem.id}`);
     }
-
-    try {
-        const nowMs = Date.now();
-        const updateData = {
-            ...additionalData,
-            processed: true,
-            resultStatus: 'deferred',
-            deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
-            deferredContext: 'SERVICE_DISCONNECT_PENDING',
-            serviceDisconnectPendingDeferredAt: nowMs,
-            dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
-            expireAt: getExpireAtTimestamp(TTL_CONFIG.PENDING_DISCONNECT_QUEUE_ITEM_IN_DAYS),
-        };
-
-        if (bulkWriter) {
-            void bulkWriter.update(queueItem.ref, updateData);
-        } else {
-            await queueItem.ref.update(updateData);
-        }
-
-        logger.info(`Deferred queue item ${queueItem.id} because service disconnect is pending.`);
-        return QueueResult.Deferred;
-    } catch {
-        logger.error(new Error(`Could not update deferred state for ${queueItem.id}`));
-        return QueueResult.Failed;
-    }
+    const expectedDateCreated = Number(queueItem.dateCreated);
+    return deferQueueItemForPendingDisconnectIfCurrentUserActive({
+        queueItem,
+        additionalData,
+        bulkWriter,
+        userID: resolvedContext.userID,
+        serviceName: resolvedContext.serviceName,
+        phase: revisionGuard
+            ? 'workout_queue_revision_pending_disconnect'
+            : 'queue_pending_disconnect',
+        logPrefix: revisionGuard ? 'WorkoutQueueRevision' : 'QueuePendingDisconnect',
+        isCurrent: revisionGuard?.isCurrent || ((currentQueueItem) => (
+            currentQueueItem.processed !== true
+            && (!Number.isFinite(expectedDateCreated) || currentQueueItem.dateCreated === expectedDateCreated)
+        )),
+    });
 }

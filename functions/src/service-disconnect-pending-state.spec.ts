@@ -8,6 +8,7 @@ import {
   buildRestoredPendingDisconnectData,
   normalizePendingServiceDisconnectErrorMessage,
   sanitizePendingServiceDisconnectErrorMessage,
+  doesRootMatchServiceDisconnectLifecycleGuard,
   SERVICE_DISCONNECT_PENDING_REASON,
   type PendingServiceDisconnectRootData,
 } from './service-disconnect-pending-state';
@@ -36,6 +37,22 @@ function toMillis(value: Timestamp | null | undefined): number | null | undefine
 }
 
 describe('service-disconnect-pending-state', () => {
+  it('rejects an expired explicit-disconnect owner from later lifecycle writes', () => {
+    const guard = {
+      disconnectGeneration: null,
+      oauthCredentialGeneration: null,
+      oauthFlowGeneration: 'disconnect-flow-1',
+      disconnectOperationGeneration: 'disconnect-operation-1',
+    };
+    const rootData = {
+      oauthFlowGeneration: 'disconnect-flow-1',
+      disconnectOperationGeneration: 'disconnect-operation-1',
+      disconnectOperationLeaseExpiresAt: Date.now() - 1,
+    };
+
+    expect(doesRootMatchServiceDisconnectLifecycleGuard(rootData, guard)).toBe(false);
+  });
+
   it('builds first pending mark data', () => {
     const state = buildPendingDisconnectMarkState(
       {},
@@ -192,6 +209,7 @@ describe('service-disconnect-pending-state', () => {
     const retryExpiresAt = timestamp(NOW_MS + 2 * DAY_MS);
 
     expect(buildPendingDisconnectMetaInputFromRootData({
+      disconnectGeneration: 'pending-generation-1',
       disconnectReason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
       disconnectAttemptCount: 4,
       disconnectNextAttemptAt: nextAttemptAt,
@@ -201,6 +219,7 @@ describe('service-disconnect-pending-state', () => {
       disconnectLastErrorMessage: 'rate limited',
       disconnectManualReviewRequired: true,
     }, NOW_MS)).toEqual({
+      generation: 'pending-generation-1',
       reason: SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
       attemptCount: 4,
       nextAttemptAt,

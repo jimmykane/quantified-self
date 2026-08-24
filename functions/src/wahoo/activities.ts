@@ -14,7 +14,6 @@ import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import {
   SERVICE_NAME,
-  WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_WORKOUTS_WRITE_SCOPE,
 } from './constants';
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
@@ -31,11 +30,27 @@ import {
   ProviderOperationError,
 } from '../shared/provider-operation-error';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import {
+  assertWahooConnectionAvailable,
+  isWahooRefreshContentionError,
+  isWahooReconnectRequiredError,
+  isWahooRefreshBackoffError,
+} from './refresh-recovery';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
   ActivitySyncOutboundFingerprintSkippedForDeletedUserError,
+  completeActivitySyncOutboundFingerprintProviderRequest,
   recordActivitySyncOutboundFingerprint,
+  markActivitySyncOutboundFingerprintProviderRequestStarted,
+  rollbackActivitySyncOutboundFingerprint,
+  type ActivitySyncOutboundFingerprintRecord,
 } from '../activity-sync/outbound-fingerprint';
+import {
+  assertWahooActiveAccountGuardCurrent,
+  captureWahooActiveAccountGuard,
+  getActiveWahooTokenSnapshot,
+  normalizeWahooUserID,
+} from './account';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -61,6 +76,12 @@ export interface WahooActivityUploadOptions {
   timeZone?: unknown;
   /** Runs after account validation and immediately before the provider request. */
   beforeProviderRequest?: () => Promise<void>;
+  /** Rolls back preparation only when no provider request was issued. */
+  onProviderRequestAborted?: () => Promise<void>;
+  /** Promote pre-request state; account ownership is revalidated before I/O. */
+  onProviderRequestStarting?: () => Promise<void>;
+  /** Finalizes pre-request state after Wahoo has been attempted. */
+  onProviderRequestFinished?: () => Promise<void>;
 }
 
 export class WahooActivityUploadSkippedForDeletedUserError extends Error {
@@ -214,11 +235,23 @@ async function assertWahooActivityUploadProviderActionAllowed(userID: string, ph
   if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, phase);
   }
+  await assertWahooConnectionAvailable(userID);
 }
 
 function toWahooHttpsError(error: unknown): never {
-  if (isTerminalServiceAuthError(error)) {
-    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
+  if (isWahooReconnectRequiredError(error) || isTerminalServiceAuthError(error)) {
+    throw Object.assign(
+      new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.'),
+      { name: 'WahooReconnectRequiredError' },
+    );
+  }
+  if (isWahooRefreshBackoffError(error)) {
+    throw new HttpsError('unavailable', 'Wahoo token refresh is temporarily paused. Please retry later.', {
+      retryAt: error.retryAt,
+    });
+  }
+  if (isWahooRefreshContentionError(error)) {
+    throw new HttpsError('unavailable', 'Wahoo credentials are being refreshed. Please retry shortly.');
   }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
@@ -270,40 +303,81 @@ function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperation
 async function withWahooWorkoutWriteToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
-  beforeProviderRequest?: () => Promise<void>,
+  hooks: Pick<
+    WahooActivityUploadOptions,
+    'beforeProviderRequest'
+    | 'onProviderRequestAborted'
+    | 'onProviderRequestStarting'
+    | 'onProviderRequestFinished'
+  > = {},
 ): Promise<T> {
   await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
-  const initialTokenSnapshots = await admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens')
-    .limit(1)
-    .get();
-  const initialTokenSnapshot = initialTokenSnapshots.docs[0];
-  if (!initialTokenSnapshot) {
-    throw new HttpsError('unauthenticated', 'Connect Wahoo before sending activities.');
-  }
+  const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
+  const providerUserId = initialTokenSnapshot.id;
 
   const execute = async (forceRefresh: boolean): Promise<T> => {
-    const currentTokenSnapshot = await initialTokenSnapshot.ref.get();
-    if (!currentTokenSnapshot.exists) {
-      throw new HttpsError('unauthenticated', 'Connect Wahoo before sending activities.');
-    }
+    const currentTokenSnapshot = await getActiveWahooTokenSnapshot(userID, providerUserId);
     const token = await getTokenData(
       currentTokenSnapshot,
       ServiceNames.WahooAPI,
       forceRefresh,
     ) as WahooAPIAuth2ServiceTokenInterface;
+    if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
+      throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
+    }
     if (!hasWahooWorkoutsWriteScope(token.scope)) {
       throw new WahooWorkoutWriteScopeRequiredError();
     }
     await assertWahooActivityUploadProviderActionAllowed(userID, 'before_provider_request');
-    if (beforeProviderRequest) {
-      await beforeProviderRequest();
-      await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
+    const accountGuard = await captureWahooActiveAccountGuard(
+      userID,
+      providerUserId,
+      token.accessToken,
+    );
+    let providerPreparationCompleted = false;
+    let providerRequestStarted = false;
+    try {
+      if (hooks.beforeProviderRequest) {
+        await hooks.beforeProviderRequest();
+        providerPreparationCompleted = true;
+        await assertWahooActivityUploadProviderActionAllowed(userID, 'after_pre_request_write');
+      }
+      await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
+      if (hooks.onProviderRequestStarting) {
+        await hooks.onProviderRequestStarting();
+        // Fingerprint promotion is an awaited Firestore transaction. A
+        // disconnect, credential rotation, or account switch can win while it
+        // is in flight, so prove ownership again immediately before the
+        // irreversible provider request.
+        await assertWahooActiveAccountGuardCurrent(userID, accountGuard);
+      }
+      providerRequestStarted = true;
+      try {
+        return await operation(token.accessToken);
+      } finally {
+        if (hooks.onProviderRequestFinished) {
+          try {
+            await hooks.onProviderRequestFinished();
+          } catch (completionError) {
+            logger.error('Could not finalize a Wahoo outbound fingerprint after the provider request started.', {
+              error: getWahooErrorLogDetails(completionError),
+            });
+          }
+        }
+      }
+    } catch (error) {
+      if (providerPreparationCompleted && !providerRequestStarted && hooks.onProviderRequestAborted) {
+        try {
+          await hooks.onProviderRequestAborted();
+        } catch (rollbackError) {
+          logger.error('Could not roll back an unused Wahoo outbound fingerprint.', {
+            error: getWahooErrorLogDetails(rollbackError),
+          });
+        }
+      }
+      throw error;
     }
-    return operation(token.accessToken);
   };
 
   try {
@@ -352,7 +426,7 @@ export async function uploadActivityFileToWahoo(
         { method: 'POST', form },
       );
       return toWahooActivityUploadResult(data || {}, 'upload');
-    }, options.beforeProviderRequest);
+    }, options);
   } catch (error) {
     logWahooActivityUploadRequestError(error, 'upload');
     if (isWahooDuplicateError(error)) {
@@ -423,16 +497,45 @@ export const importActivityToWahooAPI = onCall({
 }, async (request) => {
   const userID = await requireWahooActivityUploadAccess(request);
   const fileBuffer = toUploadBuffer(request.data?.file);
+  let outboundFingerprint: ActivitySyncOutboundFingerprintRecord | null = null;
   try {
     return await uploadActivityFileToWahoo(userID, fileBuffer, {
       filename: request.data?.filename,
       timeZone: request.data?.timeZone,
       beforeProviderRequest: async () => {
-        await recordActivitySyncOutboundFingerprint({
+        outboundFingerprint = await recordActivitySyncOutboundFingerprint({
           userID,
           destinationServiceName: ServiceNames.WahooAPI,
           fileBuffer,
+          provisional: true,
         });
+      },
+      onProviderRequestStarting: async () => {
+        if (!outboundFingerprint) {
+          throw new Error('Missing provisional Wahoo outbound fingerprint.');
+        }
+        await markActivitySyncOutboundFingerprintProviderRequestStarted({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+      },
+      onProviderRequestFinished: async () => {
+        if (!outboundFingerprint) return;
+        await completeActivitySyncOutboundFingerprintProviderRequest({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+      },
+      onProviderRequestAborted: async () => {
+        if (!outboundFingerprint) return;
+        await rollbackActivitySyncOutboundFingerprint({
+          userID,
+          destinationServiceName: ServiceNames.WahooAPI,
+          record: outboundFingerprint,
+        });
+        outboundFingerprint = null;
       },
     });
   } catch (error) {

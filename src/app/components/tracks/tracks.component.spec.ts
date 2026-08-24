@@ -169,6 +169,9 @@ describe('TracksComponent', () => {
   let mockThemeService: any;
   let mockEventService: any;
   let mockMap: any;
+  let mockMapContainer: HTMLDivElement;
+  let mockMapCanvas: HTMLCanvasElement;
+  let mockMapNavigationControl: HTMLButtonElement;
   let mockMapStyleService: any;
   let mockUserSettingsQuery: any;
   let mockTripDetectionService: any;
@@ -196,6 +199,10 @@ describe('TracksComponent', () => {
   };
 
   beforeEach(async () => {
+    mockMapContainer = document.createElement('div');
+    mockMapCanvas = document.createElement('canvas');
+    mockMapNavigationControl = document.createElement('button');
+    mockMapContainer.append(mockMapCanvas, mockMapNavigationControl);
     mockMap = {
       addControl: vi.fn(),
       addSource: vi.fn(),
@@ -216,7 +223,8 @@ describe('TracksComponent', () => {
       off: vi.fn(),
       on: vi.fn(),
       queryRenderedFeatures: vi.fn().mockReturnValue([]),
-      getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
+      getContainer: vi.fn().mockReturnValue(mockMapContainer),
+      getCanvas: vi.fn().mockReturnValue(mockMapCanvas),
       project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
       getPitch: vi.fn().mockReturnValue(0),
       getBearing: vi.fn().mockReturnValue(0),
@@ -466,6 +474,31 @@ describe('TracksComponent', () => {
     expect(registeredEvents).not.toContain('rotateend');
     expect(registeredEvents).not.toContain('pitchstart');
     expect(registeredEvents).not.toContain('pitchend');
+  });
+
+  it('marks canvas and map-control input without adding a duplicate map focus target', async () => {
+    await component.ngOnInit();
+
+    mockMapCanvas.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(true);
+    expect(fixture.nativeElement.querySelector('#map')?.hasAttribute('tabindex')).toBe(false);
+
+    (component as any).shouldPreserveMapViewForCurrentLoad = false;
+    mockMapNavigationControl.addEventListener('pointerdown', (event) => event.stopPropagation());
+    mockMapNavigationControl.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(true);
+  });
+
+  it('removes direct map canvas input listeners during destruction', async () => {
+    await component.ngOnInit();
+    component.ngOnDestroy();
+    (component as any).shouldPreserveMapViewForCurrentLoad = false;
+
+    mockMapCanvas.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(false);
   });
 
   describe('Initialization robustness', () => {
@@ -1893,6 +1926,61 @@ describe('TracksComponent', () => {
       expect(setTracksFromPreparedSpy.mock.invocationCallOrder[0]).toBeLessThan(fitBoundsSpy.mock.invocationCallOrder[0]);
     });
 
+    it('should preserve a selected trip viewport when tracks finish loading', async () => {
+      const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
+      let resolveMapRenderTick!: () => void;
+      const mapRenderTickStarted = new Promise<void>((resolve) => {
+        vi.spyOn(component as any, 'waitForMapRenderTick').mockImplementation(() => {
+          resolve();
+          return new Promise<void>((release) => {
+            resolveMapRenderTick = release;
+          });
+        });
+      });
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-preserve-selected-trip',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:30:00' }),
+        getDistance: () => ({ getDisplayValue: () => '5.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => [],
+      };
+      const event = createMockEvent('preserve-selected-trip-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+      const otherActivity = {
+        ...activity,
+        getID: () => 'activity-preserve-other-trip',
+        getPositionData: () => [
+          { latitudeDegrees: 60.16, longitudeDegrees: 24.93 },
+          { latitudeDegrees: 60.17, longitudeDegrees: 24.94 },
+        ],
+      };
+      const otherEvent = createMockEvent('preserve-other-trip-event', '2024-11-09T08:00:00Z', 60.16, 24.93);
+      (otherEvent as any).getActivities = () => [otherActivity];
+      mockEventService.getEventsBy.mockReturnValue(of([event, otherEvent]));
+
+      const load = (component as any).loadTracksMapForUserByDateRange(
+        mockUser,
+        DateRanges.thisMonth,
+        [ActivityTypes.Running],
+      );
+      await mapRenderTickStarted;
+
+      component.onDetectedTripSelected(createDetectedTrip({
+        eventIds: ['preserve-selected-trip-event'],
+      }) as any);
+      resolveMapRenderTick();
+      await load;
+
+      expect(fitBoundsSpy).toHaveBeenCalledTimes(1);
+      expect(fitBoundsSpy).toHaveBeenCalledWith([[22.94, 40.64], [22.95, 40.65]]);
+    });
+
     it('should update popup state from start marker selection handler', async () => {
       await component.ngOnInit();
       fixture.detectChanges();
@@ -2056,6 +2144,92 @@ describe('TracksComponent', () => {
       expect(tripButtons[0]?.textContent).toContain('Home');
     });
 
+    it('expands the trips panel when detection finds only a home area', async () => {
+      const homeArea = {
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      };
+      (component as any).promiseTime = 1;
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({ homeArea }));
+
+      await (component as any).updateDetectedTripsForCurrentLoad([], [], 1);
+
+      expect(component.detectedTrips()).toEqual([]);
+      expect(component.detectedHomeArea()).toEqual(homeArea);
+      expect(component.detectedTripsPanelExpanded()).toBe(true);
+    });
+
+    it('keeps Home first while sorting trips newest-first by default and persists sort changes', () => {
+      vi.spyOn(component, 'ngOnInit').mockResolvedValue();
+      component.detectedTrips.set([
+        createDetectedTrip({
+          tripId: 'trip-oldest',
+          locationLabel: 'Oldest trip',
+          startDate: new Date('2022-11-08T00:00:00Z'),
+          endDate: new Date('2022-11-16T00:00:00Z'),
+        }) as any,
+        createDetectedTrip({
+          tripId: 'trip-newest',
+          locationLabel: 'Newest trip',
+          startDate: new Date('2024-11-08T00:00:00Z'),
+          endDate: new Date('2024-11-16T00:00:00Z'),
+        }) as any,
+      ]);
+      component.detectedHomeArea.set({
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      });
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripLocations = () => Array.from(
+        fixture.nativeElement.querySelectorAll('.trip-location') as NodeListOf<HTMLElement>,
+      ).map((element) => element.textContent?.trim());
+      const sortButton = fixture.nativeElement.querySelector(
+        'button[aria-label="Showing newest trips first. Show oldest trips first."]',
+      ) as HTMLButtonElement | null;
+
+      expect(tripLocations()).toEqual(['Home', 'Newest trip', 'Oldest trip']);
+      expect(sortButton).not.toBeNull();
+
+      sortButton?.click();
+
+      expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenLastCalledWith({
+        tripSortDirection: 'asc',
+      });
+
+      mockUserSettingsQuery.myTracksSettings.set({
+        ...mockUserSettingsQuery.myTracksSettings(),
+        tripSortDirection: 'asc',
+      });
+
+      expect(component.displayedDetectedTrips().map((trip) => trip.locationLabel)).toEqual([
+        'Oldest trip',
+        'Newest trip',
+      ]);
+      expect(component.tripSortToggleLabel()).toBe('Showing oldest trips first. Show newest trips first.');
+    });
+
     it('toggles detected-trips panel state without changing settings', () => {
       component.hasEvaluatedTripDetection.set(true);
       component.detectedTrips.set([createDetectedTrip() as any]);
@@ -2216,6 +2390,28 @@ describe('TracksComponent', () => {
           expect.objectContaining({ eventId: 'trip-running-event' })
         ]
       });
+    });
+
+    it('derives activity filter options from trackable events in the selected date range', async () => {
+      const runningEvent = createMockEvent('filter-running-event', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.Running);
+      const cyclingEvent = createMockEvent('filter-cycling-event', '2024-11-09T08:00:00Z', 40.66, 22.96, ActivityTypes.Cycling);
+      const nonTrackableSwimmingEvent = {
+        ...createMockEvent('filter-swimming-event', '2024-11-10T08:00:00Z', 40.68, 22.98, ActivityTypes.Swimming),
+        getStat: () => undefined,
+      };
+      mockEventService.getEventsBy.mockReturnValue(of([
+        runningEvent,
+        cyclingEvent,
+        nonTrackableSwimmingEvent,
+      ]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(component.availableMyTracksActivityTypes()).toEqual([
+        ActivityTypes.Running,
+        ActivityTypes.Cycling,
+      ]);
     });
 
     it('resolves location labels per trip for revisits that share a destination id', async () => {
@@ -2541,6 +2737,7 @@ describe('TracksComponent', () => {
         createDetectedTrip({
           tripId: 'trip-selected',
           destinationId: 'destination-selected',
+          locationLabel: 'Selected trip',
           centroidLat: 27.7172,
           centroidLng: 85.3240,
           bounds: {
@@ -2553,6 +2750,7 @@ describe('TracksComponent', () => {
         createDetectedTrip({
           tripId: 'trip-hovered',
           destinationId: 'destination-hovered',
+          locationLabel: 'Hovered trip',
           centroidLat: 48.8566,
           centroidLng: 2.3522,
           bounds: {
@@ -2566,10 +2764,14 @@ describe('TracksComponent', () => {
       component.hasEvaluatedTripDetection.set(true);
       fixture.detectChanges();
 
-      const tripButtons = fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>;
-      tripButtons[0]?.click();
-      tripButtons[1]?.dispatchEvent(new Event('pointerenter'));
-      tripButtons[1]?.dispatchEvent(new Event('pointerleave'));
+      const tripButtons = Array.from(
+        fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>,
+      );
+      const selectedTripButton = tripButtons.find((button) => button.textContent?.includes('Selected trip'));
+      const hoveredTripButton = tripButtons.find((button) => button.textContent?.includes('Hovered trip'));
+      selectedTripButton?.click();
+      hoveredTripButton?.dispatchEvent(new Event('pointerenter'));
+      hoveredTripButton?.dispatchEvent(new Event('pointerleave'));
 
       expect(component.selectedDetectedTripId()).toBe('trip-selected');
       expect(component.hoveredDetectedTripId()).toBeNull();

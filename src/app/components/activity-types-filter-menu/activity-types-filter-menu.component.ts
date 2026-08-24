@@ -16,6 +16,11 @@ interface ActivityTypeFilterOption {
 })
 export class ActivityTypesFilterMenuComponent implements OnChanges {
   @Input() selectedActivityTypes: ActivityTypes[] = [];
+  /**
+   * Optional context-specific choices. When omitted, the menu exposes the
+   * complete supported activity-type catalog as it always has.
+   */
+  @Input() availableActivityTypes: ActivityTypes[] | null | undefined;
   @Input() disabled = false;
   @Input() ariaLabel = 'Filter activities';
   @Output() selectedActivityTypesChange = new EventEmitter<ActivityTypes[]>();
@@ -34,7 +39,7 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   ));
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!changes['selectedActivityTypes']) {
+    if (!changes['selectedActivityTypes'] && !changes['availableActivityTypes']) {
       return;
     }
     this.setSelectedActivityTypes(this.selectedActivityTypes || []);
@@ -45,7 +50,7 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
       return;
     }
 
-    const current = this.selectedActivityTypes || [];
+    const current = this.normalizeActivityTypes(this.selectedActivityTypes || []);
     const nextActivityTypes = checked
       ? Array.from(new Set([...current, activityType]))
       : current.filter(selectedActivityType => selectedActivityType !== activityType);
@@ -69,18 +74,57 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
 
   private setSelectedActivityTypes(activityTypes: ActivityTypes[]): void {
     this.selectedActivityTypes = activityTypes || [];
-    const selectedActivityTypeSet = new Set(this.selectedActivityTypes);
-    const selectedCount = this.selectedActivityTypes.length;
+    const selectedActivityTypes = this.normalizeActivityTypes(this.selectedActivityTypes);
+    const selectedActivityTypeSet = new Set(selectedActivityTypes);
+    const selectedCount = selectedActivityTypes.length;
 
     this.activityFilterLabel = selectedCount === 1
       ? '1 activity filter'
       : selectedCount > 1
         ? `${selectedCount} activity filters`
         : 'All activities';
-    this.activityTypeOptions = this.activityTypeValues.map(activityType => ({
+    const availableActivityTypes = this.getAvailableActivityTypeValues();
+    this.activityTypeOptions = availableActivityTypes.map(activityType => ({
       label: activityType,
       selected: selectedActivityTypeSet.has(activityType),
       value: activityType,
     }));
+  }
+
+  private getAvailableActivityTypeValues(): ReadonlyArray<ActivityTypes> {
+    if (!Array.isArray(this.availableActivityTypes)) {
+      return this.activityTypeValues;
+    }
+
+    // Keep an existing filter in view even when a new context has no matching
+    // activities. Removing it would silently turn a no-results state into an
+    // unfiltered result set.
+    const visibleActivityTypes = new Set(this.normalizeActivityTypes([
+      ...this.availableActivityTypes,
+      ...this.selectedActivityTypes,
+    ]));
+    return this.activityTypeValues.filter(activityType => visibleActivityTypes.has(activityType));
+  }
+
+  private normalizeActivityTypes(activityTypes: readonly unknown[]): ActivityTypes[] {
+    const normalizedActivityTypes = activityTypes
+      .map((activityType) => this.resolveActivityType(activityType))
+      .filter((activityType): activityType is ActivityTypes => !!activityType);
+    return Array.from(new Set(normalizedActivityTypes));
+  }
+
+  private resolveActivityType(activityType: unknown): ActivityTypes | null {
+    if (typeof activityType !== 'string') {
+      return null;
+    }
+
+    const rawActivityType = activityType.trim();
+    if (!rawActivityType) {
+      return null;
+    }
+
+    return ActivityTypesHelper.resolveActivityType(rawActivityType)
+      || this.activityTypeValues.find(value => value === rawActivityType)
+      || null;
   }
 }

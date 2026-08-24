@@ -45,6 +45,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() selectedEndDate!: Date;
   @Input() startOfTheWeek!: DaysOfTheWeek;
   @Input() selectedActivityTypes!: ActivityTypes[];
+  @Input() availableActivityTypes: ActivityTypes[] | null | undefined;
   @Input() showDatePicker = true;
   @Input() showActivityTypePicker = true;
   @Input() showMergedEventsToggle = false;

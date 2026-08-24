@@ -2389,6 +2389,48 @@ describe('AppUserService', () => {
                 await service.deauthorizeService(ServiceNames.WahooAPI);
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeWahooAPI');
             });
+
+            it('retries a disconnect blocked by token refresh', async () => {
+                vi.useFakeTimers();
+                try {
+                    const nowMs = Date.now();
+                    mockFunctionsService.call
+                        .mockRejectedValueOnce({
+                            code: 'functions/unavailable',
+                            details: {
+                                reason: 'service_disconnect_in_progress',
+                                blocker: 'token_refresh',
+                                retryAt: nowMs + 100,
+                                retryDeadlineAt: nowMs + 90_000,
+                            },
+                        })
+                        .mockResolvedValueOnce({ data: { result: 'Deauthorized' } });
+
+                    const resultPromise = service.deauthorizeService(ServiceNames.WahooAPI);
+                    await vi.advanceTimersByTimeAsync(1_000);
+
+                    await expect(resultPromise).resolves.toEqual({ result: 'Deauthorized' });
+                    expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+                } finally {
+                    vi.useRealTimers();
+                }
+            });
+
+            it('does not retry another disconnect already in progress', async () => {
+                const error = {
+                    code: 'functions/unavailable',
+                    details: {
+                        reason: 'service_disconnect_in_progress',
+                        blocker: 'disconnect_operation',
+                        retryAt: Date.now() + 1_000,
+                        retryDeadlineAt: Date.now() + 10 * 60_000,
+                    },
+                };
+                mockFunctionsService.call.mockRejectedValueOnce(error);
+
+                await expect(service.deauthorizeService(ServiceNames.WahooAPI)).rejects.toBe(error);
+                expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+            });
         });
 
         describe('getCurrentUserServiceTokenAndRedirectURI', () => {

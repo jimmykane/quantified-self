@@ -246,6 +246,7 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.startDate).toBeNull();
             expect((settings.myTracksSettings as any)?.endDate).toBeNull();
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
+            expect((settings.myTracksSettings as any)?.tripSortDirection).toBe('desc');
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
         });
@@ -851,6 +852,20 @@ describe('AppUserUtilities', () => {
 
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
+        });
+
+        it('should preserve an explicit ascending My Tracks trip sort direction', () => {
+            const user = {
+                settings: {
+                    myTracksSettings: {
+                        tripSortDirection: 'asc'
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect((settings.myTracksSettings as any)?.tripSortDirection).toBe('asc');
         });
 
         it('should preserve valid custom MyTracks date boundaries', () => {

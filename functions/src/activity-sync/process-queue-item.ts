@@ -8,11 +8,13 @@ import {
 } from '../queue/queue-item.interface';
 import {
     QueueResult,
+    QUEUE_DEFERRED_REASONS,
     QUEUE_SKIPPED_REASONS,
     ProviderOperationStillInFlightError,
     PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
     deferQueueItemForPendingDisconnect,
     deferQueueItemForPendingDisconnectIfCurrentUserActive,
+    deferQueueItemForReconnectRequiredIfCurrentUserActive,
     increaseRetryCountIfCurrentUserActive,
     isProviderOperationInFlightLeaseActive,
     markQueueItemSkipped,
@@ -25,12 +27,14 @@ import { isActivitySyncRouteEnabledForUser } from './settings';
 import { getServiceConnectionMeta } from '../service-connection-meta';
 import {
     isDisconnectPendingServiceConnection,
+    isReconnectRequiredServiceConnection,
     isServiceUnavailableForSyncConnection,
 } from '../../../shared/service-connection';
 import {
     setActivitySyncFailedMetadata,
     setActivitySyncProcessingMetadata,
     setActivitySyncRetryingMetadata,
+    setActivitySyncRetryingMetadataIfQueueItemDeferred,
     setActivitySyncSkippedMetadata,
     setActivitySyncSuccessMetadata,
     toActivitySyncMetadataError,
@@ -47,6 +51,7 @@ import {
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
+import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
@@ -62,6 +67,10 @@ import {
     toProviderOperationLogDetails,
 } from '../shared/provider-operation-error';
 import { recordActivitySyncOutboundFingerprint } from './outbound-fingerprint';
+import {
+    DisabledSyncRouteTransitionResult,
+    finalizeDisabledSyncRouteIfCurrent,
+} from '../queue/sync-route-eligibility';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -272,7 +281,29 @@ async function getPendingDisconnectServiceForRoute(
     return null;
 }
 
-type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending';
+async function getWahooReconnectRequiredServiceForRoute(
+    userID: string,
+    sourceServiceName: unknown,
+    destinationServiceName: unknown,
+): Promise<ServiceNames.WahooAPI | null> {
+    const normalizeServiceName = (value: unknown) => `${value || ''}`
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toLowerCase();
+    const wahooServiceName = normalizeServiceName(ServiceNames.WahooAPI);
+    if (
+        normalizeServiceName(sourceServiceName) !== wahooServiceName
+        && normalizeServiceName(destinationServiceName) !== wahooServiceName
+    ) {
+        return null;
+    }
+
+    const wahooMeta = await getServiceConnectionMeta(userID, ServiceNames.WahooAPI);
+    return isReconnectRequiredServiceConnection(wahooMeta)
+        ? ServiceNames.WahooAPI
+        : null;
+}
+
+type DestinationConnectionStatus = 'connected' | 'not_connected' | 'disconnect_pending' | 'reconnect_required';
 
 async function getDestinationConnectionStatus(userID: string, destinationServiceName: ServiceNames): Promise<DestinationConnectionStatus> {
     switch (destinationServiceName) {
@@ -296,6 +327,9 @@ async function getDestinationConnectionStatus(userID: string, destinationService
             const meta = await getServiceConnectionMeta(userID, destinationServiceName);
             if (isDisconnectPendingServiceConnection(meta)) {
                 return 'disconnect_pending';
+            }
+            if (isReconnectRequiredServiceConnection(meta)) {
+                return 'reconnect_required';
             }
             if (isServiceUnavailableForSyncConnection(meta)) {
                 return 'not_connected';
@@ -1146,23 +1180,63 @@ async function deferActivitySyncQueueItemForPendingDisconnect(
     requireCurrentProviderState = false,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const error = new Error(`${serviceName} disconnect is pending.`);
-    await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
-        ...routeMeta,
-        error: toActivitySyncMetadataError(error),
-    }));
     const additionalData = { deferredServiceName: `${serviceName}` };
-    if (!requireCurrentProviderState) {
-        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData);
+    const deferredResult = !requireCurrentProviderState
+        ? await deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
+            userID: queueItem.userID,
+            serviceName,
+        })
+        : await deferQueueItemForPendingDisconnectIfCurrentUserActive({
+            queueItem,
+            additionalData,
+            bulkWriter,
+            userID: queueItem.userID,
+            serviceName,
+            phase: 'activity_sync_pending_disconnect_transition',
+            logPrefix: 'ActivitySync',
+            isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
+        });
+    if (deferredResult !== QueueResult.Deferred || !queueItem.ref) {
+        return deferredResult;
     }
-    return deferQueueItemForPendingDisconnectIfCurrentUserActive({
+
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadataIfQueueItemDeferred({
+        ...routeMeta,
+        queueItemRef: queueItem.ref!,
+        deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+        error: toActivitySyncMetadataError(error),
+    }).then(() => undefined));
+    return deferredResult;
+}
+
+async function deferActivitySyncQueueItemForReconnectRequired(
+    queueItem: ActivitySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    routeMeta: ActivitySyncRouteMeta,
+    serviceName: ServiceNames = ServiceNames.WahooAPI,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    const error = new Error(`Reconnect ${serviceName} to resume this activity delivery.`);
+    const deferredResult = await deferQueueItemForReconnectRequiredIfCurrentUserActive({
         queueItem,
-        additionalData,
+        additionalData: { deferredServiceName: `${serviceName}` },
         bulkWriter,
         userID: queueItem.userID,
-        phase: 'activity_sync_pending_disconnect_transition',
+        serviceName,
+        phase: 'activity_sync_reconnect_required_transition',
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
     });
+    if (deferredResult !== QueueResult.Deferred || !queueItem.ref) {
+        return deferredResult;
+    }
+
+    await safelyWriteMetadata(() => setActivitySyncRetryingMetadataIfQueueItemDeferred({
+        ...routeMeta,
+        queueItemRef: queueItem.ref!,
+        deferredReason: QUEUE_DEFERRED_REASONS.ServiceReconnectRequired,
+        error: toActivitySyncMetadataError(error),
+    }).then(() => undefined));
+    return deferredResult;
 }
 
 function markActivitySyncQueueItemSkippedForDeletedUser(
@@ -1237,7 +1311,6 @@ export async function processActivitySyncQueueItem(
             error.dlqContext = 'UNKNOWN_ACTIVITY_SYNC_ROUTE';
             throw error;
         }
-
         if (!shouldResumePersistedDestinationUpload) {
             const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
             if (allowlistConfigError) {
@@ -1283,8 +1356,11 @@ export async function processActivitySyncQueueItem(
         }
 
         if (!shouldResumePersistedDestinationUpload) {
-            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             const isManualRun = queueItem.manual === true;
+            // Read the setting before lifecycle state. If a reconnect-required
+            // transition disables the route concurrently, the later lifecycle
+            // read parks the row instead of permanently completing it as disabled.
+            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
             const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
             if (pendingDisconnectService) {
                 return deferActivitySyncQueueItemForPendingDisconnect(
@@ -1294,18 +1370,17 @@ export async function processActivitySyncQueueItem(
                     pendingDisconnectService,
                 );
             }
-
-            if (!enabled && !isManualRun) {
-                await setActivitySyncSkippedMetadata({
-                    ...routeMeta,
-                    skippedReason: 'route_disabled',
-                    detail: 'Route is disabled in user settings.',
-                });
-                return updateToProcessed(queueItem, bulkWriter, {
-                    skippedReason: 'route_disabled',
-                    destinationUploadContinuation: null,
-                    resultStatus: 'skipped',
-                });
+            const reconnectRequiredService = await getWahooReconnectRequiredServiceForRoute(
+                queueItem.userID,
+                route.sourceServiceName,
+                route.destinationServiceName,
+            );
+            if (reconnectRequiredService) {
+                return deferActivitySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
+                );
             }
 
             const destinationConnectionStatus = await getDestinationConnectionStatus(queueItem.userID, queueItem.destinationServiceName);
@@ -1315,6 +1390,13 @@ export async function processActivitySyncQueueItem(
                     bulkWriter,
                     routeMeta,
                     queueItem.destinationServiceName,
+                );
+            }
+            if (destinationConnectionStatus === 'reconnect_required') {
+                return deferActivitySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
                 );
             }
             if (destinationConnectionStatus === 'not_connected') {
@@ -1328,6 +1410,55 @@ export async function processActivitySyncQueueItem(
                     destinationUploadContinuation: null,
                     resultStatus: 'skipped',
                 });
+            }
+
+            if (!enabled && !isManualRun) {
+                const routeDisabledResult = await finalizeDisabledSyncRouteIfCurrent({
+                    queueItem,
+                    userID: queueItem.userID,
+                    routeId: queueItem.routeId,
+                    settingsKind: 'activitySyncRoutes',
+                    serviceNames: [route.sourceServiceName, route.destinationServiceName],
+                    isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
+                });
+                if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.Enabled) {
+                    // Route restoration won after the earlier settings read.
+                    // Continue with the now-enabled route.
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.DeferredForRestore) {
+                    return QueueResult.Deferred;
+                } else if (
+                    routeDisabledResult.result === DisabledSyncRouteTransitionResult.DisconnectPending
+                    && routeDisabledResult.serviceName
+                ) {
+                    return deferActivitySyncQueueItemForPendingDisconnect(
+                        queueItem,
+                        bulkWriter,
+                        routeMeta,
+                        routeDisabledResult.serviceName,
+                        true,
+                    );
+                } else if (
+                    routeDisabledResult.result === DisabledSyncRouteTransitionResult.ReconnectRequired
+                    && routeDisabledResult.serviceName
+                ) {
+                    return deferActivitySyncQueueItemForReconnectRequired(
+                        queueItem,
+                        bulkWriter,
+                        routeMeta,
+                        routeDisabledResult.serviceName,
+                    );
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.SkippedDeletedUser) {
+                    return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
+                } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.NotCurrent) {
+                    return QueueResult.Processed;
+                } else {
+                    await setActivitySyncSkippedMetadata({
+                        ...routeMeta,
+                        skippedReason: 'route_disabled',
+                        detail: 'Route is disabled in user settings.',
+                    });
+                    return QueueResult.Processed;
+                }
             }
 
             const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
@@ -1543,6 +1674,21 @@ export async function processActivitySyncQueueItem(
                     providerUserId: error.providerUserId,
                 },
                 error.originalError,
+                bulkWriter,
+                routeMeta,
+            );
+        }
+
+        // The Wahoo opaque-refresh circuit breaker becomes an explicit
+        // reconnect state. It must take precedence over generic destination
+        // authentication handling so work is parked (and resumed after OAuth)
+        // rather than being skipped or reconciled as a failed upload.
+        if (
+            queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isWahooReconnectRequiredError(error)
+        ) {
+            return deferActivitySyncQueueItemForReconnectRequired(
+                queueItem,
                 bulkWriter,
                 routeMeta,
             );

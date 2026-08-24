@@ -12,6 +12,7 @@ import {
 
 export type HelpSectionId =
   | 'getting-started'
+  | 'supported-activities'
   | 'activity-calendar'
   | 'training-analysis'
   | 'ai-insights'
@@ -179,8 +180,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **Dashboard** is your main activity overview.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
+- **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
-- **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
+- **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Its activity filter lists only trackable types in the selected date range, while keeping an active no-match choice visible until you clear it. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.
 - **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.
@@ -375,7 +377,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
 - Temperature, heart rate, next-stop depth/time, time to surface, no-decompression limit, CNS/N2 load, air time remaining, pressure/volume SAC, RMV, PO₂, and dive ascent rate are available one at a time from the standard chart overlay picker when the source records them. Overlays start turned off, and multi-activity events keep each selected dive separate.
 - The **Diving** summary tab shows the source-provided average/maximum depth, surface interval, bottom time, dive number and phase times/rates, CNS/N2 loads, oxygen toxicity, SAC, and RMV values that are present. **Maximum Depth** also appears in Overall and Environment. Missing values stay unavailable: the app does not infer summaries from samples or reconstruct samples from a summary.
-- When a FIT source records dive gases, tank summaries, or tank pressure updates, the **Diving** summary tab also shows a source-native **Gas & Tanks** section. New imports and reprocessed activities retain those records with the activity; older activities can display them while their original source remains available. The section keeps every selected dive separate and displays the parser's recorded percentages, bar, litres, timestamps, and source enum values. The app does not invent a gas mixture name or nitrogen value, associate a gas with a tank, calculate consumption, or create missing records.
+- When an imported FIT activity includes dive gases, tank summaries, or tank pressure updates, the **Diving** summary tab also shows a **Gas & Tanks** section. New imports and reprocessed activities keep those details with the activity; older activities can still show them while the original file is available. Each selected dive stays separate, and the section shows the recorded percentages, pressure, volume, timestamps, and original labels. The app does not make up a gas mixture name or nitrogen value, match a gas to a tank, calculate consumption, or add missing records.
 - **Depth** is also available as an advanced chart metric in **Settings -> Charts**. The first Swim pace preference selects one dive display family: per 100 meters uses meters and meters per second, while per 100 yards uses feet and feet per second. Depth and dive-rate displays retain the FIT source's three decimal places; SAC/RMV and PO₂ retain two.
 
 ### Event chart defaults and controls
@@ -407,6 +409,34 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Training Analysis Overview', icon: 'monitoring', kind: 'route', target: '/features/training-analysis' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
+    ],
+  },
+  {
+    id: 'supported-activities',
+    icon: 'category',
+    title: 'Supported activity types',
+    summary: 'Browse the activity types Quantified Self recognizes and learn why the details shown depend on the data in each activity.',
+    content: `## Activity types we recognize
+
+- Quantified Self uses activity types and groups to label, search, filter, and organize activities. If a type is listed, we can recognize it; not every device, connected service, or uploaded file includes the same details.
+- Open the [Supported activity types page](/features/supported-activities) to search the complete list.
+
+## What you see when you open an activity
+
+- Routes, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the imported activity includes that data. We do not add missing information.
+- When you open an activity, you can see **Laps** when it includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
+- Groups help you browse, but the activity type and its data determine the charts. Activities in the same group can show different charts. For example, Boating is listed in Motorized but can use sailing-oriented charts when the activity includes the data those charts need. Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts when the activity includes the data those charts need.
+- Hand Cycle and Velomobile are grouped with Cycling. They appear in Cycling Training analysis only when the activity contains enough relevant data.
+
+## Diving
+
+- Dive Profile needs continuous depth data. Other dive details, such as depth, decompression, timing, tissue load, SAC/RMV, gas, and tank information, appear only when they are included in the activity. We do not estimate or fill in missing dive data.
+- In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade are hidden. For an event that combines diving with another activity, terrain summaries come only from the non-diving activity.
+`,
+    links: [
+      { label: 'Supported activity types', icon: 'category', kind: 'route', target: '/features/supported-activities' },
+      { label: 'Explore Integrations', icon: 'sync', kind: 'route', target: '/integrations' },
+      { label: 'Uploads & Imports', icon: 'upload_file', kind: 'route', target: '/help', fragment: 'uploads-and-imports' },
     ],
   },
   {
@@ -837,6 +867,8 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
 Direct FIT activity delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an activity upload asynchronously; Services keeps the upload status available to refresh. If Wahoo has already issued an upload ID, retrying after a connection or status error checks that same upload instead of sending the FIT again. A fresh upload starts only after Wahoo explicitly reports that processing failed. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
+
+If Wahoo rejects repeated token refreshes, its connection card changes to **Reconnect required**. Select **Reconnect** there and authorize the same Wahoo account so parked work cannot be delivered to a different account. To change Wahoo accounts, disconnect the retained account first and then connect the other one. Quantified Self keeps unaccepted automatic activity and saved-route deliveries parked while reconnecting, then resumes them safely after the new connection succeeds; it does not turn your saved route settings off.
 
 Direct course/route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory before sending it to Wahoo; the GPX must contain exactly one route with valid coordinates. It sends the route to Wahoo without creating or retaining a route in Quantified Self. If you connected Wahoo before route sending was available, reconnect it once to grant route access. When a route send reports missing Wahoo route access, select **Reconnect Wahoo** in the displayed dialog, then send the route again after you return. Routes imported by Wahoo's Cloud API sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
 

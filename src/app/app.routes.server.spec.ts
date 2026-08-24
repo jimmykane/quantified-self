@@ -64,6 +64,7 @@ describe('serverRoutes', () => {
     expect(PRERENDERED_FEATURE_ROUTES).toEqual([
       'features',
       'features/workout-data-comparison',
+      'features/supported-activities',
       'features/activity-calendar',
       'features/training-analysis',
       'features/mcp-server',
@@ -111,6 +112,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('tools/compare/saved')).toBe(false);
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features/supported-activities')).toBe(true);
     expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);

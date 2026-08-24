@@ -39,6 +39,11 @@ async function resolvedRouteData(route: Route | undefined): Promise<Record<strin
 }
 
 describe('AppRoutingModule routes', () => {
+  it('disables shell cross-fades for public layout navigation', () => {
+    expect(publicLayoutRoute?.data?.['disableRouteAnimation']).toBe(true);
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);
+  });
+
   it('should define a public help route with help metadata', () => {
     const helpRoute = routes.find(route => route.path === 'help');
 
@@ -345,6 +350,31 @@ describe('AppRoutingModule routes', () => {
       '@type': 'WebPage',
       name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
       url: 'https://quantified-self.io/features/workout-data-comparison',
+      inLanguage: 'en',
+    });
+  });
+
+  it('should define a public supported activities feature route with lazily resolved SEO metadata', async () => {
+    const route = routes.find(candidate => candidate.path === 'features/supported-activities');
+    const routeData = await resolvedRouteData(route);
+    const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
+
+    expect(route).toBeTruthy();
+    expect(route?.canMatch).toBeUndefined();
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({
+      preload: true,
+      animation: 'Features',
+    });
+    expect(routeData['title']).toBe('Supported Activity Types');
+    expect(routeData['description']).toContain('activity types Quantified Self recognizes');
+    expect(routeData['description']).toContain('device, connected service, or uploaded file');
+    expect(routeData['keywords']).toBeUndefined();
+    expect(jsonLd).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Supported Activity Types',
+      url: 'https://quantified-self.io/features/supported-activities',
       inLanguage: 'en',
     });
   });

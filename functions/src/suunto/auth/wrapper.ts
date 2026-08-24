@@ -8,6 +8,8 @@ import {
   disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
+  isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
@@ -101,10 +103,16 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (e: any) {
     const failure = extractRefreshFailureDetails(e);
     const status = failure.statusCode || 500;
+    if (isOAuthFlowContextMismatchError(e)) {
+      throw new HttpsError('permission-denied', 'Invalid OAuth state');
+    }
+    if (status === 403) {
+      throw new HttpsError('permission-denied', 'Suunto rejected the authorization request');
+    }
     if (failure.isInvalidGrant && failure.statusCode === 400) {
       logger.warn('[SuuntoAuth] Authorization code exchange was rejected with a non-terminal invalid_grant.', {
         serviceName: SERVICE_NAME,
@@ -166,7 +174,11 @@ export const deauthorizeSuuntoApp = onCall({
 
   try {
     await disconnectServiceForUser(userID, SERVICE_NAME);
-  } catch (e: any) {
+  } catch (e: unknown) {
+    if (isServiceDisconnectInProgressError(e)) {
+      logger.warn(`Suunto disconnect is waiting for another connection operation for user ${userID}.`);
+      throw new HttpsError('unavailable', e.message, e.details);
+    }
     logger.error(e);
     throw new HttpsError('internal', 'Deauthorization Error');
   }

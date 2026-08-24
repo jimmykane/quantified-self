@@ -365,8 +365,8 @@ describe('activity-sync/disconnect-routes', () => {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: { enabled: false },
         },
         pendingDisconnectRouteRestore: {
-          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: true,
+          [`routeDelivery:${ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI}`]: true,
         },
       },
     }, { merge: true });
@@ -380,7 +380,7 @@ describe('activity-sync/disconnect-routes', () => {
             [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
           },
           pendingDisconnectRouteRestore: {
-            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+            [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: true,
           },
         },
       }),
@@ -393,10 +393,28 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       serviceSyncSettings: expect.objectContaining({
         pendingDisconnectRouteRestore: {
-          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: true,
         },
       }),
     }), { merge: true });
+  });
+
+  it('does not let a stale reconnect incident disable routes after OAuth wins', async () => {
+    mockMetaGet.mockResolvedValueOnce({
+      data: () => ({
+        connectionState: 'connected',
+        connectionStateGeneration: 'oauth-generation',
+      }),
+    });
+
+    await disableActivitySyncRoutesForDisconnectedService('user-1', ServiceNames.WahooAPI, {
+      trackPendingDisconnectRestore: true,
+      expectedConnectionStateGeneration: 'terminal-failure-generation',
+      requiredConnectionState: 'reconnect_required',
+    });
+
+    expect(mockSettingsGet).not.toHaveBeenCalled();
+    expect(mockSettingsSet).not.toHaveBeenCalled();
   });
 
   it('reconstructs pending restore state when Firestore retries the disable transaction', async () => {
@@ -443,7 +461,7 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockSettingsSet.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
       serviceSyncSettings: expect.objectContaining({
         pendingDisconnectRouteRestore: {
-          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: true,
         },
       }),
     }));
@@ -459,8 +477,8 @@ describe('activity-sync/disconnect-routes', () => {
       data: () => ({
         serviceSyncSettings: {
           pendingDisconnectRouteRestore: {
-            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
-            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
+            [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: true,
+            [`routeDelivery:${ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI}`]: true,
             [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: false,
           },
         },
@@ -472,14 +490,138 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
       serviceSyncSettings: {
         pendingDisconnectRouteRestore: {
-          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: 'DELETE_SENTINEL',
-          [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: 'DELETE_SENTINEL',
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp}`]: 'DELETE_SENTINEL',
+          [`routeDelivery:${ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI}`]: 'DELETE_SENTINEL',
         },
         activitySyncRoutes: {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+        },
+      },
+    }, { merge: true });
+  });
+
+  it('keeps activity and route-delivery restore markers separate for shared route IDs', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          activitySyncRoutes: {
+            [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+          },
+          routeDeliverySyncRoutes: {
+            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+          },
+        },
+      }),
+    });
+
+    await disableActivitySyncRoutesForDisconnectedService('user-1', ServiceNames.SuuntoApp, {
+      trackPendingDisconnectRestore: true,
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      serviceSyncSettings: expect.objectContaining({
+        pendingDisconnectRouteRestore: {
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI}`]: true,
+        },
+      }),
+    }), { merge: true });
+
+    mockSettingsSet.mockClear();
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [`activity:${ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI}`]: true,
+          },
+        },
+      }),
+    });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
+      serviceSyncSettings: {
+        pendingDisconnectRouteRestore: {
+          [`activity:${ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI}`]: 'DELETE_SENTINEL',
+        },
+        activitySyncRoutes: {
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+        },
+      },
+    }, { merge: true });
+  });
+
+  it('drops ambiguous legacy restore markers without enabling either shared route kind', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: true,
+          },
+        },
+      }),
+    });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
+      serviceSyncSettings: {
+        pendingDisconnectRouteRestore: {
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: 'DELETE_SENTINEL',
+        },
+      },
+    }, { merge: true });
+  });
+
+  it('restores a non-conflicting legacy restore marker', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: true,
+          },
+        },
+      }),
+    });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
+      serviceSyncSettings: {
+        pendingDisconnectRouteRestore: {
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: 'DELETE_SENTINEL',
+        },
+        activitySyncRoutes: {
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+        },
+      },
+    }, { merge: true });
+  });
+
+  it('drops an ambiguous service-scoped legacy marker without enabling either shared route kind', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ServiceNames.SuuntoApp]: {
+              [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: true,
+            },
+          },
+        },
+      }),
+    });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
+      serviceSyncSettings: {
+        pendingDisconnectRouteRestore: {
+          [ServiceNames.SuuntoApp]: {
+            [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: 'DELETE_SENTINEL',
+          },
         },
       },
     }, { merge: true });
@@ -506,5 +648,47 @@ describe('activity-sync/disconnect-routes', () => {
     await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp);
 
     expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
+
+  it('does not restore reconnect-parked routes after Wahoo was disconnected concurrently', async () => {
+    mockSettingsGet.mockResolvedValueOnce({
+      data: () => ({
+        serviceSyncSettings: {
+          pendingDisconnectRouteRestore: {
+            [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: true,
+          },
+        },
+      }),
+    });
+    mockMetaGet.mockResolvedValueOnce({ data: () => ({}) });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.WahooAPI, {
+      requireServiceConnected: true,
+    });
+
+    expect(mockSettingsSet).not.toHaveBeenCalled();
+  });
+
+  it('clears a route-repair marker atomically with the matching generation restore', async () => {
+    mockMetaGet.mockImplementation(async (serviceName: string) => ({
+      data: () => serviceName === ServiceNames.SuuntoApp
+        ? { connectionState: 'connected', connectionStateGeneration: 'connection-generation-1' }
+        : {},
+    }));
+    mockSettingsGet.mockResolvedValueOnce({ data: () => ({}) });
+
+    await restoreActivitySyncRoutesForPendingDisconnectClear('user-1', ServiceNames.SuuntoApp, {
+      requireServiceConnected: true,
+      expectedConnectionStateGeneration: 'connection-generation-1',
+      clearRouteRestoreMarker: true,
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.objectContaining({ __mockType: 'meta' }), {
+      routeRestorePending: 'DELETE_SENTINEL',
+      routeRestoreParkingClosed: 'DELETE_SENTINEL',
+      routeRestoreConnectionGeneration: 'DELETE_SENTINEL',
+      routeRestoreLastAttemptAt: 'DELETE_SENTINEL',
+      routeRestoreAttemptCount: 'DELETE_SENTINEL',
+    }, { merge: true });
   });
 });

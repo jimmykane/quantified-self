@@ -1,0 +1,173 @@
+<main class="supported-activities-page">
+  <section class="hero-section" aria-labelledby="supported-activities-title">
+    <p class="eyebrow">Activity types</p>
+    <h1 id="supported-activities-title">Supported activity types</h1>
+    <p class="hero-copy">
+      Quantified Self recognizes {{ totalActivityTypeCount }} activity types. Browse the list to see whether your
+      activity is included. The maps, metrics, laps, and charts you see depend on what your device, connected service,
+      or uploaded file recorded.
+    </p>
+  </section>
+
+  <section id="activity-catalog" class="content-section catalog-section" aria-labelledby="activity-catalog-title">
+    <div class="section-heading">
+      <p class="eyebrow">Activity catalog</p>
+      <h2 id="activity-catalog-title">Find an activity</h2>
+      <p>Every group is open so you can scan the activity types Quantified Self recognizes.</p>
+    </div>
+
+    <div class="catalog-toolbar">
+      <mat-form-field appearance="outline" class="activity-search">
+        <mat-label>Search activity types and groups</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input
+          #searchInput
+          matInput
+          type="search"
+          [value]="searchQuery()"
+          (input)="onSearchQueryChange(searchInput.value)">
+        @if (searchQuery()) {
+        <button mat-icon-button matSuffix type="button" aria-label="Clear activity search" (click)="clearSearch()">
+          <mat-icon>close</mat-icon>
+        </button>
+        }
+      </mat-form-field>
+      <p class="catalog-result-summary" aria-live="polite">{{ searchResultSummary() }}</p>
+    </div>
+
+    @if (filteredFamilies().length) {
+    <div class="family-grid">
+      @for (family of filteredFamilies(); track family.id) {
+      <mat-card appearance="outlined" class="family-card" [attr.data-family-id]="family.id" [style.border-top-color]="family.color">
+        <mat-card-header>
+          <div
+            mat-card-avatar
+            class="family-avatar"
+            [style.background]="family.gradient">
+            <mat-icon aria-hidden="true">{{ family.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ family.label }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ family.activityTypes.length }} activity type{{ family.activityTypes.length === 1 ? '' : 's' }}
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content class="family-card-content">
+          @if (family.fallback) {
+          <p class="family-note">These activity types do not have a dedicated group. Their details still depend on the data in the activity.</p>
+          }
+          <mat-chip-set
+            class="activity-type-list"
+            role="list"
+            [attr.aria-label]="family.label + ' activity types'">
+            @for (activityType of family.activityTypes; track activityType) {
+            <mat-chip role="listitem" disableRipple [removable]="false">{{ activityType }}</mat-chip>
+            }
+          </mat-chip-set>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+    } @else {
+    <mat-card appearance="outlined" class="empty-search-card">
+      <mat-card-content>
+        <mat-icon aria-hidden="true">search_off</mat-icon>
+        <div>
+          <h3>No activity types match your search</h3>
+          <p>Try a shorter name, a group such as Cycling, or a type such as Hand Cycle.</p>
+        </div>
+      </mat-card-content>
+    </mat-card>
+    }
+  </section>
+
+  <section class="content-section" aria-labelledby="specialized-surfaces-title">
+    <div class="section-heading">
+      <p class="eyebrow">What you can see in an activity</p>
+      <h2 id="specialized-surfaces-title">Extra details appear when the data is there</h2>
+      <p>
+        Recognizing an activity type does not add data. When you open an activity, you can see laps, swim lengths,
+        jumps, and charts only when the imported activity includes them.
+      </p>
+    </div>
+    <div class="presentation-grid">
+      @for (item of specializedSurfaces; track item.title) {
+      <mat-card appearance="outlined" class="presentation-card">
+        <mat-card-header>
+          <div mat-card-avatar class="presentation-avatar">
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section provider-section" aria-labelledby="provider-context-title">
+    <div class="section-heading">
+      <p class="eyebrow">Your data source</p>
+      <h2 id="provider-context-title">Your device, service, or file determines the detail</h2>
+      <p>
+        Garmin, Suunto, COROS, Wahoo, and uploaded FIT, GPX, TCX, JSON, or SML files can include different activity
+        details. If something is missing, check what the device, service, or file recorded.
+      </p>
+    </div>
+    <div class="provider-actions" aria-label="Related resources">
+      <a mat-button routerLink="/integrations">
+        See integrations
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-button routerLink="/help" fragment="uploads-and-imports">
+        Upload help
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+    </div>
+  </section>
+
+  <section class="supplemental-section diving-details-section" aria-labelledby="diving-support-title">
+    <mat-card appearance="outlined" class="supplemental-card">
+      <mat-card-header>
+        <div mat-card-avatar class="supplemental-avatar supplemental-avatar--dive">
+          <mat-icon aria-hidden="true">scuba_diving</mat-icon>
+        </div>
+        <mat-card-title><h2 id="diving-support-title">Dive details</h2></mat-card-title>
+        <mat-card-subtitle>Available when your activity includes dive data.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content class="supplemental-card-content">
+        <p>
+          Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding can show Dive Profile, depth, decompression,
+          gas, and tank details when your activity recorded them. We do not estimate missing dive data.
+        </p>
+        <a mat-button routerLink="/help" fragment="supported-activities">
+          Read dive details in Help
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </a>
+      </mat-card-content>
+    </mat-card>
+  </section>
+
+  <section class="supplemental-section support-details-section" aria-labelledby="support-levels-title">
+    <mat-card appearance="outlined" class="supplemental-card">
+      <mat-card-header>
+        <div mat-card-avatar class="supplemental-avatar">
+          <mat-icon aria-hidden="true">info</mat-icon>
+        </div>
+        <mat-card-title><h2 id="support-levels-title">What “supported” means</h2></mat-card-title>
+        <mat-card-subtitle>We recognize the type; the activity provides the detail.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content class="supplemental-card-content">
+        <p>
+          When a type is listed, it can be labeled, searched, and filtered. Metrics, maps, laps, lengths, jumps, and
+          charts appear only when your activity includes them.
+        </p>
+        <a mat-button routerLink="/help" fragment="supported-activities">
+          Read support details
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </a>
+      </mat-card-content>
+    </mat-card>
+  </section>
+</main>

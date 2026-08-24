@@ -1,5 +1,6 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
 import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
 
 export const PRERENDERED_INTEGRATION_ROUTES = [
@@ -13,6 +14,7 @@ export const PRERENDERED_INTEGRATION_ROUTES = [
 export const PRERENDERED_FEATURE_ROUTES = [
   PUBLIC_FEATURE_PATHS.hub,
   WORKOUT_DATA_COMPARISON_PATH,
+  SUPPORTED_ACTIVITIES_PATH,
   PUBLIC_FEATURE_PATHS.activityCalendar,
   PUBLIC_FEATURE_PATHS.trainingAnalysis,
   PUBLIC_FEATURE_PATHS.mcpServer,

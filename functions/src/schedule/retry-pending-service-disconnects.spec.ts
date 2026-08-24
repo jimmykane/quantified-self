@@ -3,11 +3,15 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => ({
   collection: vi.fn(),
+  collectionGroup: vi.fn(),
   doc: vi.fn(),
   cleanupServiceConnectionForUser: vi.fn(),
   getTokenData: vi.fn(),
   clearServiceDisconnectPending: vi.fn(),
   recordServiceDisconnectRetryFailure: vi.fn(),
+  retryPendingDisconnectQueueRelease: vi.fn(),
+  retryWahooReconnectQueueRelease: vi.fn(),
+  retryPendingServiceRouteRestore: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -23,6 +27,7 @@ vi.mock('firebase-functions/logger', () => ({
 vi.mock('firebase-admin', () => {
   const firestore = () => ({
     collection: hoisted.collection,
+    collectionGroup: hoisted.collectionGroup,
     doc: hoisted.doc,
   });
 
@@ -53,8 +58,22 @@ vi.mock('../service-auth-lifecycle', () => ({
   },
 }));
 
+vi.mock('../service-connection-meta', () => ({
+  retryPendingDisconnectQueueRelease: hoisted.retryPendingDisconnectQueueRelease,
+  retryWahooReconnectQueueRelease: hoisted.retryWahooReconnectQueueRelease,
+  retryPendingServiceRouteRestore: hoisted.retryPendingServiceRouteRestore,
+}));
+
 vi.mock('../service-disconnect-pending', () => ({
   clearServiceDisconnectPending: hoisted.clearServiceDisconnectPending,
+  getServiceDisconnectLifecycleGuardFromRootData: (data: Record<string, unknown> | null | undefined) => ({
+    disconnectGeneration: data?.disconnectState === 'disconnect_pending'
+      ? `${data.disconnectGeneration || ''}`.trim() || null
+      : null,
+    oauthCredentialGeneration: `${data?.activeOAuthCredentialGeneration || ''}`.trim() || null,
+    oauthFlowGeneration: `${data?.oauthFlowGeneration || ''}`.trim() || null,
+    disconnectOperationGeneration: `${data?.disconnectOperationGeneration || ''}`.trim() || null,
+  }),
   isServiceDisconnectPendingData: (data: any) => data?.disconnectState === 'disconnect_pending',
   PENDING_SERVICE_DISCONNECT_BATCH_LIMIT: 50,
   recordServiceDisconnectRetryFailure: hoisted.recordServiceDisconnectRetryFailure,
@@ -106,6 +125,19 @@ function buildPagedQuery(pages: any[][]) {
   };
 }
 
+function buildUserServiceMetaRef(userID: string, serviceName: ServiceNames | string) {
+  return {
+    path: `users/${userID}/meta/${serviceName}`,
+    parent: {
+      id: 'meta',
+      parent: {
+        id: userID,
+        parent: { id: 'users' },
+      },
+    },
+  };
+}
+
 describe('retry-pending-service-disconnects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -119,6 +151,16 @@ describe('retry-pending-service-disconnects', () => {
     hoisted.getTokenData.mockResolvedValue({ accessToken: 'pending-token' });
     hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
+    hoisted.retryPendingDisconnectQueueRelease.mockResolvedValue(true);
+    hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
+    hoisted.retryPendingServiceRouteRestore.mockResolvedValue(true);
+    hoisted.collectionGroup.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ docs: [] }),
+    });
   });
 
   it('clears pending disconnect without deauth when entitlement is active again', async () => {
@@ -167,8 +209,208 @@ describe('retry-pending-service-disconnects', () => {
     expect(hoisted.recordServiceDisconnectRetryFailure).toHaveBeenCalledWith(
       'user-1',
       ServiceNames.SuuntoApp,
-      failure,
+      {
+        ...failure,
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
+        },
+      },
     );
+  });
+
+  it('retries the current durable Wahoo reconnect-release page', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.WahooAPI,
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.WahooAPI),
+          },
+          {
+            id: ServiceNames.WahooAPI,
+            ref: buildUserServiceMetaRef('user-2', ServiceNames.WahooAPI),
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingWahooReconnectQueueReleases()).resolves.toBe(2);
+
+    expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
+    expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-1');
+    expect(hoisted.retryWahooReconnectQueueRelease).toHaveBeenCalledWith('user-2');
+  });
+
+  it('retries the current durable pending-disconnect queue-release page', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.SuuntoApp,
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.SuuntoApp),
+          },
+          {
+            id: ServiceNames.COROSAPI,
+            ref: buildUserServiceMetaRef('user-2', ServiceNames.COROSAPI),
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingDisconnectQueueReleases())
+      .resolves.toBe(2);
+
+    expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
+    expect(hoisted.retryPendingDisconnectQueueRelease).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
+    expect(hoisted.retryPendingDisconnectQueueRelease).toHaveBeenCalledWith(
+      'user-2',
+      ServiceNames.COROSAPI,
+    );
+  });
+
+  it('bounds and checkpoints lifecycle-repair pages', async () => {
+    const docs = Array.from({ length: 25 }, (_, index) => ({
+      id: ServiceNames.WahooAPI,
+      ref: buildUserServiceMetaRef(`user-${index}`, ServiceNames.WahooAPI),
+    }));
+    const query = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ docs }),
+    };
+    const cursorRef = buildCursorRef();
+    hoisted.collectionGroup.mockReturnValueOnce(query);
+    hoisted.doc.mockImplementation((path: string) => (
+      path === 'pendingServiceDisconnectRetryCursors/lifecycle_wahoo_reconnect_release'
+        ? cursorRef
+        : { path }
+    ));
+
+    const page = await retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      'wahooReconnectReleasePending',
+    );
+    expect(page).toHaveLength(25);
+    expect(cursorRef.set).not.toHaveBeenCalled();
+
+    await retryPendingServiceDisconnectsTestInternals.checkpointLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      page,
+    );
+
+    expect(query.limit).toHaveBeenCalledWith(25);
+    expect(query.get).toHaveBeenCalledTimes(1);
+    expect(cursorRef.set).toHaveBeenCalledWith({
+      documentPath: `users/user-24/meta/${ServiceNames.WahooAPI}`,
+    }, { merge: true });
+  });
+
+  it('continues lifecycle repair after its durable document-path cursor', async () => {
+    const cursorPath = `users/user-24/meta/${ServiceNames.WahooAPI}`;
+    const cursorRef = buildCursorRef({ documentPath: cursorPath });
+    const query = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({ docs: [{
+        id: ServiceNames.WahooAPI,
+        ref: buildUserServiceMetaRef('user-25', ServiceNames.WahooAPI),
+      }] }),
+    };
+    hoisted.collectionGroup.mockReturnValueOnce(query);
+    hoisted.doc.mockImplementation((path: string) => (
+      path === 'pendingServiceDisconnectRetryCursors/lifecycle_wahoo_reconnect_release'
+        ? cursorRef
+        : { path }
+    ));
+
+    const page = await retryPendingServiceDisconnectsTestInternals.getLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      'wahooReconnectReleasePending',
+    );
+    await retryPendingServiceDisconnectsTestInternals.checkpointLifecycleRepairPage(
+      'wahoo_reconnect_release',
+      page,
+    );
+
+    expect(query.startAfter).toHaveBeenCalledWith({ path: cursorPath });
+    expect(cursorRef.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries provider-neutral route restoration markers', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: ServiceNames.SuuntoApp,
+            ref: buildUserServiceMetaRef('user-1', ServiceNames.SuuntoApp),
+          },
+          {
+            id: 'not-a-service',
+            ref: buildUserServiceMetaRef('user-2', 'not-a-service'),
+          },
+        ],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingServiceRouteRestorations())
+      .resolves.toBe(1);
+
+    expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    );
+    expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores matching marker fields outside users/{uid}/meta/{service}', async () => {
+    hoisted.collectionGroup.mockReturnValueOnce({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      startAfter: vi.fn().mockReturnThis(),
+      get: vi.fn().mockResolvedValue({
+        docs: [{
+          id: ServiceNames.WahooAPI,
+          ref: {
+            path: `other/user-1/meta/${ServiceNames.WahooAPI}`,
+            parent: {
+              id: 'meta',
+              parent: {
+                id: 'user-1',
+                parent: { id: 'other' },
+              },
+            },
+          },
+        }],
+      }),
+    });
+
+    await expect(retryPendingServiceDisconnectsTestInternals.retryPendingWahooReconnectQueueReleases())
+      .resolves.toBe(0);
+
+    expect(hoisted.retryWahooReconnectQueueRelease).not.toHaveBeenCalled();
   });
 
   it('records retry failure when local cleanup remains partial without a retryable partner failure', async () => {
@@ -194,6 +436,12 @@ describe('retry-pending-service-disconnects', () => {
         tokenID: 'unknown',
         statusCode: null,
         errorMessage: expect.stringContaining('local cleanup remained partial'),
+        lifecycleGuard: {
+          disconnectGeneration: null,
+          oauthCredentialGeneration: null,
+          oauthFlowGeneration: null,
+          disconnectOperationGeneration: null,
+        },
       },
     );
   });

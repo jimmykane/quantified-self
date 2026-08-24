@@ -5,12 +5,16 @@ const mocks = vi.hoisted(() => {
   const requestWahooAPI = vi.fn();
   const getTokenData = vi.fn();
   const isDisconnectPendingForUser = vi.fn();
+  const assertWahooConnectionAvailable = vi.fn();
   const getUserDeletionGuardState = vi.fn();
   const parseRoutePayload = vi.fn();
   const exportRoutesToFit = vi.fn();
   const tokenRefGet = vi.fn();
   const tokenQueryGet = vi.fn();
   const loggerWarn = vi.fn();
+  const getActiveWahooTokenSnapshot = vi.fn();
+  const captureWahooActiveAccountGuard = vi.fn();
+  const assertWahooActiveAccountGuardCurrent = vi.fn();
   const tokenRef = { get: tokenRefGet };
   let onCallOptions: unknown = null;
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
@@ -27,6 +31,7 @@ const mocks = vi.hoisted(() => {
     requestWahooAPI,
     getTokenData,
     isDisconnectPendingForUser,
+    assertWahooConnectionAvailable,
     getUserDeletionGuardState,
     parseRoutePayload,
     exportRoutesToFit,
@@ -34,6 +39,9 @@ const mocks = vi.hoisted(() => {
     tokenQueryGet,
     tokenRef,
     loggerWarn,
+    getActiveWahooTokenSnapshot,
+    captureWahooActiveAccountGuard,
+    assertWahooActiveAccountGuardCurrent,
     WahooAPIRequestError,
     getOnCallOptions: () => onCallOptions,
     setOnCallOptions: (options: unknown) => {
@@ -69,6 +77,18 @@ vi.mock('../tokens', () => ({ getTokenData: mocks.getTokenData }));
 vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: mocks.isDisconnectPendingForUser,
 }));
+vi.mock('./refresh-recovery', () => ({
+  assertWahooConnectionAvailable: mocks.assertWahooConnectionAvailable,
+  isWahooReconnectRequiredError: (error: unknown) => (error as { name?: string } | null)?.name === 'WahooReconnectRequiredError',
+  isWahooRefreshBackoffError: () => false,
+  isWahooRefreshContentionError: (error: unknown) => (
+    error instanceof Error && (
+      error.name === 'TokenRefreshInProgressError'
+      || error.name === 'TokenRefreshSupersededError'
+      || error.name === 'WahooCredentialSupersededError'
+    )
+  ),
+}));
 vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: mocks.getUserDeletionGuardState,
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
@@ -90,6 +110,12 @@ vi.mock('./auth/api', () => ({
   requestWahooAPI: mocks.requestWahooAPI,
   WahooAPIRequestError: mocks.WahooAPIRequestError,
   WahooAPITransportError: class WahooAPITransportError extends Error {},
+}));
+vi.mock('./account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+  captureWahooActiveAccountGuard: mocks.captureWahooActiveAccountGuard,
+  assertWahooActiveAccountGuardCurrent: mocks.assertWahooActiveAccountGuardCurrent,
+  normalizeWahooUserID: (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null,
 }));
 
 import {
@@ -124,11 +150,25 @@ describe('Wahoo route uploads', () => {
     vi.clearAllMocks();
     mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
     mocks.isDisconnectPendingForUser.mockResolvedValue(false);
+    mocks.assertWahooConnectionAvailable.mockResolvedValue(undefined);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [{ ref: mocks.tokenRef }] });
     mocks.tokenRefGet.mockResolvedValue({ exists: true });
+    mocks.getActiveWahooTokenSnapshot.mockResolvedValue({
+      exists: true,
+      id: 'wahoo-user',
+      ref: mocks.tokenRef,
+      data: () => ({ wahooUserID: 'wahoo-user' }),
+    });
+    mocks.captureWahooActiveAccountGuard.mockResolvedValue({
+      providerUserId: 'wahoo-user',
+      connectionStateGeneration: 'connection-1',
+      credential: { accessToken: 'access-token' },
+    });
+    mocks.assertWahooActiveAccountGuardCurrent.mockResolvedValue(undefined);
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write routes_read routes_write offline_data',
     });
     mocks.parseRoutePayload.mockResolvedValue(routeFile());
@@ -344,10 +384,50 @@ describe('Wahoo route uploads', () => {
     expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
   });
 
+  it('does not create a route after the active Wahoo credential changes during lookup', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({ data: [] });
+    mocks.assertWahooActiveAccountGuardCurrent
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('credential changed'), { code: 'unauthenticated' }));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+    expect(mocks.requestWahooAPI).toHaveBeenCalledWith(
+      'access-token',
+      expect.stringMatching(/^\/v1\/routes\?external_id=/),
+    );
+  });
+
+  it.each([
+    'TokenRefreshInProgressError',
+    'TokenRefreshSupersededError',
+  ])('maps %s to a retryable Wahoo route callable error', async (name) => {
+    mocks.getTokenData.mockRejectedValueOnce(Object.assign(new Error('refresh contention'), { name }));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('maps a credential rotation before Wahoo route I/O to a retryable error', async () => {
+    mocks.assertWahooActiveAccountGuardCurrent.mockRejectedValueOnce(Object.assign(
+      new Error('credential rotated'),
+      { name: 'WahooCredentialSupersededError' },
+    ));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
   it('requires both Wahoo route scopes before making provider requests', async () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write offline_data',
     });
 
@@ -361,6 +441,7 @@ describe('Wahoo route uploads', () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
       accessToken: 'access-token',
+      wahooUserID: 'wahoo-user',
       scope: 'user_read workouts_read workouts_write offline_data',
     });
 
@@ -437,6 +518,32 @@ describe('Wahoo route uploads', () => {
         code: 'unauthenticated',
         message: 'Reconnect Wahoo before sending routes.',
       });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('preserves the reconnect-required marker so saved-route delivery is parked', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Reconnect Wahoo to resume sync.'), {
+      name: 'WahooReconnectRequiredError',
+    }));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'WahooReconnectRequiredError',
+        code: 'unauthenticated',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('rechecks reconnect-required state immediately before looking up a route', async () => {
+    mocks.assertWahooConnectionAvailable
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('Reconnect Wahoo.'), {
+        name: 'WahooReconnectRequiredError',
+      }));
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 

@@ -8,6 +8,7 @@ import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -25,7 +26,11 @@ import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { AppMapSettingsInterface, AppMyTracksSettings } from '../../models/app-user.interface';
+import {
+  AppMapSettingsInterface,
+  AppMyTracksSettings,
+  AppMyTracksTripSortDirection,
+} from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
 import { TrackStartPoint, TrackStartSelection, TracksMapManager, TripAreaOverlay } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
@@ -46,7 +51,6 @@ import { TripDetectionInput } from '../../services/my-tracks-trip-detection.serv
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
 import { DetectedHomeArea } from '../../services/my-tracks-trip-detection.service';
 import {
-  ResolvedTripLocationLabel,
   TripLocationCoordinateCandidate,
   TripLocationLabelService
 } from '../../services/trip-location-label.service';
@@ -186,6 +190,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private tracksMapManager: TracksMapManager;
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
+  private shouldPreserveMapViewForCurrentLoad = false;
   private trackCoordinatesByEventId = new Map<string, number[][]>();
   private eventsById = new Map<string, any>();
 
@@ -196,6 +201,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
   private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
+  private mapViewInteractionTarget: HTMLElement | null = null;
+  private readonly mapViewInteractionHandler = () => this.onMapViewInteraction();
   private backgroundActivityRefreshQueue: Array<() => Promise<void>> = [];
   private backgroundActivityRefreshActiveCount = 0;
   private backgroundActivityRefreshEventIds = new Set<string>();
@@ -210,9 +217,23 @@ export class TracksComponent implements OnInit, OnDestroy {
   public readonly myTracksSettings = computed(() => this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings);
   public readonly selectedMyTracksStartDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.startDate));
   public readonly selectedMyTracksEndDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.endDate));
+  public availableMyTracksActivityTypes: WritableSignal<ActivityTypes[] | null> = signal(null);
+  public readonly tripSortDirection = computed<AppMyTracksTripSortDirection>(() => (
+    this.myTracksSettings()?.tripSortDirection === 'asc' ? 'asc' : 'desc'
+  ));
+  public readonly tripSortIcon = computed(() => this.tripSortDirection() === 'desc' ? 'south' : 'north');
+  public readonly tripSortToggleLabel = computed(() => (
+    this.tripSortDirection() === 'desc'
+      ? 'Showing newest trips first. Show oldest trips first.'
+      : 'Showing oldest trips first. Show newest trips first.'
+  ));
 
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
+  public readonly displayedDetectedTrips = computed(() => this.sortDetectedTripsForDisplay(
+    this.detectedTrips(),
+    this.tripSortDirection(),
+  ));
   public detectedHomeArea: WritableSignal<DetectedHomeArea | null> = signal(null);
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
@@ -396,6 +417,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
+        this.bindMapViewInteractionListeners(mapInstance);
         this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
         this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
           this.zone.run(() => {
@@ -475,6 +497,15 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.userSettingsQuery.updateMyTracksSettings({ showJumpHeatmap: checked });
   }
 
+  public onMapViewInteraction(): void {
+    this.shouldPreserveMapViewForCurrentLoad = true;
+  }
+
+  public toggleTripSortDirection(): void {
+    const tripSortDirection = this.tripSortDirection() === 'desc' ? 'asc' : 'desc';
+    this.userSettingsQuery.updateMyTracksSettings({ tripSortDirection });
+  }
+
   public async search(event: Search) {
     if (!isPlatformBrowser(this.platformId)) return;
 
@@ -494,6 +525,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
+    this.unbindMapViewInteractionListeners();
     this.unbindStartPointPopupMapListeners();
     if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
@@ -656,6 +688,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       userId: (user as any).uid || (user as any).id || 'unknown'
     });
     this.hasTrackBoundsBeenApplied = true;
+    this.shouldPreserveMapViewForCurrentLoad = false;
     const promiseTime = ++this.promiseTime;
     this.backgroundActivityRefreshQueue = [];
     this.backgroundActivityRefreshEventIds.clear();
@@ -696,6 +729,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
       this.eventsById = this.buildEventsByIdMap(events);
+      this.availableMyTracksActivityTypes.set(this.getAvailableMyTracksActivityTypes(events));
       if (!events || !events.length) {
         if (!this.isCurrentLoad(promiseTime)) {
           return;
@@ -950,9 +984,11 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.tracksMapManager.clearActivityStartPoints();
       }
 
-      if (allCoordinates.length > 0) {
+      if (allCoordinates.length > 0 && !this.shouldPreserveMapViewForCurrentLoad) {
         await this.waitForMapRenderTick();
-        this.fitBoundsToTracks(allCoordinates);
+        if (this.isCurrentLoad(promiseTime) && !this.shouldPreserveMapViewForCurrentLoad) {
+          this.fitBoundsToTracks(allCoordinates);
+        }
       }
       const mergedJumpHeatPoints = this.mergeJumpHeatPoints(mergedEarlyJumpHeatPoints, jumpHeatPoints);
       if (mergedJumpHeatPoints.length > 0) {
@@ -1550,6 +1586,43 @@ export class TracksComponent implements OnInit, OnDestroy {
       .filter((value): value is ActivityTypes | string | number => value !== null);
   }
 
+  private getAvailableMyTracksActivityTypes(events: any[]): ActivityTypes[] {
+    const availableActivityTypes = new Set<ActivityTypes>();
+    (events || []).forEach((event) => {
+      this.getEventActivityTypeValues(event).forEach((rawActivityType) => {
+        const activityType = this.resolveSupportedActivityType(rawActivityType);
+        if (activityType) {
+          availableActivityTypes.add(activityType);
+        }
+      });
+    });
+    return Array.from(availableActivityTypes);
+  }
+
+  private resolveSupportedActivityType(
+    value: ActivityTypes | string | number | null | undefined,
+  ): ActivityTypes | null {
+    const rawValue = typeof value === 'number' && Number.isFinite(value)
+      ? (ActivityTypes as unknown as Record<number, unknown>)[value]
+      : value;
+    if (typeof rawValue !== 'string') {
+      return null;
+    }
+
+    const candidate = rawValue.trim();
+    if (!candidate) {
+      return null;
+    }
+
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(candidate);
+    if (resolvedActivityType) {
+      return resolvedActivityType;
+    }
+
+    const enumActivityType = Object.values(ActivityTypes).find((activityType) => activityType === candidate);
+    return typeof enumActivityType === 'string' ? enumActivityType as ActivityTypes : null;
+  }
+
   private matchesRequestedActivityTypes(
     candidateTypes: Array<ActivityTypes | string | number | null | undefined>,
     activityTypes?: ActivityTypes[],
@@ -1845,6 +1918,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+    this.onMapViewInteraction();
     this.selectedDetectedTripId.set(trip.tripId);
     this.applyActiveDetectedTripAreaOverlay();
 
@@ -1868,6 +1942,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.onMapViewInteraction();
     this.selectedDetectedTripId.set(TracksComponent.HOME_PANEL_ENTRY_ID);
     this.applyActiveDetectedTripAreaOverlay();
     this.fitBoundsToTracks([
@@ -1897,6 +1972,27 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     this.hoveredDetectedTripId.set(null);
     this.applyActiveDetectedTripAreaOverlay();
+  }
+
+  private sortDetectedTripsForDisplay(
+    trips: readonly DetectedTripViewModel[],
+    direction: AppMyTracksTripSortDirection,
+  ): DetectedTripViewModel[] {
+    const directionMultiplier = direction === 'desc' ? -1 : 1;
+    return [...trips].sort((left, right) => {
+      const startDateDifference = left.startDate.getTime() - right.startDate.getTime();
+      if (startDateDifference !== 0) {
+        return startDateDifference * directionMultiplier;
+      }
+
+      const endDateDifference = left.endDate.getTime() - right.endDate.getTime();
+      if (endDateDifference !== 0) {
+        return endDateDifference * directionMultiplier;
+      }
+
+      return left.destinationId.localeCompare(right.destinationId)
+        || left.tripId.localeCompare(right.tripId);
+    });
   }
 
   public onDetectedHomeHoverEnded(): void {
@@ -2164,7 +2260,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedHomeArea.set(detectedHomeArea);
     this.tracksMapManager.setHomeArea(detectedHomeArea);
     this.applyActiveDetectedTripAreaOverlay();
-    this.detectedTripsPanelExpanded.set(viewModels.length > 0);
+    this.detectedTripsPanelExpanded.set(viewModels.length > 0 || !!detectedHomeArea);
     this.hasEvaluatedTripDetection.set(true);
     this.logger.info('[debug] my_tracks_trip_detection_ui_models', {
       trips: viewModels.map((trip) => ({
@@ -2571,6 +2667,32 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
+  private bindMapViewInteractionListeners(
+    map: { getContainer?: () => HTMLElement | null } | null | undefined,
+  ): void {
+    this.unbindMapViewInteractionListeners();
+    const container = map?.getContainer?.();
+    if (!container) {
+      return;
+    }
+
+    this.mapViewInteractionTarget = container;
+    ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
+      container.addEventListener(eventName, this.mapViewInteractionHandler, true);
+    });
+  }
+
+  private unbindMapViewInteractionListeners(): void {
+    if (!this.mapViewInteractionTarget) {
+      return;
+    }
+
+    ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
+      this.mapViewInteractionTarget?.removeEventListener(eventName, this.mapViewInteractionHandler, true);
+    });
+    this.mapViewInteractionTarget = null;
+  }
+
   private unbindStartPointPopupMapListeners(): void {
     if (!this.startPointPopupRepositionHandler) return;
     const map = this.tracksMapManager.getMap();
@@ -2646,6 +2768,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   private centerMapOnStartPoint(selection: TrackStartSelection): void {
     if (!selection) return;
+    this.onMapViewInteraction();
     const map = this.tracksMapManager.getMap();
     if (!map?.easeTo) return;
     const target: [number, number] = [selection.lng, selection.lat];

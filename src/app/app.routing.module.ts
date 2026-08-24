@@ -10,6 +10,7 @@ import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -58,6 +59,14 @@ function workoutDataComparisonRouteData(): ResolveData {
   );
 }
 
+function supportedActivitiesRouteData(): ResolveData {
+  return lazyRouteData(
+    () => import('./components/features/supported-activities-page.content')
+      .then(module => module.SUPPORTED_ACTIVITIES_ROUTE_DATA),
+    SEO_RESOLVED_KEYS,
+  );
+}
+
 function publicSeoRouteData(page: PublicSeoPageKey): ResolveData {
   return lazyRouteData(
     () => import('./components/public-seo/public-seo-pages.content')
@@ -84,6 +93,7 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   'integrations/coros',
   'integrations/wahoo',
   WORKOUT_DATA_COMPARISON_PATH,
+  SUPPORTED_ACTIVITIES_PATH,
   ...Object.values(PUBLIC_FEATURE_PATHS),
   ...Object.values(PUBLIC_GUIDE_PATHS),
   'share/event/:userID/:eventID',
@@ -338,6 +348,15 @@ const topLevelRoutes: Routes = [
     path: WORKOUT_DATA_COMPARISON_PATH,
     loadComponent: () => import('./components/features/workout-data-comparison-page.component').then(m => m.WorkoutDataComparisonPageComponent),
     resolve: workoutDataComparisonRouteData(),
+    data: {
+      preload: true,
+      animation: 'Features',
+    },
+  },
+  {
+    path: SUPPORTED_ACTIVITIES_PATH,
+    loadComponent: () => import('./components/features/supported-activities-page.component').then(m => m.SupportedActivitiesPageComponent),
+    resolve: supportedActivitiesRouteData(),
     data: {
       preload: true,
       animation: 'Features',
@@ -747,6 +766,7 @@ export const routes: Routes = [
   {
     path: '',
     component: PublicLayoutComponent,
+    data: { disableRouteAnimation: true },
     children: publicLayoutRoutes,
   },
 ];
