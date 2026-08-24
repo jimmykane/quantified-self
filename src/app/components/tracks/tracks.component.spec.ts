@@ -2144,6 +2144,31 @@ describe('TracksComponent', () => {
       expect(tripButtons[0]?.textContent).toContain('Home');
     });
 
+    it('expands the trips panel when detection finds only a home area', async () => {
+      const homeArea = {
+        destinationId: 'destination-home',
+        pointCount: 5,
+        pointShare: 0.6,
+        centroidLat: 37.9838,
+        centroidLng: 23.7275,
+        bounds: {
+          west: 23.71,
+          east: 23.74,
+          south: 37.97,
+          north: 38.0,
+        },
+        radiusKm: 3.2,
+      };
+      (component as any).promiseTime = 1;
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({ homeArea }));
+
+      await (component as any).updateDetectedTripsForCurrentLoad([], [], 1);
+
+      expect(component.detectedTrips()).toEqual([]);
+      expect(component.detectedHomeArea()).toEqual(homeArea);
+      expect(component.detectedTripsPanelExpanded()).toBe(true);
+    });
+
     it('keeps Home first while sorting trips newest-first by default and persists sort changes', () => {
       vi.spyOn(component, 'ngOnInit').mockResolvedValue();
       component.detectedTrips.set([

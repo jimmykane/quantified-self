@@ -2220,7 +2220,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedHomeArea.set(detectedHomeArea);
     this.tracksMapManager.setHomeArea(detectedHomeArea);
     this.applyActiveDetectedTripAreaOverlay();
-    this.detectedTripsPanelExpanded.set(viewModels.length > 0);
+    this.detectedTripsPanelExpanded.set(viewModels.length > 0 || !!detectedHomeArea);
     this.hasEvaluatedTripDetection.set(true);
     this.logger.info('[debug] my_tracks_trip_detection_ui_models', {
       trips: viewModels.map((trip) => ({
