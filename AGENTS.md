@@ -16,6 +16,7 @@ Always-on rules:
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
 - After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths. Do not push unless the user explicitly asks.
 - When building a feature, review the app help page and update or add help content when needed.
+- When adding a new indexable public page, add it to `src/sitemap.xml` in the same change. Also verify its `robots.txt` policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.

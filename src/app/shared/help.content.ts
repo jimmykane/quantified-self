@@ -12,6 +12,7 @@ import {
 
 export type HelpSectionId =
   | 'getting-started'
+  | 'supported-activities'
   | 'activity-calendar'
   | 'training-analysis'
   | 'ai-insights'
@@ -179,6 +180,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **Dashboard** is your main activity overview.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
+- **Supported Activities & Metrics** lists the canonical activity types Quantified Self recognizes and explains why available detail follows the original source. Open the [Supported Activities guide](/help#supported-activities) or public [Supported Activities & Metrics page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
 - **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
@@ -407,6 +409,34 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Training Analysis Overview', icon: 'monitoring', kind: 'route', target: '/features/training-analysis' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
+    ],
+  },
+  {
+    id: 'supported-activities',
+    icon: 'category',
+    title: 'Supported Activities & Metrics',
+    summary: 'Browse recognized activity types, source-dependent metric families, Event Details recommendations, and Diving behavior.',
+    content: `## Recognized activity types
+
+- Quantified Self recognizes canonical activity types and organizes them into activity families for labels, icons, colors, search, Calendar, and other product surfaces. A recognized type does not guarantee that every source, device, or provider records the same data.
+- Open the [Supported Activities & Metrics page](/features/supported-activities) to search every current canonical type and family.
+
+## Metrics and Event Details
+
+- Route, terrain, sensor, lap, length, jump, chart, and sport-specific details appear only when the imported source includes compatible records. A chart recommendation prioritizes recorded data; it does not create a missing field.
+- Event Details shows **Laps** when selected activities contain lap data, **Swim Lengths** when a swimming source includes per-length pool data, and **Jumps** when selected activities contain jump events. Charts and overlays likewise need compatible source time series.
+- An individual activity uses its exact activity type for Event Details chart recommendations. A family is not a promise of a uniform chart profile: Boating is organized in Motorized but keeps Sailing recommendations, while Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations.
+- Hand Cycle and Velomobile are canonical Cycling types. They use existing Cycling chart recommendations and can enter Cycling Training analysis only when the activity meets the current recorded-evidence and eligibility rules.
+
+## Diving
+
+- Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding expose depth, decompression, timing/rate, tissue-load, SAC/RMV, gas, and tank records only when the original source provides them. Continuous depth samples enable Dive Profile.
+- Quantified Self never creates, names, associates, or calculates missing gas and tank data. Diving-only Events intentionally omit terrain altitude, ascent, descent, and grade summaries; mixed Events retain terrain summaries only from non-Diving activities.
+`,
+    links: [
+      { label: 'Supported Activities & Metrics', icon: 'category', kind: 'route', target: '/features/supported-activities' },
+      { label: 'Explore Integrations', icon: 'sync', kind: 'route', target: '/integrations' },
+      { label: 'Uploads & Imports', icon: 'upload_file', kind: 'route', target: '/help', fragment: 'uploads-and-imports' },
     ],
   },
   {

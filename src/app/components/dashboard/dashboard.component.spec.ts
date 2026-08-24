@@ -337,6 +337,8 @@ describe('DashboardComponent', () => {
         expect(text).toContain('Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.');
         expect(template).toContain('[fullWidth]="true"');
         expect(template).toContain('uploadLabel="Upload activity"');
+        expect(template).toContain('routerLink="/features/supported-activities"');
+        expect(template).not.toContain('href="/features/supported-activities"');
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
     });
 

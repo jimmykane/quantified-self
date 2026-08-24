@@ -13,6 +13,7 @@ Allow: /features
 Allow: /features/activity-calendar
 Allow: /features/mcp-server
 Allow: /features/workout-data-comparison
+Allow: /features/supported-activities
 Allow: /features/training-analysis
 Allow: /features/ai-insights
 Allow: /features/workout-file-comparison
