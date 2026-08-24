@@ -247,7 +247,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: style.axisColor,
       }
       : { show: false };
-    const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+    const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE
+      && !isMobileTooltipViewport;
     const xAxisLabelInterval = showEveryDayLabel ? 0 : this.buildXAxisLabelInterval(points, chartWidth);
     const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
@@ -379,9 +380,9 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           snap: true,
         },
         renderMode: 'html',
-        // Keep the tall sleep tooltip outside the chart canvas so its rows are not
-        // clipped by compact dashboard tiles, including on touch viewports.
-        ...resolveEChartsTooltipSurfaceConfig(false),
+        // Desktop tooltips can escape compact tiles, while touch viewports keep
+        // the tooltip in the chart so taps use ECharts' mobile interaction path.
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points, style),
       },
@@ -733,13 +734,16 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
     const hasProviderLine = points.some(point => point.categoryLabel.includes('\n'));
     const currentWeekIndexes = this.getCurrentWeekPointIndexes(points);
-    const minimumLabelWidth = currentWeekIndexes.size
-      ? MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH
-      : hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
+    const minimumLabelWidth = hasProviderLine
+      ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH
+      : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
     const availableWidth = Math.max(0, chartWidth - 68);
-    const maxLabels = Math.max(currentWeekIndexes.size, availableWidth > 0
-      ? Math.max(2, Math.floor(availableWidth / minimumLabelWidth))
-      : FALLBACK_MAX_AXIS_LABELS);
+    const currentWeekWidth = currentWeekIndexes.size * MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH;
+    const remainingWidth = Math.max(0, availableWidth - currentWeekWidth);
+    const maxNonCurrentWeekLabels = availableWidth > 0
+      ? Math.max(currentWeekIndexes.size ? 0 : 2, Math.floor(remainingWidth / minimumLabelWidth))
+      : Math.max(0, FALLBACK_MAX_AXIS_LABELS - currentWeekIndexes.size);
+    const maxLabels = Math.max(2, currentWeekIndexes.size + maxNonCurrentWeekLabels);
 
     if (points.length <= maxLabels) {
       return 0;

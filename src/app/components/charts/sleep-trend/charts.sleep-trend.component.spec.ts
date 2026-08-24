@@ -136,7 +136,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
-  it('shows a label for every day in the default 14-day sleep window', async () => {
+  it('shows a label for every day in the default 14-day sleep window on desktop', async () => {
     const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
       id: `sleep-${index + 1}`,
       sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
@@ -159,6 +159,57 @@ describe('ChartsSleepTrendComponent', () => {
 
     expect(option.xAxis.axisLabel.interval).toBe(0);
     expect(option.xAxis.axisLabel.hideOverlap).toBe(false);
+  });
+
+  it('thins the default 14-day sleep labels on a mobile viewport', async () => {
+    const originalMatchMedia = window.matchMedia;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 24, 12));
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    try {
+      const chartElement = fixture.nativeElement.querySelector('.sleep-chart') as HTMLDivElement;
+      Object.defineProperty(chartElement, 'clientWidth', { configurable: true, value: 360 });
+      const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
+        id: `sleep-${index + 1}`,
+        sleepDate: `2026-08-${String(index + 11).padStart(2, '0')}`,
+        categoryLabel: `Aug ${index + 11}`,
+      }));
+      component.sleepTrend = {
+        points,
+        latestPoint: points[points.length - 1],
+      };
+
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await vi.waitFor(() => {
+        expect(mockLoader.setOption).toHaveBeenCalled();
+      });
+
+      const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+      const optionCandidate = setOptionCall[1] || setOptionCall[0];
+      const option = optionCandidate as Record<string, any>;
+      const interval = option.xAxis.axisLabel.interval as ((index: number) => boolean);
+      const visibleLabelCount = points.filter((_point, index) => interval(index)).length;
+
+      expect(interval).toEqual(expect.any(Function));
+      expect(option.xAxis.axisLabel.hideOverlap).toBe(true);
+      expect(interval(0)).toBe(true);
+      expect(interval(points.length - 1)).toBe(true);
+      expect(visibleLabelCount).toBeLessThanOrEqual(5);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      vi.useRealTimers();
+    }
   });
 
   it('renders the sleep tooltip outside the chart bounds so tall content is not cropped', async () => {
@@ -705,6 +756,9 @@ describe('ChartsSleepTrendComponent', () => {
         axis: 'x',
         snap: true,
       });
+      expect(option?.tooltip?.confine).toBe(true);
+      expect(option?.tooltip?.appendTo).toBeUndefined();
+      expect(option?.tooltip?.position).toBeUndefined();
       expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
