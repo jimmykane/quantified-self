@@ -92,11 +92,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: 'Explore an activity calendar, training analysis, the grounded Quantified Self Assistant, read-only MCP access, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a private dashboard.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Supported activities', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('Activity Calendar', '/features/activity-calendar'),
-      routeAction('Supported Activities', '/features/supported-activities'),
+      routeAction('Supported activity types', '/features/supported-activities'),
       routeAction('MCP Server', '/features/mcp-server'),
       routeAction('Assistant', '/features/ai-insights'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),

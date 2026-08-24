@@ -180,7 +180,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **Dashboard** is your main activity overview.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
-- **Supported Activities & Metrics** lists the canonical activity types Quantified Self recognizes and explains why available detail follows the original source. Open the [Supported Activities guide](/help#supported-activities) or public [Supported Activities & Metrics page](/features/supported-activities).
+- **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.
 - **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
@@ -377,7 +377,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The profile uses the standard Event Details chart controls and height. The surface is fixed at the top of the depth axis, elapsed time runs left to right, and missing samples remain visible gaps.
 - Temperature, heart rate, next-stop depth/time, time to surface, no-decompression limit, CNS/N2 load, air time remaining, pressure/volume SAC, RMV, PO₂, and dive ascent rate are available one at a time from the standard chart overlay picker when the source records them. Overlays start turned off, and multi-activity events keep each selected dive separate.
 - The **Diving** summary tab shows the source-provided average/maximum depth, surface interval, bottom time, dive number and phase times/rates, CNS/N2 loads, oxygen toxicity, SAC, and RMV values that are present. **Maximum Depth** also appears in Overall and Environment. Missing values stay unavailable: the app does not infer summaries from samples or reconstruct samples from a summary.
-- When a FIT source records dive gases, tank summaries, or tank pressure updates, the **Diving** summary tab also shows a source-native **Gas & Tanks** section. New imports and reprocessed activities retain those records with the activity; older activities can display them while their original source remains available. The section keeps every selected dive separate and displays the parser's recorded percentages, bar, litres, timestamps, and source enum values. The app does not invent a gas mixture name or nitrogen value, associate a gas with a tank, calculate consumption, or create missing records.
+- When an imported FIT activity includes dive gases, tank summaries, or tank pressure updates, the **Diving** summary tab also shows a **Gas & Tanks** section. New imports and reprocessed activities keep those details with the activity; older activities can still show them while the original file is available. Each selected dive stays separate, and the section shows the recorded percentages, pressure, volume, timestamps, and original labels. The app does not make up a gas mixture name or nitrogen value, match a gas to a tank, calculate consumption, or add missing records.
 - **Depth** is also available as an advanced chart metric in **Settings -> Charts**. The first Swim pace preference selects one dive display family: per 100 meters uses meters and meters per second, while per 100 yards uses feet and feet per second. Depth and dive-rate displays retain the FIT source's three decimal places; SAC/RMV and PO₂ retain two.
 
 ### Event chart defaults and controls
@@ -414,27 +414,27 @@ export const HELP_SECTIONS: HelpSection[] = [
   {
     id: 'supported-activities',
     icon: 'category',
-    title: 'Supported Activities & Metrics',
-    summary: 'Browse recognized activity types, source-dependent metric families, Event Details recommendations, and Diving behavior.',
-    content: `## Recognized activity types
+    title: 'Supported activity types',
+    summary: 'Browse the activity types Quantified Self recognizes and learn why the details shown depend on the data in each activity.',
+    content: `## Activity types we recognize
 
-- Quantified Self recognizes canonical activity types and organizes them into activity families for labels, icons, colors, search, Calendar, and other product surfaces. A recognized type does not guarantee that every source, device, or provider records the same data.
-- Open the [Supported Activities & Metrics page](/features/supported-activities) to search every current canonical type and family.
+- Quantified Self uses activity types and groups to label, search, filter, and organize activities. If a type is listed, we can recognize it; not every device, connected service, or uploaded file includes the same details.
+- Open the [Supported activity types page](/features/supported-activities) to search the complete list.
 
-## Metrics and Event Details
+## What appears in Event Details
 
-- Route, terrain, sensor, lap, length, jump, chart, and sport-specific details appear only when the imported source includes compatible records. A chart recommendation prioritizes recorded data; it does not create a missing field.
-- Event Details shows **Laps** when selected activities contain lap data, **Swim Lengths** when a swimming source includes per-length pool data, and **Jumps** when selected activities contain jump events. Charts and overlays likewise need compatible source time series.
-- An individual activity uses its exact activity type for Event Details chart recommendations. A family is not a promise of a uniform chart profile: Boating is organized in Motorized but keeps Sailing recommendations, while Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations.
-- Hand Cycle and Velomobile are canonical Cycling types. They use existing Cycling chart recommendations and can enter Cycling Training analysis only when the activity meets the current recorded-evidence and eligibility rules.
+- Routes, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the imported activity includes that data. We do not add missing information.
+- Event Details shows **Laps** when an activity includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
+- Groups help you browse, but the activity type and its data determine the charts. Activities in the same group can show different charts. For example, Boating is listed in Motorized but can use sailing-oriented charts when the activity includes the data those charts need. Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts when the activity includes the data those charts need.
+- Hand Cycle and Velomobile are grouped with Cycling. They appear in Cycling Training analysis only when the activity contains enough relevant data.
 
 ## Diving
 
-- Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding expose depth, decompression, timing/rate, tissue-load, SAC/RMV, gas, and tank records only when the original source provides them. Continuous depth samples enable Dive Profile.
-- Quantified Self never creates, names, associates, or calculates missing gas and tank data. Diving-only Events intentionally omit terrain altitude, ascent, descent, and grade summaries; mixed Events retain terrain summaries only from non-Diving activities.
+- Dive Profile needs continuous depth data. Other dive details, such as depth, decompression, timing, tissue load, SAC/RMV, gas, and tank information, appear only when they are included in the activity. We do not estimate or fill in missing dive data.
+- In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade are hidden. For an event that combines diving with another activity, terrain summaries come only from the non-diving activity.
 `,
     links: [
-      { label: 'Supported Activities & Metrics', icon: 'category', kind: 'route', target: '/features/supported-activities' },
+      { label: 'Supported activity types', icon: 'category', kind: 'route', target: '/features/supported-activities' },
       { label: 'Explore Integrations', icon: 'sync', kind: 'route', target: '/integrations' },
       { label: 'Uploads & Imports', icon: 'upload_file', kind: 'route', target: '/help', fragment: 'uploads-and-imports' },
     ],

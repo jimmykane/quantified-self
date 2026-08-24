@@ -26,7 +26,7 @@ describe('supported-activities-page.content', () => {
       expect(family.gradient).toContain('linear-gradient(');
     });
     expect(unspecified).toMatchObject({
-      label: 'Unspecified',
+      label: 'Other activities',
       icon: 'category',
       fallback: true,
     });
@@ -41,10 +41,10 @@ describe('supported-activities-page.content', () => {
     expect(SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES).toEqual(expect.arrayContaining([
       expect.objectContaining({
         title: 'Laps and swim lengths',
-        copy: expect.stringContaining('per-length pool data'),
+        copy: expect.stringContaining('individual pool lengths'),
       }),
       expect.objectContaining({
-        title: 'Recorded jump details',
+        title: 'Jump details',
         copy: expect.stringContaining('jump events'),
       }),
     ]));
@@ -54,11 +54,12 @@ describe('supported-activities-page.content', () => {
     expect(SUPPORTED_ACTIVITIES_PATH).toBe('features/supported-activities');
     expect(SUPPORTED_ACTIVITIES_URL).toBe('https://quantified-self.io/features/supported-activities');
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA).toMatchObject({
-      title: 'Supported Activities & Metrics',
+      title: 'Supported Activity Types',
       preload: true,
       animation: 'Features',
     });
-    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('original activity source');
+    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('activity types Quantified Self recognizes');
+    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('device, connected service, or uploaded file');
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).not.toContain('every provider');
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.jsonLd).toMatchObject({
       '@context': 'https://schema.org',

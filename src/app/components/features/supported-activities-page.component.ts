@@ -10,7 +10,6 @@ import { MatInputModule } from '@angular/material/input';
 import {
   SUPPORTED_ACTIVITIES_ROUTE_DATA,
   SUPPORTED_ACTIVITY_FAMILIES,
-  SUPPORTED_ACTIVITY_PRESENTATION_NOTES,
   SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES,
   SUPPORTED_ACTIVITY_SUPPORT_LEVELS,
   SUPPORTED_ACTIVITY_TYPE_COUNT,
@@ -43,7 +42,6 @@ export class SupportedActivitiesPageComponent {
   readonly totalActivityTypeCount = SUPPORTED_ACTIVITY_TYPE_COUNT;
   readonly supportLevels = SUPPORTED_ACTIVITY_SUPPORT_LEVELS;
   readonly specializedSurfaces = SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES;
-  readonly presentationNotes = SUPPORTED_ACTIVITY_PRESENTATION_NOTES;
   readonly searchQuery = signal('');
   readonly filteredFamilies = computed<readonly SupportedActivityFamily[]>(() => {
     const normalizedQuery = normalizeSearchValue(this.searchQuery());
@@ -75,10 +73,10 @@ export class SupportedActivitiesPageComponent {
     const activityTypeCount = this.visibleActivityTypeCount();
 
     if (!this.searchQuery().trim()) {
-      return `${this.totalActivityTypeCount} recognized activity types across ${SUPPORTED_ACTIVITY_FAMILIES.length} families.`;
+      return `${this.totalActivityTypeCount} activity types in ${SUPPORTED_ACTIVITY_FAMILIES.length} groups.`;
     }
 
-    return `Showing ${activityTypeCount} recognized activity type${activityTypeCount === 1 ? '' : 's'} across ${familyCount} matching famil${familyCount === 1 ? 'y' : 'ies'}.`;
+    return `Showing ${activityTypeCount} activity type${activityTypeCount === 1 ? '' : 's'} in ${familyCount} matching group${familyCount === 1 ? '' : 's'}.`;
   });
 
   onSearchQueryChange(query: string): void {

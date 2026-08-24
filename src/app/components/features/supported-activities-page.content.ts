@@ -39,7 +39,7 @@ export const SUPPORTED_ACTIVITY_FAMILIES: readonly SupportedActivityFamily[] = g
 
   return {
     id: entry.id,
-    label: entry.label,
+    label: entry.id === ActivityTypeGroups.UnspecifiedGroup ? 'Other activities' : entry.label,
     activityTypes: entry.activityTypes,
     icon: AppActivityTypeGroupIcons[entry.id],
     color: AppActivityTypeGroupColors[entry.id],
@@ -54,23 +54,23 @@ export const SUPPORTED_ACTIVITY_TYPE_COUNT = SUPPORTED_ACTIVITY_FAMILIES
 export const SUPPORTED_ACTIVITY_SUPPORT_LEVELS: readonly SupportedActivityContentItem[] = [
   {
     icon: 'category',
-    title: 'Recognized activity type',
-    copy: 'The catalog lists the canonical activity types Quantified Self recognizes and the family used to organize them across the app.',
+    title: 'Recognized type',
+    copy: 'The catalog shows the activity types Quantified Self recognizes and the groups that help you browse them.',
   },
   {
     icon: 'query_stats',
-    title: 'Recorded metrics first',
-    copy: 'Distance, route, terrain, sensors, laps, lengths, jumps, charts, and sport-specific records appear only when an imported source provides compatible data.',
+    title: 'Shown when recorded',
+    copy: 'Maps, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the activity includes the relevant data.',
   },
   {
     icon: 'stacked_line_chart',
-    title: 'Type-aware Event Details',
-    copy: 'An individual activity uses its exact type to recommend compatible charts. A family does not promise the same chart behavior for every member.',
+    title: 'Charts fit the activity',
+    copy: 'Groups help you browse. The activity type and its data determine which charts you see, so activities in the same group can still look different.',
   },
   {
     icon: 'sync',
-    title: 'Source and provider dependent',
-    copy: 'Connected services, manual files, device models, and recording settings can all affect which fields arrive with an activity.',
+    title: 'Your source matters',
+    copy: 'Devices, connected services, file formats, and recording settings can all change the details that arrive with an activity.',
   },
 ];
 
@@ -78,48 +78,30 @@ export const SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES: readonly SupportedActivity
   {
     icon: 'table_rows',
     title: 'Laps and swim lengths',
-    copy: 'Event Details shows Laps when selected activities contain lap data. Swimming activities can show Swim Lengths when their source includes per-length pool data.',
+    copy: 'Laps appear when the activity includes lap data. Swimming activities can show Swim Lengths when the data includes individual pool lengths.',
   },
   {
     icon: 'landscape',
-    title: 'Recorded jump details',
-    copy: 'Event Details shows Jumps when selected activities contain jump events. The visible columns follow the values actually recorded.',
+    title: 'Jump details',
+    copy: 'Jumps appear when the activity includes jump events. The columns match the measurements in the activity.',
   },
   {
     icon: 'stacked_line_chart',
-    title: 'Charts from compatible samples',
-    copy: 'Charts and overlays need compatible source time series. Recommendations prioritize relevant recorded panels rather than adding a missing metric.',
-  },
-];
-
-export const SUPPORTED_ACTIVITY_PRESENTATION_NOTES: readonly SupportedActivityContentItem[] = [
-  {
-    icon: 'sailing',
-    title: 'Families organize; types recommend',
-    copy: 'Boating is organized in Motorized, while an individual Boating activity keeps Sailing chart recommendations. The family color and icon do not replace its exact type behavior.',
-  },
-  {
-    icon: 'accessible_forward',
-    title: 'Adaptive Mobility stays type-aware',
-    copy: 'Wheel Chair is organized in Adaptive Mobility and keeps Cycling chart recommendations when compatible source metrics are present. This does not make it a Cycling Training claim.',
-  },
-  {
-    icon: 'pedal_bike',
-    title: 'Cycling has expanded coverage',
-    copy: 'Hand Cycle and Velomobile are Cycling types. They use existing Cycling chart recommendations and can enter Cycling Training analysis only when current evidence rules are met.',
+    title: 'Charts for recorded data',
+    copy: 'Charts and overlays need data recorded over time in the activity. We show useful recorded data instead of filling in a missing metric.',
   },
 ];
 
 export const SUPPORTED_ACTIVITIES_ROUTE_DATA: SupportedActivitiesRouteData = {
-  title: 'Supported Activities & Metrics',
+  title: 'Supported Activity Types',
   preload: true,
   animation: 'Features',
-  description: 'Browse the canonical activity types Quantified Self recognizes, how they are grouped, and why available metrics and Event Details charts depend on the original activity source.',
+  description: 'Browse the activity types Quantified Self recognizes. The metrics, maps, laps, charts, and sport-specific details shown for an activity depend on data from its device, connected service, or uploaded file.',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
-    name: 'Supported Activities & Metrics',
-    description: 'Browse the canonical activity types Quantified Self recognizes, how they are grouped, and why available metrics and Event Details charts depend on the original activity source.',
+    name: 'Supported Activity Types',
+    description: 'Browse the activity types Quantified Self recognizes. The metrics, maps, laps, charts, and sport-specific details shown for an activity depend on data from its device, connected service, or uploaded file.',
     url: SUPPORTED_ACTIVITIES_URL,
     inLanguage: 'en',
     isPartOf: {
@@ -133,10 +115,10 @@ export const SUPPORTED_ACTIVITIES_ROUTE_DATA: SupportedActivitiesRouteData = {
       applicationCategory: 'HealthApplication',
       operatingSystem: 'Web',
       featureList: [
-        'Canonical activity type catalog',
-        'Source-dependent activity metrics',
-        'Type-aware Event Details chart recommendations',
-        'Source-native Diving presentation',
+        'Activity type catalog',
+        'Details based on recorded activity data',
+        'Charts based on activity type and recorded data',
+        'Dive details based on recorded activity data',
       ],
     },
   },

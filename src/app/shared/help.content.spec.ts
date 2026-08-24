@@ -15,15 +15,15 @@ describe('help.content', () => {
   it('documents the supported activity catalog without overpromising source data', () => {
     const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
 
-    expect(supportedActivitiesSection?.content).toContain('[Supported Activities & Metrics page](/features/supported-activities)');
-    expect(supportedActivitiesSection?.content).toContain('A chart recommendation prioritizes recorded data; it does not create a missing field.');
-    expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when a swimming source includes per-length pool data');
-    expect(supportedActivitiesSection?.content).toContain('Jumps** when selected activities contain jump events');
-    expect(supportedActivitiesSection?.content).toContain('Boating is organized in Motorized but keeps Sailing recommendations');
-    expect(supportedActivitiesSection?.content).toContain('Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations');
-    expect(supportedActivitiesSection?.content).toContain('never creates, names, associates, or calculates missing gas and tank data');
+    expect(supportedActivitiesSection?.content).toContain('[Supported activity types page](/features/supported-activities)');
+    expect(supportedActivitiesSection?.content).toContain('We do not add missing information.');
+    expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when the data includes individual pool lengths');
+    expect(supportedActivitiesSection?.content).toContain('Jumps** when the activity includes jump events');
+    expect(supportedActivitiesSection?.content).toContain('Boating is listed in Motorized but can use sailing-oriented charts');
+    expect(supportedActivitiesSection?.content).toContain('Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts');
+    expect(supportedActivitiesSection?.content).toContain('We do not estimate or fill in missing dive data.');
     expect(supportedActivitiesSection?.links).toContainEqual({
-      label: 'Supported Activities & Metrics',
+      label: 'Supported activity types',
       icon: 'category',
       kind: 'route',
       target: '/features/supported-activities',
@@ -537,10 +537,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Maximum Depth**');
     expect(gettingStartedSection?.content).toContain('**Gas & Tanks**');
     expect(gettingStartedSection?.content).toContain('tank pressure updates');
-    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities retain those records with the activity');
-    expect(gettingStartedSection?.content).toContain('older activities can display them while their original source remains available');
-    expect(gettingStartedSection?.content).toContain('does not invent a gas mixture name or nitrogen value');
-    expect(gettingStartedSection?.content).toContain('associate a gas with a tank');
+    expect(gettingStartedSection?.content).toContain('New imports and reprocessed activities keep those details with the activity');
+    expect(gettingStartedSection?.content).toContain('older activities can still show them while the original file is available');
+    expect(gettingStartedSection?.content).toContain('does not make up a gas mixture name or nitrogen value');
+    expect(gettingStartedSection?.content).toContain('match a gas to a tank');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable');
     expect(gettingStartedSection?.content).toContain('does not infer summaries from samples');
     expect(gettingStartedSection?.content).toContain('advanced chart metric');

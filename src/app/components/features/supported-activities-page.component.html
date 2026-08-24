@@ -1,13 +1,13 @@
 <main class="supported-activities-page">
   <section class="hero-section" aria-labelledby="supported-activities-title">
-    <p class="eyebrow">Activity reference</p>
-    <h1 id="supported-activities-title">Supported activities &amp; metrics</h1>
+    <p class="eyebrow">Activity types</p>
+    <h1 id="supported-activities-title">Supported activity types</h1>
     <p class="hero-copy">
-      Quantified Self recognizes {{ totalActivityTypeCount }} canonical activity types. Browse the families used across
-      the app, then see why the metrics and Event Details charts available for one activity always depend on its
-      original recording.
+      Quantified Self recognizes {{ totalActivityTypeCount }} activity types. Browse the list to see whether your
+      activity is included. The maps, metrics, laps, and charts you see depend on what your device, connected service,
+      or uploaded file recorded.
     </p>
-    <div class="hero-actions" aria-label="Supported activities actions">
+    <div class="hero-actions" aria-label="Supported activity types actions">
       <a mat-flat-button class="qs-mat-primary" routerLink="/login">
         Get started free
         <mat-icon iconPositionEnd>arrow_forward</mat-icon>
@@ -20,11 +20,11 @@
 
   <section class="content-section" aria-labelledby="specialized-surfaces-title">
     <div class="section-heading">
-      <p class="eyebrow">Source-provided detail</p>
-      <h2 id="specialized-surfaces-title">Specialized surfaces appear when records exist</h2>
+      <p class="eyebrow">What your activity can show</p>
+      <h2 id="specialized-surfaces-title">Extra details appear when the data is there</h2>
       <p>
-        Importing a recognized type does not manufacture laps, lengths, jump events, or continuous chart samples.
-        Event Details exposes these surfaces only when compatible source records are present.
+        Recognizing an activity type does not add data. Event Details shows laps, swim lengths, jumps, and charts only
+        when the imported activity includes them.
       </p>
     </div>
     <div class="presentation-grid">
@@ -46,14 +46,14 @@
 
   <section class="content-section catalog-section" aria-labelledby="activity-catalog-title">
     <div class="section-heading">
-      <p class="eyebrow">Canonical catalog</p>
-      <h2 id="activity-catalog-title">Find your activity type</h2>
-      <p>All families are expanded so you can scan the exact names recognized by the current catalog.</p>
+      <p class="eyebrow">Activity catalog</p>
+      <h2 id="activity-catalog-title">Find an activity</h2>
+      <p>Every group is open so you can scan the activity types Quantified Self recognizes.</p>
     </div>
 
     <div class="catalog-toolbar">
       <mat-form-field appearance="outline" class="activity-search">
-        <mat-label>Search activity types and families</mat-label>
+        <mat-label>Search activity types and groups</mat-label>
         <mat-icon matPrefix>search</mat-icon>
         <input
           #searchInput
@@ -83,12 +83,12 @@
           </div>
           <mat-card-title>{{ family.label }}</mat-card-title>
           <mat-card-subtitle>
-            {{ family.activityTypes.length }} recognized activity type{{ family.activityTypes.length === 1 ? '' : 's' }}
+            {{ family.activityTypes.length }} activity type{{ family.activityTypes.length === 1 ? '' : 's' }}
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-content class="family-card-content">
           @if (family.fallback) {
-          <p class="family-note">Recognized fallback types without a dedicated sport family. Available details remain source-dependent.</p>
+          <p class="family-note">These activity types do not have a dedicated group. Their details still depend on the data in the activity.</p>
           }
           <mat-chip-set [attr.aria-label]="family.label + ' activity types'">
             @for (activityType of family.activityTypes; track activityType) {
@@ -104,8 +104,8 @@
       <mat-card-content>
         <mat-icon aria-hidden="true">search_off</mat-icon>
         <div>
-          <h3>No recognized activity types match</h3>
-          <p>Try a shorter name, a family such as Cycling, or a type such as Hand Cycle.</p>
+          <h3>No activity types match your search</h3>
+          <p>Try a shorter name, a group such as Cycling, or a type such as Hand Cycle.</p>
         </div>
       </mat-card-content>
     </mat-card>
@@ -115,55 +115,40 @@
   <section class="content-section" aria-labelledby="event-details-title">
     <div class="section-heading">
       <p class="eyebrow">Event Details</p>
-      <h2 id="event-details-title">Family and chart recommendations are different</h2>
+      <h2 id="event-details-title">Charts follow the activity, not just its group</h2>
       <p>
-        Exact activity types select the most relevant chart recommendations first. If a merged event contains multiple
-        related activities, it can use a shared family recommendation. Neither path creates a metric the source did not record.
+        Groups make the catalog easy to browse. In Event Details, the activity type and its data determine the charts
+        you see, so activities in the same group can still look different.
       </p>
-    </div>
-    <div class="presentation-grid">
-      @for (item of presentationNotes; track item.title) {
-      <mat-card appearance="outlined" class="presentation-card">
-        <mat-card-header>
-          <div mat-card-avatar class="support-level-avatar">
-            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
-      }
     </div>
   </section>
 
   <section class="content-section diving-section" aria-labelledby="diving-support-title">
     <div class="section-heading">
-      <p class="eyebrow">Specialized presentation</p>
-      <h2 id="diving-support-title">Diving is source-native by design</h2>
+      <p class="eyebrow">Diving</p>
+      <h2 id="diving-support-title">Dive details come from your recording</h2>
       <p>
-        Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding have specialized Event Details behavior when
-        their original source contains the relevant records.
+        Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding can show dive-specific details when the imported
+        activity includes them.
       </p>
     </div>
     <mat-card appearance="outlined" class="diving-card">
       <mat-card-header>
         <div mat-card-avatar class="diving-avatar"><mat-icon aria-hidden="true">scuba_diving</mat-icon></div>
-        <mat-card-title>Depth, gas, and tank records stay source-provided</mat-card-title>
+        <mat-card-title>Dive details are shown when recorded</mat-card-title>
       </mat-card-header>
       <mat-card-content>
         <p>
-          Continuous source depth enables Dive Profile. Depth, decompression, timing/rate, tissue-load, SAC/RMV, gas,
-          and tank details appear only when the original source provides them. Quantified Self never creates, names,
-          associates, or calculates missing gas and tank data.
+          Dive Profile needs continuous depth data. Depth, decompression, timing, tissue load, SAC/RMV, gas, and tank
+          details appear only when they are included in the activity. We do not estimate or fill in missing dive data.
         </p>
         <p>
-          Diving-only Events intentionally omit terrain altitude, ascent, descent, and grade summaries because dive
-          vertical movement is represented by depth. Mixed Events retain terrain summaries only from non-Diving activities.
+          In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade
+          are hidden. For an event that combines diving with another activity, terrain summaries come only from the
+          non-diving activity.
         </p>
         <a mat-stroked-button routerLink="/help" fragment="supported-activities">
-          Read the supported activities Help guide
+          Read the supported activity types Help guide
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
         </a>
       </mat-card-content>
@@ -172,16 +157,16 @@
 
   <section class="content-section provider-section" aria-labelledby="provider-context-title">
     <div class="section-heading">
-      <p class="eyebrow">Import context</p>
-      <h2 id="provider-context-title">Your source determines the detail</h2>
+      <p class="eyebrow">Your data source</p>
+      <h2 id="provider-context-title">Your device, service, or file determines the detail</h2>
       <p>
-        Garmin, Suunto, COROS, Wahoo, and uploaded FIT, GPX, TCX, JSON, or SML files can carry different activity
-        fields. Check the activity source and integration guidance when a metric is missing.
+        Garmin, Suunto, COROS, Wahoo, and uploaded FIT, GPX, TCX, JSON, or SML files can include different activity
+        details. If something is missing, check what the device, service, or file recorded.
       </p>
     </div>
     <div class="hero-actions">
-      <a mat-stroked-button routerLink="/integrations">Explore integrations</a>
-      <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Uploads and imports Help</a>
+      <a mat-stroked-button routerLink="/integrations">See integrations</a>
+      <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Get help with uploads</a>
     </div>
   </section>
 
@@ -189,14 +174,14 @@
     <mat-expansion-panel class="support-details-panel">
       <mat-expansion-panel-header>
         <mat-panel-title>
-          <h2 id="support-levels-title" class="support-details-title">What support means</h2>
+          <h2 id="support-levels-title" class="support-details-title">What “supported” means</h2>
         </mat-panel-title>
-        <mat-panel-description>Recognition and recorded-data details</mat-panel-description>
+        <mat-panel-description>We recognize the type; your activity data determines the detail.</mat-panel-description>
       </mat-expansion-panel-header>
       <div class="support-details-content">
         <p class="support-details-intro">
-          Quantified Self can classify and present a recognized type when it appears in imported data. The available
-          detail still follows the source file or connected service, not a universal sport template.
+          If an activity is listed, Quantified Self recognizes its type. It shows the details included in the activity
+          and does not add missing metrics, tracks, laps, lengths, jumps, or charts.
         </p>
         <div class="support-level-grid">
           @for (item of supportLevels; track item.title) {

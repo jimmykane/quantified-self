@@ -366,14 +366,14 @@ describe('AppRoutingModule routes', () => {
       preload: true,
       animation: 'Features',
     });
-    expect(routeData['title']).toBe('Supported Activities & Metrics');
-    expect(routeData['description']).toContain('canonical activity types');
-    expect(routeData['description']).toContain('original activity source');
+    expect(routeData['title']).toBe('Supported Activity Types');
+    expect(routeData['description']).toContain('activity types Quantified Self recognizes');
+    expect(routeData['description']).toContain('device, connected service, or uploaded file');
     expect(routeData['keywords']).toBeUndefined();
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: 'Supported Activities & Metrics',
+      name: 'Supported Activity Types',
       url: 'https://quantified-self.io/features/supported-activities',
       inLanguage: 'en',
     });

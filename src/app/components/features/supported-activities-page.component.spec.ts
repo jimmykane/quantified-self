@@ -19,7 +19,7 @@ describe('SupportedActivitiesPageComponent', () => {
     const fixture: ComponentFixture<SupportedActivitiesPageComponent> = TestBed.createComponent(SupportedActivitiesPageComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('131 canonical activity types');
+    expect(fixture.nativeElement.textContent).toContain('Quantified Self recognizes 131 activity types.');
     expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(17);
     expect(fixture.nativeElement.querySelector('[data-family-id="motorized_group"]')?.textContent).toContain('Boating');
 
@@ -28,19 +28,19 @@ describe('SupportedActivitiesPageComponent', () => {
 
     expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('[data-family-id="adaptive_mobility_group"]')?.textContent).toContain('Wheel Chair');
-    expect(fixture.nativeElement.textContent).toContain('Showing 1 recognized activity type across 1 matching family.');
+    expect(fixture.nativeElement.textContent).toContain('Showing 1 activity type in 1 matching group.');
 
     fixture.componentInstance.onSearchQueryChange('cycling');
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-family-id="cycling_group"]')?.textContent).toContain('Hand Cycle');
     expect(fixture.componentInstance.searchResultSummary()).toMatch(
-      /^Showing \d+ recognized activity types across \d+ matching families\.$/,
+      /^Showing \d+ activity types in \d+ matching groups\.$/,
     );
     expect(fixture.nativeElement.textContent).not.toContain('activity types match your search.');
   });
 
-  it('explains that family membership does not replace exact chart recommendations', () => {
+  it('uses plain language to explain how activity groups and recorded data affect Event Details', () => {
     TestBed.configureTestingModule({
       imports: [
         SupportedActivitiesPageComponent,
@@ -56,12 +56,12 @@ describe('SupportedActivitiesPageComponent', () => {
     const text = fixture.nativeElement.textContent;
     const helpLink = fixture.nativeElement.querySelector('a[routerlink="/help"], a[ng-reflect-router-link="/help"]');
 
-    expect(text).toContain('Boating is organized in Motorized');
-    expect(text).toContain('Wheel Chair is organized in Adaptive Mobility');
-    expect(text).toContain('Laps when selected activities contain lap data');
-    expect(text).toContain('Swim Lengths when their source includes per-length pool data');
-    expect(text).toContain('Jumps when selected activities contain jump events');
-    expect(text).toContain('never creates, names, associates, or calculates missing gas and tank data');
+    expect(text).toContain('Charts follow the activity, not just its group');
+    expect(text).toContain('Groups make the catalog easy to browse');
+    expect(text).toContain('Laps appear when the activity includes lap data');
+    expect(text).toContain('Swim Lengths when the data includes individual pool lengths');
+    expect(text).toContain('Jumps appear when the activity includes jump events');
+    expect(text).toContain('We do not estimate or fill in missing dive data');
     expect(helpLink).toBeTruthy();
   });
 
@@ -82,7 +82,7 @@ describe('SupportedActivitiesPageComponent', () => {
     const supportDetails = fixture.nativeElement.querySelector('.support-details-section') as HTMLElement;
 
     expect(supportDetails.querySelector('mat-expansion-panel')).toBeTruthy();
-    expect(supportDetails.textContent).toContain('What support means');
+    expect(supportDetails.textContent).toContain('What “supported” means');
     expect(providerSection.compareDocumentPosition(supportDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
