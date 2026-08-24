@@ -30,9 +30,9 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
-const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
 const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroutesfromgpx.*routes/i;
 const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
@@ -155,7 +155,7 @@ function resolveUploadExtension(
   }
 
   const baseExtension = getBaseExtension(resolved);
-  if (!SUPPORTED_BASE_EXTENSIONS.has(baseExtension)) {
+  if (!isSupportedActivityFileBaseExtension(baseExtension)) {
     throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}. Supported: fit, gpx, tcx, json, sml.`);
   }
 

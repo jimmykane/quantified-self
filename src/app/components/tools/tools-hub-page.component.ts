@@ -27,7 +27,7 @@ export class ToolsHubPageComponent {
   readonly tools: ToolCard[] = [
     {
       title: 'File comparison',
-      description: 'Compare FIT, GPX, and TCX recordings as one saved benchmark event.',
+      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings as one saved benchmark event.',
       icon: 'compare_arrows',
       route: '/tools/compare',
       status: 'available',

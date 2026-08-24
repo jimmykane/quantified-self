@@ -373,10 +373,15 @@ describe('AppToolsComparisonService', () => {
       .rejects
       .toThrow('at least 2 files');
 
+    expect(service.validateFiles([
+      makeFile('one.json', [1]),
+      makeFile('two.sml.gz', [2]),
+    ])).toBeNull();
+
     await expect(service.createComparison([
       makeFile('one.fit', [1]),
-      makeFile('two.json', [2]),
-    ])).rejects.toThrow('Only FIT, GPX, and TCX files');
+      makeFile('two.txt', [2]),
+    ])).rejects.toThrow('Only FIT, GPX, TCX, JSON, and SML files');
 
     const oversizedFile = makeFile('huge.fit', [1, 2]);
     Object.defineProperty(oversizedFile, 'size', { value: (30 * 1024 * 1024) + 1 });

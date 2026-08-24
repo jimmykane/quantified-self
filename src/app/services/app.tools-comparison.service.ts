@@ -11,6 +11,7 @@ import {
   buildToolComparisonEventIDHashParts,
   getToolComparisonBaseExtension,
 } from '@shared/tool-comparison-id';
+import { isSupportedActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { environment } from '../../environments/environment';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppEventService, EventQueryCursor } from './app.event.service';
@@ -50,7 +51,6 @@ interface PreparedComparisonFile {
   extension: string;
 }
 
-const SUPPORTED_COMPARISON_EXTENSIONS = new Set(['fit', 'gpx', 'tcx']);
 const MIN_COMPARISON_FILES = 2;
 const MAX_COMPARISON_FILES = 10;
 const MAX_COMPARISON_FILE_BYTES = 30 * 1024 * 1024;
@@ -187,8 +187,8 @@ export class AppToolsComparisonService {
     for (const file of files) {
       const extension = resolveExtensionFromFilename(file.name);
       const baseExtension = getToolComparisonBaseExtension(extension);
-      if (!SUPPORTED_COMPARISON_EXTENSIONS.has(baseExtension)) {
-        return 'Only FIT, GPX, and TCX files are supported for comparisons.';
+      if (!isSupportedActivityFileBaseExtension(baseExtension)) {
+        return 'Only FIT, GPX, TCX, JSON, and SML files are supported for comparisons.';
       }
       if (file.size <= 0) {
         return `${file.name || 'Selected file'} is empty.`;

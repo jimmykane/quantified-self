@@ -11,7 +11,7 @@
   } @else if (showGuestExperience()) {
   <section class="hero-section" aria-labelledby="tools-compare-title">
     <p class="eyebrow">Tools / Compare</p>
-    <h1 id="tools-compare-title">Compare FIT, GPX, and TCX files</h1>
+    <h1 id="tools-compare-title">Compare FIT, GPX, TCX, JSON, and SML files</h1>
     <p class="hero-copy">
       Create one saved benchmark event from multiple source files and open benchmark reports on the compare page.
     </p>
@@ -46,7 +46,7 @@
       <p class="eyebrow">Benchmark workflow</p>
       <h2 id="tools-compare-workflow-title">Review file recordings without rebuilding a dashboard</h2>
       <p class="section-copy">
-        Use the compare tool for device reviews, firmware checks, coaching notes, and repeatable FIT, GPX, or TCX file tests.
+        Use the compare tool for device reviews, firmware checks, coaching notes, and repeatable FIT, GPX, TCX, JSON, or SML file tests.
       </p>
     </div>
 
@@ -59,7 +59,7 @@
           <mat-card-title>File-based comparisons</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Upload two or more FIT, GPX, or TCX recordings after sign-in and create one saved benchmark event.</p>
+          <p>Upload two or more FIT, GPX, TCX, JSON, or SML recordings after sign-in and create one saved benchmark event.</p>
         </mat-card-content>
       </mat-card>
 
@@ -135,7 +135,7 @@
             <mat-icon>upload_file</mat-icon>
           </div>
           <mat-card-title id="new-comparison-title">New comparison</mat-card-title>
-          <mat-card-subtitle>FIT / GPX / TCX</mat-card-subtitle>
+          <mat-card-subtitle>FIT / GPX / TCX / JSON / SML</mat-card-subtitle>
         </mat-card-header>
 
         <mat-card-content>
@@ -157,7 +157,7 @@
                 type="file"
                 hidden
                 multiple
-                accept=".fit,.gpx,.tcx,.fit.gz,.gpx.gz,.tcx.gz"
+                accept=".fit,.gpx,.tcx,.json,.sml,.fit.gz,.gpx.gz,.tcx.gz,.json.gz,.sml.gz"
                 [disabled]="uploadControlsDisabled()"
                 (change)="onFilesSelected($event)">
               <button mat-stroked-button type="button" [disabled]="uploadControlsDisabled()" (click)="fileInput.click()">
