@@ -89,4 +89,30 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(html).toContain('aria-label="Fitness (CTL): 47"');
     expect(html).not.toContain('<strong>');
   });
+
+  it('should render an explicitly bounded two-column metric layout', () => {
+    const tokens = buildDashboardEChartsStyleTokens(false, 390);
+
+    const html = renderDashboardEChartsTooltipCard(tokens, {
+      title: 'Sleep',
+      rows: [
+        { label: 'Deep', value: '1h 30m' },
+        { label: 'HRV', value: '62 ms' },
+      ],
+      rowColumnCount: 2,
+      maxWidthPx: 340,
+      stackHeader: true,
+    });
+
+    expect(html).toContain('width:min(340px, calc(100vw - 32px))');
+    expect(html).toContain('box-sizing:border-box');
+    expect(html).toContain('flex-direction:column');
+    expect(html).toContain('overflow-wrap:anywhere');
+    expect(html).toContain('grid-template-columns:repeat(2,minmax(0,1fr))');
+    expect(html).toContain('max-width:min(340px, calc(100vw - 32px))');
+    expect(html).toContain('Deep');
+    expect(html).toContain('1h 30m');
+    expect(html).toContain('HRV');
+    expect(html).toContain('62 ms');
+  });
 });

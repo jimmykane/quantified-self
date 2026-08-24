@@ -58,6 +58,9 @@ export interface DashboardEChartsTooltipCardOptions {
   titleColor?: string | null;
   rows?: ReadonlyArray<DashboardEChartsTooltipMetricRow>;
   notes?: ReadonlyArray<string>;
+  rowColumnCount?: 1 | 2;
+  maxWidthPx?: number;
+  stackHeader?: boolean;
 }
 
 const DEFAULT_COMPACT_WIDTH = 680;
@@ -133,15 +136,19 @@ export function renderDashboardEChartsTooltipCard(
   const notes = (options.notes || []).filter(note => `${note}`.trim().length > 0);
   const hasHeader = title.length > 0 || subtitle.length > 0;
   const hasBody = rows.length > 0 || notes.length > 0;
+  const useTwoColumnRows = options.rowColumnCount === 2 && rows.length > 1;
+  const maxWidthPx = Number.isFinite(options.maxWidthPx) && Number(options.maxWidthPx) > 0
+    ? Number(options.maxWidthPx)
+    : typography.maxWidthPx;
 
   const headerHtml = hasHeader
     ? (
-      `<div style="display:flex;align-items:center;justify-content:flex-start;gap:12px;min-width:0;">`
+      `<div style="display:flex;${options.stackHeader ? 'flex-direction:column;align-items:flex-start;gap:3px;' : 'align-items:center;justify-content:flex-start;gap:12px;'}min-width:0;">`
       + (title.length > 0
-        ? `<div style="font-size:${typography.titleFontSize}px;line-height:${typography.textLineHeight};font-weight:700;color:${escapeDashboardEChartsTooltipHtml(options.titleColor || styleTokens.tooltipTextColor)};white-space:nowrap;">${escapeDashboardEChartsTooltipHtml(title)}</div>`
+        ? `<div style="font-size:${typography.titleFontSize}px;line-height:${typography.textLineHeight};font-weight:700;color:${escapeDashboardEChartsTooltipHtml(options.titleColor || styleTokens.tooltipTextColor)};${options.stackHeader ? 'white-space:normal;overflow-wrap:anywhere;' : 'white-space:nowrap;'}">${escapeDashboardEChartsTooltipHtml(title)}</div>`
         : '')
       + (subtitle.length > 0
-        ? `<div style="font-size:${typography.dateFontSize}px;line-height:${typography.textLineHeight};color:${styleTokens.secondaryTextColor};white-space:nowrap;">${escapeDashboardEChartsTooltipHtml(subtitle)}</div>`
+        ? `<div style="font-size:${typography.dateFontSize}px;line-height:${typography.textLineHeight};color:${styleTokens.secondaryTextColor};${options.stackHeader ? 'white-space:normal;overflow-wrap:anywhere;' : 'white-space:nowrap;'}">${escapeDashboardEChartsTooltipHtml(subtitle)}</div>`
         : '')
       + `</div>`
     )
@@ -151,7 +158,11 @@ export function renderDashboardEChartsTooltipCard(
     : '';
   const rowsHtml = rows.length > 0
     ? (
-      `<div style="display:flex;flex-direction:column;gap:${typography.metricGapPx}px;">`
+      (
+        useTwoColumnRows
+          ? `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:${typography.metricValueGapPx}px;row-gap:${typography.metricGapPx}px;">`
+          : `<div style="display:flex;flex-direction:column;gap:${typography.metricGapPx}px;">`
+      )
       + rows.map(row => renderDashboardEChartsTooltipMetricRow(styleTokens, row)).join('')
       + `</div>`
     )
@@ -167,7 +178,8 @@ export function renderDashboardEChartsTooltipCard(
     : '';
 
   return (
-    `<div class="qs-dashboard-echarts-tooltip-card" style="width:max-content;min-width:0;max-width:min(${typography.maxWidthPx}px, calc(100vw - 32px));`
+    `<div class="qs-dashboard-echarts-tooltip-card" style="${useTwoColumnRows ? `width:min(${maxWidthPx}px, calc(100vw - 32px));` : 'width:max-content;'}`
+    + `box-sizing:border-box;min-width:0;max-width:min(${maxWidthPx}px, calc(100vw - 32px));`
     + `padding:${typography.cardPadding};font-family:${ECHARTS_GLOBAL_FONT_FAMILY};">`
     + headerHtml
     + dividerHtml
