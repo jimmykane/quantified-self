@@ -291,20 +291,20 @@ describe('AppRoutingModule routes', () => {
     expect(toolsRoute?.canMatch).toBeUndefined();
     expect(toolsRoute?.loadComponent).toBeTypeOf('function');
     expect(toolsRoute?.data?.['title']).toBe('Workout Data Tools');
-    expect(toolsRoute?.data?.['description']).toContain('compare FIT, GPX, and TCX files');
+    expect(toolsRoute?.data?.['description']).toContain('compare FIT, GPX, TCX, JSON, and SML files');
     expect(toolsRoute?.data?.['description']).toContain('saved benchmark reports');
 
     expect(compareRoute).toBeTruthy();
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('FIT, GPX & TCX Benchmark Tool Trusted by Device Reviewers');
+    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX, JSON & SML Benchmark Tool Trusted by Device Reviewers');
     expect(compareRoute?.data?.['description']).toContain('trusted by device reviewers');
     expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, altitude, power');
     expect(compareRoute?.data?.['description']).toContain('all other device metrics');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
-      name: 'FIT, GPX, TCX File Comparison & Benchmark Tool',
+      name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',
       operatingSystem: 'Web',
       url: 'https://quantified-self.io/tools/compare',
       offers: {

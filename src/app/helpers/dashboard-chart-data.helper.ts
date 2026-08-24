@@ -213,6 +213,43 @@ export function formatDashboardDateByInterval(
   });
 }
 
+/**
+ * Formats a date bucket for a chart axis. Weekly labels deliberately omit the
+ * verbose "Week" word and year because the detailed bucket label belongs in
+ * the chart tooltip instead.
+ */
+export function formatDashboardAxisDateByInterval(
+  value: number | Date,
+  timeInterval: TimeIntervals,
+  compact = false,
+  locale = getBrowserLocale(),
+  timeZone?: string,
+): string {
+  const date = toValidDate(value);
+  if (!date) {
+    return '';
+  }
+
+  if (resolveDashboardDisplayInterval(timeInterval) !== TimeIntervals.Weekly) {
+    return formatDashboardDateByIntervalWithOptions(date, timeInterval, { locale, timeZone });
+  }
+
+  const week = weeknumber.weekNumber(getZonedCalendarDate(date, timeZone));
+  if (!Number.isFinite(week)) {
+    return formatDashboardDateByIntervalWithOptions(date, timeInterval, { locale, timeZone });
+  }
+
+  if (compact) {
+    return `W${week}`;
+  }
+
+  const dateLabel = date.toLocaleDateString(
+    locale,
+    withOptionalTimeZone({ day: '2-digit', month: 'short' }, timeZone),
+  );
+  return `W${week} · ${dateLabel}`;
+}
+
 export function formatDashboardWeekRangeLabel(
   value: number | Date | string,
   locale = getBrowserLocale(),

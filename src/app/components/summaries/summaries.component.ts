@@ -86,6 +86,7 @@ import {
 } from '../../helpers/derived-metric-status.helper';
 import {
   isDashboardAcwrKpiChartType,
+  isDashboardActivityCalendarChartType,
   isDashboardAerobicCapacityKpiChartType,
   isDashboardAerobicDurabilityKpiChartType,
   isDashboardEasyPercentKpiChartType,
@@ -252,6 +253,7 @@ interface DashboardTileSectionViewModel {
   label: string;
   icon: string;
   columns: number;
+  hasActivityCalendar: boolean;
   tiles: DashboardTileViewModel[];
   cells: DashboardTileSectionCellViewModel[];
   trailingPlaceholders: number[];
@@ -1954,6 +1956,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return isDashboardKpiChartType(tile.chartType);
   }
 
+  private hasActivityCalendarTile(tiles: DashboardTileViewModel[]): boolean {
+    return tiles.some((tile) => (
+      isDashboardChartTileViewModel(tile)
+      && isDashboardActivityCalendarChartType(tile.chartType)
+    ));
+  }
+
   private isKpiSettingsTile(tile: TileSettingsInterface): tile is TileChartSettingsInterface {
     if (tile.type !== TileTypes.Chart) {
       return false;
@@ -2010,6 +2019,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return {
           ...definition,
           columns: sectionColumns,
+          hasActivityCalendar: this.hasActivityCalendarTile(sectionTiles),
           tiles: sectionTiles,
           cells: sectionCells,
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
@@ -2025,6 +2035,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return {
         ...section,
         columns: sectionColumns,
+        hasActivityCalendar: this.hasActivityCalendarTile(section.tiles),
         cells: sectionCells,
         trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };

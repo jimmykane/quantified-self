@@ -10,6 +10,10 @@ export const AppActivityTypeGroupGradients: Record<ActivityTypeGroup, { start: s
     [ActivityTypeGroups.IndoorSportsGroup]: { start: '#FF467E', end: '#C2185B' },     // Pink -> Dark Pink
     [ActivityTypeGroups.OutdoorAdventuresGroup]: { start: '#55D781', end: '#2E7D32' },// Emerald -> Forest Green
     [ActivityTypeGroups.WinterSportsGroup]: { start: '#6289FE', end: '#303F9F' },     // Blue -> Indigo
+    [ActivityTypeGroups.SkatingGroup]: { start: '#7C83FD', end: '#3949AB' },          // Indigo -> Deep Indigo
+    [ActivityTypeGroups.AerialSportsGroup]: { start: '#BA68C8', end: '#6A1B9A' },     // Purple -> Deep Purple
+    [ActivityTypeGroups.MotorizedGroup]: { start: '#546E7A', end: '#263238' },        // Blue Grey -> Graphite
+    [ActivityTypeGroups.AdaptiveMobilityGroup]: { start: '#26A69A', end: '#00695C' }, // Teal -> Deep Teal
     [ActivityTypeGroups.WaterSportsGroup]: { start: '#59C7FE', end: '#0277BD' },      // Cyan -> Dark Blue
     [ActivityTypeGroups.DivingGroup]: { start: '#72E3DE', end: '#0097A7' },           // Teal -> Cyan
     [ActivityTypeGroups.TeamRacketGroup]: { start: '#9A7DEA', end: '#512DA8' },       // Purple -> Deep Purple

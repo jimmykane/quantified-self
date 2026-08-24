@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ActivityTypeGroups,
   ActivityTypes,
   ActivityTypesHelper,
   DataAirPower,
@@ -18,6 +19,7 @@ import {
   DataStrokeRate,
   DataSwimPace,
   DataTemperature,
+  DataVerticalSpeed,
 } from '@sports-alliance/sports-lib';
 import {
   getEventChartMetricFamily,
@@ -46,6 +48,29 @@ describe('event chart sport profiles', () => {
     const resolution = resolveEventChartSportProfile([activityType]);
     expect(resolution.profileID).toBe(profileID);
     expect(resolution.candidateFamilies.slice(0, firstFamilies.length)).toEqual(firstFamilies);
+  });
+
+  it.each([
+    [ActivityTypes.InlineSkating, ActivityTypeGroups.SkatingGroup, 'ice-skating'],
+    [ActivityTypes.Skating, ActivityTypeGroups.SkatingGroup, 'ice-skating'],
+    [ActivityTypes.Flying, ActivityTypeGroups.AerialSportsGroup, 'paragliding'],
+    [ActivityTypes.HangGliding, ActivityTypeGroups.AerialSportsGroup, 'paragliding'],
+    [ActivityTypes.Jumpmaster, ActivityTypeGroups.AerialSportsGroup, 'sky-diving'],
+    [ActivityTypes.Paragliding, ActivityTypeGroups.AerialSportsGroup, 'paragliding'],
+    [ActivityTypes.SkyDiving, ActivityTypeGroups.AerialSportsGroup, 'sky-diving'],
+    [ActivityTypes.Boating, ActivityTypeGroups.MotorizedGroup, 'sailing'],
+    [ActivityTypes.Driving, ActivityTypeGroups.MotorizedGroup, 'motor'],
+    [ActivityTypes.Motorcycling, ActivityTypeGroups.MotorizedGroup, 'motor'],
+    [ActivityTypes.Motorsports, ActivityTypeGroups.MotorizedGroup, 'motor'],
+    [ActivityTypes.Snowmobiling, ActivityTypeGroups.MotorizedGroup, 'snowmobiling'],
+    [ActivityTypes.Wheelchair, ActivityTypeGroups.AdaptiveMobilityGroup, 'cycling'],
+  ])('keeps the type-specific %s profile inside its Sports Lib group', (activityType, activityGroup, profileID) => {
+    expect(ActivityTypesHelper.getActivityGroupForActivityType(activityType)).toBe(activityGroup);
+
+    const resolution = resolveEventChartSportProfile([activityType]);
+
+    expect(resolution.profileID).toBe(profileID);
+    expect(resolution.source).toBe('exact');
   });
 
   it('prefers shared registered profiles before homogeneous Sports Lib groups', () => {
@@ -101,6 +126,9 @@ describe('event chart sport profiles', () => {
       {activityTypes: [ActivityTypes.Sailing, ActivityTypes.Rowing], profileID: 'paddled-water'},
       {activityTypes: [ActivityTypes.ScubaDiving, ActivityTypes.Snorkeling], profileID: 'generic-diving'},
       {activityTypes: [ActivityTypes.Golf, ActivityTypes.Tennis], profileID: 'team-racket'},
+      {activityTypes: [ActivityTypes.InlineSkating, ActivityTypes.Skating], profileID: 'ice-skating'},
+      {activityTypes: [ActivityTypes.Paragliding, ActivityTypes.SkyDiving], profileID: 'paragliding'},
+      {activityTypes: [ActivityTypes.Motorsports, ActivityTypes.Snowmobiling], profileID: 'motor'},
     ];
 
     cases.forEach(({activityTypes, profileID}) => {
@@ -114,9 +142,22 @@ describe('event chart sport profiles', () => {
     expect(unspecified.source).toBe('multisport');
   });
 
-  it('applies the explicit Skating and Tactical decisions', () => {
-    expect(resolveEventChartSportProfile([ActivityTypes.InlineSkating]).profileID).toBe('ice-skating');
-    expect(resolveEventChartSportProfile([ActivityTypes.Skating]).profileID).toBe('ice-skating');
+  it.each([
+    [[ActivityTypes.Paragliding, ActivityTypes.SkyDiving], 'paragliding', ['heart-rate', 'altitude', 'vertical-speed']],
+    [[ActivityTypes.Motorsports, ActivityTypes.Snowmobiling], 'motor', ['speed', 'altitude', 'heart-rate']],
+  ])('uses the shared %s group fallback only after exact profiles differ', (activityTypes, profileID, firstFamilies) => {
+    const individualProfileIDs = activityTypes.map((activityType) => (
+      resolveEventChartSportProfile([activityType]).profileID
+    ));
+    const resolution = resolveEventChartSportProfile(activityTypes);
+
+    expect(new Set(individualProfileIDs).size).toBeGreaterThan(1);
+    expect(resolution.profileID).toBe(profileID);
+    expect(resolution.source).toBe('shared-profile');
+    expect(resolution.candidateFamilies.slice(0, firstFamilies.length)).toEqual(firstFamilies);
+  });
+
+  it('keeps the Tactical fitness decision', () => {
     expect(resolveEventChartSportProfile([ActivityTypes.Tactical]).profileID).toBe('fitness');
   });
 
@@ -198,6 +239,42 @@ describe('event chart sport profiles', () => {
       DataTemperature.type,
     ]);
     expect(result.otherDataTypes).toEqual([]);
+  });
+
+  it.each([
+    [
+      'Skating',
+      ActivityTypes.InlineSkating,
+      [DataHeartRate.type, DataSpeed.type, DataCadence.type, DataTemperature.type],
+      [DataHeartRate.type, DataSpeed.type, DataCadence.type],
+    ],
+    [
+      'Aerial Sports',
+      ActivityTypes.Paragliding,
+      [DataHeartRate.type, DataAltitude.type, DataVerticalSpeed.type, DataSpeed.type],
+      [DataHeartRate.type, DataAltitude.type, DataVerticalSpeed.type],
+    ],
+    [
+      'Motorized',
+      ActivityTypes.Motorsports,
+      [DataSpeed.type, DataAltitude.type, DataHeartRate.type, DataTemperature.type],
+      [DataSpeed.type, DataAltitude.type, DataHeartRate.type],
+    ],
+    [
+      'Adaptive Mobility',
+      ActivityTypes.Wheelchair,
+      [DataHeartRate.type, DataPower.type, DataSpeed.type, DataAltitude.type],
+      [DataHeartRate.type, DataPower.type, DataSpeed.type],
+    ],
+  ])('selects the top three available automatic charts for %s', (label, activityType, dataTypes, automaticDataTypes) => {
+    const result = resolveEventChartRecommendations({
+      profile: resolveEventChartSportProfile([activityType]),
+      panels: dataTypes.map(panel),
+      globallyAllowedDataTypes: dataTypes,
+    });
+
+    expect(result.recommendedDataTypes.slice(0, 3)).toEqual(automaticDataTypes);
+    expect(result.automaticDataTypes).toEqual(automaticDataTypes);
   });
 
   it('keeps globally disabled recommendations grouped but unchecked', () => {

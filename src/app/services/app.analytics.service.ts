@@ -5,6 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import type { ActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { APP_STORAGE } from './storage/app.storage.token';
 
 import { environment } from '../../environments/environment';
@@ -26,7 +27,7 @@ export type ToolCompareErrorCategory =
     | 'too_many_files'
     | 'unknown'
     | 'unsupported_format';
-export type ToolCompareFileType = 'fit' | 'gpx' | 'tcx';
+export type ToolCompareFileType = ActivityFileBaseExtension;
 export type ToolCompareSavedAction =
     | 'filter'
     | 'sort'

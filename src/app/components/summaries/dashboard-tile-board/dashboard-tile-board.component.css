@@ -7,3 +7,10 @@
   min-width: 0;
   overflow: hidden;
 }
+
+@media (max-width: 860px) {
+  :host(.dashboard-tile-board--activity-calendar) {
+    /* Six compact calendar rows need room for an 18 px date and a 20 px marker stage. */
+    grid-auto-rows: max(var(--dashboard-tile-board-row-height, 150px), 360px);
+  }
+}

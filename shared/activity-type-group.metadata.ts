@@ -78,6 +78,30 @@ const ActivityTypeGroupMetadataMap: Record<ActivityTypeGroup, ActivityTypeGroupM
     aliases: ['winter sports', 'winter sports group', 'winter sports family', 'wintersports'],
     ambiguous: false,
   },
+  [ActivityTypeGroups.SkatingGroup]: {
+    id: ActivityTypeGroups.SkatingGroup,
+    label: 'Skating',
+    aliases: ['skating', 'skating group', 'skating family', 'skating activities', 'inline skating'],
+    ambiguous: true,
+  },
+  [ActivityTypeGroups.AerialSportsGroup]: {
+    id: ActivityTypeGroups.AerialSportsGroup,
+    label: 'Aerial Sports',
+    aliases: ['aerial sports', 'aerial sport', 'aerial sports group', 'aerial sports family', 'flying sports'],
+    ambiguous: false,
+  },
+  [ActivityTypeGroups.MotorizedGroup]: {
+    id: ActivityTypeGroups.MotorizedGroup,
+    label: 'Motorized',
+    aliases: ['motorized', 'motorized group', 'motorized family', 'motorized activities', 'motor sports'],
+    ambiguous: false,
+  },
+  [ActivityTypeGroups.AdaptiveMobilityGroup]: {
+    id: ActivityTypeGroups.AdaptiveMobilityGroup,
+    label: 'Adaptive Mobility',
+    aliases: ['adaptive mobility', 'adaptive mobility group', 'adaptive mobility family', 'adaptive mobility activities'],
+    ambiguous: false,
+  },
   [ActivityTypeGroups.WaterSportsGroup]: {
     id: ActivityTypeGroups.WaterSportsGroup,
     label: 'Water Sports',

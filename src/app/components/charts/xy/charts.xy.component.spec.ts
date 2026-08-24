@@ -18,6 +18,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { LoggerService } from '../../../services/logger.service';
 import {
   formatDashboardAxisNumericValue,
+  formatDashboardDateByInterval,
   formatDashboardNumericValue,
 } from '../../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
@@ -192,6 +193,31 @@ describe('ChartsXYComponent', () => {
     ));
     expect(trendSeries).toBeDefined();
     expect(trendSeries.lineStyle.type).toBe('dashed');
+  });
+
+  it('should use compact weekly axis labels without shortening tooltip labels on narrow charts', async () => {
+    const weekStart = Date.UTC(2026, 4, 25);
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Weekly;
+    component.data = [
+      { time: weekStart, [ChartDataValueTypes.Total]: 10, count: 1 },
+      { time: Date.UTC(2026, 5, 1), [ChartDataValueTypes.Total]: 20, count: 1 },
+    ];
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 360,
+    });
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const formatter = option.tooltip.formatter as (params: { dataIndex: number }) => string;
+
+    expect(option.xAxis.data).toEqual(['W22', 'W23']);
+    expect(formatter({ dataIndex: 0 })).toContain(
+      formatDashboardDateByInterval(weekStart, TimeIntervals.Weekly),
+    );
   });
 
   it('should render summary meta as "per activity type" for activity categories', async () => {

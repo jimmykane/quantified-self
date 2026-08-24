@@ -373,7 +373,7 @@ describe('ToolsComparePageComponent', () => {
   it('renders the public compare tool and guest sign-in state', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Compare FIT, GPX, and TCX files');
+    expect(text).toContain('Compare FIT, GPX, TCX, JSON, and SML files');
     expect(text).toContain('Sign in to compare files');
     expect(text).toContain('Benchmark comparisons are saved to your account');
     expect(text).toContain('Comparison files are handled after sign-in');
@@ -464,6 +464,17 @@ describe('ToolsComparePageComponent', () => {
       pageSize: 25,
       sort: { active: 'date', direction: 'desc' },
     });
+  });
+
+  it('offers JSON and SML files in the comparison picker', async () => {
+    userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const fileInput = fixture.nativeElement.querySelector('input[type="file"]') as HTMLInputElement | null;
+
+    expect(fileInput?.accept).toBe('.fit,.gpx,.tcx,.json,.sml,.fit.gz,.gpx.gz,.tcx.gz,.json.gz,.sml.gz');
   });
 
   it('loads later saved benchmark comparison pages with stored cursors', async () => {
@@ -677,8 +688,8 @@ describe('ToolsComparePageComponent', () => {
     userSubject.next(new User('user-1'));
     const inputTarget = {
       files: [
-        new File([new Uint8Array([1])], 'review-alpha.fit'),
-        new File([new Uint8Array([2])], 'review-beta.gpx.gz'),
+        new File([new Uint8Array([1])], 'review-alpha.json'),
+        new File([new Uint8Array([2])], 'review-beta.sml.gz'),
         new File([new Uint8Array([3])], 'notes.txt'),
       ],
       value: 'selected',
@@ -691,7 +702,7 @@ describe('ToolsComparePageComponent', () => {
       acceptedCount: 2,
       rejectedCount: 1,
       fileCountAfterSelection: 2,
-      fileTypes: ['fit', 'gpx'],
+      fileTypes: ['json', 'sml'],
       compressedCount: 1,
       limitReached: false,
     });
@@ -750,7 +761,7 @@ describe('ToolsComparePageComponent', () => {
       new File([new Uint8Array([1])], 'one.txt'),
       new File([new Uint8Array([2])], 'two.txt'),
     ]);
-    comparisonServiceMock.validateFiles.mockReturnValueOnce('Only FIT, GPX, and TCX files are supported for comparisons.');
+    comparisonServiceMock.validateFiles.mockReturnValueOnce('Only FIT, GPX, TCX, JSON, and SML files are supported for comparisons.');
 
     await component.createComparison();
 

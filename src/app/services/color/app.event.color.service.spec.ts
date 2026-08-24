@@ -6,6 +6,8 @@ import { LoggerService } from '../logger.service';
 import { AppColors } from './app.colors';
 import { AppDeviceColors } from './app.device.colors';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
+import { AppActivityTypeGroupIcons } from './app.activity-type-group.icons';
 import { AppDeviceColorPreferenceService } from './app-device-color-preference.service';
 
 describe('AppEventColorService', () => {
@@ -220,6 +222,33 @@ describe('AppEventColorService', () => {
 
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.Trekking)).toBe(expectedOutdoorColor);
       expect(service.getColorForActivityTypeByActivityTypeGroup(ActivityTypes.Trek)).toBe(expectedOutdoorColor);
+    });
+
+    it('should provide a complete visual treatment for newly classified activity groups', () => {
+      const cases = [
+        { activityType: ActivityTypes.InlineSkating, group: ActivityTypeGroups.SkatingGroup, icon: 'roller_skating' },
+        { activityType: ActivityTypes.Flying, group: ActivityTypeGroups.AerialSportsGroup, icon: 'paragliding' },
+        { activityType: ActivityTypes.Motorsports, group: ActivityTypeGroups.MotorizedGroup, icon: 'directions_car' },
+        { activityType: ActivityTypes.Wheelchair, group: ActivityTypeGroups.AdaptiveMobilityGroup, icon: 'accessible_forward' },
+      ];
+
+      cases.forEach(({ activityType, group, icon }) => {
+        const gradient = AppActivityTypeGroupGradients[group];
+
+        expect(service.getColorForActivityTypeByActivityTypeGroup(activityType))
+          .toBe(AppActivityTypeGroupColors[group]);
+        expect(service.getGradientForActivityTypeGroup(activityType)).toContain(gradient.start);
+        expect(service.getGradientForActivityTypeGroup(activityType)).toContain(gradient.end);
+        expect(AppActivityTypeGroupIcons[group]).toBe(icon);
+      });
+    });
+
+    it('should use the graphite motorized treatment', () => {
+      expect(AppActivityTypeGroupColors[ActivityTypeGroups.MotorizedGroup]).toBe('#546E7A');
+      expect(AppActivityTypeGroupGradients[ActivityTypeGroups.MotorizedGroup]).toEqual({
+        start: '#546E7A',
+        end: '#263238',
+      });
     });
   });
 });

@@ -16,6 +16,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  formatDashboardAxisDateByInterval,
   formatDashboardBucketDateByInterval,
   formatDashboardAxisNumericValue,
   formatDashboardAxisNumericValueWithoutUnit,
@@ -96,6 +97,27 @@ describe('dashboard-chart-data.helper', () => {
     const weekStart = Date.UTC(2026, 2, 30);
 
     expect(formatDashboardWeekRangeLabel(weekStart, 'en-GB', 'UTC')).toBe('Week 14, 30 Mar 2026 - 05 Apr 2026');
+  });
+
+  it('should use compact weekly labels on chart axes without changing detailed date labels', () => {
+    const weekStart = Date.UTC(2026, 4, 25);
+
+    expect(formatDashboardAxisDateByInterval(
+      weekStart,
+      TimeIntervals.Weekly,
+      true,
+      'en-GB',
+      'UTC',
+    )).toBe('W22');
+    expect(formatDashboardAxisDateByInterval(
+      weekStart,
+      TimeIntervals.Weekly,
+      false,
+      'en-GB',
+      'UTC',
+    )).toBe('W22 · 25 May');
+    expect(formatDashboardDateByInterval(weekStart, TimeIntervals.Weekly, 'en-GB', 'UTC'))
+      .toBe('Week 22 25 May 2026');
   });
 
   it('should format bounded date ranges using an explicit query timezone when provided', () => {

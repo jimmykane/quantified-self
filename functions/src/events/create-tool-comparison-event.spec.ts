@@ -41,6 +41,8 @@ const hoisted = vi.hoisted(() => {
   const mockFITImporter = { getFromArrayBuffer: vi.fn() };
   const mockGPXImporter = { getFromString: vi.fn() };
   const mockTCXImporter = { getFromXML: vi.fn() };
+  const mockSuuntoJSONImporter = { getFromJSONString: vi.fn() };
+  const mockSuuntoSMLImporter = { getFromXML: vi.fn(), getFromJSONString: vi.fn() };
   const mockMergeEvents = vi.fn();
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
@@ -72,6 +74,8 @@ const hoisted = vi.hoisted(() => {
     mockFITImporter,
     mockGPXImporter,
     mockTCXImporter,
+    mockSuuntoJSONImporter,
+    mockSuuntoSMLImporter,
     mockMergeEvents,
     mockServerTimestamp,
     mockSportsLibVersionToCode,
@@ -185,11 +189,15 @@ vi.mock('@sports-alliance/sports-lib', () => ({
   EventImporterFIT: hoisted.mockFITImporter,
   EventImporterGPX: hoisted.mockGPXImporter,
   EventImporterTCX: hoisted.mockTCXImporter,
+  EventImporterSuuntoJSON: hoisted.mockSuuntoJSONImporter,
+  EventImporterSuuntoSML: hoisted.mockSuuntoSMLImporter,
   EventUtilities: {
     mergeEvents: (...args: unknown[]) => hoisted.mockMergeEvents(...args),
   },
   ActivityParsingOptions: class ActivityParsingOptions {
-    constructor(_options: unknown) {}
+    constructor(options: unknown) {
+      void options;
+    }
   },
 }));
 
@@ -229,9 +237,25 @@ interface TestFile {
   originalFilename?: string;
 }
 
-function makeActivity(label: string, initialActivityID: string | null = null) {
+interface TestActivity {
+  creator: { name: string };
+  getID: () => string | null;
+  setID: (id: string) => TestActivity;
+}
+
+interface TestParsedEvent {
+  startDate: Date;
+  name: string;
+  description: string;
+  getID: () => string;
+  setID: (id: string) => TestParsedEvent;
+  getActivities: () => TestActivity[];
+  setDescription: (description: string) => TestParsedEvent;
+}
+
+function makeActivity(label: string, initialActivityID: string | null = null): TestActivity {
   let activityID: string | null = initialActivityID;
-  const activity: any = {
+  const activity: TestActivity = {
     creator: { name: label },
     getID: vi.fn(() => activityID),
     setID: vi.fn((id: string) => {
@@ -242,9 +266,12 @@ function makeActivity(label: string, initialActivityID: string | null = null) {
   return activity;
 }
 
-function makeParsedEvent(label: string, activities = [makeActivity(label)]) {
+function makeParsedEvent(
+  label: string,
+  activities: TestActivity[] = [makeActivity(label)],
+): TestParsedEvent {
   let eventID = '';
-  const event: any = {
+  const event: TestParsedEvent = {
     startDate: new Date('2026-01-10T10:00:00.000Z'),
     name: '',
     description: 'A merge of 2 or more activities',
@@ -262,10 +289,10 @@ function makeParsedEvent(label: string, activities = [makeActivity(label)]) {
   return event;
 }
 
-function makeMergedEvent(sourceEvents: any[]) {
+function makeMergedEvent(sourceEvents: TestParsedEvent[]): TestParsedEvent {
   return makeParsedEvent(
     'merged',
-    sourceEvents.flatMap((event) => event.getActivities()),
+    sourceEvents.flatMap(sourceEvent => sourceEvent.getActivities()),
   );
 }
 
@@ -410,7 +437,10 @@ describe('createToolComparisonEvent', () => {
     hoisted.mockFITImporter.getFromArrayBuffer.mockImplementation(async () => makeParsedEvent('fit'));
     hoisted.mockGPXImporter.getFromString.mockImplementation(async () => makeParsedEvent('gpx'));
     hoisted.mockTCXImporter.getFromXML.mockImplementation(async () => makeParsedEvent('tcx'));
-    hoisted.mockMergeEvents.mockImplementation((events: any[]) => makeMergedEvent(events));
+    hoisted.mockSuuntoJSONImporter.getFromJSONString.mockImplementation(async () => makeParsedEvent('json'));
+    hoisted.mockSuuntoSMLImporter.getFromXML.mockImplementation(async () => makeParsedEvent('sml'));
+    hoisted.mockSuuntoSMLImporter.getFromJSONString.mockImplementation(async () => makeParsedEvent('sml-json'));
+    hoisted.mockMergeEvents.mockImplementation((events: TestParsedEvent[]) => makeMergedEvent(events));
   });
 
   it('registers with activity processing runtime limits', () => {
@@ -586,15 +616,34 @@ describe('createToolComparisonEvent', () => {
     }), missingManifestResponse);
     expect(missingManifestResponse.status).toHaveBeenCalledWith(400);
 
+    const supportedExtensionsResponse = makeResponse();
+    await invokeCreateToolComparisonEvent(makeRequest({
+      files: [
+        { bytes: Buffer.from('{"DeviceLog":{}}'), extension: 'json', originalFilename: 'reference.json' },
+        { bytes: Buffer.from('<sml/>'), extension: 'sml', originalFilename: 'candidate.sml' },
+      ],
+    }), supportedExtensionsResponse);
+    expect(supportedExtensionsResponse.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockSuuntoSMLImporter.getFromXML).toHaveBeenCalledTimes(1);
+    const supportedWriteArgs = hoisted.mockWriteAllEventData.mock.calls[0];
+    expect(supportedWriteArgs[1]).toMatchObject({
+      name: 'Benchmark comparison: reference vs candidate',
+    });
+    expect(supportedWriteArgs[2]).toEqual([
+      expect.objectContaining({ extension: 'json', originalFilename: 'reference.json' }),
+      expect.objectContaining({ extension: 'sml', originalFilename: 'candidate.sml' }),
+    ]);
+
     const unsupportedExtensionResponse = makeResponse();
     await invokeCreateToolComparisonEvent(makeRequest({
       files: [
         { bytes: Buffer.from([0x01]), extension: 'fit', originalFilename: 'ref.fit' },
-        { bytes: Buffer.from([0x02]), extension: 'json', originalFilename: 'test.json' },
+        { bytes: Buffer.from([0x02]), extension: 'txt', originalFilename: 'test.txt' },
       ],
     }), unsupportedExtensionResponse);
     expect(unsupportedExtensionResponse.status).toHaveBeenCalledWith(400);
-    expect(unsupportedExtensionResponse.json).toHaveBeenCalledWith({ error: 'Unsupported file extension: json. Supported: fit, gpx, tcx.' });
+    expect(unsupportedExtensionResponse.json).toHaveBeenCalledWith({ error: 'Unsupported file extension: txt. Supported: fit, gpx, tcx, json, sml.' });
 
     const mismatchResponse = makeResponse();
     await invokeCreateToolComparisonEvent(makeRequest({

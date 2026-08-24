@@ -37,6 +37,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppEventInterface, BenchmarkResult, getBenchmarkPairKey } from '@shared/app-event.interface';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { isSupportedActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { firstValueFrom } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -1922,7 +1923,7 @@ export class ToolsComparePageComponent implements OnInit {
     if (rejectedForLimit) {
       this.snackBar.open(`You can compare up to ${MAX_COMPARISON_FILES} files at once.`, undefined, { duration: 3000 });
     } else if (rejectedNames.length > 0) {
-      this.snackBar.open('Only FIT, GPX, and TCX files are supported.', undefined, { duration: 3000 });
+      this.snackBar.open('Only FIT, GPX, TCX, JSON, and SML files are supported.', undefined, { duration: 3000 });
     }
 
     const acceptedCount = nextFiles.length - previousFileCount;
@@ -1938,7 +1939,7 @@ export class ToolsComparePageComponent implements OnInit {
   }
 
   private isToolCompareFileType(extension: string): extension is ToolCompareFileType {
-    return extension === 'fit' || extension === 'gpx' || extension === 'tcx';
+    return isSupportedActivityFileBaseExtension(extension);
   }
 
   private async hydrateMissingActivitySummaryRows(user: User, eventIDs: string[]): Promise<void> {

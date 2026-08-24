@@ -5,11 +5,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import * as xmldom from 'xmldom';
 import {
-  EventImporterFIT,
-  EventImporterGPX,
-  EventImporterTCX,
   EventInterface,
   EventUtilities,
 } from '@sports-alliance/sports-lib';
@@ -22,7 +18,6 @@ import {
   hasProAccess,
   setEventDocumentIfUserActive,
 } from '../utils';
-import { createParsingOptions } from '../../../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -31,6 +26,7 @@ import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import type { AppEventInterface } from '../../../shared/app-event.interface';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import {
   TOOL_COMPARISON_EVENT_ID_HEADER,
@@ -39,6 +35,7 @@ import {
   getToolComparisonBaseExtension,
   normalizeToolComparisonEventIDHint,
 } from '../../../shared/tool-comparison-id';
+import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import {
   ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   MAX_ACTIVITY_DECOMPRESSED_BYTES,
@@ -46,11 +43,11 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES,
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
+import { parseActivityFilePayload } from '../shared/activity-file-parser';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
 const FILE_MANIFEST_HEADER = 'X-Tool-Comparison-Files-Encoded';
 const TITLE_HEADER = 'X-Tool-Comparison-Title-Encoded';
-const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx']);
 const MIN_COMPARISON_FILES = 2;
 const MAX_COMPARISON_FILES = 10;
 const MAX_TOOL_COMPARISON_UPLOAD_BYTES = 30 * 1024 * 1024;
@@ -123,14 +120,6 @@ class HttpStatusError extends Error {
   }
 }
 
-function toArrayBuffer(data: Buffer): ArrayBuffer {
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-}
-
-function decodeText(data: Buffer): string {
-  return new TextDecoder().decode(toArrayBuffer(data));
-}
-
 function sha256Hex(parts: ReadonlyArray<string | Buffer>): string {
   const hash = createHash('sha256');
   for (const part of parts) {
@@ -180,8 +169,8 @@ function resolveComparisonExtension(extensionHeader?: string, originalFilename?:
   }
 
   const baseExtension = getToolComparisonBaseExtension(resolved);
-  if (!SUPPORTED_BASE_EXTENSIONS.has(baseExtension)) {
-    throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}. Supported: fit, gpx, tcx.`);
+  if (!isSupportedActivityFileBaseExtension(baseExtension)) {
+    throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}. Supported: fit, gpx, tcx, json, sml.`);
   }
 
   if (resolved.endsWith('.gz')) {
@@ -244,7 +233,7 @@ function sanitizeOriginalFilename(filename?: string): string | undefined {
 }
 
 function stripComparisonFileExtension(filename: string): string {
-  return filename.replace(/\.(fit|gpx|tcx)(\.gz)?$/i, '').trim();
+  return filename.replace(/\.(fit|gpx|tcx|json|sml)(\.gz)?$/i, '').trim();
 }
 
 function decodeOptionalHeaderValue(encodedValue?: string): string | undefined {
@@ -571,26 +560,6 @@ async function countActivitiesForEvent(userID: string, eventID: string): Promise
   return getNonNegativeInteger(countSnapshot.data().count) ?? 0;
 }
 
-async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
-  const parsingOptions = createParsingOptions();
-  const baseExtension = getToolComparisonBaseExtension(resolvedExtension);
-
-  if (baseExtension === 'fit') {
-    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payload), parsingOptions);
-  }
-
-  const text = decodeText(payload);
-  if (baseExtension === 'gpx') {
-    return EventImporterGPX.getFromString(text, xmldom.DOMParser, parsingOptions);
-  }
-  if (baseExtension === 'tcx') {
-    const xml = new xmldom.DOMParser().parseFromString(text, 'application/xml');
-    return EventImporterTCX.getFromXML(xml, parsingOptions);
-  }
-
-  throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
-}
-
 function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
@@ -785,7 +754,7 @@ async function parseComparisonFiles(
     const { file, payloadForParsing, rawBytes } = preparedFile;
     let event: EventInterface;
     try {
-      event = await parseUploadedEvent(payloadForParsing, file.extension);
+      event = await parseActivityFilePayload(payloadForParsing, file.extension);
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
@@ -1187,7 +1156,11 @@ export const createToolComparisonEvent = onRequest({
 
     await assertComparisonWriteAllowedForUser(userID);
     const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
-    await writer.writeAllEventData(userID, comparisonWriteData.mergedEvent as any, comparisonWriteData.originalFiles);
+    await writer.writeAllEventData(
+      userID,
+      comparisonWriteData.mergedEvent as unknown as AppEventInterface,
+      comparisonWriteData.originalFiles,
+    );
     await finalizeToolComparisonMetadata({
       userID,
       eventID: mergedEventID,

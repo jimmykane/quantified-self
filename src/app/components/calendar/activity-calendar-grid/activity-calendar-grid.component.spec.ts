@@ -110,6 +110,35 @@ describe('ActivityCalendarGridComponent', () => {
     expect(compactNumberRule).toContain('flex-basis: 18px;');
   });
 
+  it('keeps compact family-overflow labels inside the day marker', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+    const overflowRule = styles.match(
+      /\.activity-calendar--year \.activity-calendar-marker-overflow,\s*\.activity-calendar--compact \.activity-calendar-marker-overflow\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(overflowRule).toContain('right: 0;');
+    expect(overflowRule).toContain('bottom: 0;');
+    expect(overflowRule).toContain('z-index: 4;');
+    expect(overflowRule).toContain('background: var(--mat-sys-surface);');
+    expect(overflowRule).not.toContain('right: -5px;');
+  });
+
+  it('gives compact markers vertical clearance between adjacent calendar rows', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+    const compactStageRule = styles.match(
+      /\.activity-calendar--compact \.activity-calendar-marker-stage\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(compactStageRule).toContain('height: 20px;');
+    expect(compactStageRule).toContain('flex: 0 0 20px;');
+  });
+
   it('fits all six compact calendar weeks inside the available mobile tile height', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
