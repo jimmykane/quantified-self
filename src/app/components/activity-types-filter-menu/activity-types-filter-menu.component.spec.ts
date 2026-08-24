@@ -47,6 +47,29 @@ describe('ActivityTypesFilterMenuComponent', () => {
     expect(component.activityTypeOptions.some(option => option.value === ActivityTypes.Snorkeling)).toBe(false);
   });
 
+  it('keeps a legacy activity-type alias selected in a narrowed menu', () => {
+    const component = new ActivityTypesFilterMenuComponent();
+    const emittedActivityTypes: ActivityTypes[][] = [];
+    component.selectedActivityTypesChange.subscribe(activityTypes => emittedActivityTypes.push(activityTypes));
+    component.selectedActivityTypes = ['cycling' as ActivityTypes];
+    component.availableActivityTypes = [];
+
+    component.ngOnChanges({
+      selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true),
+      availableActivityTypes: new SimpleChange(undefined, component.availableActivityTypes, true),
+    });
+
+    expect(component.activityFilterLabel).toBe('1 activity filter');
+    expect(component.activityTypeOptions).toEqual([
+      expect.objectContaining({ value: ActivityTypes.Cycling, selected: true }),
+    ]);
+
+    component.onActivityTypeToggle(ActivityTypes.Cycling, false);
+
+    expect(emittedActivityTypes).toEqual([[]]);
+    expect(component.selectedActivityTypes).toEqual([]);
+  });
+
   it('emits toggled activity filters and updates local menu state', () => {
     const component = new ActivityTypesFilterMenuComponent();
     const emittedActivityTypes: ActivityTypes[][] = [];
