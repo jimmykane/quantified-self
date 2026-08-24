@@ -169,6 +169,7 @@ describe('TracksComponent', () => {
   let mockThemeService: any;
   let mockEventService: any;
   let mockMap: any;
+  let mockMapCanvas: HTMLCanvasElement;
   let mockMapStyleService: any;
   let mockUserSettingsQuery: any;
   let mockTripDetectionService: any;
@@ -196,6 +197,7 @@ describe('TracksComponent', () => {
   };
 
   beforeEach(async () => {
+    mockMapCanvas = document.createElement('canvas');
     mockMap = {
       addControl: vi.fn(),
       addSource: vi.fn(),
@@ -216,7 +218,7 @@ describe('TracksComponent', () => {
       off: vi.fn(),
       on: vi.fn(),
       queryRenderedFeatures: vi.fn().mockReturnValue([]),
-      getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
+      getCanvas: vi.fn().mockReturnValue(mockMapCanvas),
       project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
       getPitch: vi.fn().mockReturnValue(0),
       getBearing: vi.fn().mockReturnValue(0),
@@ -466,6 +468,25 @@ describe('TracksComponent', () => {
     expect(registeredEvents).not.toContain('rotateend');
     expect(registeredEvents).not.toContain('pitchstart');
     expect(registeredEvents).not.toContain('pitchend');
+  });
+
+  it('marks direct map canvas input without adding a duplicate map focus target', async () => {
+    await component.ngOnInit();
+
+    mockMapCanvas.dispatchEvent(new Event('pointerdown'));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(true);
+    expect(fixture.nativeElement.querySelector('#map')?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('removes direct map canvas input listeners during destruction', async () => {
+    await component.ngOnInit();
+    component.ngOnDestroy();
+    (component as any).shouldPreserveMapViewForCurrentLoad = false;
+
+    mockMapCanvas.dispatchEvent(new Event('pointerdown'));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(false);
   });
 
   describe('Initialization robustness', () => {

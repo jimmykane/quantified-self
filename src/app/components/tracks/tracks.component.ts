@@ -200,6 +200,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
   private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
+  private mapViewInteractionTarget: HTMLCanvasElement | null = null;
+  private readonly mapViewInteractionHandler = () => this.onMapViewInteraction();
   private backgroundActivityRefreshQueue: Array<() => Promise<void>> = [];
   private backgroundActivityRefreshActiveCount = 0;
   private backgroundActivityRefreshEventIds = new Set<string>();
@@ -413,6 +415,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
+        this.bindMapViewInteractionListeners(mapInstance);
         this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
         this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
           this.zone.run(() => {
@@ -520,6 +523,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
+    this.unbindMapViewInteractionListeners();
     this.unbindStartPointPopupMapListeners();
     if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
@@ -2621,6 +2625,32 @@ export class TracksComponent implements OnInit, OnDestroy {
     ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
       map.on(eventName, this.startPointPopupRepositionHandler);
     });
+  }
+
+  private bindMapViewInteractionListeners(
+    map: { getCanvas?: () => HTMLCanvasElement | null } | null | undefined,
+  ): void {
+    this.unbindMapViewInteractionListeners();
+    const canvas = map?.getCanvas?.();
+    if (!canvas) {
+      return;
+    }
+
+    this.mapViewInteractionTarget = canvas;
+    ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
+      canvas.addEventListener(eventName, this.mapViewInteractionHandler);
+    });
+  }
+
+  private unbindMapViewInteractionListeners(): void {
+    if (!this.mapViewInteractionTarget) {
+      return;
+    }
+
+    ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
+      this.mapViewInteractionTarget?.removeEventListener(eventName, this.mapViewInteractionHandler);
+    });
+    this.mapViewInteractionTarget = null;
   }
 
   private unbindStartPointPopupMapListeners(): void {
