@@ -17,7 +17,9 @@
   </app-peek-panel>
   }
 
-  <div #mapDiv id="map"></div>
+  <div #mapDiv id="map" tabindex="0" aria-label="Activity tracks map"
+    (pointerdown)="onMapViewInteraction()" (wheel)="onMapViewInteraction()"
+    (keydown)="onMapViewInteraction()"></div>
   @if (selectedStartPoint(); as startPoint) {
   @if (selectedStartPointScreen(); as startPointScreen) {
   @if (getStartPointPopupContent(startPoint); as popupContent) {
@@ -47,6 +49,12 @@
       ariaLabelExpand="Expand trips" ariaLabelCollapse="Collapse trips" title="Trips"
       icon="route">
       <div peek-header-actions class="detected-trips-summary-row">
+        <button mat-icon-button type="button"
+          (click)="toggleTripSortDirection()"
+          [matTooltip]="tripSortToggleLabel()"
+          [attr.aria-label]="tripSortToggleLabel()">
+          <mat-icon>{{ tripSortIcon() }}</mat-icon>
+        </button>
         <span class="detected-trips-badge">
           <span class="detected-trips-badge-count">{{ detectedTrips().length }}</span>
           <span class="detected-trips-badge-label">{{ detectedTrips().length === 1 ? 'trip' : 'trips' }}</span>
@@ -72,7 +80,7 @@
           </button>
         </li>
         }
-        @for (trip of detectedTrips(); track trip.tripId) {
+        @for (trip of displayedDetectedTrips(); track trip.tripId) {
         <li>
           <button
             type="button"

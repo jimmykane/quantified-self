@@ -180,7 +180,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
-- **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
+- **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.
 - **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.

@@ -687,6 +687,7 @@ export class AppUserUtilities {
             myTracksSettings.dateRange = AppUserUtilities.getDefaultMyTracksDateRange();
         }
         (settings.myTracksSettings as any).showJumpHeatmap = (settings.myTracksSettings as any).showJumpHeatmap !== false;
+        myTracksSettings.tripSortDirection = myTracksSettings.tripSortDirection === 'asc' ? 'asc' : 'desc';
 
         // Export to CSV
         settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};

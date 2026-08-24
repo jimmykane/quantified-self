@@ -24,6 +24,7 @@ import type { TrainingDestinationId, TrainingSportId } from '@shared/training-di
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
+export type AppMyTracksTripSortDirection = 'asc' | 'desc';
 
 export interface AppMapSettingsInterface extends UserMapSettingsInterface {
     mapStyle?: AppMapStyleName;
@@ -36,6 +37,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     activityTypes?: ActivityTypes[];
     mapStyle?: 'default' | 'satellite' | 'outdoors';
     showJumpHeatmap?: boolean;
+    tripSortDirection?: AppMyTracksTripSortDirection;
     startDate?: number | null;
     endDate?: number | null;
 }

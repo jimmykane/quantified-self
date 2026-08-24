@@ -181,6 +181,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
   });
 
+  it('should document My Tracks trip sorting and the inferred Home entry', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('inferred **Home** area first when available');
+    expect(gettingStartedSection?.content).toContain('newest-first or oldest-first');
+    expect(gettingStartedSection?.content).toContain('choice is saved');
+  });
+
   it('should document dashboard manager curated/custom/map categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
