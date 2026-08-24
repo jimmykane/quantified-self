@@ -249,14 +249,19 @@ export const TRAINING_SPORT_DEFINITIONS = [
     id: 'cycling',
     label: 'Cycling',
     scopeLabel: 'Cycling/MTB',
-    details: 'Road, indoor, virtual, e-bike, MTB, Enduro, and Downhill',
+    details: 'Road, indoor, virtual, e-bike, hand cycle, velomobile, MTB, Enduro, and Downhill',
     iconActivityType: ActivityTypes.Cycling,
     capabilities: ['training-mix', 'best-build', 'durability', 'capacity', 'power-profile'],
     contexts: [
       {
         id: 'cycling',
         label: 'Cycling',
-        activityTypes: [ActivityTypes.Cycling, ActivityTypes.EBiking],
+        activityTypes: [
+          ActivityTypes.Cycling,
+          ActivityTypes.EBiking,
+          ActivityTypes.Handcycle,
+          ActivityTypes.Velomobile,
+        ],
         profile: 'endurance',
         intensityPolicy: 'zones',
         loadPolicy: 'recorded',

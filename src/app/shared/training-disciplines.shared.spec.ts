@@ -104,6 +104,18 @@ describe('shared Training sport registry', () => {
       });
   });
 
+  it('keeps Hand Cycle and Velomobile in the standard Cycling context', () => {
+    [ActivityTypes.Handcycle, ActivityTypes.Velomobile].forEach((activityType) => {
+      expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
+        sport: 'cycling',
+        context: 'cycling',
+        profile: 'endurance',
+        intensityPolicy: 'zones',
+        loadPolicy: 'recorded',
+      });
+    });
+  });
+
   it('keeps intentionally unsupported broad-family members in Other', () => {
     [
       ActivityTypes.Crossfit,

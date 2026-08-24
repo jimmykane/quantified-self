@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `20.1.1`
+- `@sports-alliance/sports-lib`: `20.2.0`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -341,7 +341,7 @@ rendering derive from it.
 | Training family | Registered contexts and profiles | Conservative canonical membership |
 | --- | --- | --- |
 | Running | Running (`endurance`), Trail running (`vertical-endurance`), Indoor running (`endurance`) | Running; Trail Running; Treadmill, Indoor Running, Virtual Running |
-| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, E-Biking; Indoor Cycling, Virtual Cycling; Mountain Biking; Enduro MTB; Downhill Cycling |
+| Cycling | Cycling and Indoor cycling (`endurance`), Mountain biking (`endurance`), Enduro MTB (`mixed-gravity`), Downhill MTB (`gravity`) | Cycling, E-Biking, Hand Cycle, Velomobile; Indoor Cycling, Virtual Cycling; Mountain Biking; Enduro MTB; Downhill Cycling |
 | Swimming | Pool swimming (`pool`), Open-water swimming (`open-water`) | Swimming; Open Water Swimming |
 | Rowing | Indoor rowing and On-water rowing (`rowing`) | Indoor Rowing; Rowing |
 | Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking; Hiking, Trekking |
@@ -1216,7 +1216,7 @@ score for every workout.
 The engine currently supports:
 
 - Running, Treadmill, Indoor Running, Virtual Running, and Trail Running.
-- Cycling, Indoor Cycling, Biking, Virtual Cycling, E-Biking, and standard Mountain Biking.
+- Cycling, Indoor Cycling, Biking, Virtual Cycling, E-Biking, Hand Cycle, Velomobile, and standard Mountain Biking.
 - Swimming and Open Water Swimming.
 
 Support means the engine understands the activity type. An individual activity can still be explicitly ineligible.
@@ -1834,7 +1834,11 @@ or any derived payload. Use a targeted reparse only when a specific retained ori
 records; do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a global historical reparse
 solely for these dive records.
 
-The repository now pins Sports Lib `20.1.1`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
+Sports Lib `20.2.0` classifies Hand Cycle and Velomobile in the Cycling group. Quantified Self routes both to the
+standard Cycling context, where they use the normal endurance summaries and Cycling durability protocol when their
+recorded evidence qualifies. This group-membership change does not require a derived-schema bump or source reparse.
+
+The repository now pins Sports Lib `20.2.0`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
 persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat.
 Existing persisted Resting Calories values remain historical values until a source reparse replaces their source stats.
 They are neither renamed nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM`

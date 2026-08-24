@@ -332,6 +332,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**Use automatic selection**');
     expect(trainingSection?.content).toContain('unmatched types appear under **Other power activities**');
     expect(trainingSection?.content).toContain('standard mountain biking, Enduro MTB, and Downhill MTB');
+    expect(trainingSection?.content).toContain('hand cycle, velomobile');
     expect(trainingSection?.content).toContain('does not invent downhill runs or uplift/lift segments');
     expect(trainingSection?.content).toContain('Longest jump is the maximum persisted jump distance');
     expect(trainingSection?.content).toContain('gravity MTB jump count and longest jump');
