@@ -17,6 +17,8 @@ describe('help.content', () => {
 
     expect(supportedActivitiesSection?.content).toContain('[Supported Activities & Metrics page](/features/supported-activities)');
     expect(supportedActivitiesSection?.content).toContain('A chart recommendation prioritizes recorded data; it does not create a missing field.');
+    expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when a swimming source includes per-length pool data');
+    expect(supportedActivitiesSection?.content).toContain('Jumps** when selected activities contain jump events');
     expect(supportedActivitiesSection?.content).toContain('Boating is organized in Motorized but keeps Sailing recommendations');
     expect(supportedActivitiesSection?.content).toContain('Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations');
     expect(supportedActivitiesSection?.content).toContain('never creates, names, associates, or calculates missing gas and tank data');

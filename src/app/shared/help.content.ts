@@ -424,6 +424,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Metrics and Event Details
 
 - Route, terrain, sensor, lap, length, jump, chart, and sport-specific details appear only when the imported source includes compatible records. A chart recommendation prioritizes recorded data; it does not create a missing field.
+- Event Details shows **Laps** when selected activities contain lap data, **Swim Lengths** when a swimming source includes per-length pool data, and **Jumps** when selected activities contain jump events. Charts and overlays likewise need compatible source time series.
 - An individual activity uses its exact activity type for Event Details chart recommendations. A family is not a promise of a uniform chart profile: Boating is organized in Motorized but keeps Sailing recommendations, while Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations.
 - Hand Cycle and Velomobile are canonical Cycling types. They use existing Cycling chart recommendations and can enter Cycling Training analysis only when the activity meets the current recorded-evidence and eligibility rules.
 

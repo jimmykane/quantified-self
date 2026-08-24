@@ -74,6 +74,24 @@ export const SUPPORTED_ACTIVITY_SUPPORT_LEVELS: readonly SupportedActivityConten
   },
 ];
 
+export const SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES: readonly SupportedActivityContentItem[] = [
+  {
+    icon: 'table_rows',
+    title: 'Laps and swim lengths',
+    copy: 'Event Details shows Laps when selected activities contain lap data. Swimming activities can show Swim Lengths when their source includes per-length pool data.',
+  },
+  {
+    icon: 'landscape',
+    title: 'Recorded jump details',
+    copy: 'Event Details shows Jumps when selected activities contain jump events. The visible columns follow the values actually recorded.',
+  },
+  {
+    icon: 'stacked_line_chart',
+    title: 'Charts from compatible samples',
+    copy: 'Charts and overlays need compatible source time series. Recommendations prioritize relevant recorded panels rather than adding a missing metric.',
+  },
+];
+
 export const SUPPORTED_ACTIVITY_PRESENTATION_NOTES: readonly SupportedActivityContentItem[] = [
   {
     icon: 'sailing',

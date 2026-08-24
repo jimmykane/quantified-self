@@ -23,13 +23,39 @@
       <p class="eyebrow">What support means</p>
       <h2 id="support-levels-title">Recognition is not a promise of every metric</h2>
       <p>
-        A recognized activity type can be imported and presented in Quantified Self. The available detail still follows
-        the source file or connected service, not a universal sport template.
+        Quantified Self can classify and present a recognized type when it appears in imported data. The available
+        detail still follows the source file or connected service, not a universal sport template.
       </p>
     </div>
     <div class="support-level-grid">
       @for (item of supportLevels; track item.title) {
       <mat-card appearance="outlined" class="support-level-card">
+        <mat-card-header>
+          <div mat-card-avatar class="support-level-avatar">
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="specialized-surfaces-title">
+    <div class="section-heading">
+      <p class="eyebrow">Source-provided detail</p>
+      <h2 id="specialized-surfaces-title">Specialized surfaces appear when records exist</h2>
+      <p>
+        Importing a recognized type does not manufacture laps, lengths, jump events, or continuous chart samples.
+        Event Details exposes these surfaces only when compatible source records are present.
+      </p>
+    </div>
+    <div class="presentation-grid">
+      @for (item of specializedSurfaces; track item.title) {
+      <mat-card appearance="outlined" class="presentation-card">
         <mat-card-header>
           <div mat-card-avatar class="support-level-avatar">
             <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>

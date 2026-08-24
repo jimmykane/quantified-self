@@ -16,6 +16,12 @@ export interface ActivityTypeGroupCatalogEntry extends ActivityTypeGroupMetadata
   activityTypes: ActivityTypes[];
 }
 
+const CanonicalActivityTypeValues = new Set<string>(Object.values(ActivityTypes));
+
+function isCanonicalActivityType(value: string): value is ActivityTypes {
+  return CanonicalActivityTypeValues.has(value);
+}
+
 const ActivityTypeGroupMetadataMap: Record<ActivityTypeGroup, ActivityTypeGroupMetadata> = {
   [ActivityTypeGroups.RunningGroup]: {
     id: ActivityTypeGroups.RunningGroup,
@@ -187,7 +193,8 @@ export function resolveActivityTypeGroup(value: unknown): ActivityTypeGroup | nu
 }
 
 export function getActivityTypesForGroup(activityTypeGroup: ActivityTypeGroup): ActivityTypes[] {
-  const canonicalActivityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray() as ActivityTypes[];
+  const canonicalActivityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray()
+    .filter(isCanonicalActivityType);
 
   return [...new Set(canonicalActivityTypes)]
     .filter(activityType => ActivityTypesHelper.getActivityGroupForActivityType(activityType) === activityTypeGroup)

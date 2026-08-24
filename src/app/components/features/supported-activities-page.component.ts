@@ -10,6 +10,7 @@ import {
   SUPPORTED_ACTIVITIES_ROUTE_DATA,
   SUPPORTED_ACTIVITY_FAMILIES,
   SUPPORTED_ACTIVITY_PRESENTATION_NOTES,
+  SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES,
   SUPPORTED_ACTIVITY_SUPPORT_LEVELS,
   SUPPORTED_ACTIVITY_TYPE_COUNT,
   type SupportedActivityFamily,
@@ -39,6 +40,7 @@ export class SupportedActivitiesPageComponent {
   readonly routeData = SUPPORTED_ACTIVITIES_ROUTE_DATA;
   readonly totalActivityTypeCount = SUPPORTED_ACTIVITY_TYPE_COUNT;
   readonly supportLevels = SUPPORTED_ACTIVITY_SUPPORT_LEVELS;
+  readonly specializedSurfaces = SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES;
   readonly presentationNotes = SUPPORTED_ACTIVITY_PRESENTATION_NOTES;
   readonly searchQuery = signal('');
   readonly filteredFamilies = computed<readonly SupportedActivityFamily[]>(() => {
@@ -74,7 +76,7 @@ export class SupportedActivitiesPageComponent {
       return `${this.totalActivityTypeCount} recognized activity types across ${SUPPORTED_ACTIVITY_FAMILIES.length} families.`;
     }
 
-    return `${activityTypeCount} activity type${activityTypeCount === 1 ? '' : 's'} in ${familyCount} famil${familyCount === 1 ? 'y' : 'ies'} match your search.`;
+    return `Showing ${activityTypeCount} recognized activity type${activityTypeCount === 1 ? '' : 's'} across ${familyCount} matching famil${familyCount === 1 ? 'y' : 'ies'}.`;
   });
 
   onSearchQueryChange(query: string): void {

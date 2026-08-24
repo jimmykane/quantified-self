@@ -33,6 +33,10 @@ type. It does not promise that every device, provider, import format, or recordi
 Distance, route, terrain, sensors, laps, lengths, jumps, charts, and sport-specific details are shown only when
 compatible records arrive in the source data.
 
+Event Details shows Laps when selected activities contain lap data, Swim Lengths when a swimming source includes
+per-length pool data, and Jumps when selected activities contain jump events. Charts and overlays likewise need
+compatible source time series. These are source-record surfaces, not additional promises made by catalog membership.
+
 The page, Help section, integration links, and discovery links must retain that source-dependent wording. Do not turn
 the catalog into a claim that a provider supports every type or metric.
 

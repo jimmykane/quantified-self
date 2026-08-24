@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   getActivityTypeGroupLabel,
@@ -92,5 +92,16 @@ describe('activity-type-group.metadata', () => {
       ActivityTypes.Workout,
     ].sort());
     expect(getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup)).toContain(ActivityTypes.Yoga);
+  });
+
+  it('ignores malformed values from Sports Lib canonical activity lookup results', () => {
+    const canonicalTypesSpy = vi.spyOn(ActivityTypesHelper, 'getActivityTypesAsUniqueArray')
+      .mockReturnValue([ActivityTypes.Cycling, 'Not a canonical activity type']);
+
+    try {
+      expect(getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup)).toEqual([ActivityTypes.Cycling]);
+    } finally {
+      canonicalTypesSpy.mockRestore();
+    }
   });
 });

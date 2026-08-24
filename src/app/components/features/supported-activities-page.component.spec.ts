@@ -28,7 +28,16 @@ describe('SupportedActivitiesPageComponent', () => {
 
     expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('[data-family-id="adaptive_mobility_group"]')?.textContent).toContain('Wheel Chair');
-    expect(fixture.nativeElement.textContent).toContain('1 activity type in 1 family match your search.');
+    expect(fixture.nativeElement.textContent).toContain('Showing 1 recognized activity type across 1 matching family.');
+
+    fixture.componentInstance.onSearchQueryChange('cycling');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-family-id="cycling_group"]')?.textContent).toContain('Hand Cycle');
+    expect(fixture.componentInstance.searchResultSummary()).toMatch(
+      /^Showing \d+ recognized activity types across \d+ matching families\.$/,
+    );
+    expect(fixture.nativeElement.textContent).not.toContain('activity types match your search.');
   });
 
   it('explains that family membership does not replace exact chart recommendations', () => {
@@ -49,6 +58,9 @@ describe('SupportedActivitiesPageComponent', () => {
 
     expect(text).toContain('Boating is organized in Motorized');
     expect(text).toContain('Wheel Chair is organized in Adaptive Mobility');
+    expect(text).toContain('Laps when selected activities contain lap data');
+    expect(text).toContain('Swim Lengths when their source includes per-length pool data');
+    expect(text).toContain('Jumps when selected activities contain jump events');
     expect(text).toContain('never creates, names, associates, or calculates missing gas and tank data');
     expect(helpLink).toBeTruthy();
   });
