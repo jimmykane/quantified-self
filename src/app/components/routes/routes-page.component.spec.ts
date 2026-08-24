@@ -208,6 +208,9 @@ describe('RoutesPageComponent', () => {
         };
         hapticsServiceMock = {
             selection: vi.fn(),
+            success: vi.fn(),
+            warning: vi.fn(),
+            error: vi.fn(),
         };
         processingServiceMock = {
             addJob: vi.fn().mockReturnValue('job-1'),
@@ -1662,6 +1665,7 @@ describe('RoutesPageComponent', () => {
             zipped: true,
             source: 'routes_list_bulk',
         });
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
         expect(component.bulkActionInProgress()).toBe(false);
     });
 

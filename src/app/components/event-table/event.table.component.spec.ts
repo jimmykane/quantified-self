@@ -14,6 +14,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { from, of, Subject } from 'rxjs';
@@ -107,6 +108,7 @@ describe('EventTableComponent', () => {
     let mockAnalyticsService: any;
     let mockLogger: any;
     let mockEventTagService: any;
+    let mockHapticsService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -268,6 +270,12 @@ describe('EventTableComponent', () => {
             }),
             applyBulkChanges: vi.fn().mockResolvedValue({}),
         };
+        mockHapticsService = {
+            selection: vi.fn(),
+            success: vi.fn(),
+            warning: vi.fn(),
+            error: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
@@ -287,6 +295,7 @@ describe('EventTableComponent', () => {
                 { provide: AppProcessingService, useValue: mockProcessingService },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: EventTagService, useValue: mockEventTagService },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]

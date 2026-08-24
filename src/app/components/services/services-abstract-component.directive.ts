@@ -30,6 +30,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserInterface, AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRoute } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRoute } from '@shared/route-delivery-sync-routes';
@@ -68,6 +69,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
   protected analyticsService = inject(AppAnalyticsService);
+  protected hapticsService = inject(AppHapticsService);
   protected logger = inject(LoggerService);
   protected dialog = inject(MatDialog, { optional: true });
 
@@ -135,6 +137,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
+        this.hapticsService.success();
       } catch (e: any) {
         this.logger.error(e);
         const status = e?.status;
@@ -152,6 +155,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.snackBar.open(message, undefined, {
           duration: 10000,
         });
+        this.hapticsService.error();
       } finally {
         this.isLoading = false;
         this.isConnecting = false;
@@ -187,6 +191,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.triggerUpsell('connection_card', 'connection');
       return;
     }
+    this.hapticsService.selection();
     this.isConnecting = true;
     try {
       this.analyticsService.logEvent('service_connect_start', { service_name: this.serviceName });
@@ -209,6 +214,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.snackBar.open(message, undefined, {
         duration: 5000,
       });
+      this.hapticsService.error();
     }
   }
 
@@ -217,6 +223,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.triggerUpsell();
       return;
     }
+    this.hapticsService.selection();
     const shouldContinue = await this.confirmDisconnectWithRouteImpact();
     if (!shouldContinue) {
       return;
@@ -227,6 +234,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.snackBar.open(`Disconnected successfully`, undefined, {
         duration: 2000,
       });
+      this.hapticsService.success();
       this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
     } catch (e: any) {
       this.logger.error(e);
@@ -243,6 +251,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.snackBar.open(message, undefined, {
         duration: 2000,
       });
+      this.hapticsService.error();
     }
     this.isDisconnecting = false;
     this.forceConnected = false;

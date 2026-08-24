@@ -1077,6 +1077,7 @@ export class RoutesPageComponent implements OnInit {
                 fileType: this.getPrimaryRouteFileType(route),
             });
             this.snackBar.open('Route deleted.', undefined, { duration: 2500 });
+            this.hapticsService.success();
         } catch (error) {
             this.analyticsService.logSavedRouteAction('delete', {
                 status: 'failure',
@@ -1084,6 +1085,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.logger.error('[RoutesPageComponent] Failed to delete route', { routeID }, error);
             this.snackBar.open('Failed to delete route.', undefined, { duration: 3000 });
+            this.hapticsService.error();
         } finally {
             this.deletingRouteID.set(null);
         }
@@ -1417,6 +1419,7 @@ export class RoutesPageComponent implements OnInit {
                     source: 'routes_list_bulk',
                 });
                 this.snackBar.open('Could not export GPX for selected routes.', undefined, { duration: 3000 });
+                this.hapticsService.error();
                 return;
             }
 
@@ -1453,6 +1456,11 @@ export class RoutesPageComponent implements OnInit {
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2000 },
             );
+            if (status === 'partial_success') {
+                this.hapticsService.warning();
+            } else {
+                this.hapticsService.success();
+            }
         } catch (error) {
             this.processingService.failJob(jobId, 'Route GPX export failed');
             this.analyticsService.logSavedRouteAction('export_gpx', {
@@ -1465,6 +1473,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.logger.error('[RoutesPageComponent] Failed to export selected route GPX files', error);
             this.snackBar.open('Could not export GPX for selected routes.', undefined, { duration: 3000 });
+            this.hapticsService.error();
         } finally {
             this.bulkActionInProgress.set(false);
         }
@@ -1553,6 +1562,7 @@ export class RoutesPageComponent implements OnInit {
                 if (!this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, responseMessage)) {
                     this.snackBar.open(responseMessage, undefined, { duration: 4000 });
                 }
+                this.hapticsService.error();
                 return;
             }
 
@@ -1589,6 +1599,11 @@ export class RoutesPageComponent implements OnInit {
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
             );
+            if (status === 'partial_success') {
+                this.hapticsService.warning();
+            } else {
+                this.hapticsService.success();
+            }
         } catch (error) {
             this.processingService.failJob(jobId, 'Route send failed');
             this.analyticsService.logSavedRouteAction('send_service_route', {
@@ -1604,6 +1619,7 @@ export class RoutesPageComponent implements OnInit {
             if (!this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, errorMessage)) {
                 this.snackBar.open(errorMessage, undefined, { duration: 4000 });
             }
+            this.hapticsService.error();
         } finally {
             this.bulkActionInProgress.set(false);
         }
@@ -1636,6 +1652,7 @@ export class RoutesPageComponent implements OnInit {
                 source: 'routes_list_bulk',
             });
             this.snackBar.open('No original route files found for the selected routes.', undefined, { duration: 3000 });
+            this.hapticsService.error();
             return;
         }
 
@@ -1681,6 +1698,7 @@ export class RoutesPageComponent implements OnInit {
                     source: 'routes_list_bulk',
                 });
                 this.snackBar.open('Could not download original files for selected routes.', undefined, { duration: 3000 });
+                this.hapticsService.error();
                 return;
             }
 
@@ -1709,6 +1727,11 @@ export class RoutesPageComponent implements OnInit {
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2000 },
             );
+            if (status === 'partial_success') {
+                this.hapticsService.warning();
+            } else {
+                this.hapticsService.success();
+            }
         } catch (error) {
             this.processingService.failJob(jobId, 'Original route file download failed');
             this.analyticsService.logSavedRouteAction('download', {
@@ -1722,6 +1745,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.logger.error('[RoutesPageComponent] Failed to download selected route original files', error);
             this.snackBar.open('Could not download original files for selected routes.', undefined, { duration: 3000 });
+            this.hapticsService.error();
         } finally {
             this.bulkActionInProgress.set(false);
         }
@@ -1791,6 +1815,7 @@ export class RoutesPageComponent implements OnInit {
                     source: 'routes_list_bulk',
                 });
                 this.snackBar.open('Failed to delete selected routes.', undefined, { duration: 3000 });
+                this.hapticsService.error();
                 return;
             }
 
@@ -1809,6 +1834,11 @@ export class RoutesPageComponent implements OnInit {
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
             );
+            if (status === 'partial_success') {
+                this.hapticsService.warning();
+            } else {
+                this.hapticsService.success();
+            }
         } catch (error) {
             this.processingService.failJob(jobId, 'Selected route delete failed');
             this.analyticsService.logSavedRouteAction('delete', {
@@ -1818,6 +1848,7 @@ export class RoutesPageComponent implements OnInit {
             });
             this.logger.error('[RoutesPageComponent] Failed to delete selected routes', error);
             this.snackBar.open('Failed to delete selected routes.', undefined, { duration: 3000 });
+            this.hapticsService.error();
         } finally {
             this.bulkActionInProgress.set(false);
         }

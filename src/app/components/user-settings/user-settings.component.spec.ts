@@ -19,6 +19,7 @@ import { MatFormField } from '@angular/material/form-field';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
@@ -42,6 +43,7 @@ describe('UserSettingsComponent', () => {
     let mockActivatedRoute: any;
     let mockRouter: any;
     let queryParamMapSubject: BehaviorSubject<any>;
+    let hapticsServiceMock: any;
 
     const mockUser: Partial<User> = {
         uid: 'test-uid',
@@ -119,6 +121,12 @@ describe('UserSettingsComponent', () => {
             },
             queryParamMap: queryParamMapSubject.asObservable()
         };
+        hapticsServiceMock = {
+            selection: vi.fn(),
+            success: vi.fn(),
+            warning: vi.fn(),
+            error: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
@@ -140,6 +148,7 @@ describe('UserSettingsComponent', () => {
                 },
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+                { provide: AppHapticsService, useValue: hapticsServiceMock },
                 { provide: Analytics, useValue: null },
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -981,6 +990,20 @@ describe('UserSettingsComponent', () => {
         await component.onSubmit(new Event('submit'));
 
         expect(component.userSettingsFormGroup.pristine).toBe(true);
+        expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
+    });
+
+    it('uses an error haptic when a settings save fails', async () => {
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'updateUserProperties').mockRejectedValueOnce(new Error('offline'));
+
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('chartStrokeWidth').setValue(7);
+        component.userSettingsFormGroup.get('chartStrokeWidth').markAsDirty();
+
+        await component.onSubmit(new Event('submit'));
+
+        expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
     });
 
     it('normalizes malformed legacy settings so required chart/unit controls stay valid', () => {

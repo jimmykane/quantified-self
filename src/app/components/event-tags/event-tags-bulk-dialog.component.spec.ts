@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { ComponentFixture } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
 
 import { EventTagsBulkDialogComponent } from './event-tags-bulk-dialog.component';
@@ -18,18 +19,26 @@ describe('EventTagsBulkDialogComponent', () => {
   let close: ReturnType<typeof vi.fn>;
   let snackbar: ReturnType<typeof vi.fn>;
   let dialogRef: { close: ReturnType<typeof vi.fn>; disableClose: boolean };
+  let hapticsService: any;
 
   beforeEach(() => {
     save = vi.fn().mockResolvedValue({});
     close = vi.fn();
     snackbar = vi.fn();
     dialogRef = { close, disableClose: false };
+    hapticsService = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
     TestBed.configureTestingModule({
       imports: [EventTagsBulkDialogComponent, NoopAnimationsModule],
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { selectedCount: 3, addSuggestions: ['Race'], removeSuggestions: ['Old'], save } },
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: MatSnackBar, useValue: { open: snackbar } },
+        { provide: AppHapticsService, useValue: hapticsService },
       ],
     });
     fixture = TestBed.createComponent(EventTagsBulkDialogComponent);
@@ -46,6 +55,7 @@ describe('EventTagsBulkDialogComponent', () => {
 
     expect(save).toHaveBeenCalledWith({ add: ['Race'], remove: ['Old'] });
     expect(close).toHaveBeenCalledWith(true);
+    expect(hapticsService.success).toHaveBeenCalledOnce();
   });
 
   it('prevents the same tag from being added and removed', () => {

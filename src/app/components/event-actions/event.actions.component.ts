@@ -28,6 +28,7 @@ import {
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventSharingService } from '../../services/app.event-sharing.service';
 import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -57,6 +58,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   private processingService = inject(AppProcessingService);
   private eventSharingService = inject(AppEventSharingService);
   private dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private hapticsService = inject(AppHapticsService);
 
 
   constructor(
@@ -143,6 +145,11 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     this.snackBar.open(copied ? 'Public link copied' : 'Could not copy public link', undefined, {
       duration: 2500,
     });
+    if (copied) {
+      this.hapticsService.success();
+    } else {
+      this.hapticsService.error();
+    }
   }
 
   async stopSharingEvent(): Promise<void> {
@@ -176,9 +183,11 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       } else {
         this.snackBar.open('Sharing stopped', undefined, { duration: 2500 });
       }
+      this.hapticsService.success();
     } catch (error) {
       this.logger.error('[EventActionsComponent] Failed to update sharing', error);
       this.snackBar.open('Could not update sharing', undefined, { duration: 3500 });
+      this.hapticsService.error();
     } finally {
       this.isSharing = false;
       this.changeDetectorRef.markForCheck();
@@ -216,6 +225,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
           duration: 2000,
         });
+        this.hapticsService.success();
         this.changeDetectorRef.detectChanges();
       } catch (error) {
         this.processingService.failJob(jobId, 'Re-calculation failed');
@@ -223,6 +233,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not recalculate statistics.'), undefined, {
           duration: 4000,
         });
+        this.hapticsService.error();
       }
     } finally {
       this.isReprocessing = false;
@@ -263,6 +274,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.snackBar.open('Activity reimported from source file', undefined, {
           duration: 2000,
         });
+        this.hapticsService.success();
         this.changeDetectorRef.detectChanges();
       } catch (error) {
         this.processingService.failJob(jobId, 'Reimport failed');
@@ -270,6 +282,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not reimport activity from file.'), undefined, {
           duration: 4000,
         });
+        this.hapticsService.error();
       }
     } finally {
       this.isReprocessing = false;
@@ -357,6 +370,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   // }
 
   async downloadGPX() {
+    this.hapticsService.selection();
     try {
       const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
       this.fileService.downloadFile(
@@ -368,23 +382,27 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.snackBar.open('GPX file served', undefined, {
         duration: 2000,
       });
+      this.hapticsService.success();
     } catch (error) {
       this.logger.error('[EventActionsComponent] Failed to download GPX from original files', error);
       this.snackBar.open('Could not download GPX file', undefined, {
         duration: 3000,
       });
+      this.hapticsService.error();
     }
   }
 
 
 
   async downloadOriginals() {
+    this.hapticsService.selection();
     this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
       const originalFiles = this.eventService.getOriginalEventDownloadSources(this.event as any);
 
       if (originalFiles.length === 0) {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
+        this.hapticsService.error();
         return;
       }
 
@@ -394,12 +412,19 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         fallbackFileName: 'original-file',
       });
 
+      if (result.mode === 'none') {
+        this.hapticsService.error();
+        return;
+      }
+
       this.analyticsService.logEvent(
         result.mode === 'zip' ? 'downloaded_original_files_zip' : 'downloaded_original_file',
       );
+      this.hapticsService.success();
     } catch (error: any) {
       this.logger.error('Download failed', error);
       this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
+      this.hapticsService.error();
     }
   }
 
@@ -419,15 +444,24 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       if (!result) {
         return;
       }
-      await this.eventService.deleteAllEventData(this.user, this.event.getID());
-      this.dayDetailsNavigation.markEventDeleted(this.event.getID());
-      this.eventDeleted.emit(this.event.getID());
-      if (this.navigateAfterDelete) {
-        await this.leaveDeletedEventRoute();
+      try {
+        await this.eventService.deleteAllEventData(this.user, this.event.getID());
+        this.dayDetailsNavigation.markEventDeleted(this.event.getID());
+        this.eventDeleted.emit(this.event.getID());
+        if (this.navigateAfterDelete) {
+          await this.leaveDeletedEventRoute();
+        }
+        this.snackBar.open('Event deleted', undefined, {
+          duration: 2000,
+        });
+        this.hapticsService.success();
+      } catch (error) {
+        this.logger.error('[EventActionsComponent] Failed to delete event', error);
+        this.snackBar.open('Could not delete event', undefined, {
+          duration: 3000,
+        });
+        this.hapticsService.error();
       }
-      this.snackBar.open('Event deleted', undefined, {
-        duration: 2000,
-      });
     });
   }
 

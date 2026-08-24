@@ -129,6 +129,7 @@ import {
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import type { TrainingWorkspacePreferences } from '../../models/app-user.interface';
 import type { SleepSession } from '@shared/sleep';
 import {
@@ -476,6 +477,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     private readonly userSettingsService: TrainingWorkspacePreferenceWriter | null = null,
     @Optional() private readonly snackBar: MatSnackBar | null = null,
     @Optional() private readonly bottomSheet: MatBottomSheet | null = null,
+    @Optional() private readonly hapticsService: AppHapticsService | null = null,
   ) {
     this.useTrainingStateDetailsDialog = breakpointObserver
       ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
@@ -1254,6 +1256,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (destination === this.selectedTrainingDestination) {
       return;
     }
+    this.hapticsService?.selection();
     this.preferredDestinationOverrideBaseline = normalizeTrainingDestinationId(
       this.trainingWorkspacePreferences.preferredDestination,
     );
@@ -1400,6 +1403,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
             'Dismiss',
             { duration: 6000 },
           );
+          this.hapticsService?.error();
         }
       }
     }

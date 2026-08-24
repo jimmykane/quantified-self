@@ -28,6 +28,7 @@ import { TripLocationLabelService } from '../../services/trip-location-label.ser
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import { MapboxLayersControlService } from '../../services/map/mapbox-layers-control.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { By } from '@angular/platform-browser';
 
 const waitForAsyncWork = async () => {
@@ -180,6 +181,7 @@ describe('TracksComponent', () => {
   let mockMyTracksPolylineCacheService: any;
   let mockMapboxLayersControlService: any;
   let mockMapLayersControlHandle: any;
+  let mockHapticsService: any;
 
   const mockUser = {
     uid: 'user-1',
@@ -413,6 +415,12 @@ describe('TracksComponent', () => {
     mockMapboxLayersControlService = {
       create: vi.fn().mockReturnValue(mockMapLayersControlHandle),
     };
+    mockHapticsService = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [TracksComponent, PeekPanelComponent],
@@ -425,6 +433,7 @@ describe('TracksComponent', () => {
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppEventColorService, useValue: { getTrackColor: vi.fn() } },
         { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+        { provide: AppHapticsService, useValue: mockHapticsService },
         { provide: BrowserCompatibilityService, useValue: { checkCompressionSupport: vi.fn().mockReturnValue(true) } },
         { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() } },
         { provide: AppFileService, useValue: {} },

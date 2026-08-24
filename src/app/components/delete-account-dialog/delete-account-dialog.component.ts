@@ -1,10 +1,11 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FormsModule } from '@angular/forms';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface DeleteAccountDialogData {
     displayName: string;
@@ -27,6 +28,7 @@ export interface DeleteAccountDialogData {
 })
 export class DeleteAccountDialogComponent {
     confirmChecked = false;
+    private readonly hapticsService = inject(AppHapticsService);
 
     constructor(
         public dialogRef: MatDialogRef<DeleteAccountDialogComponent>,
@@ -34,6 +36,7 @@ export class DeleteAccountDialogComponent {
     ) { }
 
     onConfirm(): void {
+        this.hapticsService.warning();
         this.dialogRef.close(true);
     }
 

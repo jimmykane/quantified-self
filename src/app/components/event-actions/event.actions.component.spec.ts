@@ -22,6 +22,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { of } from 'rxjs';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 vi.mock('app/firebase/analytics', () => ({
     Analytics: class { },
@@ -42,6 +43,7 @@ describe('EventActionsComponent', () => {
     let mockRouter: any;
     let mockLocation: any;
     let mockDayDetailsNavigation: any;
+    let mockHapticsService: any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -138,6 +140,12 @@ describe('EventActionsComponent', () => {
         };
         mockLocation = { back: vi.fn() };
         mockDayDetailsNavigation = { markEventDeleted: vi.fn() };
+        mockHapticsService = {
+            selection: vi.fn(),
+            success: vi.fn(),
+            warning: vi.fn(),
+            error: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
@@ -158,7 +166,8 @@ describe('EventActionsComponent', () => {
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
                 { provide: Clipboard, useValue: { copy: vi.fn() } },
                 { provide: AppEventSharingService, useValue: mockEventSharingService },
-                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } }
+                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+                { provide: AppHapticsService, useValue: mockHapticsService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -197,6 +206,7 @@ describe('EventActionsComponent', () => {
         expect(deleted).toHaveBeenCalledWith('event-123');
         expect(mockRouter.navigate).not.toHaveBeenCalled();
         expect(mockSnackBar.open).toHaveBeenCalledWith('Event deleted', undefined, { duration: 2000 });
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
     it('should leave a deleted event details route by default', async () => {
@@ -224,6 +234,7 @@ describe('EventActionsComponent', () => {
         expect(mockEventSharingService.setEventSharing).toHaveBeenCalledWith(component.user, 'event-123', true);
         expect(mockEventSharingService.copyShareUrl).toHaveBeenCalledWith('event', 'test-uid', 'event-123');
         expect((component.event as any).privacy).toBe('public');
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
     it('should not enable sharing when the public-share confirmation is cancelled', async () => {
@@ -251,6 +262,7 @@ describe('EventActionsComponent', () => {
 
         expect(mockEventSharingService.setEventSharing).not.toHaveBeenCalled();
         expect(mockEventSharingService.copyShareUrl).toHaveBeenCalledWith('event', 'test-uid', 'event-123');
+        expect(mockHapticsService.success).toHaveBeenCalledOnce();
     });
 
     it('should disable sharing after confirmation', async () => {

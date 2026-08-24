@@ -11,6 +11,7 @@ import { AppUserService, RouteDeliverySyncBackfillSummary } from '../../../servi
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-route-delivery-sync-route-control',
@@ -45,6 +46,7 @@ export class RouteDeliverySyncRouteControlComponent implements OnChanges, OnDest
     private analyticsService: AppAnalyticsService,
     private logger: LoggerService,
     private snackBar: MatSnackBar,
+    private hapticsService: AppHapticsService,
   ) {}
 
   ngOnChanges(): void {
@@ -92,6 +94,7 @@ export class RouteDeliverySyncRouteControlComponent implements OnChanges, OnDest
       return;
     }
 
+    this.hapticsService.selection();
     this.isSaving = true;
     try {
       await this.userService.updateRouteDeliverySyncRouteSettings(this.user, { [this.routeId]: enabled });
@@ -106,9 +109,11 @@ export class RouteDeliverySyncRouteControlComponent implements OnChanges, OnDest
         undefined,
         { duration: 3500 },
       );
+      this.hapticsService.success();
     } catch (error: any) {
       this.logger.error(error);
       this.snackBar.open(`Could not update automatic route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.hapticsService.error();
     } finally {
       this.isSaving = false;
     }
@@ -126,6 +131,7 @@ export class RouteDeliverySyncRouteControlComponent implements OnChanges, OnDest
       return;
     }
 
+    this.hapticsService.selection();
     this.isBackfilling = true;
     try {
       const summary = await this.userService.backfillRouteDeliverySyncRouteForCurrentUser(
@@ -145,9 +151,15 @@ export class RouteDeliverySyncRouteControlComponent implements OnChanges, OnDest
         undefined,
         { duration: 4500 },
       );
+      if (summary.failedCount > 0) {
+        this.hapticsService.warning();
+      } else {
+        this.hapticsService.success();
+      }
     } catch (error: any) {
       this.logger.error(error);
       this.snackBar.open(`Could not start route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.hapticsService.error();
     } finally {
       this.isBackfilling = false;
     }

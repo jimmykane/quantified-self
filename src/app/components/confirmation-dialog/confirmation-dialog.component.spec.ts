@@ -4,6 +4,7 @@ import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from './confirmation-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('ConfirmationDialogComponent', () => {
@@ -11,10 +12,17 @@ describe('ConfirmationDialogComponent', () => {
   let component: ConfirmationDialogComponent;
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
   let bottomSheetRefMock: { dismiss: ReturnType<typeof vi.fn> };
+  let hapticsServiceMock: any;
 
   beforeEach(async () => {
     dialogRefMock = { close: vi.fn() };
     bottomSheetRefMock = { dismiss: vi.fn() };
+    hapticsServiceMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [ConfirmationDialogComponent],
@@ -23,6 +31,7 @@ describe('ConfirmationDialogComponent', () => {
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
         { provide: MAT_DIALOG_DATA, useValue: null },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
       ],
     }).compileComponents();
 
@@ -47,6 +56,7 @@ describe('ConfirmationDialogComponent', () => {
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
@@ -78,6 +88,7 @@ describe('ConfirmationDialogComponent', () => {
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
@@ -104,6 +115,7 @@ describe('ConfirmationDialogComponent', () => {
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
@@ -125,6 +137,7 @@ describe('ConfirmationDialogComponent', () => {
     component.onConfirm();
     expect(dialogRefMock.close).toHaveBeenCalledWith(true);
     expect(bottomSheetRefMock.dismiss).toHaveBeenCalledWith(true);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
   });
 
   it('should support label aliases and hide cancel when requested', async () => {
@@ -135,6 +148,7 @@ describe('ConfirmationDialogComponent', () => {
       providers: [
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatBottomSheetRef, useValue: bottomSheetRefMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
@@ -154,5 +168,7 @@ describe('ConfirmationDialogComponent', () => {
     expect(component.cancelButtonText).toBe('Abort');
     expect(component.showCancel).toBe(false);
     expect(component.confirmColor).toBe('warn');
+    component.onConfirm();
+    expect(hapticsServiceMock.warning).toHaveBeenCalledOnce();
   });
 });
