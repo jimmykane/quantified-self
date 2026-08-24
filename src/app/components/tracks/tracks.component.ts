@@ -200,7 +200,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
   private mapLayersControlHandle: MapboxLayersControlHandle | null = null;
-  private mapViewInteractionTarget: HTMLCanvasElement | null = null;
+  private mapViewInteractionTarget: HTMLElement | null = null;
   private readonly mapViewInteractionHandler = () => this.onMapViewInteraction();
   private backgroundActivityRefreshQueue: Array<() => Promise<void>> = [];
   private backgroundActivityRefreshActiveCount = 0;
@@ -2628,17 +2628,17 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private bindMapViewInteractionListeners(
-    map: { getCanvas?: () => HTMLCanvasElement | null } | null | undefined,
+    map: { getContainer?: () => HTMLElement | null } | null | undefined,
   ): void {
     this.unbindMapViewInteractionListeners();
-    const canvas = map?.getCanvas?.();
-    if (!canvas) {
+    const container = map?.getContainer?.();
+    if (!container) {
       return;
     }
 
-    this.mapViewInteractionTarget = canvas;
+    this.mapViewInteractionTarget = container;
     ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
-      canvas.addEventListener(eventName, this.mapViewInteractionHandler);
+      container.addEventListener(eventName, this.mapViewInteractionHandler, true);
     });
   }
 
@@ -2648,7 +2648,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     ['pointerdown', 'wheel', 'keydown'].forEach((eventName) => {
-      this.mapViewInteractionTarget?.removeEventListener(eventName, this.mapViewInteractionHandler);
+      this.mapViewInteractionTarget?.removeEventListener(eventName, this.mapViewInteractionHandler, true);
     });
     this.mapViewInteractionTarget = null;
   }

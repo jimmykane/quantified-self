@@ -169,7 +169,9 @@ describe('TracksComponent', () => {
   let mockThemeService: any;
   let mockEventService: any;
   let mockMap: any;
+  let mockMapContainer: HTMLDivElement;
   let mockMapCanvas: HTMLCanvasElement;
+  let mockMapNavigationControl: HTMLButtonElement;
   let mockMapStyleService: any;
   let mockUserSettingsQuery: any;
   let mockTripDetectionService: any;
@@ -197,7 +199,10 @@ describe('TracksComponent', () => {
   };
 
   beforeEach(async () => {
+    mockMapContainer = document.createElement('div');
     mockMapCanvas = document.createElement('canvas');
+    mockMapNavigationControl = document.createElement('button');
+    mockMapContainer.append(mockMapCanvas, mockMapNavigationControl);
     mockMap = {
       addControl: vi.fn(),
       addSource: vi.fn(),
@@ -218,6 +223,7 @@ describe('TracksComponent', () => {
       off: vi.fn(),
       on: vi.fn(),
       queryRenderedFeatures: vi.fn().mockReturnValue([]),
+      getContainer: vi.fn().mockReturnValue(mockMapContainer),
       getCanvas: vi.fn().mockReturnValue(mockMapCanvas),
       project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
       getPitch: vi.fn().mockReturnValue(0),
@@ -470,13 +476,19 @@ describe('TracksComponent', () => {
     expect(registeredEvents).not.toContain('pitchend');
   });
 
-  it('marks direct map canvas input without adding a duplicate map focus target', async () => {
+  it('marks canvas and map-control input without adding a duplicate map focus target', async () => {
     await component.ngOnInit();
 
-    mockMapCanvas.dispatchEvent(new Event('pointerdown'));
+    mockMapCanvas.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(true);
     expect(fixture.nativeElement.querySelector('#map')?.hasAttribute('tabindex')).toBe(false);
+
+    (component as any).shouldPreserveMapViewForCurrentLoad = false;
+    mockMapNavigationControl.addEventListener('pointerdown', (event) => event.stopPropagation());
+    mockMapNavigationControl.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(true);
   });
 
   it('removes direct map canvas input listeners during destruction', async () => {
@@ -484,7 +496,7 @@ describe('TracksComponent', () => {
     component.ngOnDestroy();
     (component as any).shouldPreserveMapViewForCurrentLoad = false;
 
-    mockMapCanvas.dispatchEvent(new Event('pointerdown'));
+    mockMapCanvas.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(false);
   });
