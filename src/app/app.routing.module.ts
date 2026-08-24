@@ -766,6 +766,7 @@ export const routes: Routes = [
   {
     path: '',
     component: PublicLayoutComponent,
+    data: { disableRouteAnimation: true },
     children: publicLayoutRoutes,
   },
 ];
