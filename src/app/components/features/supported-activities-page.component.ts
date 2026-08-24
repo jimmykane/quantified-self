@@ -3,7 +3,6 @@ import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -11,7 +10,6 @@ import {
   SUPPORTED_ACTIVITIES_ROUTE_DATA,
   SUPPORTED_ACTIVITY_FAMILIES,
   SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES,
-  SUPPORTED_ACTIVITY_SUPPORT_LEVELS,
   SUPPORTED_ACTIVITY_TYPE_COUNT,
   type SupportedActivityFamily,
 } from './supported-activities-page.content';
@@ -28,7 +26,6 @@ function normalizeSearchValue(value: string): string {
     MatButtonModule,
     MatCardModule,
     MatChipsModule,
-    MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -40,7 +37,6 @@ function normalizeSearchValue(value: string): string {
 export class SupportedActivitiesPageComponent {
   readonly routeData = SUPPORTED_ACTIVITIES_ROUTE_DATA;
   readonly totalActivityTypeCount = SUPPORTED_ACTIVITY_TYPE_COUNT;
-  readonly supportLevels = SUPPORTED_ACTIVITY_SUPPORT_LEVELS;
   readonly specializedSurfaces = SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES;
   readonly searchQuery = signal('');
   readonly filteredFamilies = computed<readonly SupportedActivityFamily[]>(() => {

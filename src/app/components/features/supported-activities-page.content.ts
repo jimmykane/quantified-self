@@ -51,29 +51,6 @@ export const SUPPORTED_ACTIVITY_FAMILIES: readonly SupportedActivityFamily[] = g
 export const SUPPORTED_ACTIVITY_TYPE_COUNT = SUPPORTED_ACTIVITY_FAMILIES
   .reduce((count, family) => count + family.activityTypes.length, 0);
 
-export const SUPPORTED_ACTIVITY_SUPPORT_LEVELS: readonly SupportedActivityContentItem[] = [
-  {
-    icon: 'category',
-    title: 'Recognized type',
-    copy: 'The catalog shows the activity types Quantified Self recognizes and the groups that help you browse them.',
-  },
-  {
-    icon: 'query_stats',
-    title: 'Shown when recorded',
-    copy: 'Maps, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the activity includes the relevant data.',
-  },
-  {
-    icon: 'stacked_line_chart',
-    title: 'Charts fit the activity',
-    copy: 'Groups help you browse. The activity type and its data determine which charts you see, so activities in the same group can still look different.',
-  },
-  {
-    icon: 'sync',
-    title: 'Your source matters',
-    copy: 'Devices, connected services, file formats, and recording settings can all change the details that arrive with an activity.',
-  },
-];
-
 export const SUPPORTED_ACTIVITY_SPECIALIZED_SURFACES: readonly SupportedActivityContentItem[] = [
   {
     icon: 'table_rows',

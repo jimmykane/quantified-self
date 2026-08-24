@@ -3,7 +3,7 @@
   gap: clamp(2rem, 5vw, 4rem);
   max-width: 76rem;
   margin: 0 auto;
-  padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 2rem) 4rem;
+  padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 2rem) 1rem;
 }
 
 .hero-section,
@@ -50,25 +50,23 @@ h3 {
 .section-heading p,
 .family-note,
 .catalog-result-summary,
-.diving-card p {
+.supplemental-card-content p {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-large);
 }
 
-.hero-actions {
+.provider-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.25rem;
 }
 
-.support-level-grid,
 .presentation-grid,
 .family-grid {
   display: grid;
   gap: 1rem;
 }
 
-.support-level-grid,
 .presentation-grid {
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
@@ -78,39 +76,24 @@ h3 {
   max-width: 56rem;
 }
 
-.support-details-title,
-.diving-details-title h2 {
+.supplemental-card h2 {
   font: var(--mat-sys-title-medium);
 }
 
-.diving-details-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.diving-details-title mat-icon {
-  color: var(--mat-sys-tertiary);
-}
-
-.support-details-content,
-.diving-details-content {
+.supplemental-card-content {
   display: grid;
-  gap: 1rem;
-  padding: 0.25rem 0;
+  gap: 0.75rem;
 }
 
-.support-details-intro,
-.diving-details-content p {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+.supplemental-card-content a {
+  justify-self: start;
+  margin-inline-start: -0.5rem;
 }
 
 .family-grid {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
 
-.support-level-card,
 .presentation-card,
 .family-card {
   height: 100%;
@@ -120,16 +103,21 @@ h3 {
   border-top-width: 0.25rem;
 }
 
-.support-level-avatar,
+.supplemental-avatar,
 .family-avatar {
   display: grid;
   place-items: center;
   border-radius: 50%;
 }
 
-.support-level-avatar {
+.supplemental-avatar {
   background: var(--mat-sys-primary-container);
   color: var(--mat-sys-on-primary-container);
+}
+
+.supplemental-avatar--dive {
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
 }
 
 .family-avatar {
@@ -159,14 +147,6 @@ h3 {
 }
 
 @media (max-width: 37.5rem) {
-  .hero-actions {
-    display: grid;
-  }
-
-  .hero-actions > a {
-    width: 100%;
-  }
-
   .family-grid {
     grid-template-columns: minmax(0, 1fr);
   }

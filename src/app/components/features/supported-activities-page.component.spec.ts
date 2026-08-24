@@ -40,7 +40,7 @@ describe('SupportedActivitiesPageComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('activity types match your search.');
   });
 
-  it('puts the catalog before supporting details and keeps advanced information compact', () => {
+  it('puts the catalog before concise, app-native supporting details', () => {
     TestBed.configureTestingModule({
       imports: [
         SupportedActivitiesPageComponent,
@@ -68,17 +68,19 @@ describe('SupportedActivitiesPageComponent', () => {
     ).toBeTruthy();
     expect(catalogSection.compareDocumentPosition(specializedSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(fixture.nativeElement.querySelector('#event-details-title')).toBeNull();
-    expect(divingDetails.querySelector('mat-expansion-panel')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    expect(divingDetails.querySelector('mat-card')).toBeTruthy();
+    expect(divingDetails.querySelector('h2#diving-support-title')).toBeTruthy();
     expect(text).toContain('When you open an activity, you can see laps');
     expect(text).toContain('Laps appear when the activity includes lap data');
     expect(text).toContain('Swim Lengths when the data includes individual pool lengths');
     expect(text).toContain('Jumps appear when the activity includes jump events');
-    expect(text).toContain('We do not estimate or fill in missing dive data');
+    expect(text).toContain('We do not estimate missing dive data');
     expect(helpLink).toBeTruthy();
     expect(helpLink?.getAttribute('href')).toContain('/help#supported-activities');
   });
 
-  it('keeps support explanation at the bottom after provider and advanced dive details', () => {
+  it('keeps a compact support card at the bottom after provider and dive details', () => {
     TestBed.configureTestingModule({
       imports: [
         SupportedActivitiesPageComponent,
@@ -95,7 +97,9 @@ describe('SupportedActivitiesPageComponent', () => {
     const divingDetails = fixture.nativeElement.querySelector('.diving-details-section') as HTMLElement;
     const supportDetails = fixture.nativeElement.querySelector('.support-details-section') as HTMLElement;
 
-    expect(supportDetails.querySelector('mat-expansion-panel')).toBeTruthy();
+    expect(supportDetails.querySelector('mat-card')).toBeTruthy();
+    expect(supportDetails.querySelector('.support-level-grid')).toBeNull();
+    expect(supportDetails.querySelector('h2#support-levels-title')).toBeTruthy();
     expect(supportDetails.textContent).toContain('What “supported” means');
     expect(providerSection.compareDocumentPosition(supportDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(divingDetails.compareDocumentPosition(supportDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

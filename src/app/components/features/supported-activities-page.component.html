@@ -112,70 +112,59 @@
         details. If something is missing, check what the device, service, or file recorded.
       </p>
     </div>
-    <div class="hero-actions">
-      <a mat-stroked-button routerLink="/integrations">See integrations</a>
-      <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Get help with uploads</a>
+    <div class="provider-actions" aria-label="Related resources">
+      <a mat-button routerLink="/integrations">
+        See integrations
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-button routerLink="/help" fragment="uploads-and-imports">
+        Upload help
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
     </div>
   </section>
 
-  <section class="diving-details-section" aria-labelledby="diving-support-title">
-    <mat-expansion-panel class="diving-details-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <div class="diving-details-title">
-            <mat-icon aria-hidden="true">scuba_diving</mat-icon>
-            <h2 id="diving-support-title">Dive-specific details</h2>
-          </div>
-        </mat-panel-title>
-        <mat-panel-description>Shown when your activity includes dive data.</mat-panel-description>
-      </mat-expansion-panel-header>
-      <div class="diving-details-content">
+  <section class="supplemental-section diving-details-section" aria-labelledby="diving-support-title">
+    <mat-card appearance="outlined" class="supplemental-card">
+      <mat-card-header>
+        <div mat-card-avatar class="supplemental-avatar supplemental-avatar--dive">
+          <mat-icon aria-hidden="true">scuba_diving</mat-icon>
+        </div>
+        <mat-card-title><h2 id="diving-support-title">Dive details</h2></mat-card-title>
+        <mat-card-subtitle>Available when your activity includes dive data.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content class="supplemental-card-content">
         <p>
-          Dive Profile needs continuous depth data. Depth, decompression, timing, tissue load, SAC/RMV, gas, and tank
-          details appear only when they are included in the activity. We do not estimate or fill in missing dive data.
+          Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding can show Dive Profile, depth, decompression,
+          gas, and tank details when your activity recorded them. We do not estimate missing dive data.
         </p>
-        <p>
-          In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade
-          are hidden. For an event that combines diving with another activity, terrain summaries come only from the
-          non-diving activity.
-        </p>
-        <a mat-stroked-button routerLink="/help" fragment="supported-activities">
+        <a mat-button routerLink="/help" fragment="supported-activities">
           Read dive details in Help
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
         </a>
-      </div>
-    </mat-expansion-panel>
+      </mat-card-content>
+    </mat-card>
   </section>
 
-  <section class="support-details-section" aria-labelledby="support-levels-title">
-    <mat-expansion-panel class="support-details-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <h2 id="support-levels-title" class="support-details-title">What “supported” means</h2>
-        </mat-panel-title>
-        <mat-panel-description>We recognize the type; your activity data determines the detail.</mat-panel-description>
-      </mat-expansion-panel-header>
-      <div class="support-details-content">
-        <p class="support-details-intro">
-          If an activity is listed, Quantified Self recognizes its type. It shows the details included in the activity
-          and does not add missing metrics, tracks, laps, lengths, jumps, or charts.
-        </p>
-        <div class="support-level-grid">
-          @for (item of supportLevels; track item.title) {
-          <mat-card appearance="outlined" class="support-level-card">
-            <mat-card-header>
-              <div mat-card-avatar class="support-level-avatar">
-                <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
-              </div>
-              <mat-card-title>{{ item.title }}</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <p>{{ item.copy }}</p>
-            </mat-card-content>
-          </mat-card>
-          }
+  <section class="supplemental-section support-details-section" aria-labelledby="support-levels-title">
+    <mat-card appearance="outlined" class="supplemental-card">
+      <mat-card-header>
+        <div mat-card-avatar class="supplemental-avatar">
+          <mat-icon aria-hidden="true">info</mat-icon>
         </div>
-      </div>
-    </mat-expansion-panel>
+        <mat-card-title><h2 id="support-levels-title">What “supported” means</h2></mat-card-title>
+        <mat-card-subtitle>We recognize the type; the activity provides the detail.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content class="supplemental-card-content">
+        <p>
+          When a type is listed, it can be labeled, searched, and filtered. Metrics, maps, laps, lengths, jumps, and
+          charts appear only when your activity includes them.
+        </p>
+        <a mat-button routerLink="/help" fragment="supported-activities">
+          Read support details
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </a>
+      </mat-card-content>
+    </mat-card>
   </section>
 </main>
