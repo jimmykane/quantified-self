@@ -82,4 +82,10 @@
   .dialog-body {
     padding: 16px !important;
   }
+
+  // The notification feed is already inset by the dialog body on small screens.
+  // It does not need the hover-transform buffer used by wider pointer layouts.
+  .feed-wrapper {
+    padding: 0;
+  }
 }

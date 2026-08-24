@@ -187,8 +187,14 @@
 
 @media (max-width: 599.98px) {
     .changelog-panel.changelog-panel-notification {
+        // This class is supplied only by the What's New dialog. Its outer dialog
+        // body already provides the mobile gutter, so avoid adding it again here.
+        .mat-expansion-panel-header {
+            padding-inline-start: 8px;
+        }
+
         ::ng-deep .mat-expansion-panel-body {
-            padding-inline-start: 16px;
+            padding-inline-start: 8px;
         }
     }
 
