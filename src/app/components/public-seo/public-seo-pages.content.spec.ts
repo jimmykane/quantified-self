@@ -229,6 +229,7 @@ describe('public-seo-pages.content', () => {
 
     expect(featureHubLinks).toContain('/features/ai-insights');
     expect(featureHubLinks).toContain('/features/activity-calendar');
+    expect(featureHubLinks).toContain('/features/supported-activities');
     expect(featureHubLinks).toContain('/features/training-analysis');
     expect(featureHubLinks).toContain('/features/mcp-server');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');

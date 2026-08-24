@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   getActivityTypeGroupLabel,
+  getActivityTypeGroupCatalog,
   getActivityTypesForGroup,
   isIndoorActivityType,
   isAmbiguousActivityTypeGroup,
@@ -70,18 +71,26 @@ describe('activity-type-group.metadata', () => {
     expect(isIndoorActivityType(ActivityTypes.Cycling)).toBe(false);
   });
 
-  it('falls back to per-activity group resolution when direct group-members helper is unavailable', () => {
-    const directHelperSpy = vi.spyOn(ActivityTypesHelper, 'getActivityTypesForActivityGroup')
-      .mockImplementation(() => {
-        throw new Error('helper unavailable');
-      });
+  it('creates a complete, deduplicated canonical catalog from Sports Lib group lookups', () => {
+    const catalog = getActivityTypeGroupCatalog();
+    const catalogTypes = catalog.flatMap(entry => entry.activityTypes);
+    const canonicalTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
+    const unspecified = catalog.find(entry => entry.id === ActivityTypeGroups.UnspecifiedGroup);
 
-    try {
-      const indoorGroupActivityTypes = getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup);
-      expect(indoorGroupActivityTypes).toContain(ActivityTypes.Yoga);
-      expect(indoorGroupActivityTypes.length).toBeGreaterThan(0);
-    } finally {
-      directHelperSpy.mockRestore();
-    }
+    expect(catalog).toHaveLength(17);
+    expect(catalogTypes).toHaveLength(131);
+    expect(new Set(catalogTypes).size).toBe(catalogTypes.length);
+    expect([...catalogTypes].sort()).toEqual([...canonicalTypes].sort());
+    expect(unspecified?.activityTypes).toEqual([
+      ActivityTypes.Generic,
+      ActivityTypes.Match,
+      ActivityTypes.Other,
+      ActivityTypes.Route,
+      ActivityTypes.Tactical,
+      ActivityTypes.Transition,
+      ActivityTypes.unknown,
+      ActivityTypes.Workout,
+    ].sort());
+    expect(getActivityTypesForGroup(ActivityTypeGroups.IndoorSportsGroup)).toContain(ActivityTypes.Yoga);
   });
 });

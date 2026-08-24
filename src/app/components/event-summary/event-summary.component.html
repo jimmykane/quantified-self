@@ -40,6 +40,10 @@
       }
 
       <div class="event-summary-actions-secondary">
+        <a mat-icon-button class="summary-stats-action-button" href="/features/supported-activities"
+          matTooltip="Supported activities & metrics" aria-label="Supported activities and metrics">
+          <mat-icon>category</mat-icon>
+        </a>
         @if (hasDevices) {
         <button mat-icon-button class="summary-stats-action-button devices-button" (click)="openDevices()"
           matTooltip="View sensors & devices" aria-label="View sensors and devices">

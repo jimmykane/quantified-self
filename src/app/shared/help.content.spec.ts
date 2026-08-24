@@ -12,9 +12,26 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('documents the supported activity catalog without overpromising source data', () => {
+    const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
+
+    expect(supportedActivitiesSection?.content).toContain('[Supported Activities & Metrics page](/features/supported-activities)');
+    expect(supportedActivitiesSection?.content).toContain('A chart recommendation prioritizes recorded data; it does not create a missing field.');
+    expect(supportedActivitiesSection?.content).toContain('Boating is organized in Motorized but keeps Sailing recommendations');
+    expect(supportedActivitiesSection?.content).toContain('Wheel Chair is organized in Adaptive Mobility but keeps Cycling recommendations');
+    expect(supportedActivitiesSection?.content).toContain('never creates, names, associates, or calculates missing gas and tank data');
+    expect(supportedActivitiesSection?.links).toContainEqual({
+      label: 'Supported Activities & Metrics',
+      icon: 'category',
+      kind: 'route',
+      target: '/features/supported-activities',
+    });
+  });
+
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'supported-activities',
       'activity-calendar',
       'training-analysis',
       'ai-insights',
@@ -26,8 +43,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define nine unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(9);
+  it('should define ten unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(10);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);

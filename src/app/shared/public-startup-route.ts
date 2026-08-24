@@ -21,6 +21,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/integrations/wahoo',
   '/features',
   '/features/workout-data-comparison',
+  '/features/supported-activities',
   '/features/activity-calendar',
   '/features/training-analysis',
   '/features/mcp-server',

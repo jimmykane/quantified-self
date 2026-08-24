@@ -349,6 +349,31 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
+  it('should define a public supported activities feature route with lazily resolved SEO metadata', async () => {
+    const route = routes.find(candidate => candidate.path === 'features/supported-activities');
+    const routeData = await resolvedRouteData(route);
+    const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
+
+    expect(route).toBeTruthy();
+    expect(route?.canMatch).toBeUndefined();
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({
+      preload: true,
+      animation: 'Features',
+    });
+    expect(routeData['title']).toBe('Supported Activities & Metrics');
+    expect(routeData['description']).toContain('canonical activity types');
+    expect(routeData['description']).toContain('original activity source');
+    expect(routeData['keywords']).toBeUndefined();
+    expect(jsonLd).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: 'Supported Activities & Metrics',
+      url: 'https://quantified-self.io/features/supported-activities',
+      inLanguage: 'en',
+    });
+  });
+
   it('should define public feature SEO routes with lazily resolved metadata and no guards', async () => {
     const expectedRoutes = [
       {

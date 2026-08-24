@@ -1,0 +1,187 @@
+<main class="supported-activities-page">
+  <section class="hero-section" aria-labelledby="supported-activities-title">
+    <p class="eyebrow">Activity reference</p>
+    <h1 id="supported-activities-title">Supported activities &amp; metrics</h1>
+    <p class="hero-copy">
+      Quantified Self recognizes {{ totalActivityTypeCount }} canonical activity types. Browse the families used across
+      the app, then see why the metrics and Event Details charts available for one activity always depend on its
+      original recording.
+    </p>
+    <div class="hero-actions" aria-label="Supported activities actions">
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
+        Get started free
+        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+      </a>
+      <a mat-stroked-button routerLink="/integrations">
+        Explore integrations
+      </a>
+    </div>
+  </section>
+
+  <section class="content-section" aria-labelledby="support-levels-title">
+    <div class="section-heading">
+      <p class="eyebrow">What support means</p>
+      <h2 id="support-levels-title">Recognition is not a promise of every metric</h2>
+      <p>
+        A recognized activity type can be imported and presented in Quantified Self. The available detail still follows
+        the source file or connected service, not a universal sport template.
+      </p>
+    </div>
+    <div class="support-level-grid">
+      @for (item of supportLevels; track item.title) {
+      <mat-card appearance="outlined" class="support-level-card">
+        <mat-card-header>
+          <div mat-card-avatar class="support-level-avatar">
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section catalog-section" aria-labelledby="activity-catalog-title">
+    <div class="section-heading">
+      <p class="eyebrow">Canonical catalog</p>
+      <h2 id="activity-catalog-title">Find your activity type</h2>
+      <p>All families are expanded so you can scan the exact names recognized by the current catalog.</p>
+    </div>
+
+    <div class="catalog-toolbar">
+      <mat-form-field appearance="outline" class="activity-search">
+        <mat-label>Search activity types and families</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input
+          #searchInput
+          matInput
+          type="search"
+          [value]="searchQuery()"
+          (input)="onSearchQueryChange(searchInput.value)">
+        @if (searchQuery()) {
+        <button mat-icon-button matSuffix type="button" aria-label="Clear activity search" (click)="clearSearch()">
+          <mat-icon>close</mat-icon>
+        </button>
+        }
+      </mat-form-field>
+      <p class="catalog-result-summary" aria-live="polite">{{ searchResultSummary() }}</p>
+    </div>
+
+    @if (filteredFamilies().length) {
+    <div class="family-grid">
+      @for (family of filteredFamilies(); track family.id) {
+      <mat-card appearance="outlined" class="family-card" [attr.data-family-id]="family.id" [style.border-top-color]="family.color">
+        <mat-card-header>
+          <div
+            mat-card-avatar
+            class="family-avatar"
+            [style.background]="family.gradient">
+            <mat-icon aria-hidden="true">{{ family.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ family.label }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ family.activityTypes.length }} recognized activity type{{ family.activityTypes.length === 1 ? '' : 's' }}
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content class="family-card-content">
+          @if (family.fallback) {
+          <p class="family-note">Recognized fallback types without a dedicated sport family. Available details remain source-dependent.</p>
+          }
+          <mat-chip-set [attr.aria-label]="family.label + ' activity types'">
+            @for (activityType of family.activityTypes; track activityType) {
+            <mat-chip>{{ activityType }}</mat-chip>
+            }
+          </mat-chip-set>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+    } @else {
+    <mat-card appearance="outlined" class="empty-search-card">
+      <mat-card-content>
+        <mat-icon aria-hidden="true">search_off</mat-icon>
+        <div>
+          <h3>No recognized activity types match</h3>
+          <p>Try a shorter name, a family such as Cycling, or a type such as Hand Cycle.</p>
+        </div>
+      </mat-card-content>
+    </mat-card>
+    }
+  </section>
+
+  <section class="content-section" aria-labelledby="event-details-title">
+    <div class="section-heading">
+      <p class="eyebrow">Event Details</p>
+      <h2 id="event-details-title">Family and chart recommendations are different</h2>
+      <p>
+        Exact activity types select the most relevant chart recommendations first. If a merged event contains multiple
+        related activities, it can use a shared family recommendation. Neither path creates a metric the source did not record.
+      </p>
+    </div>
+    <div class="presentation-grid">
+      @for (item of presentationNotes; track item.title) {
+      <mat-card appearance="outlined" class="presentation-card">
+        <mat-card-header>
+          <div mat-card-avatar class="support-level-avatar">
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
+    </div>
+  </section>
+
+  <section class="content-section diving-section" aria-labelledby="diving-support-title">
+    <div class="section-heading">
+      <p class="eyebrow">Specialized presentation</p>
+      <h2 id="diving-support-title">Diving is source-native by design</h2>
+      <p>
+        Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding have specialized Event Details behavior when
+        their original source contains the relevant records.
+      </p>
+    </div>
+    <mat-card appearance="outlined" class="diving-card">
+      <mat-card-header>
+        <div mat-card-avatar class="diving-avatar"><mat-icon aria-hidden="true">scuba_diving</mat-icon></div>
+        <mat-card-title>Depth, gas, and tank records stay source-provided</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          Continuous source depth enables Dive Profile. Depth, decompression, timing/rate, tissue-load, SAC/RMV, gas,
+          and tank details appear only when the original source provides them. Quantified Self never creates, names,
+          associates, or calculates missing gas and tank data.
+        </p>
+        <p>
+          Diving-only Events intentionally omit terrain altitude, ascent, descent, and grade summaries because dive
+          vertical movement is represented by depth. Mixed Events retain terrain summaries only from non-Diving activities.
+        </p>
+        <a mat-stroked-button routerLink="/help" fragment="supported-activities">
+          Read the supported activities Help guide
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </a>
+      </mat-card-content>
+    </mat-card>
+  </section>
+
+  <section class="content-section provider-section" aria-labelledby="provider-context-title">
+    <div class="section-heading">
+      <p class="eyebrow">Import context</p>
+      <h2 id="provider-context-title">Your source determines the detail</h2>
+      <p>
+        Garmin, Suunto, COROS, Wahoo, and uploaded FIT, GPX, TCX, JSON, or SML files can carry different activity
+        fields. Check the activity source and integration guidance when a metric is missing.
+      </p>
+    </div>
+    <div class="hero-actions">
+      <a mat-stroked-button routerLink="/integrations">Explore integrations</a>
+      <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Uploads and imports Help</a>
+    </div>
+  </section>
+</main>

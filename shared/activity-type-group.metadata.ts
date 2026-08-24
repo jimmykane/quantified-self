@@ -12,6 +12,10 @@ export interface ActivityTypeGroupMetadata {
   ambiguous: boolean;
 }
 
+export interface ActivityTypeGroupCatalogEntry extends ActivityTypeGroupMetadata {
+  activityTypes: ActivityTypes[];
+}
+
 const ActivityTypeGroupMetadataMap: Record<ActivityTypeGroup, ActivityTypeGroupMetadata> = {
   [ActivityTypeGroups.RunningGroup]: {
     id: ActivityTypeGroups.RunningGroup,
@@ -183,34 +187,18 @@ export function resolveActivityTypeGroup(value: unknown): ActivityTypeGroup | nu
 }
 
 export function getActivityTypesForGroup(activityTypeGroup: ActivityTypeGroup): ActivityTypes[] {
-  const helper = ActivityTypesHelper as unknown as {
-    getActivityTypesForActivityGroup?: (group: ActivityTypeGroup) => ActivityTypes[];
-    getActivityGroupForActivityType?: (activityType: ActivityTypes) => ActivityTypeGroup;
-  };
+  const canonicalActivityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray() as ActivityTypes[];
 
-  if (typeof helper.getActivityTypesForActivityGroup === 'function') {
-    try {
-      return helper.getActivityTypesForActivityGroup(activityTypeGroup);
-    } catch {
-      // Fall through to group-by-activity lookup so module initialization cannot fail.
-    }
-  }
+  return [...new Set(canonicalActivityTypes)]
+    .filter(activityType => ActivityTypesHelper.getActivityGroupForActivityType(activityType) === activityTypeGroup)
+    .sort((left, right) => left.localeCompare(right));
+}
 
-  if (typeof helper.getActivityGroupForActivityType === 'function') {
-    const deduped = new Set<ActivityTypes>();
-    for (const activityType of Object.values(ActivityTypes) as ActivityTypes[]) {
-      try {
-        if (helper.getActivityGroupForActivityType(activityType) === activityTypeGroup) {
-          deduped.add(activityType);
-        }
-      } catch {
-        // Ignore malformed values and continue collecting valid members.
-      }
-    }
-    return [...deduped];
-  }
-
-  return [];
+export function getActivityTypeGroupCatalog(): ActivityTypeGroupCatalogEntry[] {
+  return getActivityTypeGroupMetadataList().map(metadata => ({
+    ...metadata,
+    activityTypes: getActivityTypesForGroup(metadata.id),
+  }));
 }
 
 const EXPLICIT_INDOOR_ACTIVITY_TYPES = new Set<ActivityTypes>([
