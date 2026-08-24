@@ -39,6 +39,11 @@ async function resolvedRouteData(route: Route | undefined): Promise<Record<strin
 }
 
 describe('AppRoutingModule routes', () => {
+  it('disables shell cross-fades for public layout navigation', () => {
+    expect(publicLayoutRoute?.data?.['disableRouteAnimation']).toBe(true);
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);
+  });
+
   it('should define a public help route with help metadata', () => {
     const helpRoute = routes.find(route => route.path === 'help');
 

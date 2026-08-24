@@ -18,32 +18,6 @@
     </div>
   </section>
 
-  <section class="content-section" aria-labelledby="support-levels-title">
-    <div class="section-heading">
-      <p class="eyebrow">What support means</p>
-      <h2 id="support-levels-title">Recognition is not a promise of every metric</h2>
-      <p>
-        Quantified Self can classify and present a recognized type when it appears in imported data. The available
-        detail still follows the source file or connected service, not a universal sport template.
-      </p>
-    </div>
-    <div class="support-level-grid">
-      @for (item of supportLevels; track item.title) {
-      <mat-card appearance="outlined" class="support-level-card">
-        <mat-card-header>
-          <div mat-card-avatar class="support-level-avatar">
-            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
-      }
-    </div>
-  </section>
-
   <section class="content-section" aria-labelledby="specialized-surfaces-title">
     <div class="section-heading">
       <p class="eyebrow">Source-provided detail</p>
@@ -209,5 +183,37 @@
       <a mat-stroked-button routerLink="/integrations">Explore integrations</a>
       <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Uploads and imports Help</a>
     </div>
+  </section>
+
+  <section class="support-details-section" aria-labelledby="support-levels-title">
+    <mat-expansion-panel class="support-details-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <h2 id="support-levels-title" class="support-details-title">What support means</h2>
+        </mat-panel-title>
+        <mat-panel-description>Recognition and recorded-data details</mat-panel-description>
+      </mat-expansion-panel-header>
+      <div class="support-details-content">
+        <p class="support-details-intro">
+          Quantified Self can classify and present a recognized type when it appears in imported data. The available
+          detail still follows the source file or connected service, not a universal sport template.
+        </p>
+        <div class="support-level-grid">
+          @for (item of supportLevels; track item.title) {
+          <mat-card appearance="outlined" class="support-level-card">
+            <mat-card-header>
+              <div mat-card-avatar class="support-level-avatar">
+                <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+              </div>
+              <mat-card-title>{{ item.title }}</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <p>{{ item.copy }}</p>
+            </mat-card-content>
+          </mat-card>
+          }
+        </div>
+      </div>
+    </mat-expansion-panel>
   </section>
 </main>

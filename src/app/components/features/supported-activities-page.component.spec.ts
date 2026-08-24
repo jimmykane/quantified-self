@@ -64,4 +64,25 @@ describe('SupportedActivitiesPageComponent', () => {
     expect(text).toContain('never creates, names, associates, or calculates missing gas and tank data');
     expect(helpLink).toBeTruthy();
   });
+
+  it('keeps the support explanation compact at the bottom of the page', () => {
+    TestBed.configureTestingModule({
+      imports: [
+        SupportedActivitiesPageComponent,
+        RouterTestingModule.withRoutes([]),
+        NoopAnimationsModule,
+        MatIconTestingModule,
+      ],
+    });
+
+    const fixture: ComponentFixture<SupportedActivitiesPageComponent> = TestBed.createComponent(SupportedActivitiesPageComponent);
+    fixture.detectChanges();
+
+    const providerSection = fixture.nativeElement.querySelector('.provider-section') as HTMLElement;
+    const supportDetails = fixture.nativeElement.querySelector('.support-details-section') as HTMLElement;
+
+    expect(supportDetails.querySelector('mat-expansion-panel')).toBeTruthy();
+    expect(supportDetails.textContent).toContain('What support means');
+    expect(providerSection.compareDocumentPosition(supportDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
