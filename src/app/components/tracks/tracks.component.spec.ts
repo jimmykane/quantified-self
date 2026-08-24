@@ -2392,6 +2392,28 @@ describe('TracksComponent', () => {
       });
     });
 
+    it('derives activity filter options from trackable events in the selected date range', async () => {
+      const runningEvent = createMockEvent('filter-running-event', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.Running);
+      const cyclingEvent = createMockEvent('filter-cycling-event', '2024-11-09T08:00:00Z', 40.66, 22.96, ActivityTypes.Cycling);
+      const nonTrackableSwimmingEvent = {
+        ...createMockEvent('filter-swimming-event', '2024-11-10T08:00:00Z', 40.68, 22.98, ActivityTypes.Swimming),
+        getStat: () => undefined,
+      };
+      mockEventService.getEventsBy.mockReturnValue(of([
+        runningEvent,
+        cyclingEvent,
+        nonTrackableSwimmingEvent,
+      ]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.all, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(component.availableMyTracksActivityTypes()).toEqual([
+        ActivityTypes.Running,
+        ActivityTypes.Cycling,
+      ]);
+    });
+
     it('resolves location labels per trip for revisits that share a destination id', async () => {
       const firstVisitEvent = createMockEvent('trip-nepal-visit-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
       const secondVisitEvent = createMockEvent('trip-nepal-visit-2', '2024-11-16T08:00:00Z', 27.7201, 85.3301);

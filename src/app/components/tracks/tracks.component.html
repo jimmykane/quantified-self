@@ -10,6 +10,7 @@
       [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="true"
       [showActivityTypePicker]="true" [dateRangesToShow]="dateRangesToShow"
       [selectedActivityTypes]="myTracksSettings().activityTypes"
+      [availableActivityTypes]="availableMyTracksActivityTypes()"
       [selectedDateRange]="myTracksSettings().dateRange" [selectedStartDate]="selectedMyTracksStartDate()"
       [selectedEndDate]="selectedMyTracksEndDate()" [includeMergedEvents]="false"
       (searchChange)="search($event)">

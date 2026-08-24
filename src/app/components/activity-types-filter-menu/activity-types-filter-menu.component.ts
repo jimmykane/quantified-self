@@ -16,6 +16,11 @@ interface ActivityTypeFilterOption {
 })
 export class ActivityTypesFilterMenuComponent implements OnChanges {
   @Input() selectedActivityTypes: ActivityTypes[] = [];
+  /**
+   * Optional context-specific choices. When omitted, the menu exposes the
+   * complete supported activity-type catalog as it always has.
+   */
+  @Input() availableActivityTypes: ActivityTypes[] | null | undefined;
   @Input() disabled = false;
   @Input() ariaLabel = 'Filter activities';
   @Output() selectedActivityTypesChange = new EventEmitter<ActivityTypes[]>();
@@ -34,7 +39,7 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
   ));
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!changes['selectedActivityTypes']) {
+    if (!changes['selectedActivityTypes'] && !changes['availableActivityTypes']) {
       return;
     }
     this.setSelectedActivityTypes(this.selectedActivityTypes || []);
@@ -77,10 +82,26 @@ export class ActivityTypesFilterMenuComponent implements OnChanges {
       : selectedCount > 1
         ? `${selectedCount} activity filters`
         : 'All activities';
-    this.activityTypeOptions = this.activityTypeValues.map(activityType => ({
+    const availableActivityTypes = this.getAvailableActivityTypeValues();
+    this.activityTypeOptions = availableActivityTypes.map(activityType => ({
       label: activityType,
       selected: selectedActivityTypeSet.has(activityType),
       value: activityType,
     }));
+  }
+
+  private getAvailableActivityTypeValues(): ReadonlyArray<ActivityTypes> {
+    if (!Array.isArray(this.availableActivityTypes)) {
+      return this.activityTypeValues;
+    }
+
+    // Keep an existing filter in view even when a new context has no matching
+    // activities. Removing it would silently turn a no-results state into an
+    // unfiltered result set.
+    const visibleActivityTypes = new Set([
+      ...this.availableActivityTypes,
+      ...this.selectedActivityTypes,
+    ]);
+    return this.activityTypeValues.filter(activityType => visibleActivityTypes.has(activityType));
   }
 }

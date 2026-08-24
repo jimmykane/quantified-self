@@ -8,6 +8,7 @@ import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -216,6 +217,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   public readonly myTracksSettings = computed(() => this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings);
   public readonly selectedMyTracksStartDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.startDate));
   public readonly selectedMyTracksEndDate = computed(() => this.dateFromTimestamp(this.myTracksSettings()?.endDate));
+  public availableMyTracksActivityTypes: WritableSignal<ActivityTypes[] | null> = signal(null);
   public readonly tripSortDirection = computed<AppMyTracksTripSortDirection>(() => (
     this.myTracksSettings()?.tripSortDirection === 'asc' ? 'asc' : 'desc'
   ));
@@ -727,6 +729,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
       this.eventsById = this.buildEventsByIdMap(events);
+      this.availableMyTracksActivityTypes.set(this.getAvailableMyTracksActivityTypes(events));
       if (!events || !events.length) {
         if (!this.isCurrentLoad(promiseTime)) {
           return;
@@ -1581,6 +1584,43 @@ export class TracksComponent implements OnInit, OnDestroy {
     return this.getEventActivities(event)
       .map((activity) => this.getActivityTypeValue(activity))
       .filter((value): value is ActivityTypes | string | number => value !== null);
+  }
+
+  private getAvailableMyTracksActivityTypes(events: any[]): ActivityTypes[] {
+    const availableActivityTypes = new Set<ActivityTypes>();
+    (events || []).forEach((event) => {
+      this.getEventActivityTypeValues(event).forEach((rawActivityType) => {
+        const activityType = this.resolveSupportedActivityType(rawActivityType);
+        if (activityType) {
+          availableActivityTypes.add(activityType);
+        }
+      });
+    });
+    return Array.from(availableActivityTypes);
+  }
+
+  private resolveSupportedActivityType(
+    value: ActivityTypes | string | number | null | undefined,
+  ): ActivityTypes | null {
+    const rawValue = typeof value === 'number' && Number.isFinite(value)
+      ? (ActivityTypes as unknown as Record<number, unknown>)[value]
+      : value;
+    if (typeof rawValue !== 'string') {
+      return null;
+    }
+
+    const candidate = rawValue.trim();
+    if (!candidate) {
+      return null;
+    }
+
+    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(candidate);
+    if (resolvedActivityType) {
+      return resolvedActivityType;
+    }
+
+    const enumActivityType = Object.values(ActivityTypes).find((activityType) => activityType === candidate);
+    return typeof enumActivityType === 'string' ? enumActivityType as ActivityTypes : null;
   }
 
   private matchesRequestedActivityTypes(

@@ -205,6 +205,7 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('inferred **Home** area first when available');
+    expect(gettingStartedSection?.content).toContain('lists only trackable types in the selected date range');
     expect(gettingStartedSection?.content).toContain('newest-first or oldest-first');
     expect(gettingStartedSection?.content).toContain('choice is saved');
   });

@@ -30,6 +30,23 @@ describe('ActivityTypesFilterMenuComponent', () => {
     ))).toBe(true);
   });
 
+  it('limits options to a supplied context while keeping an active no-match filter visible', () => {
+    const component = new ActivityTypesFilterMenuComponent();
+    component.selectedActivityTypes = [ActivityTypes.Running];
+    component.availableActivityTypes = [ActivityTypes.Cycling];
+
+    component.ngOnChanges({
+      selectedActivityTypes: new SimpleChange([], component.selectedActivityTypes, true),
+      availableActivityTypes: new SimpleChange(undefined, component.availableActivityTypes, true),
+    });
+
+    expect(component.activityTypeOptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: ActivityTypes.Cycling, selected: false }),
+      expect.objectContaining({ value: ActivityTypes.Running, selected: true }),
+    ]));
+    expect(component.activityTypeOptions.some(option => option.value === ActivityTypes.Snorkeling)).toBe(false);
+  });
+
   it('emits toggled activity filters and updates local menu state', () => {
     const component = new ActivityTypesFilterMenuComponent();
     const emittedActivityTypes: ActivityTypes[][] = [];
