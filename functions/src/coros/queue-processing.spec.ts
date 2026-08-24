@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
 const mocks = vi.hoisted(() => {
   const state = { current: {} as Record<string, unknown> };
   const queueRef = { id: 'coros-queue-1' };
+  const tokenRootRef = { id: 'firebase-1' };
   const transactionUpdate = vi.fn((_ref: unknown, update: Record<string, unknown>) => {
     for (const [field, value] of Object.entries(update)) {
       if (value === 'delete-sentinel') {
@@ -13,13 +15,24 @@ const mocks = vi.hoisted(() => {
       }
     }
   });
-  const transactionGet = vi.fn(async () => ({
-    exists: true,
-    data: () => ({ ...state.current }),
-  }));
+  const transactionGet = vi.fn(async (ref: unknown) => (
+    ref === tokenRootRef
+      ? {
+          exists: true,
+          data: () => ({
+            disconnectState: 'disconnect_pending',
+            disconnectGeneration: 'pending-generation-1',
+          }),
+        }
+      : {
+          exists: true,
+          data: () => ({ ...state.current }),
+        }
+  ));
   return {
     state,
     queueRef,
+    tokenRootRef,
     transactionGet,
     transactionUpdate,
     runTransaction: vi.fn(async (runner: (transaction: {
@@ -49,6 +62,10 @@ vi.mock('firebase-admin/firestore', () => ({
 vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardStateInTransaction: mocks.deletionGuard,
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
+}));
+
+vi.mock('../service-token-store', () => ({
+  getServiceTokenRootDocumentRef: () => mocks.tokenRootRef,
 }));
 
 import {
@@ -141,7 +158,10 @@ describe('COROS event-write revision lease', () => {
 
     await expect(claimCOROSEventWriteRevision(item, 'firebase-1', 'worker-r1'))
       .resolves.toBe('claimed');
-    await expect(deferQueueItemForPendingDisconnect(item))
+    await expect(deferQueueItemForPendingDisconnect(item, undefined, {}, {
+      userID: 'firebase-1',
+      serviceName: ServiceNames.COROSAPI,
+    }))
       .resolves.toBe(QueueResult.Deferred);
     await releaseCOROSEventWriteRevision(item, 'firebase-1', 'worker-r1');
 
@@ -150,6 +170,7 @@ describe('COROS event-write revision lease', () => {
       processed: true,
       resultStatus: 'deferred',
       deferredReason: QUEUE_DEFERRED_REASONS.ServiceDisconnectPending,
+      serviceDisconnectPendingGeneration: 'pending-generation-1',
       dispatchedToCloudTask: PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
     }));
     expect(mocks.state.current).not.toHaveProperty('processingOwner');

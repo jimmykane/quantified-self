@@ -1,5 +1,4 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, PRO_REQUIRED_MESSAGE } from '../../utils';
@@ -8,12 +7,19 @@ import {
   disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
+  isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
-import { SERVICE_NAME, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../constants';
+import { SERVICE_NAME } from '../constants';
 import { getWahooErrorLogDetails } from '../error-details';
-import { setServiceConnectionProviderUserId } from '../../service-connection-meta';
+import { getServiceConnectionMeta } from '../../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import {
+  getActiveWahooTokenSnapshot,
+  isWahooOAuthAccountMismatchError,
+  normalizeWahooUserID,
+} from '../account';
 
 async function requireWahooConnectAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
@@ -57,10 +63,19 @@ export const requestAndSetWahooAPIAccessToken = onCall({
     throw new HttpsError('permission-denied', 'Invalid OAuth state');
   }
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (error) {
     logger.error('Wahoo authorization code flow failed', getWahooErrorLogDetails(error));
     const statusCode = (error as { statusCode?: number })?.statusCode;
+    if (isOAuthFlowContextMismatchError(error)) {
+      throw new HttpsError('permission-denied', 'Invalid OAuth state.');
+    }
+    if (isWahooOAuthAccountMismatchError(error)) {
+      throw new HttpsError('failed-precondition', error.message);
+    }
+    if (statusCode === 403) {
+      throw new HttpsError('permission-denied', 'Wahoo rejected the authorization request.');
+    }
     if (statusCode === 429 || (statusCode && statusCode >= 500)) {
       throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable.');
     }
@@ -80,6 +95,10 @@ export const deauthorizeWahooAPI = onCall({
   try {
     await disconnectServiceForUser(request.auth.uid, SERVICE_NAME);
   } catch (error) {
+    if (isServiceDisconnectInProgressError(error)) {
+      logger.warn(`Wahoo disconnect is waiting for another connection operation for user ${request.auth.uid}.`);
+      throw new HttpsError('unavailable', error.message, error.details);
+    }
     logger.error('Wahoo deauthorization failed', getWahooErrorLogDetails(error));
     throw new HttpsError('internal', 'Wahoo deauthorization failed.');
   }
@@ -100,21 +119,14 @@ export const getWahooAPIConnectionAccount = onCall({
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
 
-  const tokenSnapshots = await admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(request.auth.uid)
-    .collection('tokens')
-    .limit(1)
-    .get();
-  const providerUserId = `${tokenSnapshots.docs[0]?.data()?.wahooUserID || ''}`.trim();
-  if (!providerUserId) {
+  const meta = await getServiceConnectionMeta(request.auth.uid, SERVICE_NAME);
+  const pinnedProviderUserId = normalizeWahooUserID(meta?.providerUserId);
+  if (pinnedProviderUserId) return { providerUserId: pinnedProviderUserId };
+
+  try {
+    const tokenSnapshot = await getActiveWahooTokenSnapshot(request.auth.uid);
+    return { providerUserId: tokenSnapshot.id };
+  } catch {
     return { providerUserId: null };
   }
-
-  const didWrite = await setServiceConnectionProviderUserId(
-    request.auth.uid,
-    SERVICE_NAME,
-    providerUserId,
-  );
-  return { providerUserId: didWrite ? providerUserId : null };
 });

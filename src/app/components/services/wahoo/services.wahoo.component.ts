@@ -3,7 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { SERVICE_CONNECTION_STATES, isDisconnectPendingServiceConnection } from '@shared/service-connection';
+import {
+  SERVICE_CONNECTION_STATES,
+  isDisconnectPendingServiceConnection,
+  isReconnectRequiredServiceConnection,
+} from '@shared/service-connection';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFileService } from '../../../services/app.file.service';
@@ -54,7 +58,12 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
 
   isConnectedToService(): boolean {
     return !this.isDisconnectPending
+      && !this.isReconnectRequired
       && (this.forceConnected || this.serviceMeta?.connectionState === SERVICE_CONNECTION_STATES.Connected);
+  }
+
+  get isReconnectRequired(): boolean {
+    return isReconnectRequiredServiceConnection(this.serviceMeta);
   }
 
   get isDisconnectPending(): boolean {
@@ -62,14 +71,24 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
   }
 
   get connectionDescription(): string {
-    return this.isDisconnectPending
+    return this.isReconnectRequired
+      ? 'Reconnect Wahoo to resume history imports, automatic activity sync, and route delivery.'
+      : this.isDisconnectPending
       ? 'Disconnect is pending while Wahoo finishes deauthorization. Imports are paused.'
       : 'Imports Wahoo-recorded activities and can send FIT activities plus GPX or FIT routes to Wahoo.';
   }
 
+  get shouldShowConnectAction(): boolean {
+    return (!this.isConnectedToService() || this.isReconnectRequired) && !this.isDisconnectPending;
+  }
+
+  get connectButtonLabel(): string {
+    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+  }
+
   protected override onServiceDataChanged(): void {
     const providerUserId = `${this.serviceMeta?.providerUserId || ''}`.trim();
-    if (!this.isConnectedToService()) {
+    if (!this.isConnectedToService() && !this.isReconnectRequired) {
       this.wahooAccountId.set(null);
       this.isLoadingWahooAccountId.set(false);
       this.wahooAccountIdHydrationAttempted = false;

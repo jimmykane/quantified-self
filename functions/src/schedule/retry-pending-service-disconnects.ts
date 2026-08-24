@@ -13,7 +13,13 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
 import {
+  retryPendingDisconnectQueueRelease,
+  retryPendingServiceRouteRestore,
+  retryWahooReconnectQueueRelease,
+} from '../service-connection-meta';
+import {
   clearServiceDisconnectPending,
+  getServiceDisconnectLifecycleGuardFromRootData,
   isServiceDisconnectPendingData,
   PENDING_SERVICE_DISCONNECT_BATCH_LIMIT,
   PendingServiceDisconnectFailure,
@@ -28,13 +34,20 @@ interface PendingDisconnectCollectionConfig {
 }
 
 type PendingDisconnectScanType = 'due_retry' | 'restored_entitlement';
+type LifecycleRepairScanType = 'wahoo_reconnect_release' | 'route_restore' | 'pending_disconnect_queue_release';
 
 interface PendingDisconnectScanCursorData {
   documentId?: string;
   disconnectNextAttemptAt?: FirebaseFirestore.Timestamp;
 }
 
+interface LifecycleRepairScanCursorData {
+  documentPath?: string;
+}
+
 const PENDING_SERVICE_DISCONNECT_SCAN_CURSOR_COLLECTION = 'pendingServiceDisconnectRetryCursors';
+const LIFECYCLE_REPAIR_BATCH_LIMIT = 25;
+const LIFECYCLE_REPAIR_CONCURRENCY = 5;
 
 const PENDING_DISCONNECT_COLLECTIONS: ReadonlyArray<PendingDisconnectCollectionConfig> = [
   {
@@ -115,6 +128,87 @@ function getSnapshotField(snapshot: admin.firestore.QueryDocumentSnapshot, field
   }
 
   return (snapshot.data() as Record<string, unknown>)[fieldName];
+}
+
+function getLifecycleRepairScanCursorRef(
+  scanType: LifecycleRepairScanType,
+): FirebaseFirestore.DocumentReference {
+  return admin.firestore().doc(
+    `${PENDING_SERVICE_DISCONNECT_SCAN_CURSOR_COLLECTION}/lifecycle_${scanType}`,
+  );
+}
+
+async function getLifecycleRepairPage(
+  scanType: LifecycleRepairScanType,
+  markerField: 'wahooReconnectReleasePending' | 'routeRestorePending' | 'pendingDisconnectQueueReleasePending',
+): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+  const cursorRef = getLifecycleRepairScanCursorRef(scanType);
+  const cursorSnapshot = await cursorRef.get();
+  const cursor = cursorSnapshot.exists
+    ? cursorSnapshot.data() as LifecycleRepairScanCursorData | undefined
+    : undefined;
+
+  const runQuery = async (documentPath?: string) => {
+    let query = admin.firestore()
+      .collectionGroup('meta')
+      .where(markerField, '==', true)
+      .orderBy(FieldPath.documentId())
+      .limit(LIFECYCLE_REPAIR_BATCH_LIMIT);
+    if (documentPath) {
+      query = query.startAfter(admin.firestore().doc(documentPath));
+    }
+    return query.get();
+  };
+
+  let snapshot = await runQuery(cursor?.documentPath);
+  if (snapshot.docs.length === 0 && cursor?.documentPath) {
+    // Cursor docs are flat scheduler-owned checkpoints with no descendants.
+    await cursorRef.delete();
+    snapshot = await runQuery();
+  }
+
+  return snapshot.docs;
+}
+
+async function checkpointLifecycleRepairPage(
+  scanType: LifecycleRepairScanType,
+  docs: readonly admin.firestore.QueryDocumentSnapshot[],
+): Promise<void> {
+  const cursorRef = getLifecycleRepairScanCursorRef(scanType);
+  if (docs.length < LIFECYCLE_REPAIR_BATCH_LIMIT) {
+    // Reaching the end wraps the next scheduled run back to the first marker.
+    await cursorRef.delete();
+  } else {
+    await cursorRef.set({
+      documentPath: docs[docs.length - 1].ref.path,
+    }, { merge: true });
+  }
+}
+
+async function processWithBoundedConcurrency<T>(
+  items: readonly T[],
+  operation: (item: T) => Promise<void>,
+): Promise<void> {
+  for (let index = 0; index < items.length; index += LIFECYCLE_REPAIR_CONCURRENCY) {
+    await Promise.all(items
+      .slice(index, index + LIFECYCLE_REPAIR_CONCURRENCY)
+      .map(operation));
+  }
+}
+
+function getUserIDFromServiceMetaSnapshot(
+  snapshot: admin.firestore.QueryDocumentSnapshot,
+): string | null {
+  const metaCollection = snapshot.ref.parent;
+  const userRef = metaCollection.parent;
+  if (
+    metaCollection.id !== 'meta'
+    || !userRef
+    || userRef.parent.id !== 'users'
+  ) {
+    return null;
+  }
+  return userRef.id || null;
 }
 
 async function updatePendingDisconnectScanCursor(
@@ -261,6 +355,9 @@ function buildUnexpectedPartialCleanupFailure(
     tokenID: 'unknown',
     statusCode: null,
     errorMessage: `${config.serviceName} pending disconnect local cleanup remained partial for user ${rootSnapshot.id} without a retryable partner failure.`,
+    lifecycleGuard: getServiceDisconnectLifecycleGuardFromRootData(
+      rootSnapshot.data() as Record<string, unknown>,
+    ),
   };
 }
 
@@ -284,6 +381,10 @@ async function retryPendingDisconnectRoot(
     return;
   }
 
+  const disconnectLifecycleGuard = getServiceDisconnectLifecycleGuardFromRootData(
+    rootSnapshot.data() as Record<string, unknown>,
+  );
+
   const outcome = await cleanupServiceConnectionForUser(
     userID,
     config.serviceName,
@@ -294,6 +395,7 @@ async function retryPendingDisconnectRoot(
         recoverTerminalAuthFailure: false,
         allowDisconnectPendingTokenUse: true,
       }),
+      disconnectLifecycleGuard,
     },
   );
 
@@ -323,16 +425,124 @@ async function retryPendingDisconnectRoot(
     return;
   }
 
-  const didRecordRetryFailure = await recordServiceDisconnectRetryFailure(userID, config.serviceName, retryableFailure);
+  const guardedRetryableFailure = {
+    ...retryableFailure,
+    lifecycleGuard: disconnectLifecycleGuard,
+  };
+  const didRecordRetryFailure = await recordServiceDisconnectRetryFailure(
+    userID,
+    config.serviceName,
+    guardedRetryableFailure,
+  );
   if (!didRecordRetryFailure) {
     return;
   }
   logger.warn('[RetryPendingServiceDisconnects] Pending disconnect retry failed; scheduled another attempt if retry budget remains.', {
     userID,
     serviceName: config.serviceName,
-    tokenID: retryableFailure.tokenID,
-    statusCode: retryableFailure.statusCode,
+    tokenID: guardedRetryableFailure.tokenID,
+    statusCode: guardedRetryableFailure.statusCode,
   });
+}
+
+/**
+ * Reconnect callbacks can release several independent queue collections. If
+ * one write fails after earlier rows succeeded, the Wahoo meta marker keeps
+ * the remainder durable until this scheduler finishes the idempotent release.
+ * These markers only exist after a partial operational failure. Process one
+ * cursor-checkpointed page per run so a large backlog cannot consume the
+ * complete scheduler window or repeatedly starve later accounts.
+ */
+async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
+  const docs = await getLifecycleRepairPage(
+    'wahoo_reconnect_release',
+    'wahooReconnectReleasePending',
+  );
+  let repairedCount = 0;
+
+  await processWithBoundedConcurrency(docs, async metaSnapshot => {
+    if (metaSnapshot.id !== ServiceNames.WahooAPI) return;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
+    if (!userID) return;
+
+    try {
+      if (await retryWahooReconnectQueueRelease(userID)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a Wahoo reconnect queue release.', {
+        userID,
+        serviceName: ServiceNames.WahooAPI,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  });
+  await checkpointLifecycleRepairPage('wahoo_reconnect_release', docs);
+
+  return repairedCount;
+}
+
+async function retryPendingServiceRouteRestorations(): Promise<number> {
+  const docs = await getLifecycleRepairPage('route_restore', 'routeRestorePending');
+  const knownServiceNames = new Set<string>(Object.values(ServiceNames));
+  let repairedCount = 0;
+
+  await processWithBoundedConcurrency(docs, async metaSnapshot => {
+    if (!knownServiceNames.has(metaSnapshot.id)) return;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
+    if (!userID) return;
+
+    try {
+      if (await retryPendingServiceRouteRestore(userID, metaSnapshot.id as ServiceNames)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair route restoration.', {
+        userID,
+        serviceName: metaSnapshot.id,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  });
+  await checkpointLifecycleRepairPage('route_restore', docs);
+
+  return repairedCount;
+}
+
+/**
+ * Finishes queue pages released after a pending-disconnect lifecycle was
+ * already cleared. These markers are distinct from pending disconnect roots:
+ * the OAuth recovery succeeded and must never be rolled back for bounded
+ * queue work.
+ */
+async function retryPendingDisconnectQueueReleases(): Promise<number> {
+  const docs = await getLifecycleRepairPage(
+    'pending_disconnect_queue_release',
+    'pendingDisconnectQueueReleasePending',
+  );
+  const knownServiceNames = new Set<string>(Object.values(ServiceNames));
+  let repairedCount = 0;
+
+  await processWithBoundedConcurrency(docs, async metaSnapshot => {
+    if (!knownServiceNames.has(metaSnapshot.id)) return;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
+    if (!userID) return;
+
+    try {
+      if (await retryPendingDisconnectQueueRelease(userID, metaSnapshot.id as ServiceNames)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a bounded pending-disconnect queue release.', {
+        userID,
+        serviceName: metaSnapshot.id,
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    }
+  });
+  await checkpointLifecycleRepairPage('pending_disconnect_queue_release', docs);
+
+  return repairedCount;
 }
 
 export const retryPendingServiceDisconnects = onSchedule({
@@ -343,6 +553,25 @@ export const retryPendingServiceDisconnects = onSchedule({
   memory: '512MiB',
 }, async () => {
   const now = Timestamp.now();
+
+  // Repair already-connected accounts first. Pending-disconnect scans can
+  // involve provider I/O, so putting these bounded pages first prevents a
+  // slow provider batch from starving queue release or route restoration.
+  const repairedWahooReconnectReleaseCount = await retryPendingWahooReconnectQueueReleases();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending Wahoo reconnect queue releases.', {
+    serviceName: ServiceNames.WahooAPI,
+    repairedCount: repairedWahooReconnectReleaseCount,
+  });
+
+  const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
+    repairedCount: repairedRouteRestoreCount,
+  });
+
+  const repairedPendingDisconnectQueueReleaseCount = await retryPendingDisconnectQueueReleases();
+  logger.info('[RetryPendingServiceDisconnects] Repaired bounded pending-disconnect queue releases.', {
+    repairedCount: repairedPendingDisconnectQueueReleaseCount,
+  });
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);
@@ -374,8 +603,13 @@ export const retryPendingServiceDisconnects = onSchedule({
 export const retryPendingServiceDisconnectsTestInternals = {
   clearPendingDisconnectRootIfEntitled,
   clearPendingDisconnectsForRestoredEntitlements,
+  checkpointLifecycleRepairPage,
   getDuePendingDisconnectRoots,
+  getLifecycleRepairPage,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
+  retryPendingDisconnectQueueReleases,
+  retryPendingServiceRouteRestorations,
+  retryPendingWahooReconnectQueueReleases,
   shouldKeepConnectionForCurrentEntitlement,
 };

@@ -80,6 +80,8 @@ vi.mock('../../OAuth2', () => ({
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     deauthorizeServiceForUser: vi.fn(),
     disconnectServiceForUser: vi.fn(),
+    isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
+    isServiceDisconnectInProgressError: (error: unknown) => (error as { name?: string } | null)?.name === 'ServiceDisconnectInProgressError',
     validateOAuth2State: vi.fn(),
 }));
 
@@ -166,7 +168,7 @@ describe('Garmin Auth Wrapper', () => {
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');
-            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode');
+            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode', 'validState');
         });
 
         it('should throw permission-denied if state is invalid', async () => {
@@ -192,6 +194,26 @@ describe('Garmin Auth Wrapper', () => {
             vi.mocked(OAuth2.disconnectServiceForUser).mockRejectedValue(error);
 
             await expect((deauthorizeGarminAPI as any)(data, context)).rejects.toThrow('Bad request or internal error');
+        });
+
+        it('returns a retryable error when token refresh blocks disconnect', async () => {
+            const details = {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'token_refresh',
+                retryAt: Date.now() + 1_000,
+                retryDeadlineAt: Date.now() + 90_000,
+            };
+            vi.mocked(OAuth2.disconnectServiceForUser).mockRejectedValue(
+                Object.assign(new Error('Garmin credentials are being refreshed.'), {
+                    name: 'ServiceDisconnectInProgressError',
+                    details,
+                }),
+            );
+
+            await expect((deauthorizeGarminAPI as any)({}, context)).rejects.toMatchObject({
+                code: 'unavailable',
+                details,
+            });
         });
     });
 

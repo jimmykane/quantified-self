@@ -340,6 +340,10 @@ describe('processRouteSyncQueueItem', () => {
       queueItem,
       undefined,
       { deferredServiceName: ServiceNames.SuuntoApp },
+      {
+        userID: queueItem.firebaseUserID,
+        serviceName: ServiceNames.SuuntoApp,
+      },
     );
     expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
     expect(queueUtilsMocks.moveToDeadLetterQueue).not.toHaveBeenCalled();

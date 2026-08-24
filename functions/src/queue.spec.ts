@@ -2851,6 +2851,17 @@ describe('queue', () => {
             const pendingDisconnectError = new Error('service disconnect is pending');
             pendingDisconnectError.name = 'TokenUseSkippedForPendingDisconnectError';
             vi.mocked(getTokenData).mockRejectedValueOnce(pendingDisconnectError);
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({ ...suuntoQueueItem, ref: undefined }),
+            });
+            mockDocRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    disconnectState: 'disconnect_pending',
+                    disconnectGeneration: 'suunto-pending-generation',
+                }),
+            });
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
@@ -2864,6 +2875,7 @@ describe('queue', () => {
                 deferredReason: 'service_disconnect_pending',
                 dispatchedToCloudTask: expect.any(Number),
                 serviceDisconnectPendingDeferredAt: expect.any(Number),
+                serviceDisconnectPendingGeneration: 'suunto-pending-generation',
             }));
             expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 retryCount: expect.any(Number),

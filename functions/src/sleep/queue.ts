@@ -530,8 +530,14 @@ class MissingSleepProviderTokenError extends Error {
     }
 }
 
-function isTokenUseSkippedForPendingDisconnectError(error: unknown): boolean {
-    return error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError';
+function isTokenUseSkippedForPendingDisconnectError(error: unknown): error is Error & {
+    firebaseUserID: string;
+    serviceName: ServiceNames;
+} {
+    return error instanceof Error
+        && error.name === 'TokenUseSkippedForPendingDisconnectError'
+        && typeof (error as { firebaseUserID?: unknown }).firebaseUserID === 'string'
+        && typeof (error as { serviceName?: unknown }).serviceName === 'string';
 }
 
 async function resolveTokenAndUser(queueItem: SleepSyncQueueItemInterface): Promise<{
@@ -829,6 +835,9 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             return deferQueueItemForPendingDisconnect(queueItem, undefined, {
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
+            }, {
+                userID: error.firebaseUserID,
+                serviceName: error.serviceName,
             });
         }
         if (queueItem.userID) {

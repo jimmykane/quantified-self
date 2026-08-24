@@ -11,7 +11,7 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
-    function serviceDisconnectFields() {
+    function backendOwnedServiceRootFields() {
       return [
         'disconnectState',
         'disconnectReason',
@@ -21,21 +21,27 @@ service cloud.firestore {
         'disconnectRetryExpiresAt',
         'disconnectLastStatusCode',
         'disconnectLastErrorMessage',
-        'disconnectManualReviewRequired'
+        'disconnectManualReviewRequired',
+        'disconnectOperationGeneration',
+        'activeOAuthCredentialGeneration',
+        'oauthFlowGeneration'
       ];
     }
 
-    function serviceRootCreateDoesNotSetDisconnectFields() {
-      return !request.resource.data.keys().hasAny(serviceDisconnectFields());
+    function serviceRootCreateDoesNotSetBackendFields() {
+      return !request.resource.data.keys().hasAny(backendOwnedServiceRootFields());
     }
 
-    function serviceRootUpdateDoesNotTouchDisconnectFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(serviceDisconnectFields());
+    function serviceRootUpdateDoesNotTouchBackendFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(backendOwnedServiceRootFields());
     }
 
     function serviceRootIsNotPendingDisconnect() {
-      return !('disconnectState' in resource.data)
-        || resource.data.disconnectState != 'disconnect_pending';
+      return (
+          !('disconnectState' in resource.data)
+          || resource.data.disconnectState != 'disconnect_pending'
+        )
+        && !('disconnectOperationGeneration' in resource.data);
     }
 
     // Make sure the uid of the requesting user matches name of the user
@@ -380,10 +386,10 @@ service cloud.firestore {
     match /suuntoAppAccessTokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
       allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetDisconnectFields();
+        && serviceRootCreateDoesNotSetBackendFields();
       allow update: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchDisconnectFields();
+        && serviceRootUpdateDoesNotTouchBackendFields();
       allow delete: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
@@ -391,7 +397,10 @@ service cloud.firestore {
           allow write: if isNonAnonymousOwner(userID)
             && (
               !exists(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID))
-              || get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+              || (
+                get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
+                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data)
+              )
             );
        }
     }
@@ -399,10 +408,10 @@ service cloud.firestore {
     match /COROSAPIAccessTokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
       allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetDisconnectFields();
+        && serviceRootCreateDoesNotSetBackendFields();
       allow update: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchDisconnectFields();
+        && serviceRootUpdateDoesNotTouchBackendFields();
       allow delete: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
@@ -417,10 +426,10 @@ service cloud.firestore {
     match /garminAPITokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
       allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetDisconnectFields();
+        && serviceRootCreateDoesNotSetBackendFields();
       allow update: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchDisconnectFields();
+        && serviceRootUpdateDoesNotTouchBackendFields();
       allow delete: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect();
        match /tokens/{document=**} {
@@ -428,7 +437,10 @@ service cloud.firestore {
           allow write: if isNonAnonymousOwner(userID)
             && (
               !exists(/databases/$(database)/documents/garminAPITokens/$(userID))
-              || get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
+              || (
+                get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
+                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/garminAPITokens/$(userID)).data)
+              )
             );
        }
     }

@@ -64,6 +64,40 @@ describe('ServicesWahooComponent', () => {
     expect(component.connectionDescription).toContain('Disconnect is pending');
   });
 
+  it('shows reconnect-required state and reconnect action while keeping Wahoo tools unavailable', () => {
+    component.user = {} as any;
+    component.hasProAccess = true;
+    component.serviceMeta = { connectionState: 'reconnect_required' } as any;
+
+    fixture.detectChanges();
+
+    expect(component.isReconnectRequired).toBe(true);
+    expect(component.isConnectedToService()).toBe(false);
+    expect(component.connectButtonLabel).toBe('Reconnect');
+    expect(component.connectionDescription).toContain('Reconnect Wahoo');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo rejected repeated token refreshes');
+    expect(fixture.nativeElement.textContent).toContain('Reconnect');
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button'))
+      .some((button: HTMLButtonElement) => button.textContent?.includes('Disconnect'))).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeNull();
+  });
+
+  it('keeps the safe account ID visible while reconnect is required', () => {
+    component.serviceMeta = {
+      connectionState: 'reconnect_required',
+      providerUserId: '60462',
+    } as any;
+
+    (component as any).onServiceDataChanged();
+    fixture.detectChanges();
+
+    expect(component.wahooAccountId()).toBe('60462');
+    expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(fixture.nativeElement.textContent).toContain('retained account ID');
+    expect(fixture.nativeElement.textContent).not.toContain('OAuth credentials are stored');
+    expect(functionsService.call).not.toHaveBeenCalled();
+  });
+
   it('shows the safe Wahoo account ID instead of a generic connected label', () => {
     component.serviceMeta = { connectionState: 'connected', providerUserId: '60462' } as any;
     (component as any).onServiceDataChanged();
@@ -71,6 +105,7 @@ describe('ServicesWahooComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(fixture.nativeElement.textContent).toContain('OAuth credentials are stored securely on the server.');
     expect(fixture.nativeElement.textContent).not.toContain('Wahoo account connected');
     expect(functionsService.call).not.toHaveBeenCalled();
   });

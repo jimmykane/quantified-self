@@ -4,13 +4,17 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
 import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
-import { isDisconnectPendingServiceConnection } from '../../../shared/service-connection';
+import {
+    isDisconnectPendingServiceConnection,
+    isReconnectRequiredServiceConnection,
+} from '../../../shared/service-connection';
 import {
     RouteDeliverySyncQueueItemInterface,
 } from '../queue/queue-item.interface';
 import {
     deferQueueItemForPendingDisconnect,
     deferQueueItemForPendingDisconnectIfCurrentUserActive,
+    deferQueueItemForReconnectRequiredIfCurrentUserActive,
     increaseRetryCountIfCurrentUserActive,
     isProviderOperationInFlightLeaseActive,
     markQueueItemSkipped,
@@ -44,6 +48,7 @@ import {
 import { setRouteDeliveryMetadata } from '../routes/route-persistence';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { getServiceConnectionMeta } from '../service-connection-meta';
+import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import {
     isProviderOperationError,
     ProviderOperationError,
@@ -54,6 +59,10 @@ import {
     updateQueueItemIfUserActive,
 } from '../queue/dispatch-marker';
 import { RouteProviderSendResult } from '../routes/provider-acceptance';
+import {
+    DisabledSyncRouteTransitionResult,
+    finalizeDisabledSyncRouteIfCurrent,
+} from '../queue/sync-route-eligibility';
 
 interface ErrorLike {
     code?: unknown;
@@ -768,6 +777,18 @@ async function getPendingDisconnectServiceForRoute(
     return null;
 }
 
+async function isWahooReconnectRequiredForRouteDelivery(
+    userID: string,
+    destinationServiceName: ServiceNames,
+): Promise<boolean> {
+    if (destinationServiceName !== ServiceNames.WahooAPI) {
+        return false;
+    }
+    return isReconnectRequiredServiceConnection(
+        await getServiceConnectionMeta(userID, destinationServiceName),
+    );
+}
+
 async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
     queueItem: RouteDeliverySyncQueueItemInterface,
     bulkWriter: admin.firestore.BulkWriter | undefined,
@@ -776,14 +797,35 @@ async function deferRouteDeliverySyncQueueItemForPendingDisconnect(
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     const additionalData = { deferredServiceName: `${serviceName}` };
     if (!requireCurrentProviderState) {
-        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData);
+        return deferQueueItemForPendingDisconnect(queueItem, bulkWriter, additionalData, {
+            userID: queueItem.userID,
+            serviceName,
+        });
     }
     return deferQueueItemForPendingDisconnectIfCurrentUserActive({
         queueItem,
         additionalData,
         bulkWriter,
         userID: queueItem.userID,
+        serviceName,
         phase: 'route_delivery_sync_pending_disconnect_transition',
+        logPrefix: 'RouteDeliverySync',
+        isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
+    });
+}
+
+async function deferRouteDeliverySyncQueueItemForReconnectRequired(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    serviceName: ServiceNames = ServiceNames.WahooAPI,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    return deferQueueItemForReconnectRequiredIfCurrentUserActive({
+        queueItem,
+        additionalData: { deferredServiceName: `${serviceName}` },
+        bulkWriter,
+        userID: queueItem.userID,
+        serviceName,
+        phase: 'route_delivery_sync_reconnect_required_transition',
         logPrefix: 'RouteDeliverySync',
         isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
     });
@@ -923,12 +965,59 @@ export async function processRouteDeliverySyncQueueItem(
             );
         }
 
+        if (await isWahooReconnectRequiredForRouteDelivery(
+            queueItem.userID,
+            queueItem.destinationServiceName,
+        )) {
+            return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
+        }
+
         if (!enabled && queueItem.manual !== true) {
-            await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'route_disabled',
-                resultStatus: 'skipped',
+            const routeDisabledResult = await finalizeDisabledSyncRouteIfCurrent({
+                queueItem,
+                userID: queueItem.userID,
+                routeId: queueItem.routeId,
+                settingsKind: 'routeDeliverySyncRoutes',
+                serviceNames: [route.sourceServiceName, route.destinationServiceName],
+                isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, queueItem),
             });
+            if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.Enabled) {
+                // Route restoration won after the earlier settings read.
+                // Continue with the now-enabled route.
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.DeferredForRestore) {
+                return QueueResult.Deferred;
+            } else if (
+                routeDisabledResult.result === DisabledSyncRouteTransitionResult.DisconnectPending
+                && routeDisabledResult.serviceName
+            ) {
+                return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                    queueItem,
+                    bulkWriter,
+                    routeDisabledResult.serviceName,
+                    true,
+                );
+            } else if (
+                routeDisabledResult.result === DisabledSyncRouteTransitionResult.ReconnectRequired
+                && routeDisabledResult.serviceName
+            ) {
+                return deferRouteDeliverySyncQueueItemForReconnectRequired(
+                    queueItem,
+                    bulkWriter,
+                    routeDisabledResult.serviceName,
+                );
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.SkippedDeletedUser) {
+                return markQueueItemSkipped(
+                    queueItem,
+                    bulkWriter,
+                    QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+                    { skippedContext: 'USER_DELETION_GUARD' },
+                );
+            } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.NotCurrent) {
+                return QueueResult.Processed;
+            } else {
+                await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
+                return QueueResult.Processed;
+            }
         }
 
         const adapter = getRouteSendAdapter(queueItem.destinationServiceName);
@@ -972,6 +1061,15 @@ export async function processRouteDeliverySyncQueueItem(
         try {
             context = await adapter.createContext(queueItem.userID);
         } catch (error) {
+            // The connection can become reconnect-required after the state
+            // precheck above. Preserve the queue item instead of collapsing
+            // that named Wahoo outcome into a generic auth skip.
+            if (
+                queueItem.destinationServiceName === ServiceNames.WahooAPI
+                && isWahooReconnectRequiredError(error)
+            ) {
+                return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
+            }
             if (isDestinationAuthRequiredError(error)) {
                 await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'destination_not_connected', toErrorMessage(error)));
                 return updateToProcessed(queueItem, bulkWriter, {
@@ -1097,6 +1195,13 @@ export async function processRouteDeliverySyncQueueItem(
                 getPendingDisconnectServiceFromError(error, queueItem),
                 providerSendInProgress,
             );
+        }
+
+        if (
+            queueItem.destinationServiceName === ServiceNames.WahooAPI
+            && isWahooReconnectRequiredError(error)
+        ) {
+            return deferRouteDeliverySyncQueueItemForReconnectRequired(queueItem, bulkWriter);
         }
 
         if (providerSendInProgress && isDestinationAuthRequiredError(error)) {

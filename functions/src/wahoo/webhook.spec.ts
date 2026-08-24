@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     deletionGuard: vi.fn(),
     disconnectPending: vi.fn(),
     hasProAccess: vi.fn(),
+    getActiveWahooTokenSnapshot: vi.fn(),
   };
 });
 
@@ -33,6 +34,14 @@ vi.mock('../service-disconnect-pending', () => ({
   isServiceDisconnectPendingForUser: mocks.disconnectPending,
 }));
 vi.mock('./queue-store', () => ({ upsertWahooWorkoutQueueItem: vi.fn() }));
+vi.mock('./account', () => ({
+  getActiveWahooTokenSnapshot: mocks.getActiveWahooTokenSnapshot,
+}));
+vi.mock('./refresh-recovery', () => ({
+  isWahooReconnectRequiredError: (error: unknown) => (
+    (error as { name?: unknown } | null)?.name === 'WahooReconnectRequiredError'
+  ),
+}));
 
 import { resolveActiveWahooOwner, secureTokenMatches } from './webhook';
 
@@ -66,6 +75,7 @@ describe('resolveActiveWahooOwner', () => {
     mocks.deletionGuard.mockResolvedValue({ shouldSkip: false });
     mocks.disconnectPending.mockResolvedValue(false);
     mocks.hasProAccess.mockResolvedValue(true);
+    mocks.getActiveWahooTokenSnapshot.mockResolvedValue({ id: 'wahoo-1', exists: true });
   });
 
   it('resolves the sole active owner through the shared token index', async () => {
@@ -78,6 +88,7 @@ describe('resolveActiveWahooOwner', () => {
     expect(mocks.serviceWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.WahooAPI);
     expect(mocks.limit).toHaveBeenCalledWith(2);
     expect(mocks.deletionGuard).toHaveBeenCalledWith(expect.anything(), 'firebase-1');
+    expect(mocks.getActiveWahooTokenSnapshot).toHaveBeenCalledWith('firebase-1', 'wahoo-1');
   });
 
   it('returns no owner when no matching Wahoo token exists', async () => {
@@ -103,6 +114,16 @@ describe('resolveActiveWahooOwner', () => {
     mocks.tokenQueryGet.mockResolvedValue({ docs: [token] });
 
     await expect(resolveActiveWahooOwner('wahoo-1')).rejects.toThrow('invalid token path');
+  });
+
+  it('ignores a webhook for a retained token that is not the pinned Wahoo account', async () => {
+    mocks.tokenQueryGet.mockResolvedValue({ docs: [wahooTokenDocument('firebase-1', 'wahoo-1')] });
+    mocks.getActiveWahooTokenSnapshot.mockRejectedValueOnce(
+      Object.assign(new Error('The selected Wahoo account changed.'), { code: 'unauthenticated' }),
+    );
+
+    await expect(resolveActiveWahooOwner('wahoo-1')).resolves.toBeNull();
+    expect(mocks.hasProAccess).not.toHaveBeenCalled();
   });
 
   it('ignores owners that are deleting, disconnecting, or no longer Pro', async () => {
