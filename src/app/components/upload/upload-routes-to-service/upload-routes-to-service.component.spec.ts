@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vites
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -97,6 +98,12 @@ describe('UploadRoutesToServiceComponent', () => {
         },
     };
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
+    const mockHapticsService = {
+        selection: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+    };
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
 
     beforeAll(() => {
@@ -166,6 +173,7 @@ describe('UploadRoutesToServiceComponent', () => {
                 { provide: AppAnalyticsService, useValue: mockAnalytics },
                 { provide: Auth, useValue: mockAuth },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
+                { provide: AppHapticsService, useValue: mockHapticsService },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: AppUserService, useValue: { hasProAccessSignal: vi.fn().mockReturnValue(true), user: vi.fn().mockReturnValue({ stripeRole: 'pro' }) } },
             ],
