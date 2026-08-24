@@ -12,7 +12,7 @@ export const AppActivityTypeGroupColors: Record<ActivityTypeGroup, string> = {
   [ActivityTypeGroups.WinterSportsGroup]: '#6289FE',
   [ActivityTypeGroups.SkatingGroup]: '#7C83FD',
   [ActivityTypeGroups.AerialSportsGroup]: '#BA68C8',
-  [ActivityTypeGroups.MotorizedGroup]: '#8D6E63',
+  [ActivityTypeGroups.MotorizedGroup]: '#546E7A',
   [ActivityTypeGroups.AdaptiveMobilityGroup]: '#26A69A',
   [ActivityTypeGroups.WaterSportsGroup]: '#59C7FE',
   [ActivityTypeGroups.DivingGroup]: '#72E3DE',

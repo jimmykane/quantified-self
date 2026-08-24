@@ -242,5 +242,13 @@ describe('AppEventColorService', () => {
         expect(AppActivityTypeGroupIcons[group]).toBe(icon);
       });
     });
+
+    it('should use the graphite motorized treatment', () => {
+      expect(AppActivityTypeGroupColors[ActivityTypeGroups.MotorizedGroup]).toBe('#546E7A');
+      expect(AppActivityTypeGroupGradients[ActivityTypeGroups.MotorizedGroup]).toEqual({
+        start: '#546E7A',
+        end: '#263238',
+      });
+    });
   });
 });
