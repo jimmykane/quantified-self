@@ -69,6 +69,7 @@ describe('SupportedActivitiesPageComponent', () => {
     expect(catalogSection.compareDocumentPosition(specializedSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(fixture.nativeElement.querySelector('#event-details-title')).toBeNull();
     expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.presentation-avatar')).toHaveLength(3);
     expect(divingDetails.querySelector('mat-card')).toBeTruthy();
     expect(divingDetails.querySelector('h2#diving-support-title')).toBeTruthy();
     expect(text).toContain('When you open an activity, you can see laps');
