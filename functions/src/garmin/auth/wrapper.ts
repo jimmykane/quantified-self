@@ -8,6 +8,7 @@ import {
   getAndSetServiceOAuth2AccessTokenForUser,
   disconnectServiceForUser,
   isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -169,7 +170,11 @@ export const deauthorizeGarminAPI = functions
   try {
     await disconnectServiceForUser(userID, SERVICE_NAME);
     return { success: true };
-  } catch (e: any) {
+  } catch (e: unknown) {
+    if (isServiceDisconnectInProgressError(e)) {
+      logger.warn(`Garmin disconnect is waiting for another connection operation for user ${userID}.`);
+      throw new functions.https.HttpsError('unavailable', e.message, e.details);
+    }
     logger.error('Error deauthorizing Garmin:', e);
     throw new functions.https.HttpsError('internal', 'Bad request or internal error');
   }

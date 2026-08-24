@@ -597,7 +597,14 @@ describe('OAuth2', () => {
 
             await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
                 name: 'ServiceDisconnectInProgressError',
-                statusCode: 409,
+                code: 'unavailable',
+                statusCode: 503,
+                details: {
+                    reason: 'service_disconnect_in_progress',
+                    blocker: 'token_refresh',
+                    retryAt: expect.any(Number),
+                    retryDeadlineAt: tokenData.tokenRefreshLeaseExpiresAt,
+                },
             });
 
             expect(getTokenData).not.toHaveBeenCalled();
@@ -613,7 +620,14 @@ describe('OAuth2', () => {
 
             await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
                 name: 'ServiceDisconnectInProgressError',
-                statusCode: 409,
+                code: 'unavailable',
+                statusCode: 503,
+                details: {
+                    reason: 'service_disconnect_in_progress',
+                    blocker: 'disconnect_operation',
+                    retryAt: expect.any(Number),
+                    retryDeadlineAt: mockTransactionDocumentData.disconnectOperationLeaseExpiresAt,
+                },
             });
 
             expect(getTokenData).not.toHaveBeenCalled();

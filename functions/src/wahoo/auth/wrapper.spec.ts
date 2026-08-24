@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     hasServiceOAuthConnectAccess: vi.fn(),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
+    disconnectServiceForUser: vi.fn(),
     validateOAuth2State: vi.fn(),
     getServiceConnectionMeta: vi.fn(),
     getActiveWahooTokenSnapshot: vi.fn(),
@@ -34,7 +35,11 @@ const mocks = vi.hoisted(() => {
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
   HttpsError: class HttpsError extends Error {
-    constructor(public readonly code: string, message: string) {
+    constructor(
+      public readonly code: string,
+      message: string,
+      public readonly details?: unknown,
+    ) {
       super(message);
     }
   },
@@ -61,10 +66,11 @@ vi.mock('../../service-oauth-access', () => ({
 }));
 
 vi.mock('../../OAuth2', () => ({
-  disconnectServiceForUser: vi.fn(),
+  disconnectServiceForUser: mocks.disconnectServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser: mocks.getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser: mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser,
   isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
+  isServiceDisconnectInProgressError: (error: unknown) => (error as { name?: string } | null)?.name === 'ServiceDisconnectInProgressError',
   validateOAuth2State: mocks.validateOAuth2State,
 }));
 
@@ -79,6 +85,7 @@ vi.mock('../account', () => ({
 }));
 
 import {
+  deauthorizeWahooAPI,
   getWahooAPIConnectionAccount,
   requestAndSetWahooAPIAccessToken,
 } from './wrapper';
@@ -87,6 +94,7 @@ describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
+    mocks.disconnectServiceForUser.mockReset().mockResolvedValue(undefined);
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.getActiveWahooTokenSnapshot.mockRejectedValue(new Error('No Wahoo account'));
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
@@ -193,6 +201,29 @@ describe('Wahoo Auth Wrapper', () => {
     } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
       code: 'unavailable',
       message: 'Wahoo is temporarily unavailable.',
+    });
+  });
+
+  it('returns a retryable error when token refresh blocks disconnect', async () => {
+    const details = {
+      reason: 'service_disconnect_in_progress',
+      blocker: 'token_refresh',
+      retryAt: Date.now() + 1_000,
+      retryDeadlineAt: Date.now() + 90_000,
+    };
+    mocks.disconnectServiceForUser.mockRejectedValue(
+      Object.assign(new Error('Wahoo credentials are being refreshed.'), {
+        name: 'ServiceDisconnectInProgressError',
+        details,
+      }),
+    );
+
+    await expect(deauthorizeWahooAPI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+    } as any)).rejects.toMatchObject({
+      code: 'unavailable',
+      details,
     });
   });
 });

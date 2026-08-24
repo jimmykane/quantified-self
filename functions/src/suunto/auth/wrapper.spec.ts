@@ -23,9 +23,11 @@ vi.mock('firebase-functions/v2/https', () => {
         },
         HttpsError: class HttpsError extends Error {
             code: string;
-            constructor(code: string, message: string) {
+            details?: unknown;
+            constructor(code: string, message: string, details?: unknown) {
                 super(message);
                 this.code = code;
+                this.details = details;
                 this.name = 'HttpsError';
             }
         }
@@ -45,6 +47,7 @@ vi.mock('../../OAuth2', () => ({
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn().mockResolvedValue({}),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn().mockResolvedValue('https://mock-redirect.com'),
     isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
+    isServiceDisconnectInProgressError: (error: unknown) => (error as { name?: string } | null)?.name === 'ServiceDisconnectInProgressError',
     validateOAuth2State: vi.fn().mockResolvedValue(true)
 }));
 
@@ -276,6 +279,26 @@ describe('Suunto Auth Wrapper', () => {
 
             await expect(deauthorizeSuuntoApp(request as any))
                 .rejects.toThrow('Deauthorization Error');
+        });
+
+        it('returns a retryable error when token refresh blocks disconnect', async () => {
+            const details = {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'token_refresh',
+                retryAt: Date.now() + 1_000,
+                retryDeadlineAt: Date.now() + 90_000,
+            };
+            (oauth2.disconnectServiceForUser as any).mockRejectedValue(
+                Object.assign(new Error('Suunto credentials are being refreshed.'), {
+                    name: 'ServiceDisconnectInProgressError',
+                    details,
+                }),
+            );
+
+            await expect(deauthorizeSuuntoApp(createMockRequest() as any)).rejects.toMatchObject({
+                code: 'unavailable',
+                details,
+            });
         });
     });
 });

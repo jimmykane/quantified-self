@@ -7,6 +7,22 @@ export const SERVICE_CONNECTION_STATES = {
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
 export type ProviderBindingState = 'bound' | 'unbound';
 
+export const SERVICE_DISCONNECT_RETRY_REASON = 'service_disconnect_in_progress' as const;
+
+export const SERVICE_DISCONNECT_RETRY_BLOCKERS = {
+  TokenRefresh: 'token_refresh',
+  DisconnectOperation: 'disconnect_operation',
+} as const;
+
+export type ServiceDisconnectRetryBlocker = typeof SERVICE_DISCONNECT_RETRY_BLOCKERS[keyof typeof SERVICE_DISCONNECT_RETRY_BLOCKERS];
+
+export interface ServiceDisconnectRetryDetails {
+  reason: typeof SERVICE_DISCONNECT_RETRY_REASON;
+  blocker: ServiceDisconnectRetryBlocker;
+  retryAt: number;
+  retryDeadlineAt: number;
+}
+
 export interface ServiceConnectionMetaFields {
   connectionState?: ServiceConnectionState | null;
   /**

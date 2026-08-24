@@ -8,6 +8,7 @@ import {
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
@@ -94,6 +95,10 @@ export const deauthorizeWahooAPI = onCall({
   try {
     await disconnectServiceForUser(request.auth.uid, SERVICE_NAME);
   } catch (error) {
+    if (isServiceDisconnectInProgressError(error)) {
+      logger.warn(`Wahoo disconnect is waiting for another connection operation for user ${request.auth.uid}.`);
+      throw new HttpsError('unavailable', error.message, error.details);
+    }
     logger.error('Wahoo deauthorization failed', getWahooErrorLogDetails(error));
     throw new HttpsError('internal', 'Wahoo deauthorization failed.');
   }

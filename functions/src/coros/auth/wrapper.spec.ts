@@ -20,7 +20,7 @@ vi.mock('firebase-functions/v1', () => ({
     }),
     https: {
         HttpsError: class HttpsError extends Error {
-            constructor(public code: string, message: string) {
+            constructor(public code: string, message: string, public details?: unknown) {
                 super(message);
                 this.name = 'HttpsError';
             }
@@ -38,6 +38,7 @@ vi.mock('../../OAuth2', () => ({
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn().mockResolvedValue({}),
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn().mockResolvedValue('https://mock-redirect.com'),
     isOAuthFlowContextMismatchError: (error: unknown) => (error as { name?: string } | null)?.name === 'OAuthFlowContextMismatchError',
+    isServiceDisconnectInProgressError: (error: unknown) => (error as { name?: string } | null)?.name === 'ServiceDisconnectInProgressError',
     validateOAuth2State: vi.fn().mockResolvedValue(true)
 }));
 
@@ -163,6 +164,26 @@ describe('COROS Auth Wrapper', () => {
 
             await expect(deauthorizeCOROSAPI({}, context))
                 .rejects.toThrow('Deauthorization Error');
+        });
+
+        it('returns a retryable error when token refresh blocks disconnect', async () => {
+            const details = {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'token_refresh',
+                retryAt: Date.now() + 1_000,
+                retryDeadlineAt: Date.now() + 90_000,
+            };
+            (oauth2.disconnectServiceForUser as any).mockRejectedValue(
+                Object.assign(new Error('COROS credentials are being refreshed.'), {
+                    name: 'ServiceDisconnectInProgressError',
+                    details,
+                }),
+            );
+
+            await expect(deauthorizeCOROSAPI({}, context)).rejects.toMatchObject({
+                code: 'unavailable',
+                details,
+            });
         });
     });
 });

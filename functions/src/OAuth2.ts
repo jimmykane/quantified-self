@@ -44,6 +44,12 @@ import {
   type DocumentGenerationGuard,
 } from './token-refresh-coordinator';
 import { assertWahooOAuthAccountCompatible } from './wahoo/account';
+import {
+  SERVICE_DISCONNECT_RETRY_BLOCKERS,
+  SERVICE_DISCONNECT_RETRY_REASON,
+  type ServiceDisconnectRetryBlocker,
+  type ServiceDisconnectRetryDetails,
+} from '../../shared/service-connection';
 export { deleteLocalServiceToken } from './service-token-store';
 
 interface PersistedOAuthCredentialGuard {
@@ -93,13 +99,42 @@ export function isOAuthFlowContextMismatchError(error: unknown): error is OAuthF
     || (error instanceof Error && error.name === 'OAuthFlowContextMismatchError');
 }
 
-class ServiceDisconnectInProgressError extends Error {
-  public readonly name = 'ServiceDisconnectInProgressError';
-  public readonly statusCode = 409;
+const SERVICE_DISCONNECT_RETRY_POLL_MS = 2_000;
 
-  constructor(serviceName: ServiceNames) {
-    super(`Finish disconnecting ${serviceName} before starting another connection operation.`);
+export class ServiceDisconnectInProgressError extends Error {
+  public readonly name = 'ServiceDisconnectInProgressError';
+  public readonly code = 'unavailable';
+  public readonly statusCode = 503;
+  public readonly details: ServiceDisconnectRetryDetails;
+
+  constructor(
+    serviceName: ServiceNames,
+    blocker: ServiceDisconnectRetryBlocker,
+    blockingLeaseExpiresAt: number,
+    nowMs = Date.now(),
+  ) {
+    super(blocker === SERVICE_DISCONNECT_RETRY_BLOCKERS.TokenRefresh
+      ? `${serviceName} credentials are being refreshed. Disconnect will retry shortly.`
+      : `${serviceName} is already being disconnected. Please retry shortly.`);
+    const normalizedLeaseExpiry = Number.isFinite(blockingLeaseExpiresAt)
+      ? Math.max(nowMs, blockingLeaseExpiresAt)
+      : nowMs + SERVICE_DISCONNECT_RETRY_POLL_MS;
+    this.details = {
+      reason: SERVICE_DISCONNECT_RETRY_REASON,
+      blocker,
+      retryAt: Math.min(normalizedLeaseExpiry, nowMs + SERVICE_DISCONNECT_RETRY_POLL_MS),
+      retryDeadlineAt: normalizedLeaseExpiry,
+    };
   }
+}
+
+export function isServiceDisconnectInProgressError(error: unknown): error is ServiceDisconnectInProgressError {
+  if (!(error instanceof Error) || error.name !== 'ServiceDisconnectInProgressError') return false;
+  const details = (error as Partial<ServiceDisconnectInProgressError>).details;
+  return details?.reason === SERVICE_DISCONNECT_RETRY_REASON
+    && Object.values(SERVICE_DISCONNECT_RETRY_BLOCKERS).includes(details.blocker)
+    && Number.isFinite(details.retryAt)
+    && Number.isFinite(details.retryDeadlineAt);
 }
 
 async function assertOAuthUserCanWriteServiceState(
@@ -141,10 +176,15 @@ async function beginOAuthFlowIfUserActive(
       throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_state_write:${serviceName}`);
     }
     const rootSnapshot = await transaction.get(tokenRootRef);
-    if (getActiveServiceDisconnectOperationGeneration(
-      rootSnapshot.data() as Record<string, unknown> | undefined,
-    )) {
-      throw new ServiceDisconnectInProgressError(serviceName);
+    const rootData = rootSnapshot.data() as Record<string, unknown> | undefined;
+    const nowMs = Date.now();
+    if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
+      throw new ServiceDisconnectInProgressError(
+        serviceName,
+        SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
+        Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
+        nowMs,
+      );
     }
 
     // This is the first durable action in an OAuth-start request. Disconnects
@@ -326,18 +366,30 @@ async function beginExplicitDisconnectOperation(
     const rootData = rootSnapshot.exists
       ? rootSnapshot.data() as Record<string, unknown>
       : undefined;
-    if (getActiveServiceDisconnectOperationGeneration(rootData)) {
-      throw new ServiceDisconnectInProgressError(serviceName);
-    }
     const nowMs = Date.now();
-    const refreshIsActive = tokenSnapshots.docs.some(snapshot => {
+    if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
+      throw new ServiceDisconnectInProgressError(
+        serviceName,
+        SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
+        Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
+        nowMs,
+      );
+    }
+    const refreshBlockingLeaseExpiresAt = tokenSnapshots.docs.reduce((latestExpiry, snapshot) => {
       const tokenData = typeof snapshot.data === 'function' ? snapshot.data() : undefined;
       const leaseOwner = `${tokenData?.tokenRefreshLeaseOwner || ''}`.trim();
       const leaseExpiresAt = Number(tokenData?.tokenRefreshLeaseExpiresAt || 0);
-      return leaseOwner && Number.isFinite(leaseExpiresAt) && leaseExpiresAt > nowMs;
-    });
-    if (refreshIsActive) {
-      throw new ServiceDisconnectInProgressError(serviceName);
+      return leaseOwner && Number.isFinite(leaseExpiresAt) && leaseExpiresAt > nowMs
+        ? Math.max(latestExpiry, leaseExpiresAt)
+        : latestExpiry;
+    }, 0);
+    if (refreshBlockingLeaseExpiresAt > nowMs) {
+      throw new ServiceDisconnectInProgressError(
+        serviceName,
+        SERVICE_DISCONNECT_RETRY_BLOCKERS.TokenRefresh,
+        refreshBlockingLeaseExpiresAt,
+        nowMs,
+      );
     }
     const invalidatedOAuthFlowGeneration = crypto.randomUUID();
     const disconnectOperationGeneration = crypto.randomUUID();

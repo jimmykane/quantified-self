@@ -106,8 +106,39 @@ import {
 import {
   isDisconnectPendingServiceConnection,
   isReconnectRequiredServiceConnection,
+  SERVICE_DISCONNECT_RETRY_BLOCKERS,
+  SERVICE_DISCONNECT_RETRY_REASON,
   SERVICE_CONNECTION_STATES,
+  type ServiceDisconnectRetryDetails,
 } from '@shared/service-connection';
+
+const SERVICE_DISCONNECT_RETRY_GRACE_MS = 2_000;
+const SERVICE_DISCONNECT_MAX_CLIENT_RETRY_WINDOW_MS = 2 * 60 * 1000;
+const SERVICE_DISCONNECT_INITIAL_RETRY_DELAY_MS = 1_000;
+const SERVICE_DISCONNECT_MAX_RETRY_DELAY_MS = 15_000;
+
+function getTokenRefreshDisconnectRetryDetails(error: unknown): ServiceDisconnectRetryDetails | null {
+  const callableError = error as { code?: unknown; details?: unknown } | null;
+  const code = typeof callableError?.code === 'string' ? callableError.code : '';
+  if (code !== 'unavailable' && code !== 'functions/unavailable') return null;
+
+  const details = callableError?.details as Partial<ServiceDisconnectRetryDetails> | null;
+  if (
+    details?.reason !== SERVICE_DISCONNECT_RETRY_REASON
+    || details.blocker !== SERVICE_DISCONNECT_RETRY_BLOCKERS.TokenRefresh
+  ) return null;
+
+  const retryAt = Number(details.retryAt);
+  const retryDeadlineAt = Number(details.retryDeadlineAt);
+  if (!Number.isFinite(retryAt) || !Number.isFinite(retryDeadlineAt)) return null;
+
+  return {
+    reason: SERVICE_DISCONNECT_RETRY_REASON,
+    blocker: SERVICE_DISCONNECT_RETRY_BLOCKERS.TokenRefresh,
+    retryAt,
+    retryDeadlineAt,
+  };
+}
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
@@ -1417,8 +1448,37 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for deauthorization`);
     }
 
-    const result = await this.functionsService.call(functionName);
+    const result = await this.callServiceDisconnectWithRefreshRetry(functionName);
     return result.data;
+  }
+
+  private async callServiceDisconnectWithRefreshRetry(functionName: FunctionName): Promise<{ data: any }> {
+    let retryAttempt = 0;
+    let retryDeadlineAt: number | null = null;
+
+    while (true) {
+      try {
+        return await this.functionsService.call(functionName);
+      } catch (error) {
+        const details = getTokenRefreshDisconnectRetryDetails(error);
+        if (!details) throw error;
+
+        const nowMs = Date.now();
+        retryDeadlineAt ??= Math.min(
+          details.retryDeadlineAt + SERVICE_DISCONNECT_RETRY_GRACE_MS,
+          nowMs + SERVICE_DISCONNECT_MAX_CLIENT_RETRY_WINDOW_MS,
+        );
+        const exponentialDelayMs = Math.min(
+          SERVICE_DISCONNECT_INITIAL_RETRY_DELAY_MS * (2 ** retryAttempt),
+          SERVICE_DISCONNECT_MAX_RETRY_DELAY_MS,
+        );
+        const delayMs = Math.max(0, details.retryAt - nowMs, exponentialDelayMs);
+        if (nowMs + delayMs > retryDeadlineAt) throw error;
+
+        await new Promise<void>(resolve => setTimeout(resolve, delayMs));
+        retryAttempt += 1;
+      }
+    }
   }
 
   async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string }> {

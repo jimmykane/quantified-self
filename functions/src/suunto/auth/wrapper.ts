@@ -9,6 +9,7 @@ import {
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   isOAuthFlowContextMismatchError,
+  isServiceDisconnectInProgressError,
   validateOAuth2State,
 } from '../../OAuth2';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
@@ -173,7 +174,11 @@ export const deauthorizeSuuntoApp = onCall({
 
   try {
     await disconnectServiceForUser(userID, SERVICE_NAME);
-  } catch (e: any) {
+  } catch (e: unknown) {
+    if (isServiceDisconnectInProgressError(e)) {
+      logger.warn(`Suunto disconnect is waiting for another connection operation for user ${userID}.`);
+      throw new HttpsError('unavailable', e.message, e.details);
+    }
     logger.error(e);
     throw new HttpsError('internal', 'Deauthorization Error');
   }
