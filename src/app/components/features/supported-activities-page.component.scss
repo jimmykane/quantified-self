@@ -74,6 +74,25 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 
+.support-details-section {
+  max-width: 56rem;
+}
+
+.support-details-title {
+  font: var(--mat-sys-title-medium);
+}
+
+.support-details-content {
+  display: grid;
+  gap: 1rem;
+  padding: 0.25rem 0;
+}
+
+.support-details-intro {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
 .family-grid {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
