@@ -55,9 +55,12 @@
           @if (family.fallback) {
           <p class="family-note">These activity types do not have a dedicated group. Their details still depend on the data in the activity.</p>
           }
-          <mat-chip-set [attr.aria-label]="family.label + ' activity types'">
+          <mat-chip-set
+            class="activity-type-list"
+            role="list"
+            [attr.aria-label]="family.label + ' activity types'">
             @for (activityType of family.activityTypes; track activityType) {
-            <mat-chip>{{ activityType }}</mat-chip>
+            <mat-chip role="listitem" disableRipple [removable]="false">{{ activityType }}</mat-chip>
             }
           </mat-chip-set>
         </mat-card-content>

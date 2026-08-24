@@ -152,6 +152,11 @@ h3 {
   font: var(--mat-sys-body-medium);
 }
 
+.activity-type-list mat-chip {
+  --mat-chip-hover-state-layer-opacity: 0;
+  --mat-chip-focus-state-layer-opacity: 0;
+}
+
 .activity-search {
   width: min(100%, 34rem);
 }

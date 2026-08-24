@@ -23,6 +23,12 @@ describe('SupportedActivitiesPageComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(17);
     expect(fixture.nativeElement.querySelector('[data-family-id="motorized_group"]')?.textContent).toContain('Boating');
 
+    const activityTypeList = fixture.nativeElement.querySelector('.activity-type-list') as HTMLElement;
+    const activityTypeChip = activityTypeList.querySelector('mat-chip') as HTMLElement;
+    expect(activityTypeList.getAttribute('role')).toBe('list');
+    expect(activityTypeChip.getAttribute('role')).toBe('listitem');
+    expect(activityTypeChip.hasAttribute('disableRipple')).toBe(true);
+
     fixture.componentInstance.onSearchQueryChange('wheel chair');
     fixture.detectChanges();
 
