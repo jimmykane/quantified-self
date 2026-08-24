@@ -1,0 +1,147 @@
+.supported-activities-page {
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 2rem) 4rem;
+}
+
+.hero-section,
+.content-section,
+.section-heading,
+.catalog-toolbar,
+.family-card-content,
+.diving-card mat-card-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.hero-section {
+  max-width: 54rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-large);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font: var(--mat-sys-display-small);
+}
+
+h2 {
+  font: var(--mat-sys-headline-medium);
+}
+
+h3 {
+  font: var(--mat-sys-title-medium);
+}
+
+.hero-copy,
+.section-heading p,
+.family-note,
+.catalog-result-summary,
+.diving-card p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-large);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.support-level-grid,
+.presentation-grid,
+.family-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.support-level-grid,
+.presentation-grid {
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.family-grid {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.support-level-card,
+.presentation-card,
+.family-card {
+  height: 100%;
+}
+
+.family-card {
+  border-top-width: 0.25rem;
+}
+
+.support-level-avatar,
+.family-avatar,
+.diving-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.support-level-avatar {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.family-avatar {
+  color: var(--mat-sys-on-primary);
+}
+
+.diving-avatar {
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.family-note {
+  font: var(--mat-sys-body-medium);
+}
+
+.activity-search {
+  width: min(100%, 34rem);
+}
+
+.catalog-result-summary {
+  font: var(--mat-sys-body-medium);
+}
+
+.empty-search-card mat-card-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.empty-search-card mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+@media (max-width: 37.5rem) {
+  .hero-actions {
+    display: grid;
+  }
+
+  .hero-actions > a {
+    width: 100%;
+  }
+
+  .family-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -45,6 +45,7 @@ describe('public-startup-route', () => {
     expect(isPublicContentPath('/terms')).toBe(true);
     expect(isPublicContentPath('/releases?view=latest')).toBe(true);
     expect(isPublicContentPath('/features/activity-calendar')).toBe(true);
+    expect(isPublicContentPath('/features/supported-activities')).toBe(true);
     expect(isPublicContentPath('/features/mcp-server')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-suunto')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-wahoo')).toBe(true);

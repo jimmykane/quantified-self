@@ -14,6 +14,7 @@ const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/integrations\/integrations-hub-page\.component\.ts$/,
   /^src\/app\/components\/integrations\/provider-integration-page\.component\.ts$/,
   /^src\/app\/components\/features\/workout-data-comparison-page\.component\.ts$/,
+  /^src\/app\/components\/features\/supported-activities-page\.component\.ts$/,
   /^src\/app\/components\/public-seo\/public-seo-page\.component\.ts$/,
   /^src\/app\/components\/tools\/tools-hub-page\.component\.ts$/,
   /^src\/app\/components\/tools\/tools-compare-page\.component\.ts$/,
@@ -44,7 +45,7 @@ const publicStartupSourceRecords = uniqueSourceRecords(publicStartupJavaScriptAs
 
 assertNoHomeStartupSource(
   'route-only public page content',
-  /^src\/app\/components\/(?:features\/workout-data-comparison-page|integrations\/integration-pages|public-seo\/public-seo-pages)\.content\.ts$/,
+  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/public-seo-pages)\.content\.ts$/,
 );
 assertNoHomeStartupSource(
   'unused event data runtime',

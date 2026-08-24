@@ -39,6 +39,10 @@
               <mat-icon aria-hidden="true">sync</mat-icon>
               <span>Connect service</span>
             </button>
+            <a mat-button routerLink="/features/supported-activities">
+              <mat-icon aria-hidden="true">category</mat-icon>
+              <span>Check supported activities</span>
+            </a>
             <mat-menu #noActivityConnectServiceMenu="matMenu" class="qs-menu-panel">
               @for (option of noActivityConnectServiceOptions; track option.serviceName) {
               <button mat-menu-item type="button" (click)="onNoActivityConnectService(option.serviceName)">
