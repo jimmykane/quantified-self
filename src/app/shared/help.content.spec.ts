@@ -16,6 +16,7 @@ describe('help.content', () => {
     const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
 
     expect(supportedActivitiesSection?.content).toContain('[Supported activity types page](/features/supported-activities)');
+    expect(supportedActivitiesSection?.content).toContain('## What you see when you open an activity');
     expect(supportedActivitiesSection?.content).toContain('We do not add missing information.');
     expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when the data includes individual pool lengths');
     expect(supportedActivitiesSection?.content).toContain('Jumps** when the activity includes jump events');

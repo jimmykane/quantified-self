@@ -421,10 +421,10 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Quantified Self uses activity types and groups to label, search, filter, and organize activities. If a type is listed, we can recognize it; not every device, connected service, or uploaded file includes the same details.
 - Open the [Supported activity types page](/features/supported-activities) to search the complete list.
 
-## What appears in Event Details
+## What you see when you open an activity
 
 - Routes, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the imported activity includes that data. We do not add missing information.
-- Event Details shows **Laps** when an activity includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
+- When you open an activity, you can see **Laps** when it includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
 - Groups help you browse, but the activity type and its data determine the charts. Activities in the same group can show different charts. For example, Boating is listed in Motorized but can use sailing-oriented charts when the activity includes the data those charts need. Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts when the activity includes the data those charts need.
 - Hand Cycle and Velomobile are grouped with Cycling. They appear in Cycling Training analysis only when the activity contains enough relevant data.
 

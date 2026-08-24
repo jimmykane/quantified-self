@@ -7,44 +7,9 @@
       activity is included. The maps, metrics, laps, and charts you see depend on what your device, connected service,
       or uploaded file recorded.
     </p>
-    <div class="hero-actions" aria-label="Supported activity types actions">
-      <a mat-flat-button class="qs-mat-primary" routerLink="/login">
-        Get started free
-        <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-      </a>
-      <a mat-stroked-button routerLink="/integrations">
-        Explore integrations
-      </a>
-    </div>
   </section>
 
-  <section class="content-section" aria-labelledby="specialized-surfaces-title">
-    <div class="section-heading">
-      <p class="eyebrow">What your activity can show</p>
-      <h2 id="specialized-surfaces-title">Extra details appear when the data is there</h2>
-      <p>
-        Recognizing an activity type does not add data. Event Details shows laps, swim lengths, jumps, and charts only
-        when the imported activity includes them.
-      </p>
-    </div>
-    <div class="presentation-grid">
-      @for (item of specializedSurfaces; track item.title) {
-      <mat-card appearance="outlined" class="presentation-card">
-        <mat-card-header>
-          <div mat-card-avatar class="support-level-avatar">
-            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
-      }
-    </div>
-  </section>
-
-  <section class="content-section catalog-section" aria-labelledby="activity-catalog-title">
+  <section id="activity-catalog" class="content-section catalog-section" aria-labelledby="activity-catalog-title">
     <div class="section-heading">
       <p class="eyebrow">Activity catalog</p>
       <h2 id="activity-catalog-title">Find an activity</h2>
@@ -112,47 +77,30 @@
     }
   </section>
 
-  <section class="content-section" aria-labelledby="event-details-title">
+  <section class="content-section" aria-labelledby="specialized-surfaces-title">
     <div class="section-heading">
-      <p class="eyebrow">Event Details</p>
-      <h2 id="event-details-title">Charts follow the activity, not just its group</h2>
+      <p class="eyebrow">What you can see in an activity</p>
+      <h2 id="specialized-surfaces-title">Extra details appear when the data is there</h2>
       <p>
-        Groups make the catalog easy to browse. In Event Details, the activity type and its data determine the charts
-        you see, so activities in the same group can still look different.
+        Recognizing an activity type does not add data. When you open an activity, you can see laps, swim lengths,
+        jumps, and charts only when the imported activity includes them.
       </p>
     </div>
-  </section>
-
-  <section class="content-section diving-section" aria-labelledby="diving-support-title">
-    <div class="section-heading">
-      <p class="eyebrow">Diving</p>
-      <h2 id="diving-support-title">Dive details come from your recording</h2>
-      <p>
-        Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding can show dive-specific details when the imported
-        activity includes them.
-      </p>
+    <div class="presentation-grid">
+      @for (item of specializedSurfaces; track item.title) {
+      <mat-card appearance="outlined" class="presentation-card">
+        <mat-card-header>
+          <div mat-card-avatar class="support-level-avatar">
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          </div>
+          <mat-card-title>{{ item.title }}</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>{{ item.copy }}</p>
+        </mat-card-content>
+      </mat-card>
+      }
     </div>
-    <mat-card appearance="outlined" class="diving-card">
-      <mat-card-header>
-        <div mat-card-avatar class="diving-avatar"><mat-icon aria-hidden="true">scuba_diving</mat-icon></div>
-        <mat-card-title>Dive details are shown when recorded</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <p>
-          Dive Profile needs continuous depth data. Depth, decompression, timing, tissue load, SAC/RMV, gas, and tank
-          details appear only when they are included in the activity. We do not estimate or fill in missing dive data.
-        </p>
-        <p>
-          In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade
-          are hidden. For an event that combines diving with another activity, terrain summaries come only from the
-          non-diving activity.
-        </p>
-        <a mat-stroked-button routerLink="/help" fragment="supported-activities">
-          Read the supported activity types Help guide
-          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-        </a>
-      </mat-card-content>
-    </mat-card>
   </section>
 
   <section class="content-section provider-section" aria-labelledby="provider-context-title">
@@ -168,6 +116,35 @@
       <a mat-stroked-button routerLink="/integrations">See integrations</a>
       <a mat-stroked-button routerLink="/help" fragment="uploads-and-imports">Get help with uploads</a>
     </div>
+  </section>
+
+  <section class="diving-details-section" aria-labelledby="diving-support-title">
+    <mat-expansion-panel class="diving-details-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <div class="diving-details-title">
+            <mat-icon aria-hidden="true">scuba_diving</mat-icon>
+            <h2 id="diving-support-title">Dive-specific details</h2>
+          </div>
+        </mat-panel-title>
+        <mat-panel-description>Shown when your activity includes dive data.</mat-panel-description>
+      </mat-expansion-panel-header>
+      <div class="diving-details-content">
+        <p>
+          Dive Profile needs continuous depth data. Depth, decompression, timing, tissue load, SAC/RMV, gas, and tank
+          details appear only when they are included in the activity. We do not estimate or fill in missing dive data.
+        </p>
+        <p>
+          In a dive-only activity, depth is the relevant vertical measure, so terrain altitude, ascent, descent, and grade
+          are hidden. For an event that combines diving with another activity, terrain summaries come only from the
+          non-diving activity.
+        </p>
+        <a mat-stroked-button routerLink="/help" fragment="supported-activities">
+          Read dive details in Help
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </a>
+      </div>
+    </mat-expansion-panel>
   </section>
 
   <section class="support-details-section" aria-labelledby="support-levels-title">
