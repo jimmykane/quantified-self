@@ -20,6 +20,41 @@ describe('activity-type-group.metadata', () => {
     expect(resolveActivityTypeGroup('running group')).toBe(ActivityTypeGroups.RunningGroup);
   });
 
+  it('resolves labels, aliases, and members for newly classified Sports Lib groups', () => {
+    const cases = [
+      {
+        group: ActivityTypeGroups.SkatingGroup,
+        label: 'Skating',
+        alias: 'inline skating',
+        activityType: ActivityTypes.InlineSkating,
+      },
+      {
+        group: ActivityTypeGroups.AerialSportsGroup,
+        label: 'Aerial Sports',
+        alias: 'flying sports',
+        activityType: ActivityTypes.Flying,
+      },
+      {
+        group: ActivityTypeGroups.MotorizedGroup,
+        label: 'Motorized',
+        alias: 'motor sports',
+        activityType: ActivityTypes.Motorsports,
+      },
+      {
+        group: ActivityTypeGroups.AdaptiveMobilityGroup,
+        label: 'Adaptive Mobility',
+        alias: 'adaptive mobility',
+        activityType: ActivityTypes.Wheelchair,
+      },
+    ];
+
+    cases.forEach(({ group, label, alias, activityType }) => {
+      expect(getActivityTypeGroupLabel(group)).toBe(label);
+      expect(resolveActivityTypeGroup(alias)).toBe(group);
+      expect(getActivityTypesForGroup(group)).toContain(activityType);
+    });
+  });
+
   it('tracks ambiguous groups via quantified metadata', () => {
     expect(isAmbiguousActivityTypeGroup(ActivityTypeGroups.RunningGroup)).toBe(true);
     expect(isAmbiguousActivityTypeGroup(ActivityTypeGroups.WaterSportsGroup)).toBe(false);

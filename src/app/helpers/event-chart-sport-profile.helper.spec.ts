@@ -101,6 +101,9 @@ describe('event chart sport profiles', () => {
       {activityTypes: [ActivityTypes.Sailing, ActivityTypes.Rowing], profileID: 'paddled-water'},
       {activityTypes: [ActivityTypes.ScubaDiving, ActivityTypes.Snorkeling], profileID: 'generic-diving'},
       {activityTypes: [ActivityTypes.Golf, ActivityTypes.Tennis], profileID: 'team-racket'},
+      {activityTypes: [ActivityTypes.InlineSkating, ActivityTypes.Skating], profileID: 'ice-skating'},
+      {activityTypes: [ActivityTypes.Paragliding, ActivityTypes.SkyDiving], profileID: 'paragliding'},
+      {activityTypes: [ActivityTypes.Motorsports, ActivityTypes.Snowmobiling], profileID: 'motor'},
     ];
 
     cases.forEach(({activityTypes, profileID}) => {
@@ -117,6 +120,7 @@ describe('event chart sport profiles', () => {
   it('applies the explicit Skating and Tactical decisions', () => {
     expect(resolveEventChartSportProfile([ActivityTypes.InlineSkating]).profileID).toBe('ice-skating');
     expect(resolveEventChartSportProfile([ActivityTypes.Skating]).profileID).toBe('ice-skating');
+    expect(resolveEventChartSportProfile([ActivityTypes.Wheelchair]).profileID).toBe('cycling');
     expect(resolveEventChartSportProfile([ActivityTypes.Tactical]).profileID).toBe('fitness');
   });
 
