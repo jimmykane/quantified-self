@@ -8,6 +8,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-route
 import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { RouteDeliverySyncRouteControlComponent } from './route-delivery-sync-route-control.component';
 
 describe('RouteDeliverySyncRouteControlComponent', () => {
@@ -30,6 +31,12 @@ describe('RouteDeliverySyncRouteControlComponent', () => {
   };
   const analytics = { logEvent: vi.fn() };
   const snackBar = { open: vi.fn() };
+  const hapticsService = {
+    selection: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -40,6 +47,7 @@ describe('RouteDeliverySyncRouteControlComponent', () => {
         { provide: AppAnalyticsService, useValue: analytics },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: AppHapticsService, useValue: hapticsService },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -77,6 +85,8 @@ describe('RouteDeliverySyncRouteControlComponent', () => {
       component.user,
       { [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI]: false },
     );
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.success).toHaveBeenCalledOnce();
   });
 
   it('queues a saved-route backfill independently of the automatic toggle', async () => {

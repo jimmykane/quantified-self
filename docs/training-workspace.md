@@ -637,6 +637,10 @@ settings echo before the server accepts the write, that echo does not retire the
 write is acknowledged. Intermediate echoes from coalesced choices and unrelated stale settings emissions likewise cannot
 replace the latest requested view.
 
+On supported mobile coarse-pointer devices, a real destination change uses the shared selection haptic. A final failed
+preference write uses one error haptic; these presentation cues do not change destination, persistence, or reconciliation
+semantics.
+
 ## Page Sections and Calculations
 
 The sections retain the following relative order when their destination renders them.

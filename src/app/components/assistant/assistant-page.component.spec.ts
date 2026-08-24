@@ -17,6 +17,7 @@ import type { AssistantChatResponse } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -84,6 +85,12 @@ describe('AssistantPageComponent', () => {
   const quotaService = {
     loadQuotaStatus: vi.fn(),
   };
+  const hapticsService = {
+    selection: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  };
   const auth = {
     currentUser: { uid: 'assistant-user' },
   };
@@ -114,6 +121,10 @@ describe('AssistantPageComponent', () => {
     });
     assistantService.getErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
+    hapticsService.selection.mockReset();
+    hapticsService.success.mockReset();
+    hapticsService.warning.mockReset();
+    hapticsService.error.mockReset();
 
     await TestBed.configureTestingModule({
       imports: [
@@ -125,6 +136,7 @@ describe('AssistantPageComponent', () => {
       providers: [
         { provide: AssistantService, useValue: assistantService },
         { provide: AssistantQuotaService, useValue: quotaService },
+        { provide: AppHapticsService, useValue: hapticsService },
         { provide: Auth, useValue: auth },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         {
@@ -1238,6 +1250,8 @@ describe('AssistantPageComponent', () => {
     expect(evidenceCard.querySelector('.evidence-source-copy > span')?.textContent)
       .toContain('Grounded in Get daily report.');
     expect(text).toContain('19 of 20 remaining');
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.success).toHaveBeenCalledOnce();
   });
 
   it('starts a new server-owned conversation', async () => {
@@ -1290,6 +1304,8 @@ describe('AssistantPageComponent', () => {
     expect(component.promptControl.value).toBe('How am I today?');
     expect(component.quota()?.remainingCount).toBe(18);
     expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
   });
 
   it('marks quota unavailable when a failed-send refresh returns no status', async () => {

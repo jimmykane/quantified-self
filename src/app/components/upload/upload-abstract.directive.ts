@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { isUploadErrorUserActionHandled, shouldReportUploadError } from '../../services/upload-error';
 
 export interface UploadBatchSummary {
@@ -38,6 +39,7 @@ export abstract class UploadAbstractDirective implements OnInit {
   protected processingService = inject(AppProcessingService);
   protected router = inject(Router);
   protected logger = inject(LoggerService);
+  protected hapticsService = inject(AppHapticsService);
 
   constructor() { }
 
@@ -127,6 +129,9 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     // Then actually start processing them
+    if (filesToProcess.length > 0) {
+      this.hapticsService.selection();
+    }
     this.isUploading = true;
     let successfulUploads = 0;
     let failedUploads = 0;
@@ -180,12 +185,14 @@ export abstract class UploadAbstractDirective implements OnInit {
         duration: 5000,
       });
     }
-    this.onUploadBatchFinished({
+    const summary = {
       totalFiles: filesToProcess.length,
       successfulUploads,
       duplicateUploads,
       failedUploads,
-    });
+    };
+    this.triggerUploadBatchHaptic(summary);
+    this.onUploadBatchFinished(summary);
 
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
@@ -197,5 +204,25 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
     // Clear the target
     event.target.value = '';
+  }
+
+  private triggerUploadBatchHaptic(summary: UploadBatchSummary): void {
+    if (summary.failedUploads > 0) {
+      if (summary.successfulUploads > 0 || summary.duplicateUploads > 0) {
+        this.hapticsService.warning();
+      } else {
+        this.hapticsService.error();
+      }
+      return;
+    }
+
+    if (summary.duplicateUploads > 0) {
+      this.hapticsService.warning();
+      return;
+    }
+
+    if (summary.successfulUploads > 0) {
+      this.hapticsService.success();
+    }
   }
 }

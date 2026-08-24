@@ -12,6 +12,7 @@ import {
   normalizeEventTagSuggestions,
 } from '@shared/event-tags';
 import { SharedModule } from '../../modules/shared.module';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface EventTagsDialogData {
   title?: string;
@@ -34,6 +35,7 @@ export class EventTagsDialogComponent {
   private dialogRef = inject(MatDialogRef<EventTagsDialogComponent>);
   private snackBar = inject(MatSnackBar);
   private data = inject<EventTagsDialogData>(MAT_DIALOG_DATA);
+  private hapticsService = inject(AppHapticsService);
 
   readonly separatorKeysCodes = [ENTER, COMMA] as const;
   readonly tagLimit = EVENT_TAG_LIMIT;
@@ -91,6 +93,7 @@ export class EventTagsDialogComponent {
     try {
       const tags = this.stagedTags();
       const savedTags = this.data.save ? await this.data.save(tags) : tags;
+      this.hapticsService.success();
       this.dialogRef.close(normalizeEventTags(savedTags));
     } catch (error) {
       this.snackBar.open(
@@ -98,6 +101,7 @@ export class EventTagsDialogComponent {
         undefined,
         { duration: 3000 },
       );
+      this.hapticsService.error();
     } finally {
       this.dialogRef.disableClose = false;
       this.isSaving.set(false);

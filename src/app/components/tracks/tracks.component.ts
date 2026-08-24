@@ -24,6 +24,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import {
@@ -209,6 +210,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   private promiseTime = 0;
   private analyticsService = inject(AppAnalyticsService);
+  private hapticsService = inject(AppHapticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private logger = inject(LoggerService);
   private tripDetectionService = inject(MyTracksTripDetectionService);
@@ -503,6 +505,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public toggleTripSortDirection(): void {
     const tripSortDirection = this.tripSortDirection() === 'desc' ? 'asc' : 'desc';
+    this.hapticsService.selection();
     this.userSettingsQuery.updateMyTracksSettings({ tripSortDirection });
   }
 
@@ -1918,6 +1921,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+    this.hapticsService.selection();
     this.onMapViewInteraction();
     this.selectedDetectedTripId.set(trip.tripId);
     this.applyActiveDetectedTripAreaOverlay();
@@ -1942,6 +1946,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.hapticsService.selection();
     this.onMapViewInteraction();
     this.selectedDetectedTripId.set(TracksComponent.HOME_PANEL_ENTRY_ID);
     this.applyActiveDetectedTripAreaOverlay();

@@ -9,6 +9,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MapStyleService } from '../../../services/map-style.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MenuRadioListComponent } from '../../shared/menu-radio-list/menu-radio-list.component';
 import { MapLayersMenuPanelComponent } from './map-layers-menu-panel.component';
 
@@ -17,6 +18,7 @@ describe('MapLayersMenuPanelComponent', () => {
   let fixture: ComponentFixture<MapLayersMenuPanelComponent>;
   let mapStyleServiceMock: any;
   let analyticsServiceMock: any;
+  let hapticsServiceMock: any;
 
   beforeEach(async () => {
     mapStyleServiceMock = {
@@ -29,6 +31,12 @@ describe('MapLayersMenuPanelComponent', () => {
 
     analyticsServiceMock = {
       logEvent: vi.fn(),
+    };
+    hapticsServiceMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -44,6 +52,7 @@ describe('MapLayersMenuPanelComponent', () => {
       providers: [
         { provide: MapStyleService, useValue: mapStyleServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
       ]
     }).compileComponents();
 
@@ -68,6 +77,7 @@ describe('MapLayersMenuPanelComponent', () => {
 
     expect(mapStyleEmitSpy).toHaveBeenCalledWith('satellite');
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('event_map_settings_change');
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
   });
 
   it('emits 3d and jump heat toggles', () => {
@@ -79,6 +89,7 @@ describe('MapLayersMenuPanelComponent', () => {
 
     expect(is3DEmitSpy).toHaveBeenCalledWith(true);
     expect(jumpHeatEmitSpy).toHaveBeenCalledWith(true);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
   });
 
   it('respects analytics event name override', () => {

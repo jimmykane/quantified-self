@@ -11,6 +11,7 @@ import { ActivitySyncRouteControlComponent } from './activity-sync-route-control
 import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 describe('ActivitySyncRouteControlComponent', () => {
   let component: ActivitySyncRouteControlComponent;
@@ -27,6 +28,12 @@ describe('ActivitySyncRouteControlComponent', () => {
     logActivitySyncRouteBackfill: vi.fn(),
   };
   const snackBar = { open: vi.fn() };
+  const hapticsService = {
+    selection: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -36,6 +43,7 @@ describe('ActivitySyncRouteControlComponent', () => {
         { provide: AppAnalyticsService, useValue: analyticsService },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: AppHapticsService, useValue: hapticsService },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -155,6 +163,8 @@ describe('ActivitySyncRouteControlComponent', () => {
       ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       true,
     );
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.success).toHaveBeenCalledOnce();
   });
 
   it('does not enable delivery while Wahoo is disconnected', async () => {

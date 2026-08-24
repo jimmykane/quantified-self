@@ -11,6 +11,7 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { LoggerService } from '../../../services/logger.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -31,6 +32,7 @@ describe('UploadActivitiesComponent', () => {
   let browserCompatibilityServiceMock: any;
   let loggerMock: any;
   let snackBarMock: any;
+  let hapticsServiceMock: any;
 
   beforeEach(async () => {
     authServiceMock = {
@@ -70,6 +72,12 @@ describe('UploadActivitiesComponent', () => {
       warn: vi.fn(),
     };
     snackBarMock = { open: vi.fn() };
+    hapticsServiceMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [UploadActivitiesComponent],
@@ -85,6 +93,7 @@ describe('UploadActivitiesComponent', () => {
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: MatDialog, useValue: { open: vi.fn() } },
         { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -292,6 +301,8 @@ describe('UploadActivitiesComponent', () => {
     await component.getFiles(fileInputEvent);
 
     expect(uploadCompleteSpy).toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.success).toHaveBeenCalledOnce();
   });
 
   it('should not report expected client upload failures', async () => {
@@ -310,6 +321,7 @@ describe('UploadActivitiesComponent', () => {
 
     expect(loggerMock.error).not.toHaveBeenCalled();
     expect(processingServiceMock.failJob).toHaveBeenCalledWith('job-id', uploadError.message);
+    expect(hapticsServiceMock.error).toHaveBeenCalledOnce();
   });
 
   it('should report server upload failures', async () => {

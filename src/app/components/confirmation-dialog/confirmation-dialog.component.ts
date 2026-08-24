@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface ConfirmationDialogData {
   title?: string;
@@ -24,6 +25,7 @@ export class ConfirmationDialogComponent {
   private _bottomSheetRef = inject(MatBottomSheetRef, { optional: true });
   private _dialogRef = inject(MatDialogRef, { optional: true });
   private _dialogData = inject<ConfirmationDialogData | null>(MAT_DIALOG_DATA, { optional: true });
+  private _hapticsService = inject(AppHapticsService);
 
   get title(): string {
     return this._dialogData?.title || 'Are you sure?';
@@ -61,6 +63,11 @@ export class ConfirmationDialogComponent {
   }
 
   onConfirm(): void {
+    if (this.confirmColor === 'warn') {
+      this._hapticsService.warning();
+    } else {
+      this._hapticsService.selection();
+    }
     this.respond(true);
   }
 

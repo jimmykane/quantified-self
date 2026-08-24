@@ -11,6 +11,7 @@ import { ActivitySyncBackfillSummary, AppUserService } from '../../../services/a
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-activity-sync-route-control',
@@ -45,6 +46,7 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
     private analyticsService: AppAnalyticsService,
     private logger: LoggerService,
     private snackBar: MatSnackBar,
+    private hapticsService: AppHapticsService,
   ) {}
 
   ngOnChanges(): void {
@@ -96,6 +98,7 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
       return;
     }
 
+    this.hapticsService.selection();
     this.isSaving = true;
     try {
       await this.userService.updateActivitySyncRouteSettings(this.user, { [this.routeId]: enabled });
@@ -107,9 +110,11 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
         undefined,
         { duration: 3500 },
       );
+      this.hapticsService.success();
     } catch (error) {
       this.logger.error(error);
       this.snackBar.open('Could not update automatic activity sync.', undefined, { duration: 5000 });
+      this.hapticsService.error();
     } finally {
       this.isSaving = false;
     }
@@ -131,6 +136,7 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
       return;
     }
 
+    this.hapticsService.selection();
     this.isBackfilling = true;
     try {
       const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
@@ -148,9 +154,15 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
       });
       const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
       this.snackBar.open(`${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'} scheduled for syncing to ${this.destinationName}.${failureSuffix}`, undefined, { duration: 4500 });
+      if (summary.failedCount > 0) {
+        this.hapticsService.warning();
+      } else {
+        this.hapticsService.success();
+      }
     } catch (error: any) {
       this.logger.error(error);
       this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.hapticsService.error();
     } finally {
       this.isBackfilling = false;
     }

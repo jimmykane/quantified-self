@@ -1693,6 +1693,12 @@ describe('TrainingWorkspaceComponent', () => {
       updateTrainingWorkspacePreferences: vi.fn().mockRejectedValue(new Error('offline')),
     };
     const snackBar = { open: vi.fn() };
+    const hapticsService = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
@@ -1706,6 +1712,8 @@ describe('TrainingWorkspaceComponent', () => {
       'en-US',
       preferenceWriter,
       snackBar as any,
+      null,
+      hapticsService as any,
     );
     (component as any).currentUserUID = 'user-1';
 
@@ -1722,6 +1730,8 @@ describe('TrainingWorkspaceComponent', () => {
       'training_destination_saved',
       expect.anything(),
     );
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
   });
 
   it('does not accept a local Firestore echo until the destination write is acknowledged', async () => {

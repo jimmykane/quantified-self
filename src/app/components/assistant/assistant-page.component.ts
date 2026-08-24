@@ -31,6 +31,7 @@ import {
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   AssistantError,
   AssistantService,
@@ -88,6 +89,7 @@ type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantR
 export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
+  private readonly hapticsService = inject(AppHapticsService);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
@@ -345,6 +347,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!text) {
       return;
     }
+    this.hapticsService.selection();
     this.errorMessage.set(null);
     this.sending.set(true);
     const activeConversation = this.conversation();
@@ -403,6 +406,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.retryRequest.set(null);
         this.pendingRequestId.set(null);
         this.clearRememberedPendingRequest(request.requestId);
+        this.hapticsService.success();
       }
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
@@ -426,6 +430,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.retryRequest.set(null);
         this.pendingRequestId.set(null);
         this.clearRememberedPendingRequest(request.requestId);
+        this.hapticsService.success();
       } else if (refreshedPendingRequestId === request.requestId) {
         if (refreshedConversation !== undefined) {
           this.conversation.set(refreshedConversation);
@@ -455,6 +460,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
             'The conversation changed in another tab. It has been refreshed; try again.',
           );
         }
+        this.hapticsService.error();
       }
       try {
         this.quota.set(await this.quotaService.loadQuotaStatus());
@@ -587,6 +593,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       if (this.hasCompletedRequest(state.conversation, requestId)) {
         this.retryRequest.set(null);
         this.errorMessage.set(null);
+        this.hapticsService.success();
         await this.finishPendingResponseRecovery(requestId);
         return;
       }
@@ -599,12 +606,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
             ? 'The Assistant could not answer this question. It is ready below to send again.'
             : 'The Assistant could not complete the previous question. Please send it again.',
         );
+        this.hapticsService.error();
         await this.finishPendingResponseRecovery(requestId);
         return;
       }
     } catch (error) {
       if (!this.isRetryablePendingStateError(error)) {
         this.errorMessage.set(this.assistantService.getErrorMessage(error));
+        this.hapticsService.error();
         await this.finishPendingResponseRecovery(requestId);
         return;
       }
@@ -617,6 +626,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.errorMessage.set(
         'The Assistant response is taking too long. Please try again.',
       );
+      this.hapticsService.error();
       await this.finishPendingResponseRecovery(requestId);
       return;
     }

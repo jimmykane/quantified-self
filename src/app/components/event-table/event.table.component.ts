@@ -56,6 +56,7 @@ import { EventTagService } from '../../services/event-tag.service';
 import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 interface EventTableRowCacheEntry {
   event: EventInterface;
@@ -126,6 +127,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
+  private hapticsService = inject(AppHapticsService);
   private eventTagService = inject(EventTagService);
   public tagFilter = '';
   public tagFilterOptions: string[] = [];
@@ -292,12 +294,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   checkBoxClick(row) {
     this.selection.toggle(row);
+    this.hapticsService.selection();
   }
 
   clearSelection(event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
+    if (this.selection.selected.length === 0) {
+      return;
+    }
     this.selection.clear();
+    this.hapticsService.selection();
   }
 
   public removeDeletedEvent(eventID: string): void {
@@ -433,11 +440,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   /** Selects all rows if they are not all selected; otherwise clear selection. */
   masterToggle() {
     const selectableRows = this.getSelectableRows();
-    if (this.isAllSelected()) {
-      selectableRows.forEach(row => this.selection.deselect(row));
+    if (selectableRows.length === 0) {
       return;
     }
-    selectableRows.forEach(row => this.selection.select(row));
+    if (this.isAllSelected()) {
+      selectableRows.forEach(row => this.selection.deselect(row));
+    } else {
+      selectableRows.forEach(row => this.selection.select(row));
+    }
+    this.hapticsService.selection();
   }
 
   private collectSourceFilePaths(event: EventInterface): string[] {
@@ -488,6 +499,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
 
+    this.hapticsService.selection();
     const dialogRef = this.dialog.open(MergeOptionsDialogComponent);
     const mergeSelection = await firstValueFrom(
       race(
@@ -533,6 +545,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.snackBar.open(this.eventMergeService.getMergeErrorMessage(error), undefined, {
         duration: 5000,
       });
+      this.hapticsService.error();
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
       dialogRef.close(null);
@@ -548,6 +561,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     dialogRef.close(true);
+    this.hapticsService.success();
 
     try {
       const navigated = await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
@@ -590,29 +604,42 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.loaded();
         return;
       }
-      this.unsubscribeFromAll();
-      const deletePromises = [];
-      const eventsToDelete = this.selection.selected.map(selected => selected.Event);
-      eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
-      this.selection.clear();
-      await Promise.all(deletePromises);
+      try {
+        this.unsubscribeFromAll();
+        const deletePromises = [];
+        const eventsToDelete = this.selection.selected.map(selected => selected.Event);
+        eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
+        this.selection.clear();
+        await Promise.all(deletePromises);
 
-      // Update local view
-      if (this.events) {
-        const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
-        this.events = this.events.filter(e => !deletedIds.has(e.getID()));
-        this.processChanges('after_delete_selection');
+        // Update local view
+        if (this.events) {
+          const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
+          this.events = this.events.filter(e => !deletedIds.has(e.getID()));
+          this.processChanges('after_delete_selection');
+        }
+
+        this.analyticsService.logEvent('delete_events');
+        this.snackBar.open('Events deleted', undefined, {
+          duration: 2000,
+        });
+        this.hapticsService.success();
+      } catch (error) {
+        this.logger.error('[EventTableComponent] Failed to delete selected events', error);
+        this.snackBar.open('Could not delete selected events', undefined, {
+          duration: 3000,
+        });
+        this.hapticsService.error();
+      } finally {
+        this.loaded();
       }
-
-      this.analyticsService.logEvent('delete_events');
-      this.snackBar.open('Events deleted', undefined, {
-        duration: 2000,
-      });
-      this.loaded();
     });
   }
 
   public downloadAsCSV(event) {
+    if (this.selection.selected.length > 0) {
+      this.hapticsService.selection();
+    }
     this.dialog.open(EventsExportFormComponent, {
       // width: '100vw',
       disableClose: false,
@@ -633,6 +660,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.processingService.removeJob(jobId);
         return;
       }
+      this.hapticsService.selection();
 
       this.processingService.updateJob(jobId, {
         title: `Generating ${selectedEvents.length} GPX ${selectedEvents.length === 1 ? 'file' : 'files'}...`,
@@ -671,6 +699,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (generatedFiles.length === 0) {
         this.snackBar.open('Could not export GPX for selected events', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No GPX files exported');
+        this.hapticsService.error();
         return;
       }
 
@@ -715,16 +744,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           undefined,
           { duration: 4000 },
         );
+        this.hapticsService.warning();
         return;
       }
 
       this.snackBar.open(selectedEvents.length === 1 ? 'GPX file served' : 'GPX files served', undefined, {
         duration: 2000,
       });
+      this.hapticsService.success();
     } catch (error) {
       this.logger.error('Error exporting GPX files:', error);
       this.processingService.failJob(jobId, 'GPX export failed');
       this.snackBar.open('Error exporting GPX files', undefined, { duration: 3000 });
+      this.hapticsService.error();
     }
   }
 
@@ -739,6 +771,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.processingService.removeJob(jobId);
         return;
       }
+      this.hapticsService.selection();
 
       // Collect all file metadata from selected events
       const filesToDownload: Array<{ path: string; startDate?: unknown; fallbackDate?: unknown; originalFilename?: string; downloadFileName?: string; extension?: string; eventId: string | null }> = [];
@@ -755,6 +788,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (filesToDownload.length === 0) {
         this.snackBar.open('No original files available for selected events', undefined, { duration: 3000 });
         this.processingService.removeJob(jobId);
+        this.hapticsService.error();
         return;
       }
 
@@ -781,6 +815,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (result.mode === 'none') {
         this.snackBar.open('Failed to download any files', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No files downloaded');
+        this.hapticsService.error();
         return;
       }
 
@@ -795,11 +830,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           undefined,
           { duration: 4000 },
         );
+        this.hapticsService.warning();
+        return;
       }
+      this.hapticsService.success();
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
       this.processingService.failJob(jobId, 'Download failed');
       this.snackBar.open('Error downloading files', undefined, { duration: 3000 });
+      this.hapticsService.error();
     }
   }
 
@@ -908,6 +947,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.showActions || !this.user || !event?.getID?.()) {
       return;
     }
+    this.hapticsService.selection();
     const originalTags = this.eventTagService.getTags(event);
 
     const dialogRef = this.dialog.open(EventTagsDialogComponent, {
@@ -956,6 +996,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.snackBar.open('Select at least one valid event to update tags.', undefined, { duration: 2500 });
       return;
     }
+    this.hapticsService.selection();
     const removeSuggestions = normalizeEventTagSuggestions(selectedEvents.flatMap(event => getEventTags(event)));
     let savedResults: Record<string, string[]> | null = null;
 

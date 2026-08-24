@@ -30,6 +30,7 @@ import { ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } fro
 import { AppDashboardSettingsInterface } from '../../models/app-user.interface';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   MapTypes,
@@ -169,6 +170,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
   private analyticsService = inject(AppAnalyticsService);
+  private hapticsService = inject(AppHapticsService);
 
 
 
@@ -535,12 +537,14 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });
+      this.hapticsService.success();
       this.analyticsService.logEvent('user_settings_update');
     } catch (e) {
       this.logger.error('[UserSettingsComponent] onSubmit FAILED. Error details:', e);
       this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
       });
+      this.hapticsService.error();
     } finally {
       this.isSaving = false;
     }
@@ -676,11 +680,13 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
         this.snackBar.open('Account deleted! You are now logged out.', undefined, {
           duration: 5000,
         });
+        this.hapticsService.success();
         localStorage.clear();
         this.windowService.windowRef.location.reload();
       } catch (e) {
         this.logger.error(e);
         this.errorDeleting = e;
+        this.hapticsService.error();
         this.isDeleting = false;
       }
     });

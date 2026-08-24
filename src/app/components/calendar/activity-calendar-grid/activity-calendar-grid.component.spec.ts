@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityCalendarGridComponent } from './activity-calendar-grid.component';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 describe('ActivityCalendarGridComponent', () => {
   it('renders activity days as buttons and emits the selected day', async () => {
@@ -18,6 +19,7 @@ describe('ActivityCalendarGridComponent', () => {
 
     expect(selected).toHaveBeenCalledOnce();
     expect(selected.mock.calls[0][0].dateKey).toBe('2026-08-03');
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
   });
 
@@ -172,7 +174,18 @@ async function renderGrid(
   startOfWeek: DaysOfTheWeek | number = DaysOfTheWeek.Monday,
 ) {
   const fixture = await import('@angular/core/testing').then(async ({ TestBed }) => {
-    await TestBed.configureTestingModule({ imports: [ActivityCalendarGridComponent] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [ActivityCalendarGridComponent],
+      providers: [{
+        provide: AppHapticsService,
+        useValue: {
+          selection: vi.fn(),
+          success: vi.fn(),
+          warning: vi.fn(),
+          error: vi.fn(),
+        },
+      }],
+    }).compileComponents();
     return TestBed.createComponent(ActivityCalendarGridComponent);
   });
   fixture.componentRef.setInput('model', buildActivityCalendarViewModel(events, {

@@ -11,6 +11,7 @@ import { AppRouteService } from '../../../services/app.route.service';
 import { AppRouteUploadService } from '../../../services/app.route-upload.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -30,6 +31,7 @@ describe('UploadRoutesComponent', () => {
   let browserCompatibilityServiceMock: any;
   let loggerMock: any;
   let snackBarMock: any;
+  let hapticsServiceMock: any;
 
   beforeEach(async () => {
     authServiceMock = {
@@ -73,6 +75,12 @@ describe('UploadRoutesComponent', () => {
       warn: vi.fn(),
     };
     snackBarMock = { open: vi.fn() };
+    hapticsServiceMock = {
+      selection: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
 
     TestBed.configureTestingModule({
       imports: [UploadRoutesComponent],
@@ -88,6 +96,7 @@ describe('UploadRoutesComponent', () => {
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: MatDialog, useValue: { open: vi.fn() } },
         { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: AppHapticsService, useValue: hapticsServiceMock },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     });
@@ -257,6 +266,8 @@ describe('UploadRoutesComponent', () => {
       duplicateUploads: 1,
       failedUploads: 0,
     });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.warning).toHaveBeenCalledOnce();
     expect(uploadCompleteSpy).not.toHaveBeenCalled();
   });
 });

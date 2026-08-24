@@ -89,8 +89,8 @@ const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
-const MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH = 36;
 const FALLBACK_MAX_AXIS_LABELS = 8;
+const MOBILE_TOOLTIP_MAX_WIDTH_PX = 340;
 const STACK_TOP_BORDER_RADIUS = [3, 3, 0, 0] as const;
 const STACK_BAR_EMPHASIS = { focus: 'none' as const };
 
@@ -247,7 +247,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: style.axisColor,
       }
       : { show: false };
-    const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+    const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE
+      && !isMobileTooltipViewport;
     const xAxisLabelInterval = showEveryDayLabel ? 0 : this.buildXAxisLabelInterval(points, chartWidth);
     const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
@@ -379,11 +380,16 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           snap: true,
         },
         renderMode: 'html',
-        // Keep the tall sleep tooltip outside the chart canvas so its rows are not
-        // clipped by compact dashboard tiles, including on touch viewports.
-        ...resolveEChartsTooltipSurfaceConfig(false),
+        // Desktop tooltips can escape compact tiles. Touch tooltips stay local
+        // so ECharts can position the click-triggered surface reliably.
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         ...buildDashboardEChartsTooltipChrome(style),
-        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(params, points, style),
+        formatter: (params: AxisTooltipParam[]) => this.formatTooltip(
+          params,
+          points,
+          style,
+          isMobileTooltipViewport,
+        ),
       },
       legend: {
         show: !style.isCompactLayout,
@@ -433,6 +439,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     params: AxisTooltipParam[],
     points: DashboardSleepTrendPoint[],
     style: ReturnType<typeof buildDashboardEChartsStyleTokens>,
+    useCompactMobileLayout = false,
   ): string {
     if (!Array.isArray(params) || params.length === 0) {
       return '';
@@ -504,6 +511,9 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       title: `${point.providerLabel}${point.isNap ? ' nap' : ''} · ${point.sleepDate}`,
       subtitle: this.formatTooltipSubtitle(point),
       rows,
+      rowColumnCount: useCompactMobileLayout ? 2 : 1,
+      maxWidthPx: useCompactMobileLayout ? MOBILE_TOOLTIP_MAX_WIDTH_PX : undefined,
+      stackHeader: useCompactMobileLayout,
     });
   }
 
@@ -732,14 +742,13 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     }
 
     const hasProviderLine = points.some(point => point.categoryLabel.includes('\n'));
-    const currentWeekIndexes = this.getCurrentWeekPointIndexes(points);
-    const minimumLabelWidth = currentWeekIndexes.size
-      ? MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH
-      : hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
+    const minimumLabelWidth = hasProviderLine
+      ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH
+      : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
     const availableWidth = Math.max(0, chartWidth - 68);
-    const maxLabels = Math.max(currentWeekIndexes.size, availableWidth > 0
+    const maxLabels = availableWidth > 0
       ? Math.max(2, Math.floor(availableWidth / minimumLabelWidth))
-      : FALLBACK_MAX_AXIS_LABELS);
+      : FALLBACK_MAX_AXIS_LABELS;
 
     if (points.length <= maxLabels) {
       return 0;
@@ -747,26 +756,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
     const lastIndex = points.length - 1;
     const visibleIndexes = new Set<number>();
-    const nonCurrentWeekIndexes = points
-      .map((_point, index) => index)
-      .filter(index => !currentWeekIndexes.has(index));
-    const remainingLabelSlots = maxLabels - currentWeekIndexes.size;
-    if (remainingLabelSlots > 0) {
-      const step = Math.max(1, Math.ceil(nonCurrentWeekIndexes.length / remainingLabelSlots));
-      for (let position = 0; position < nonCurrentWeekIndexes.length; position += step) {
-        visibleIndexes.add(nonCurrentWeekIndexes[position]);
-      }
-
-      if (!currentWeekIndexes.has(lastIndex) && !visibleIndexes.has(lastIndex)) {
-        if (visibleIndexes.size >= remainingLabelSlots) {
-          const lastVisibleIndex = Math.max(...visibleIndexes);
-          visibleIndexes.delete(lastVisibleIndex);
-        }
-        visibleIndexes.add(lastIndex);
-      }
-    }
-    for (const index of currentWeekIndexes) {
-      visibleIndexes.add(index);
+    for (let labelIndex = 0; labelIndex < maxLabels; labelIndex += 1) {
+      visibleIndexes.add(Math.round((labelIndex * lastIndex) / (maxLabels - 1)));
     }
 
     return (index: number) => visibleIndexes.has(index);
