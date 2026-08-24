@@ -5,6 +5,7 @@ import {
     ActivityTypes,
     DynamicDataLoader,
     EventImporterJSON,
+    LapTypes,
     UnitSystem,
 } from '@sports-alliance/sports-lib';
 
@@ -90,6 +91,76 @@ describe('EventJSONSanitizer', () => {
         expect(sanitizedJson.activities[0].stats[mockKnownType]).toBe(123);
         expect(sanitizedJson.activities[0].stats[mockUnknownType]).toBeUndefined();
         expect(unknownTypes).toContain(mockUnknownType);
+    });
+
+    it('should remove unknown types from single Activity lap stats before hydration', () => {
+        setupMock();
+        const json = {
+            name: 'Stored activity',
+            startDate: 0,
+            endDate: 60_000,
+            type: ActivityTypes.Running,
+            powerMeter: false,
+            trainer: false,
+            stats: {},
+            streams: [],
+            laps: [{
+                startDate: 0,
+                endDate: 60_000,
+                type: LapTypes.Manual,
+                stats: { [mockUnknownType]: 456 },
+            }],
+            creator: { name: 'test', devices: [] },
+            intensityZones: [],
+            events: [],
+        };
+
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(sanitizedJson.laps[0].stats[mockUnknownType]).toBeUndefined();
+        expect(unknownTypes).toContain(mockUnknownType);
+        expect(issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                location: 'stats',
+                path: `laps[0].stats.${mockUnknownType}`,
+                type: mockUnknownType,
+            }),
+        ]));
+
+        DynamicDataLoader.getDataClassFromDataType = originalGetDataClass;
+        DynamicDataLoader.getDataInstanceFromDataType = originalGetDataInstance;
+
+        const activity = EventImporterJSON.getActivityFromJSON(sanitizedJson);
+        expect(activity.getLaps()).toHaveLength(1);
+    });
+
+    it('should remove unknown types from embedded Activity lap stats', () => {
+        setupMock();
+        const json = {
+            activities: [{
+                laps: [{
+                    stats: {
+                        [mockKnownType]: 123,
+                        [mockUnknownType]: 456,
+                    },
+                }],
+            }],
+        };
+
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(sanitizedJson.activities[0].laps[0].stats[mockKnownType]).toBe(123);
+        expect(sanitizedJson.activities[0].laps[0].stats[mockUnknownType]).toBeUndefined();
+        expect(unknownTypes).toContain(mockUnknownType);
+        expect(issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                location: 'stats',
+                path: `activities[0].laps[0].stats.${mockUnknownType}`,
+                type: mockUnknownType,
+            }),
+        ]));
     });
 
     it('should remove unknown types from Activity streams (Array)', () => {
@@ -277,6 +348,45 @@ describe('EventJSONSanitizer', () => {
             expect.objectContaining({
                 kind: 'unknown_data_type',
                 type: metabolicCaloriesType,
+            }),
+        ]));
+    });
+
+    it('should retain Intensity lap stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here so this detects a registry regression.
+        const intensityType = 'Intensity';
+        const json = {
+            name: 'Stored activity',
+            startDate: 0,
+            endDate: 60_000,
+            type: ActivityTypes.Running,
+            powerMeter: false,
+            trainer: false,
+            stats: {},
+            streams: [],
+            laps: [{
+                startDate: 0,
+                endDate: 60_000,
+                type: LapTypes.Manual,
+                stats: { [intensityType]: 'moderate' },
+            }],
+            creator: { name: 'test', devices: [] },
+            intensityZones: [],
+            events: [],
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(intensityType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+        const activity = EventImporterJSON.getActivityFromJSON(sanitizedJson);
+
+        expect(registeredClass?.type).toBe(intensityType);
+        expect(sanitizedJson.laps[0].stats[intensityType]).toBe('moderate');
+        expect(activity.getLaps()[0].getStat(intensityType)?.getValue()).toBe('moderate');
+        expect(unknownTypes).not.toContain(intensityType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: intensityType,
             }),
         ]));
     });
