@@ -95,6 +95,16 @@ describe('EventSummaryComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('uses client-side routing for the supported activities reference', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
+            'utf8'
+        );
+
+        expect(template).toContain('routerLink="/features/supported-activities"');
+        expect(template).not.toContain('href="/features/supported-activities"');
+    });
+
     it('keeps the event detail summary out of an outer glass card surface', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
