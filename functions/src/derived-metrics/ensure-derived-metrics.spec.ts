@@ -327,4 +327,29 @@ describe('decideDerivedMetricsFreshness', () => {
             { recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION },
         )).toBe(true);
     });
+
+    it('rebuilds durability snapshots that lack exact supporting-workout start times', () => {
+        const legacyPayload = {
+            scopes: [{
+                recentSupportingEvents: [{ startDayMs: Date.UTC(2026, 7, 25) }],
+            }],
+        };
+        const currentPayload = {
+            scopes: [{
+                recentSupportingEvents: [{
+                    startDayMs: Date.UTC(2026, 7, 25),
+                    startMs: Date.UTC(2026, 7, 25, 9),
+                }],
+            }],
+        };
+
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingDurability,
+            legacyPayload,
+        )).toBe(false);
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingDurability,
+            currentPayload,
+        )).toBe(true);
+    });
 });

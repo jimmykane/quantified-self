@@ -424,14 +424,15 @@ function normalizeSupportingEvent(value: unknown): DerivedTrainingDurabilityScop
   const eventId = nonEmptyString(source?.eventId);
   const label = nullableString(source?.label);
   const startDayMs = finiteNumber(source?.startDayMs);
+  const startMs = finiteNumber(source?.startMs);
   const contextKey = nonEmptyString(source?.contextKey);
   const metrics = ['decouplingPercent', 'outputRetentionPercent', 'heartRateDriftBpm', 'paceRetentionPercent', 'swolfChange'] as const;
   const values = metrics.map(key => nullableFiniteNumber(source?.[key]));
-  if (!source || !activityId || !eventId || label === undefined || startDayMs === null || !contextKey || values.some(item => item === undefined)) {
+  if (!source || !activityId || !eventId || label === undefined || startDayMs === null || startMs === null || !contextKey || values.some(item => item === undefined)) {
     return null;
   }
   return {
-    activityId, eventId, label, startDayMs, contextKey,
+    activityId, eventId, label, startDayMs, startMs, contextKey,
     decouplingPercent: values[0] as number | null,
     outputRetentionPercent: values[1] as number | null,
     heartRateDriftBpm: values[2] as number | null,

@@ -3166,7 +3166,15 @@ function projectTrainingDurabilityForMcp(payload: unknown): unknown {
     excludesMergedEvents: source.excludesMergedEvents,
     excludesFutureEvents: source.excludesFutureEvents,
     evidenceSource: source.evidenceSource,
-    scopes,
+    scopes: scopes.map(scope => ({
+      ...scope!,
+      // The workspace uses the exact start instant to render a local date and
+      // time. MCP retains only the existing UTC day bucket for this activity-
+      // derived record.
+      recentSupportingEvents: scope!.recentSupportingEvents.map(event => Object.fromEntries(
+        Object.entries(event).filter(([key]) => key !== 'startMs'),
+      )),
+    })),
   };
 }
 

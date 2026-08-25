@@ -49,7 +49,7 @@ const durabilityMetrics = { coverage, summaries: [summary] };
 const window28 = { periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, ...durabilityMetrics };
 const window7 = { periodDays: 7, windowStartDayMs: 1, windowEndDayMs: 2, ...durabilityMetrics };
 const supportingEvent = {
-  activityId: 'activity-1', eventId: 'event-1', label: null, startDayMs: 1, contextKey: context.contextKey,
+  activityId: 'activity-1', eventId: 'event-1', label: null, startDayMs: 1, startMs: 2, contextKey: context.contextKey,
   decouplingPercent: 4, outputRetentionPercent: 96, heartRateDriftBpm: 5, paceRetentionPercent: null, swolfChange: null,
 };
 
@@ -265,5 +265,21 @@ describe('training derived metric normalizers', () => {
       dayBoundary: 'UTC', asOfDayMs: 2, currentWindowDays: 28, baselineBlockCount: 3, weeklyPointCount: 12,
       excludesMergedEvents: true, excludesFutureEvents: true, evidenceSource: 'persisted-activity-stat', scopes: [],
     })).toBeNull();
+  });
+
+  it('rejects supporting workouts without an exact start timestamp', () => {
+    const payload = durabilityPayload();
+    const legacySupportingEvent = Object.fromEntries(
+      Object.entries(payload.scopes[0].recentSupportingEvents[0])
+        .filter(([key]) => key !== 'startMs'),
+    );
+    const legacyPayload = {
+      ...payload,
+      scopes: payload.scopes.map((scope, index) => index === 0
+        ? { ...scope, recentSupportingEvents: [legacySupportingEvent] }
+        : scope),
+    };
+
+    expect(resolveTrainingDurabilityMetricPayload(legacyPayload)).toBeNull();
   });
 });

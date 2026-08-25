@@ -805,6 +805,8 @@ export interface DerivedTrainingDurabilitySupportingEvent {
   eventId: string;
   label: string | null;
   startDayMs: number;
+  /** Exact activity start for local workspace presentation. Never MCP-projected. */
+  startMs: number;
   contextKey: string;
   decouplingPercent: number | null;
   outputRetentionPercent: number | null;

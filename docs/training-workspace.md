@@ -1369,6 +1369,11 @@ and SWOLF change. Training compares:
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
 
+The workspace formats those supporting activities from their exact start instant in the viewer's local timezone; it does
+not render an imported activity name as a date. Snapshots written before the exact instant was retained are invalid for
+this metric only and automatically queue a durability rebuild. The MCP projection remains identity-safe: it exposes the
+existing UTC day bucket, never that exact activity start.
+
 The swimming-pace and durability trajectory x-axes use compact `W35` markers only on phone viewports; their visible
 key defines `W` as a Monday–Sunday UTC week. Wider viewports show the week-start date instead, while tooltips retain
 the full week number and date range. The durability summary remains a fixed twelve UTC weeks, but, when a later

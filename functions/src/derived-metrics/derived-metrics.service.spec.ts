@@ -3213,6 +3213,9 @@ describe('training explanation and durability metrics', () => {
         });
         expect(running.usual.summaries[0].medianDecouplingPercent).toBe(6);
         expect(running.recentSupportingEvents).toHaveLength(2);
+        expect(running.recentSupportingEvents).toEqual(expect.arrayContaining([
+            expect.objectContaining({ startMs: currentDates[1] }),
+        ]));
         expect(result.payload.scopes.find(item => item.scope === 'pool-swimming')?.current.summaries[0]).toMatchObject({
             context: { poolLengthMeters: 25, stroke: 'freestyle' },
             medianPaceRetentionPercent: 97.09,

@@ -2876,6 +2876,7 @@ function buildTrainingDurabilitySupportingEvents(
                 eventId: activity.eventId,
                 label: toSafeString(activity.eventData.name).trim() || null,
                 startDayMs: activity.startDayMs,
+                startMs: activity.startMs,
                 contextKey: evidence.context.contextKey,
                 decouplingPercent: evidence.decouplingPercent,
                 outputRetentionPercent: evidence.outputRetentionPercent,
@@ -2884,7 +2885,7 @@ function buildTrainingDurabilitySupportingEvents(
                 swolfChange: evidence.swolfChange,
             }];
         })
-        .sort((left, right) => right.startDayMs - left.startDayMs || left.activityId.localeCompare(right.activityId))
+        .sort((left, right) => right.startMs - left.startMs || left.activityId.localeCompare(right.activityId))
         .slice(0, 5);
 }
 
