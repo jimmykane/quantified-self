@@ -19,6 +19,24 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxDoublings: 4,
 } as const;
 
+/**
+ * Return the configured delay after a completed retry-state transition. A
+ * retry count of one is the first retry and therefore uses the minimum delay.
+ */
+export function getCloudTaskRetryBackoffSeconds(retryCount: unknown): number {
+    const completedRetries = Number.isFinite(Number(retryCount))
+        ? Math.max(0, Math.floor(Number(retryCount)))
+        : 0;
+    const backoffExponent = Math.min(
+        Math.max(0, completedRetries - 1),
+        CLOUD_TASK_RETRY_CONFIG.maxDoublings,
+    );
+    return Math.min(
+        CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds,
+        CLOUD_TASK_RETRY_CONFIG.minBackoffSeconds * (2 ** backoffExponent),
+    );
+}
+
 export const REPARSE_HEAVY_TASK_RETRY_CONFIG = {
     maxAttempts: CLOUD_TASK_RETRY_CONFIG.maxAttempts,
     minBackoffSeconds: 900,    // 15 minutes

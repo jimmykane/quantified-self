@@ -219,6 +219,8 @@ describe('processActivitySyncTask', () => {
   });
 
   it('schedules a pending COROS status poll and completes at info level', async () => {
+    const nowMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
     mockQueueGet.mockResolvedValueOnce({
       exists: true,
       id: 'queue-item-1',
@@ -232,18 +234,23 @@ describe('processActivitySyncTask', () => {
     });
     mockProcessActivitySyncQueueItem.mockImplementationOnce(async (queueItem: {
       retryCount?: number;
+      dispatchedToCloudTask?: number | null;
     }) => {
       queueItem.retryCount = 2;
+      // Use a due time below the 30-minute retry fallback so this verifies that
+      // the worker honors the durable transaction marker.
+      queueItem.dispatchedToCloudTask = nowMs + (25 * 60 * 1000);
       return 'PROVIDER_STATUS_PENDING';
     });
     mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
 
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
 
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
       'queue-item-1',
       expect.any(Number),
-      1800,
+      1500,
     );
     expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
       'user-1',
@@ -256,7 +263,7 @@ describe('processActivitySyncTask', () => {
       expect.objectContaining({
         queueItemId: 'queue-item-1',
         providerStatus: 1,
-        pollDelaySeconds: 1800,
+        pollDelaySeconds: 1500,
         retryCount: 2,
         taskEnqueued: true,
       }),

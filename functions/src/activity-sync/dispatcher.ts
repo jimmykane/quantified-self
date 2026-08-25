@@ -152,6 +152,9 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
             const isUndispatched = dispatchedToCloudTask === null;
             const isProviderOperationClaim = dispatchedToCloudTask === PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER;
             const providerOperationStartedAt = toDispatchTimestamp(data.providerOperationStartedAt);
+            // An acknowledged asynchronous provider poll stores its planned
+            // dispatch time in this marker. A future timestamp therefore
+            // remains recent until the delayed task is genuinely overdue.
             const dispatchAgeTimestamp = isProviderOperationClaim
                 ? providerOperationStartedAt
                 : dispatchedToCloudTask;

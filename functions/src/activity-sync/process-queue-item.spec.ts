@@ -13,6 +13,7 @@ interface MockActivitySyncRetryParams {
   incrementBy?: number;
   bulkWriter?: unknown;
   maxRetryDlqContext?: string;
+  retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null;
 }
 
 interface MockActivitySyncDlqParams {
@@ -179,7 +180,14 @@ vi.mock('../queue-utils', () => ({
     }
     const result = await mockIncreaseRetryCountForQueueItem(...args);
     if (result === 'RETRY_INCREMENTED') {
+      const currentRetryCount = Number(params.queueItem.retryCount);
+      const nextRetryCount = (Number.isFinite(currentRetryCount)
+        ? Math.max(0, Math.floor(currentRetryCount))
+        : 0) + (params.incrementBy || 1);
       params.queueItem.dispatchedToCloudTask = null;
+      if (params.retryDispatchMarkerAtMs) {
+        params.queueItem.dispatchedToCloudTask = params.retryDispatchMarkerAtMs(nextRetryCount);
+      }
       params.queueItem.providerOperationStartedAt = null;
     }
     return result;
@@ -950,6 +958,8 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('persists COROS async identifiers and resumes status without uploading the FIT file again', async () => {
+    const pollSchedulingStartedAtMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(pollSchedulingStartedAtMs);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
@@ -958,6 +968,8 @@ describe('activity-sync/process-queue-item', () => {
     };
 
     const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    dateNowSpy.mockRestore();
 
     expect(firstResult).toBe(QueueResult.ProviderStatusPending);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
@@ -978,6 +990,13 @@ describe('activity-sync/process-queue-item', () => {
       1,
       undefined,
       'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    );
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0] as MockActivitySyncRetryParams | undefined;
+    expect(retryParams?.retryDispatchMarkerAtMs?.(1)).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(queueItem.dispatchedToCloudTask).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
     );
     expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalledWith(

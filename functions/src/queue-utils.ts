@@ -356,6 +356,12 @@ export interface IncreaseRetryCountIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /**
+     * An acknowledged delayed retry can retain its planned dispatch time as
+     * the queue marker. This prevents the reconciliation scheduler from
+     * starting a duplicate before that delayed task is overdue.
+     */
+    retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null;
 }
 
 export interface DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams {
@@ -622,6 +628,7 @@ export async function increaseRetryCountIfCurrentUserActive(
     const failedDocRef = db.collection('failed_jobs').doc(params.queueItem.id);
     let nextRetryCount = 0;
     let nextTotalRetryCount = 0;
+    let nextDispatchMarker: number | null = null;
     let movedToDlq = false;
     let nextErrors: QueueItemInterface['errors'] = [];
 
@@ -639,6 +646,11 @@ export async function increaseRetryCountIfCurrentUserActive(
                 : 0;
             nextRetryCount = currentRetryCount + incrementBy;
             nextTotalRetryCount = currentTotalRetryCount + incrementBy;
+            const requestedDispatchMarker = params.retryDispatchMarkerAtMs?.(nextRetryCount);
+            nextDispatchMarker = Number.isFinite(requestedDispatchMarker)
+                && Number(requestedDispatchMarker) > 0
+                ? Math.floor(Number(requestedDispatchMarker))
+                : null;
             const currentErrors = Array.isArray(currentQueueItem.errors)
                 ? currentQueueItem.errors as NonNullable<QueueItemInterface['errors']>
                 : [];
@@ -678,6 +690,8 @@ export async function increaseRetryCountIfCurrentUserActive(
                             params.maxRetryDlqContext,
                             params.manualReconciliation.additionalData,
                         ),
+                        dispatchedToCloudTask: null,
+                        providerOperationStartedAt: null,
                     });
                 } else {
                     transaction.delete(params.queueItem.ref!);
@@ -689,7 +703,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 retryCount: nextRetryCount,
                 totalRetryCount: nextTotalRetryCount,
                 errors: nextErrors,
-                dispatchedToCloudTask: null,
+                dispatchedToCloudTask: nextDispatchMarker,
                 providerOperationStartedAt: null,
                 ...clearRevisionProcessingLeaseUpdate(),
             });
@@ -720,7 +734,7 @@ export async function increaseRetryCountIfCurrentUserActive(
             return QueueResult.MovedToDLQ;
         }
 
-        params.queueItem.dispatchedToCloudTask = null;
+        params.queueItem.dispatchedToCloudTask = nextDispatchMarker;
         params.queueItem.providerOperationStartedAt = null;
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;

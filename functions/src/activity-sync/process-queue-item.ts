@@ -71,6 +71,7 @@ import {
     DisabledSyncRouteTransitionResult,
     finalizeDisabledSyncRouteIfCurrent,
 } from '../queue/sync-route-eligibility';
+import { getCloudTaskRetryBackoffSeconds } from '../shared/queue-config';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -737,6 +738,7 @@ function increaseActivitySyncRetryCountIfCurrent(
     error: Error,
     bulkWriter: admin.firestore.BulkWriter | undefined,
     maxRetryDlqContext?: string,
+    retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
     return increaseRetryCountIfCurrentUserActive({
         queueItem,
@@ -749,6 +751,7 @@ function increaseActivitySyncRetryCountIfCurrent(
         logPrefix: 'ActivitySync',
         isCurrent: currentQueueItem => isSameActivitySyncProviderState(currentQueueItem, queueItem),
         manualReconciliation: getActivitySyncManualReconciliationState(queueItem, maxRetryDlqContext),
+        retryDispatchMarkerAtMs,
     });
 }
 
@@ -1877,11 +1880,14 @@ export async function processActivitySyncQueueItem(
                 }
 
                 if (isExpectedCOROSActivityUploadPending(actionableError)) {
+                    const pollSchedulingStartedAtMs = Date.now();
                     const pollResult = await increaseActivitySyncRetryCountIfCurrent(
                         queueItem,
                         normalizedError,
                         bulkWriter,
                         actionableError.dlqContext,
+                        nextRetryCount => pollSchedulingStartedAtMs
+                            + (getCloudTaskRetryBackoffSeconds(nextRetryCount) * 1000),
                     );
                     if (pollResult === QueueResult.MovedToDLQ) {
                         await safelyWriteMetadata(() => setActivitySyncFailedMetadata({

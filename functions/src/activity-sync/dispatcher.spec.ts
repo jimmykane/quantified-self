@@ -15,7 +15,6 @@ const {
   mockQueueLimit,
   mockQueueCollection,
   mockFirestore,
-  mockRunTransaction,
   mockRecursiveDelete,
   mockGetUserDeletionGuardState,
   mockGetUserDeletionGuardStateInTransaction,
@@ -68,7 +67,6 @@ const {
     mockQueueLimit,
     mockQueueCollection,
     mockFirestore,
-    mockRunTransaction,
     mockRecursiveDelete,
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
@@ -156,7 +154,7 @@ describe('activity-sync/dispatcher', () => {
       deletionInProgress: false,
       shouldSkip: false,
     });
-    const queryChain: any = {
+    const queryChain = {
       where: mockQueueWhere,
       orderBy: mockQueueOrderBy,
       startAfter: mockQueueStartAfter,
@@ -274,6 +272,29 @@ describe('activity-sync/dispatcher', () => {
         data: () => ({
           dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
           providerOperationStartedAt: nowMs - (10 * 60 * 1000),
+          dateCreated: 100,
+          userID: 'user-1',
+        }),
+        ref: { update },
+      }],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 0, skippedRecent: 1 });
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass the configured delay for a scheduled provider status poll', async () => {
+    const nowMs = 1_700_000_000_000;
+    const update = vi.fn().mockResolvedValue(undefined);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'pending-provider-status-poll',
+        data: () => ({
+          dispatchedToCloudTask: nowMs + (4 * 60 * 60 * 1000),
           dateCreated: 100,
           userID: 'user-1',
         }),

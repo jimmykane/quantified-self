@@ -1,7 +1,10 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import {
+    CLOUD_TASK_RETRY_CONFIG,
+    getCloudTaskRetryBackoffSeconds,
+} from '../shared/queue-config';
 import { enqueueActivitySyncTask } from '../shared/cloud-tasks';
 import { QueueResult } from '../queue-utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
@@ -17,20 +20,22 @@ interface ActivitySyncTaskPayload {
 
 const MAX_RETRY_REASON_LENGTH = 300;
 
-function getProviderStatusPollDelaySeconds(retryCount: unknown): number {
-    // Pending polls consume the queue retry budget, so mirror the configured
-    // Cloud Tasks backoff before scheduling the next explicit status check.
-    const completedPolls = Number.isFinite(Number(retryCount))
-        ? Math.max(0, Math.floor(Number(retryCount)))
-        : 0;
-    const backoffExponent = Math.min(
-        Math.max(0, completedPolls - 1),
-        CLOUD_TASK_RETRY_CONFIG.maxDoublings,
-    );
-    return Math.min(
-        CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds,
-        CLOUD_TASK_RETRY_CONFIG.minBackoffSeconds * (2 ** backoffExponent),
-    );
+function getProviderStatusPollDelaySeconds(queueItem: ActivitySyncQueueItemInterface): number {
+    const fallbackDelaySeconds = getCloudTaskRetryBackoffSeconds(queueItem.retryCount);
+    // The retry transition records the planned poll time in the dispatch marker
+    // before this worker acknowledges. Use that durable due time so a delayed
+    // task does not drift from the cadence protected by the dispatcher.
+    const scheduledAtMs = Number(queueItem.dispatchedToCloudTask);
+    const nowMs = Date.now();
+    const remainingDelayMs = scheduledAtMs - nowMs;
+    if (
+        Number.isFinite(scheduledAtMs)
+        && remainingDelayMs > 0
+        && remainingDelayMs <= (CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1000)
+    ) {
+        return Math.max(1, Math.ceil(remainingDelayMs / 1000));
+    }
+    return fallbackDelaySeconds;
 }
 
 function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string | undefined {
@@ -114,7 +119,7 @@ export const processActivitySyncTask = onTaskDispatched({
                     logger.info(`[ActivitySyncTaskWorker] Skipping pending COROS status poll for item ${queueItemId} because the account is deleted or deleting.`);
                     break;
                 }
-                const pollDelaySeconds = getProviderStatusPollDelaySeconds(processingQueueItem.retryCount);
+                const pollDelaySeconds = getProviderStatusPollDelaySeconds(processingQueueItem);
                 const taskEnqueued = await enqueueActivitySyncTask(
                     queueItemId,
                     Date.now(),
