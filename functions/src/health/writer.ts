@@ -1,13 +1,13 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
-    HEALTH_MAX_RECORD_DOCUMENT_BYTES,
-    HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD,
+    HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD,
     HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES,
     HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
+    HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES,
     HEALTH_MAX_WRITE_BYTES,
     HEALTH_PROVIDERS,
-    HEALTH_RECORDS_COLLECTION_ID,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HEALTH_SAMPLE_CHUNKS_COLLECTION_ID,
     HEALTH_SCHEMA_VERSION,
     HEALTH_SYNC_STATE_COLLECTION_ID,
@@ -38,22 +38,22 @@ export interface HealthWriterDependencies {
     generateId?: HealthIdGenerator;
 }
 
-export type HealthRecordWriteStatus = 'written' | 'unchanged' | 'stale' | 'skipped_deleted_user';
+export type HealthSourceRecordWriteStatus = 'written' | 'unchanged' | 'stale' | 'skipped_deleted_user';
 
-export interface HealthRecordWriteResult {
-    id: string;
-    status: HealthRecordWriteStatus;
-    record: HealthSourceRecord | null;
+export interface HealthSourceRecordWriteResult {
+    sourceRecordId: string;
+    status: HealthSourceRecordWriteStatus;
+    sourceRecord: HealthSourceRecord | null;
     chunksWritten: number;
     chunksDeleted: number;
 }
 
-export class HealthRevisionConflictError extends Error {
-    public readonly name = 'HealthRevisionConflictError';
-    public readonly code = 'health_revision_conflict';
+export class HealthSourceRecordRevisionConflictError extends Error {
+    public readonly name = 'HealthSourceRecordRevisionConflictError';
+    public readonly code = 'health_source_record_revision_conflict';
 
-    constructor(public readonly recordId: string) {
-        super(`Health record ${recordId} has conflicting content for the same provider revision order.`);
+    constructor(public readonly sourceRecordId: string) {
+        super(`Health source record ${sourceRecordId} has conflicting content for the same provider revision order.`);
     }
 }
 
@@ -65,8 +65,8 @@ export class HealthWriteSizeError extends HealthWriteValidationError {
     }
 }
 
-export interface BuiltHealthWrite {
-    record: HealthSourceRecord;
+export interface BuiltHealthSourceRecordWrite {
+    sourceRecord: HealthSourceRecord;
     chunks: HealthSampleChunk[];
 }
 
@@ -141,19 +141,22 @@ function documentBytes(value: unknown): number {
     return Buffer.byteLength(serialized, 'utf8');
 }
 
-export function assertHealthWriteSize(record: HealthSourceRecord, chunks: readonly HealthSampleChunk[]): void {
-    const recordBytes = documentBytes(record);
-    if (recordBytes > HEALTH_MAX_RECORD_DOCUMENT_BYTES) {
-        throw new HealthWriteSizeError(`Health source record ${record.id} exceeds the bounded document size.`);
+export function assertHealthSourceRecordWriteSize(
+    sourceRecord: HealthSourceRecord,
+    chunks: readonly HealthSampleChunk[],
+): void {
+    const sourceRecordBytes = documentBytes(sourceRecord);
+    if (sourceRecordBytes > HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES) {
+        throw new HealthWriteSizeError(`Health source record ${sourceRecord.id} exceeds the bounded document size.`);
     }
     const chunkSizes = chunks.map(chunk => ({ chunk, bytes: documentBytes(chunk) }));
     const oversizedChunk = chunkSizes.find(item => item.bytes > HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES);
     if (oversizedChunk) {
         throw new HealthWriteSizeError(`Health sample chunk ${oversizedChunk.chunk.id} exceeds the bounded document size.`);
     }
-    const totalBytes = recordBytes + chunkSizes.reduce((total, item) => total + item.bytes, 0);
+    const totalBytes = sourceRecordBytes + chunkSizes.reduce((total, item) => total + item.bytes, 0);
     if (totalBytes > HEALTH_MAX_WRITE_BYTES) {
-        throw new HealthWriteSizeError('Health record replacement exceeds the bounded transaction payload size.');
+        throw new HealthWriteSizeError('Health source-record replacement exceeds the bounded transaction payload size.');
     }
 }
 
@@ -174,12 +177,12 @@ function digestPayload(input: HealthSourceRecordInput): unknown {
     });
 }
 
-export async function buildHealthWrite(
+export async function buildHealthSourceRecordWrite(
     userID: string,
     value: unknown,
     nowMs = Date.now(),
     generateId: HealthIdGenerator = generateIDFromParts,
-): Promise<BuiltHealthWrite> {
+): Promise<BuiltHealthSourceRecordWrite> {
     validateWriteContext(userID, nowMs);
     const input = canonicalizeInput(validateHealthSourceRecordInput(value));
     const accountKey = await generateOpaqueId(generateId, [
@@ -189,7 +192,7 @@ export async function buildHealthWrite(
         input.providerAccountId,
     ]);
     const id = await generateOpaqueId(generateId, [
-        'health-record-v1',
+        'health-source-record-v1',
         userID,
         input.provider,
         input.providerAccountId,
@@ -197,7 +200,7 @@ export async function buildHealthWrite(
         input.sourceRecordKey,
     ]);
     const digest = await generateOpaqueId(generateId, [
-        'health-record-content-v1',
+        'health-source-record-content-v1',
         JSON.stringify(digestPayload(input)),
     ]);
     const revision = {
@@ -224,7 +227,7 @@ export async function buildHealthWrite(
                 schemaVersion: HEALTH_SCHEMA_VERSION,
                 id: chunkId,
                 userID,
-                parentRecordId: id,
+                parentSourceRecordId: id,
                 provider: input.provider,
                 accountKey,
                 metricId: series.metricId,
@@ -266,7 +269,7 @@ export async function buildHealthWrite(
         ...input.metrics.map(metric => metric.metricId),
         ...input.sampleSeries.map(series => series.metricId),
     ])].sort();
-    const record: HealthSourceRecord = {
+    const sourceRecord: HealthSourceRecord = {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id,
         userID,
@@ -291,8 +294,8 @@ export async function buildHealthWrite(
         createdAtMs: nowMs,
         updatedAtMs: nowMs,
     };
-    const result = cleanUndefined({ record, chunks });
-    assertHealthWriteSize(result.record, result.chunks);
+    const result = cleanUndefined({ sourceRecord, chunks });
+    assertHealthSourceRecordWriteSize(result.sourceRecord, result.chunks);
     return result;
 }
 
@@ -309,10 +312,19 @@ export async function replaceHealthSourceRecord(
     value: unknown,
     nowMs = Date.now(),
     dependencies: HealthWriterDependencies = {},
-): Promise<HealthRecordWriteResult> {
+): Promise<HealthSourceRecordWriteResult> {
     const db = dependencies.db || admin.firestore();
-    const built = await buildHealthWrite(userID, value, nowMs, dependencies.generateId || generateIDFromParts);
-    const recordRef = userHealthCollection(db, userID, HEALTH_RECORDS_COLLECTION_ID).doc(built.record.id);
+    const built = await buildHealthSourceRecordWrite(
+        userID,
+        value,
+        nowMs,
+        dependencies.generateId || generateIDFromParts,
+    );
+    const sourceRecordRef = userHealthCollection(
+        db,
+        userID,
+        HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+    ).doc(built.sourceRecord.id);
     const chunkCollection = userHealthCollection(db, userID, HEALTH_SAMPLE_CHUNKS_COLLECTION_ID);
 
     const result = await db.runTransaction(async transaction => {
@@ -320,52 +332,56 @@ export async function replaceHealthSourceRecord(
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
         } catch (error) {
-            throw new UserDeletionGuardReadError(userID, 'health_record_write', error);
+            throw new UserDeletionGuardReadError(userID, 'health_source_record_write', error);
         }
         if (deletionGuard.shouldSkip) {
             return {
-                id: built.record.id,
+                sourceRecordId: built.sourceRecord.id,
                 status: 'skipped_deleted_user' as const,
-                record: null,
+                sourceRecord: null,
                 chunksWritten: 0,
                 chunksDeleted: 0,
             };
         }
 
-        const snapshot = await transaction.get(recordRef);
-        const existing = snapshot.exists ? snapshot.data() as HealthSourceRecord : null;
-        if (existing && existing.source.revision.order > built.record.source.revision.order) {
+        const snapshot = await transaction.get(sourceRecordRef);
+        const existingSourceRecord = snapshot.exists ? snapshot.data() as HealthSourceRecord : null;
+        if (existingSourceRecord
+            && existingSourceRecord.source.revision.order > built.sourceRecord.source.revision.order) {
             return {
-                id: existing.id,
+                sourceRecordId: existingSourceRecord.id,
                 status: 'stale' as const,
-                record: existing,
+                sourceRecord: existingSourceRecord,
                 chunksWritten: 0,
                 chunksDeleted: 0,
             };
         }
-        if (existing && existing.source.revision.order === built.record.source.revision.order) {
-            const unchanged = existing.source.revision.token === built.record.source.revision.token
-                && existing.source.revision.digest === built.record.source.revision.digest;
+        if (existingSourceRecord
+            && existingSourceRecord.source.revision.order === built.sourceRecord.source.revision.order) {
+            const unchanged = existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
+                && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
             if (!unchanged) {
-                throw new HealthRevisionConflictError(built.record.id);
+                throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
             }
             return {
-                id: existing.id,
+                sourceRecordId: existingSourceRecord.id,
                 status: 'unchanged' as const,
-                record: existing,
+                sourceRecord: existingSourceRecord,
                 chunksWritten: 0,
                 chunksDeleted: 0,
             };
         }
 
-        const existingChunkIds = existing?.sampleChunkIds || [];
+        const existingChunkIds = existingSourceRecord?.sampleChunkIds || [];
         if (!Array.isArray(existingChunkIds)
-            || existingChunkIds.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD
+            || existingChunkIds.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD
             || new Set(existingChunkIds).size !== existingChunkIds.length
             || existingChunkIds.some(chunkId => typeof chunkId !== 'string' || !OPAQUE_ID_PATTERN.test(chunkId))) {
-            throw new HealthWriteValidationError('Stored health record violates the bounded sample-chunk invariant.');
+            throw new HealthWriteValidationError(
+                'Stored health source record violates the bounded sample-chunk invariant.',
+            );
         }
-        const incomingChunkIds = new Set(built.record.sampleChunkIds);
+        const incomingChunkIds = new Set(built.sourceRecord.sampleChunkIds);
         const staleChunkIds = existingChunkIds.filter(chunkId => !incomingChunkIds.has(chunkId));
         for (const chunkId of staleChunkIds) {
             // Health sample chunks are permanent leaf documents by schema; descendants are forbidden by Rules.
@@ -374,23 +390,23 @@ export async function replaceHealthSourceRecord(
         for (const chunk of built.chunks) {
             transaction.set(chunkCollection.doc(chunk.id), chunk);
         }
-        const record = {
-            ...built.record,
-            createdAtMs: existing?.createdAtMs ?? built.record.createdAtMs,
+        const sourceRecord = {
+            ...built.sourceRecord,
+            createdAtMs: existingSourceRecord?.createdAtMs ?? built.sourceRecord.createdAtMs,
         };
-        transaction.set(recordRef, record);
+        transaction.set(sourceRecordRef, sourceRecord);
         return {
-            id: record.id,
+            sourceRecordId: sourceRecord.id,
             status: 'written' as const,
-            record,
+            sourceRecord,
             chunksWritten: built.chunks.length,
             chunksDeleted: staleChunkIds.length,
         };
     });
 
-    logger.info('[HealthSync] Health record write completed.', {
-        provider: built.record.source.provider,
-        recordId: built.record.id,
+    logger.info('[HealthSync] Health source-record write completed.', {
+        provider: built.sourceRecord.source.provider,
+        sourceRecordId: built.sourceRecord.id,
         status: result.status,
         chunksWritten: result.chunksWritten,
         chunksDeleted: result.chunksDeleted,

@@ -559,7 +559,7 @@ describe('firestore indexes', () => {
 
         expect(config.indexes).toEqual(expect.arrayContaining([
             {
-                collectionGroup: 'healthRecords',
+                collectionGroup: 'healthSourceRecords',
                 queryScope: 'COLLECTION',
                 fields: [
                     { fieldPath: 'source.provider', order: 'ASCENDING' },
@@ -569,7 +569,7 @@ describe('firestore indexes', () => {
                 density: 'SPARSE_ALL',
             },
             {
-                collectionGroup: 'healthRecords',
+                collectionGroup: 'healthSourceRecords',
                 queryScope: 'COLLECTION',
                 fields: [
                     { fieldPath: 'metricIds', arrayConfig: 'CONTAINS' },
@@ -601,13 +601,13 @@ describe('firestore indexes', () => {
         ]));
         expect(config.fieldOverrides).toEqual(expect.arrayContaining([
             {
-                collectionGroup: 'healthRecords',
+                collectionGroup: 'healthSourceRecords',
                 fieldPath: '*',
                 ttl: false,
                 indexes: [],
             },
             {
-                collectionGroup: 'healthRecords',
+                collectionGroup: 'healthSourceRecords',
                 fieldPath: 'calendarDate',
                 ttl: false,
                 indexes: [
@@ -638,7 +638,7 @@ describe('firestore indexes', () => {
             },
         ]));
         expect(config.fieldOverrides.some(override => (
-            (override.collectionGroup === 'healthRecords'
+            (override.collectionGroup === 'healthSourceRecords'
                 || override.collectionGroup === 'healthSampleChunks'
                 || override.collectionGroup === 'healthSyncState')
             && override.ttl === true

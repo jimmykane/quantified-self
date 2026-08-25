@@ -1,10 +1,10 @@
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_DEFAULT_CHUNK_PAGE_SIZE,
-  HEALTH_DEFAULT_RECORD_PAGE_SIZE,
+  HEALTH_DEFAULT_SOURCE_RECORD_PAGE_SIZE,
   HEALTH_DEFAULT_SAMPLE_POINT_LIMIT,
   HEALTH_MAX_CHUNK_PAGE_SIZE,
-  HEALTH_MAX_RECORD_PAGE_SIZE,
+  HEALTH_MAX_SOURCE_RECORD_PAGE_SIZE,
   HEALTH_MAX_SAMPLE_POINT_LIMIT,
   HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
   HEALTH_MAX_SAMPLE_RANGE_DAYS,
@@ -140,7 +140,12 @@ export function normalizeHealthRangeQuery(value: HealthRangeQuery | unknown): No
     providers: normalizeProviders(query.providers),
     metricIds: normalizeMetricIds(query.metricIds),
     includeSamples,
-    recordLimit: normalizeLimit(query.recordLimit, HEALTH_DEFAULT_RECORD_PAGE_SIZE, HEALTH_MAX_RECORD_PAGE_SIZE, 'recordLimit'),
+    sourceRecordLimit: normalizeLimit(
+      query.sourceRecordLimit,
+      HEALTH_DEFAULT_SOURCE_RECORD_PAGE_SIZE,
+      HEALTH_MAX_SOURCE_RECORD_PAGE_SIZE,
+      'sourceRecordLimit',
+    ),
     chunkLimit: normalizeLimit(query.chunkLimit, HEALTH_DEFAULT_CHUNK_PAGE_SIZE, HEALTH_MAX_CHUNK_PAGE_SIZE, 'chunkLimit'),
     samplePointLimit: normalizeLimit(
       query.samplePointLimit,
@@ -149,7 +154,7 @@ export function normalizeHealthRangeQuery(value: HealthRangeQuery | unknown): No
       'samplePointLimit',
       HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
     ),
-    recordCursor: normalizeCursor(query.recordCursor, 'recordCursor'),
+    sourceRecordCursor: normalizeCursor(query.sourceRecordCursor, 'sourceRecordCursor'),
     chunkCursor: normalizeCursor(query.chunkCursor, 'chunkCursor'),
   };
 }
@@ -182,9 +187,9 @@ function metricMatches(metricId: HealthMetricId, metricIds: readonly HealthMetri
 
 function chunkMatchesKnownParentRevision(
   chunk: HealthSampleChunk,
-  recordsById: ReadonlyMap<string, HealthSourceRecord>,
+  sourceRecordsById: ReadonlyMap<string, HealthSourceRecord>,
 ): boolean {
-  const parent = recordsById.get(chunk.parentRecordId);
+  const parent = sourceRecordsById.get(chunk.parentSourceRecordId);
   if (!parent) {
     return true;
   }
@@ -468,22 +473,22 @@ function requestedDayCount(query: NormalizedHealthRangeQuery): number {
 }
 
 export function projectHealthRange(
-  records: readonly HealthSourceRecord[],
+  sourceRecords: readonly HealthSourceRecord[],
   chunks: readonly HealthSampleChunk[],
   queryValue: HealthRangeQuery | NormalizedHealthRangeQuery,
   nowMs = Date.now(),
 ): HealthRangeResult {
   const query = normalizeHealthRangeQuery(queryValue);
-  const matchingRecords = records
-    .filter(record => record.calendarDate >= query.startDate && record.calendarDate <= query.endDate)
-    .filter(record => providerMatches(record.source.provider, query.providers))
-    .filter(record => query.providers.length > 0
+  const matchingSourceRecords = sourceRecords
+    .filter(sourceRecord => sourceRecord.calendarDate >= query.startDate && sourceRecord.calendarDate <= query.endDate)
+    .filter(sourceRecord => providerMatches(sourceRecord.source.provider, query.providers))
+    .filter(sourceRecord => query.providers.length > 0
       || query.metricIds.length === 0
-      || record.metricIds.some(metricId => metricMatches(metricId, query.metricIds)))
-    .filter(record => isAfterCursor(record, query.recordCursor))
+      || sourceRecord.metricIds.some(metricId => metricMatches(metricId, query.metricIds)))
+    .filter(sourceRecord => isAfterCursor(sourceRecord, query.sourceRecordCursor))
     .sort(compareDateAndId);
-  const recordsTruncated = matchingRecords.length > query.recordLimit;
-  const selectedRecords = matchingRecords.slice(0, query.recordLimit);
+  const sourceRecordsTruncated = matchingSourceRecords.length > query.sourceRecordLimit;
+  const selectedSourceRecords = matchingSourceRecords.slice(0, query.sourceRecordLimit);
 
   const primaryMatchingChunks = query.includeSamples
     ? chunks
@@ -495,7 +500,7 @@ export function projectHealthRange(
     : [];
   const chunkPageTruncated = primaryMatchingChunks.length > query.chunkLimit;
   const selectedChunkPage = primaryMatchingChunks.slice(0, query.chunkLimit);
-  const recordsById = new Map(records.map(record => [record.id, record]));
+  const sourceRecordsById = new Map(sourceRecords.map(sourceRecord => [sourceRecord.id, sourceRecord]));
   const selectedChunks: HealthSampleChunk[] = [];
   let returnedSamplePoints = 0;
   let pointLimitTruncated = false;
@@ -506,7 +511,7 @@ export function projectHealthRange(
       lastConsumedChunk = chunk;
       continue;
     }
-    if (!chunkMatchesKnownParentRevision(chunk, recordsById)) {
+    if (!chunkMatchesKnownParentRevision(chunk, sourceRecordsById)) {
       sampleRevisionMismatchCount += 1;
       lastConsumedChunk = chunk;
       continue;
@@ -526,63 +531,63 @@ export function projectHealthRange(
   const coverage = new Map<string, CoverageAccumulator>();
   const freshness = new Map<string, FreshnessAccumulator>();
 
-  for (const record of selectedRecords) {
-    record.metrics.forEach((entry, index) => {
+  for (const sourceRecord of selectedSourceRecords) {
+    sourceRecord.metrics.forEach((entry, index) => {
       if (!metricMatches(entry.metricId, query.metricIds)) {
         return;
       }
-      const entryCoverage = entry.coverage || record.coverage;
+      const entryCoverage = entry.coverage || sourceRecord.coverage;
       const observation: HealthObservation = {
-        id: `${record.id}:${index}`,
-        recordId: record.id,
-        provider: record.source.provider,
-        accountKey: record.source.accountKey,
-        calendarDate: record.calendarDate,
-        startTimeMs: record.startTimeMs,
-        endTimeMs: record.endTimeMs,
-        timezoneOffsetSeconds: record.timezoneOffsetSeconds,
-        sourceRecordType: record.source.sourceRecordType,
-        sourceRecordKey: record.source.sourceRecordKey,
-        receivedAtMs: record.source.receivedAtMs,
+        id: `${sourceRecord.id}:${index}`,
+        sourceRecordId: sourceRecord.id,
+        provider: sourceRecord.source.provider,
+        accountKey: sourceRecord.source.accountKey,
+        calendarDate: sourceRecord.calendarDate,
+        startTimeMs: sourceRecord.startTimeMs,
+        endTimeMs: sourceRecord.endTimeMs,
+        timezoneOffsetSeconds: sourceRecord.timezoneOffsetSeconds,
+        sourceRecordType: sourceRecord.source.sourceRecordType,
+        sourceRecordKey: sourceRecord.source.sourceRecordKey,
+        receivedAtMs: sourceRecord.source.receivedAtMs,
         coverage: entryCoverage,
-        device: entry.device === undefined ? record.device ?? null : entry.device,
+        device: entry.device === undefined ? sourceRecord.device ?? null : entry.device,
         entry,
       };
       observations.push(observation);
       addDiscoveryEntry(discovery, {
         metricId: entry.metricId,
-        provider: record.source.provider,
+        provider: sourceRecord.source.provider,
         valueType: entry.valueType,
         canonicalUnit: entryCanonicalUnit(entry),
         aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
         origin: entry.origin,
         recordingMethod: entry.recordingMethod,
-        calendarDate: record.calendarDate,
+        calendarDate: sourceRecord.calendarDate,
         hasSamples: false,
       });
       addCoverage(coverage, {
         metricId: entry.metricId,
-        provider: record.source.provider,
-        accountKey: record.source.accountKey,
+        provider: sourceRecord.source.provider,
+        accountKey: sourceRecord.source.accountKey,
         aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
         origin: entry.origin,
         recordingMethod: entry.recordingMethod,
-        calendarDate: record.calendarDate,
+        calendarDate: sourceRecord.calendarDate,
         status: entryCoverage.status,
       });
       const expectedUpdateIntervalMs = entryCoverage.expectedUpdateIntervalMs;
       addFreshness(freshness, {
         metricId: entry.metricId,
-        provider: record.source.provider,
-        accountKey: record.source.accountKey,
+        provider: sourceRecord.source.provider,
+        accountKey: sourceRecord.source.accountKey,
         aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
         origin: entry.origin,
         recordingMethod: entry.recordingMethod,
-        lastObservedAtMs: record.endTimeMs,
-        lastReceivedAtMs: record.source.receivedAtMs,
+        lastObservedAtMs: sourceRecord.endTimeMs,
+        lastReceivedAtMs: sourceRecord.source.receivedAtMs,
         staleAfterMs: typeof expectedUpdateIntervalMs === 'number' && expectedUpdateIntervalMs > 0
           ? expectedUpdateIntervalMs
           : null,
@@ -710,13 +715,13 @@ export function projectHealthRange(
     freshness: freshnessResult,
     conflicts: findHealthConflicts(observations),
     pageInfo: {
-      recordsTruncated,
+      sourceRecordsTruncated,
       samplesTruncated,
       sampleRevisionMismatchCount,
-      recordAggregateComplete: query.recordCursor === null && !recordsTruncated,
+      sourceRecordAggregateComplete: query.sourceRecordCursor === null && !sourceRecordsTruncated,
       sampleAggregateComplete: !query.includeSamples
         || (query.chunkCursor === null && !samplesTruncated && sampleRevisionMismatchCount === 0),
-      recordCursor: recordsTruncated ? cursorForLast(selectedRecords) : null,
+      sourceRecordCursor: sourceRecordsTruncated ? cursorForLast(selectedSourceRecords) : null,
       chunkCursor: samplesTruncated && lastConsumedChunk ? cursorForLast([lastConsumedChunk]) : null,
       returnedSamplePoints,
     },

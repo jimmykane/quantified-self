@@ -6,7 +6,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
     HEALTH_VALUE_TYPES,
@@ -21,7 +21,7 @@ function validInput(): Record<string, unknown> {
         sourceRecordKey: '2026-01-01',
         revision: { order: 1, token: 'revision-1' },
         receivedAtMs: Date.parse('2026-01-02T00:00:00.000Z'),
-        kind: HEALTH_RECORD_KINDS.DailySummary,
+        kind: HEALTH_SOURCE_RECORD_KINDS.DailySummary,
         calendarDate: '2026-01-01',
         startTimeMs: Date.parse('2026-01-01T00:00:00.000Z'),
         endTimeMs: Date.parse('2026-01-01T23:59:59.999Z'),
@@ -66,7 +66,11 @@ function validInput(): Record<string, unknown> {
 }
 
 describe('health write validation', () => {
-    it('returns a sanitized typed provider record', () => {
+    it('uses a write-wide error code shared by source-record and sync-state validation', () => {
+        expect(new HealthWriteValidationError('invalid').code).toBe('invalid_health_write');
+    });
+
+    it('returns a sanitized typed health source record', () => {
         const result = validateHealthSourceRecordInput(validInput());
 
         expect(result).toMatchObject({
@@ -101,7 +105,7 @@ describe('health write validation', () => {
         expect(() => validateHealthSourceRecordInput(input)).toThrow('canonical.unit must match the metric catalog');
     });
 
-    it('does not allow the raw provider account ID to become persisted record metadata', () => {
+    it('does not allow the raw provider account ID to become persisted source-record metadata', () => {
         const input = validInput();
         input.sourceRecordKey = input.providerAccountId;
 

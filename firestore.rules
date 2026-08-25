@@ -332,7 +332,7 @@ service cloud.firestore {
 
         // Unified health source records are private owner-readable, server-written data.
         // List reads must carry the public page limit plus one look-ahead document.
-        match /healthRecords/{recordID} {
+        match /healthSourceRecords/{sourceRecordID} {
           allow get: if isOwner();
           allow list: if isOwner()
             && request.query.limit != null

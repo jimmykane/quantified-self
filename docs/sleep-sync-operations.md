@@ -18,7 +18,7 @@ continue to use it.
 Future provider health adapters may create typed references to an existing Sleep document and an
 allowlisted aggregate field (duration, score, aggregate HR/HRV, maximum SpO₂, or average respiration).
 They must not copy Sleep sessions, stages, provider fields, or respiration/SpO₂/HRV sample arrays into
-`healthRecords` or `healthSampleChunks`. The reference validator requires the stable health metric ID
+`healthSourceRecords` or `healthSampleChunks`. The reference validator requires the stable health metric ID
 to match the referenced Sleep field. See [Unified health data foundation](unified-health-data.md).
 
 Provider disconnect retains both normalized Sleep sessions and imported unified health history.

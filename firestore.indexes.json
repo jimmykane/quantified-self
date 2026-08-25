@@ -1398,7 +1398,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "healthRecords",
+      "collectionGroup": "healthSourceRecords",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1417,7 +1417,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "healthRecords",
+      "collectionGroup": "healthSourceRecords",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -2165,13 +2165,13 @@
       "indexes": []
     },
     {
-      "collectionGroup": "healthRecords",
+      "collectionGroup": "healthSourceRecords",
       "fieldPath": "*",
       "ttl": false,
       "indexes": []
     },
     {
-      "collectionGroup": "healthRecords",
+      "collectionGroup": "healthSourceRecords",
       "fieldPath": "calendarDate",
       "ttl": false,
       "indexes": [

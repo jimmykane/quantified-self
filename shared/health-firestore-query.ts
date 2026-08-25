@@ -1,5 +1,5 @@
 import {
-  HEALTH_RECORDS_COLLECTION_ID,
+  HEALTH_SOURCE_RECORDS_COLLECTION_ID,
   HEALTH_SAMPLE_CHUNKS_COLLECTION_ID,
   HealthQueryCursor,
   HealthRangeQuery,
@@ -16,7 +16,7 @@ export interface HealthFirestoreFilterPlan {
 }
 
 export interface HealthFirestoreQueryPlan {
-  collectionId: typeof HEALTH_RECORDS_COLLECTION_ID | typeof HEALTH_SAMPLE_CHUNKS_COLLECTION_ID;
+  collectionId: typeof HEALTH_SOURCE_RECORDS_COLLECTION_ID | typeof HEALTH_SAMPLE_CHUNKS_COLLECTION_ID;
   startDate: string;
   endDate: string;
   filter: HealthFirestoreFilterPlan | null;
@@ -26,7 +26,7 @@ export interface HealthFirestoreQueryPlan {
 
 export interface HealthFirestoreQueryPlans {
   query: NormalizedHealthRangeQuery;
-  records: HealthFirestoreQueryPlan;
+  sourceRecords: HealthFirestoreQueryPlan;
   chunks: HealthFirestoreQueryPlan | null;
 }
 
@@ -40,7 +40,7 @@ function providerFilter(field: string, providers: readonly string[]): HealthFire
   return null;
 }
 
-function recordMetricFilter(metricIds: readonly string[]): HealthFirestoreFilterPlan | null {
+function sourceRecordMetricFilter(metricIds: readonly string[]): HealthFirestoreFilterPlan | null {
   if (metricIds.length === 1) {
     return { field: 'metricIds', operator: 'array-contains', value: metricIds[0] };
   }
@@ -67,19 +67,19 @@ export function planHealthFirestoreQueries(
   // A provider predicate takes precedence so provider + metric queries do not
   // require a combinatorial provider/metric/date index. The shared projector
   // applies every requested filter to the bounded result set afterward.
-  const recordFilter = providerFilter('source.provider', query.providers)
-    || recordMetricFilter(query.metricIds);
+  const sourceRecordFilter = providerFilter('source.provider', query.providers)
+    || sourceRecordMetricFilter(query.metricIds);
   const chunkFilter = providerFilter('provider', query.providers)
     || chunkMetricFilter(query.metricIds);
   return {
     query,
-    records: {
-      collectionId: HEALTH_RECORDS_COLLECTION_ID,
+    sourceRecords: {
+      collectionId: HEALTH_SOURCE_RECORDS_COLLECTION_ID,
       startDate: query.startDate,
       endDate: query.endDate,
-      filter: recordFilter,
-      cursor: query.recordCursor,
-      fetchLimit: query.recordLimit + 1,
+      filter: sourceRecordFilter,
+      cursor: query.sourceRecordCursor,
+      fetchLimit: query.sourceRecordLimit + 1,
     },
     chunks: query.includeSamples ? {
       collectionId: HEALTH_SAMPLE_CHUNKS_COLLECTION_ID,

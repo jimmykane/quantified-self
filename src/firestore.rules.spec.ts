@@ -1320,11 +1320,11 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe('Unified Health Records and Sync State', () => {
+        describe('Unified Health Source Records and Sync State', () => {
             it('allows owners to get their own health documents', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
 
-                await assertSucceeds(db.collection('users').doc(userId).collection('healthRecords').doc('record-1').get());
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSourceRecords').doc('record-1').get());
                 await assertSucceeds(db.collection('users').doc(userId).collection('healthSampleChunks').doc('chunk-1').get());
                 await assertSucceeds(db.collection('users').doc(userId).collection('healthSyncState').doc('GarminAPI').get());
             });
@@ -1333,19 +1333,19 @@ describe('Firestore Security Rules', () => {
                 const ownerDb = testEnv.authenticatedContext(userId).firestore();
                 const anonymousDb = testEnv.unauthenticatedContext().firestore();
 
-                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthRecords').doc('record-1').get());
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSourceRecords').doc('record-1').get());
                 await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSampleChunks').doc('chunk-1').get());
                 await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSyncState').doc('GarminAPI').get());
-                await assertFails(anonymousDb.collection('users').doc(userId).collection('healthRecords').doc('record-1').get());
+                await assertFails(anonymousDb.collection('users').doc(userId).collection('healthSourceRecords').doc('record-1').get());
             });
 
             it('allows only explicitly bounded owner list queries', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 const userRef = db.collection('users').doc(userId);
 
-                await assertSucceeds(userRef.collection('healthRecords').limit(33).get());
-                await assertFails(userRef.collection('healthRecords').limit(34).get());
-                await assertFails(userRef.collection('healthRecords').get());
+                await assertSucceeds(userRef.collection('healthSourceRecords').limit(33).get());
+                await assertFails(userRef.collection('healthSourceRecords').limit(34).get());
+                await assertFails(userRef.collection('healthSourceRecords').get());
 
                 await assertSucceeds(userRef.collection('healthSampleChunks').limit(9).get());
                 await assertFails(userRef.collection('healthSampleChunks').limit(10).get());
@@ -1360,7 +1360,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 const userRef = db.collection('users').doc(userId);
 
-                await assertFails(userRef.collection('healthRecords').doc('record-1').set({ calendarDate: '2026-01-01' }));
+                await assertFails(userRef.collection('healthSourceRecords').doc('record-1').set({ calendarDate: '2026-01-01' }));
                 await assertFails(userRef.collection('healthSampleChunks').doc('chunk-1').set({ offsetMs: [0] }));
                 await assertFails(userRef.collection('healthSyncState').doc('GarminAPI').set({ status: 'ready' }));
             });

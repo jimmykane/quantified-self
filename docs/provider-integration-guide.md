@@ -127,7 +127,7 @@ Separate state by trust boundary.
 | Safe connection status           | `users/{uid}/meta/<Provider>`               | Owner may read the limited projection; client does not write it    |
 | Queue and failed jobs            | Server-owned queue and DLQ collections      | No client writes; admin read only where the Rules model permits it |
 | Imported event and original file | Existing event/file model                   | Follow the established event and Storage access model              |
-| Imported health source record    | `users/{uid}/healthRecords`                  | Owner bounded read; server writes only                              |
+| Imported health source record    | `users/{uid}/healthSourceRecords`            | Owner bounded read; server writes only                              |
 | High-resolution health samples  | `users/{uid}/healthSampleChunks`             | Owner bounded read; server writes only                              |
 | Safe health sync status         | `users/{uid}/healthSyncState`                | Owner bounded read; server writes only                              |
 
@@ -138,7 +138,7 @@ For every new persistent write path:
 - Keep provider credentials and signed download URLs out of safe metadata, events, error text, analytics, logs, and admin responses.
 - Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
-- Use deterministic opaque provider-account and record IDs for health data. Never persist the raw provider account ID, free-form provider error, or raw provider payload in the unified health collections.
+- Use deterministic opaque provider-account and source-record IDs for health data. Never persist the raw provider account ID, free-form provider error, or raw provider payload in the unified health collections.
 - Keep health sample documents and reads strictly bounded. Time-based retention is intentionally uncapped until product/privacy policy explicitly changes it; do not add ad hoc TTL in a provider adapter.
 
 ## 6. Ingestion: webhooks, history, and idempotent queues
@@ -284,7 +284,7 @@ Account deletion is not merely token deletion. Add provider identity discovery a
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
-Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health records during ordinary deauthorization.
+Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health source records during ordinary deauthorization.
 
 ## 9. Frontend, help, public pages, and attribution
 

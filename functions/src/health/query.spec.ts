@@ -6,7 +6,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SCHEMA_VERSION,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
@@ -20,7 +20,7 @@ interface Operation {
     args: unknown[];
 }
 
-function fakeDatabase(recordDocs: HealthSourceRecord[]) {
+function fakeDatabase(sourceRecordDocs: HealthSourceRecord[]) {
     const operations = new Map<string, Operation[]>();
     const makeQuery = (collectionId: string) => {
         const queryOperations: Operation[] = [];
@@ -43,8 +43,11 @@ function fakeDatabase(recordDocs: HealthSourceRecord[]) {
                 return query;
             }),
             get: vi.fn(async () => ({
-                docs: collectionId === 'healthRecords'
-                    ? recordDocs.map(record => ({ id: record.id, data: () => record }))
+                docs: collectionId === 'healthSourceRecords'
+                    ? sourceRecordDocs.map(sourceRecord => ({
+                        id: sourceRecord.id,
+                        data: () => sourceRecord,
+                    }))
                     : [],
             })),
         };
@@ -63,13 +66,13 @@ function fakeDatabase(recordDocs: HealthSourceRecord[]) {
     return { db, operations };
 }
 
-function record(): HealthSourceRecord {
+function sourceRecord(): HealthSourceRecord {
     const startTimeMs = Date.parse('2026-01-01T00:00:00.000Z');
     return {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id: 'record-1',
         userID: 'user-1',
-        kind: HEALTH_RECORD_KINDS.DailySummary,
+        kind: HEALTH_SOURCE_RECORD_KINDS.DailySummary,
         source: {
             provider: HEALTH_PROVIDERS.GarminAPI,
             accountKey: 'opaque-account',
@@ -103,18 +106,18 @@ function record(): HealthSourceRecord {
 }
 
 describe('server health range reader', () => {
-    it('executes the shared bounded plan and projects stored records', async () => {
-        const fake = fakeDatabase([record()]);
+    it('executes the shared bounded plan and projects stored source records', async () => {
+        const fake = fakeDatabase([sourceRecord()]);
         const result = await readHealthRange('user-1', {
             startDate: '2026-01-01',
             endDate: '2026-01-07',
             providers: [HEALTH_PROVIDERS.GarminAPI],
             metricIds: [HEALTH_METRIC_IDS.Steps],
-            recordLimit: 10,
+            sourceRecordLimit: 10,
         }, { db: fake.db as never, nowMs: Date.parse('2026-01-02T00:00:00.000Z') });
 
         expect(result.observations).toHaveLength(1);
-        expect(fake.operations.get('healthRecords')).toEqual(expect.arrayContaining([
+        expect(fake.operations.get('healthSourceRecords')).toEqual(expect.arrayContaining([
             { method: 'where', args: ['calendarDate', '>=', '2026-01-01'] },
             { method: 'where', args: ['calendarDate', '<=', '2026-01-07'] },
             { method: 'where', args: ['source.provider', '==', HEALTH_PROVIDERS.GarminAPI] },
@@ -130,12 +133,12 @@ describe('server health range reader', () => {
             startDate: '2026-01-01',
             endDate: '2026-01-07',
             includeSamples: true,
-            recordCursor: { calendarDate: '2026-01-02', id: 'record-2' },
+            sourceRecordCursor: { calendarDate: '2026-01-02', id: 'record-2' },
             chunkCursor: { calendarDate: '2026-01-03', id: 'chunk-3' },
             chunkLimit: 8,
         }, { db: fake.db as never });
 
-        expect(fake.operations.get('healthRecords')).toEqual(expect.arrayContaining([
+        expect(fake.operations.get('healthSourceRecords')).toEqual(expect.arrayContaining([
             { method: 'startAfter', args: ['2026-01-02', 'record-2'] },
         ]));
         expect(fake.operations.get('healthSampleChunks')).toEqual(expect.arrayContaining([

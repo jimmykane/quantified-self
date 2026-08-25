@@ -1,25 +1,25 @@
 export const HEALTH_SCHEMA_VERSION = 1 as const;
 
-export const HEALTH_RECORDS_COLLECTION_ID = 'healthRecords';
+export const HEALTH_SOURCE_RECORDS_COLLECTION_ID = 'healthSourceRecords';
 export const HEALTH_SAMPLE_CHUNKS_COLLECTION_ID = 'healthSampleChunks';
 export const HEALTH_SYNC_STATE_COLLECTION_ID = 'healthSyncState';
 
-export const HEALTH_MAX_METRICS_PER_RECORD = 128;
+export const HEALTH_MAX_METRICS_PER_SOURCE_RECORD = 128;
 export const HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK = 1_440;
-export const HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD = 200;
-export const HEALTH_MAX_RECORD_DOCUMENT_BYTES = 256 * 1024;
+export const HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD = 200;
+export const HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES = 256 * 1024;
 export const HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES = 900 * 1024;
 // A replacement can include both the incoming revision and deletion of the
 // previous revision. Keep each side below half Firestore's 10 MiB request cap,
 // leaving headroom for document names, index entries, and protocol overhead.
 export const HEALTH_MAX_WRITE_BYTES = 4 * 1024 * 1024;
-export const HEALTH_DEFAULT_RECORD_PAGE_SIZE = 32;
-export const HEALTH_MAX_RECORD_PAGE_SIZE = 32;
+export const HEALTH_DEFAULT_SOURCE_RECORD_PAGE_SIZE = 32;
+export const HEALTH_MAX_SOURCE_RECORD_PAGE_SIZE = 32;
 export const HEALTH_DEFAULT_CHUNK_PAGE_SIZE = 8;
 export const HEALTH_MAX_CHUNK_PAGE_SIZE = 8;
 export const HEALTH_DEFAULT_SAMPLE_POINT_LIMIT = 10_000;
 export const HEALTH_MAX_SAMPLE_POINT_LIMIT = HEALTH_MAX_CHUNK_PAGE_SIZE * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
-export const HEALTH_MAX_QUERY_FETCH_BYTES = (HEALTH_MAX_RECORD_PAGE_SIZE + 1) * HEALTH_MAX_RECORD_DOCUMENT_BYTES
+export const HEALTH_MAX_QUERY_FETCH_BYTES = (HEALTH_MAX_SOURCE_RECORD_PAGE_SIZE + 1) * HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES
   + (HEALTH_MAX_CHUNK_PAGE_SIZE + 1) * HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES;
 export const HEALTH_MAX_SUMMARY_RANGE_DAYS = 366;
 export const HEALTH_MAX_SAMPLE_RANGE_DAYS = 31;
@@ -34,14 +34,14 @@ export const HEALTH_PROVIDERS = {
 
 export type HealthProvider = typeof HEALTH_PROVIDERS[keyof typeof HEALTH_PROVIDERS];
 
-export const HEALTH_RECORD_KINDS = {
+export const HEALTH_SOURCE_RECORD_KINDS = {
   DailySummary: 'daily_summary',
   IntervalSummary: 'interval_summary',
   PointMeasurement: 'point_measurement',
   ProfileSnapshot: 'profile_snapshot',
 } as const;
 
-export type HealthRecordKind = typeof HEALTH_RECORD_KINDS[keyof typeof HEALTH_RECORD_KINDS];
+export type HealthSourceRecordKind = typeof HEALTH_SOURCE_RECORD_KINDS[keyof typeof HEALTH_SOURCE_RECORD_KINDS];
 
 export const HEALTH_VALUE_ORIGINS = {
   Recorded: 'recorded',
@@ -314,7 +314,7 @@ export interface HealthSleepMetricReference extends HealthMetricBase {
 
 export type HealthMetricEntry = HealthMetricValue | HealthSleepMetricReference;
 
-export interface HealthRecordRevision {
+export interface HealthSourceRecordRevision {
   order: number;
   token: string;
   digest: string;
@@ -325,7 +325,7 @@ export interface HealthSourceMetadata {
   accountKey: string;
   sourceRecordType: string;
   sourceRecordKey: string;
-  revision: HealthRecordRevision;
+  revision: HealthSourceRecordRevision;
   receivedAtMs: number;
 }
 
@@ -333,7 +333,7 @@ export interface HealthSourceRecord {
   schemaVersion: typeof HEALTH_SCHEMA_VERSION;
   id: string;
   userID: string;
-  kind: HealthRecordKind;
+  kind: HealthSourceRecordKind;
   source: HealthSourceMetadata;
   calendarDate: string;
   startTimeMs: number;
@@ -352,7 +352,7 @@ export interface HealthSampleChunk {
   schemaVersion: typeof HEALTH_SCHEMA_VERSION;
   id: string;
   userID: string;
-  parentRecordId: string;
+  parentSourceRecordId: string;
   provider: HealthProvider;
   accountKey: string;
   metricId: HealthMetricId;
@@ -378,7 +378,7 @@ export interface HealthSampleChunk {
   qualityCodes?: string[] | null;
   coverage: HealthCoverage;
   device?: HealthDeviceAttribution | null;
-  revision: HealthRecordRevision;
+  revision: HealthSourceRecordRevision;
   createdAtMs: number;
   updatedAtMs: number;
 }
@@ -416,10 +416,10 @@ export interface HealthRangeQuery {
   providers?: HealthProvider[];
   metricIds?: HealthMetricId[];
   includeSamples?: boolean;
-  recordLimit?: number;
+  sourceRecordLimit?: number;
   chunkLimit?: number;
   samplePointLimit?: number;
-  recordCursor?: HealthQueryCursor | null;
+  sourceRecordCursor?: HealthQueryCursor | null;
   chunkCursor?: HealthQueryCursor | null;
 }
 
@@ -427,16 +427,16 @@ export interface NormalizedHealthRangeQuery extends HealthRangeQuery {
   providers: HealthProvider[];
   metricIds: HealthMetricId[];
   includeSamples: boolean;
-  recordLimit: number;
+  sourceRecordLimit: number;
   chunkLimit: number;
   samplePointLimit: number;
-  recordCursor: HealthQueryCursor | null;
+  sourceRecordCursor: HealthQueryCursor | null;
   chunkCursor: HealthQueryCursor | null;
 }
 
 export interface HealthObservation {
   id: string;
-  recordId: string;
+  sourceRecordId: string;
   provider: HealthProvider;
   accountKey: string;
   calendarDate: string;
@@ -520,12 +520,12 @@ export interface HealthConflict {
 }
 
 export interface HealthRangePageInfo {
-  recordsTruncated: boolean;
+  sourceRecordsTruncated: boolean;
   samplesTruncated: boolean;
   sampleRevisionMismatchCount: number;
-  recordAggregateComplete: boolean;
+  sourceRecordAggregateComplete: boolean;
   sampleAggregateComplete: boolean;
-  recordCursor: HealthQueryCursor | null;
+  sourceRecordCursor: HealthQueryCursor | null;
   chunkCursor: HealthQueryCursor | null;
   returnedSamplePoints: number;
 }

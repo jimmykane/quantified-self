@@ -51,15 +51,18 @@ export async function readHealthRange(
 ): Promise<HealthRangeResult> {
     const db = dependencies.db || admin.firestore();
     const plans = planHealthFirestoreQueries(queryValue);
-    const recordQuery = applyQueryPlan(userCollection(db, userID, plans.records.collectionId), plans.records);
+    const sourceRecordQuery = applyQueryPlan(
+        userCollection(db, userID, plans.sourceRecords.collectionId),
+        plans.sourceRecords,
+    );
     const chunkQuery = plans.chunks
         ? applyQueryPlan(userCollection(db, userID, plans.chunks.collectionId), plans.chunks)
         : null;
-    const [recordSnapshot, chunkSnapshot] = await db.runTransaction(async transaction => Promise.all([
-        transaction.get(recordQuery),
+    const [sourceRecordSnapshot, chunkSnapshot] = await db.runTransaction(async transaction => Promise.all([
+        transaction.get(sourceRecordQuery),
         chunkQuery ? transaction.get(chunkQuery) : Promise.resolve(null),
     ]), { readOnly: true });
-    const records = recordSnapshot.docs.map(snapshot => ({
+    const sourceRecords = sourceRecordSnapshot.docs.map(snapshot => ({
         ...snapshot.data(),
         id: snapshot.id,
     }) as HealthSourceRecord);
@@ -67,5 +70,5 @@ export async function readHealthRange(
         ...snapshot.data(),
         id: snapshot.id,
     }) as HealthSampleChunk);
-    return projectHealthRange(records, chunks, plans.query, dependencies.nowMs);
+    return projectHealthRange(sourceRecords, chunks, plans.query, dependencies.nowMs);
 }

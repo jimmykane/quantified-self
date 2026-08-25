@@ -51,12 +51,12 @@ export class AppHealthService {
             return of(projectHealthRange([], [], plans.query));
         }
 
-        const records$ = this.watchCollection<HealthSourceRecord>(uid, plans.records);
+        const sourceRecords$ = this.watchCollection<HealthSourceRecord>(uid, plans.sourceRecords);
         const chunks$ = plans.chunks
             ? this.watchCollection<HealthSampleChunk>(uid, plans.chunks)
             : of([] as HealthSampleChunk[]);
-        return combineLatest([records$, chunks$]).pipe(
-            map(([records, chunks]) => projectHealthRange(records, chunks, plans.query)),
+        return combineLatest([sourceRecords$, chunks$]).pipe(
+            map(([sourceRecords, chunks]) => projectHealthRange(sourceRecords, chunks, plans.query)),
             shareReplay({ bufferSize: 1, refCount: true }),
         );
     }

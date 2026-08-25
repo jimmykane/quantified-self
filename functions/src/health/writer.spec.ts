@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import {
     HEALTH_COVERAGE_STATUSES,
-    HEALTH_MAX_RECORD_DOCUMENT_BYTES,
+    HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES,
     HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES,
     HEALTH_MAX_WRITE_BYTES,
     HEALTH_METRIC_IDS,
@@ -10,7 +10,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SYNC_STATUSES,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
@@ -39,10 +39,10 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 import {
-    HealthRevisionConflictError,
+    HealthSourceRecordRevisionConflictError,
     HealthWriteSizeError,
-    assertHealthWriteSize,
-    buildHealthWrite,
+    assertHealthSourceRecordWriteSize,
+    buildHealthSourceRecordWrite,
     markHealthProviderDisconnected,
     replaceHealthSourceRecord,
     updateHealthSyncState,
@@ -102,7 +102,7 @@ function validInput(pointCount = 2): Record<string, unknown> {
         sourceRecordKey: '2026-01-01',
         revision: { order: 1, token: 'revision-1' },
         receivedAtMs: Date.parse('2026-01-02T00:00:00.000Z'),
-        kind: HEALTH_RECORD_KINDS.DailySummary,
+        kind: HEALTH_SOURCE_RECORD_KINDS.DailySummary,
         calendarDate: '2026-01-01',
         startTimeMs: Date.parse('2026-01-01T00:00:00.000Z'),
         endTimeMs: Date.parse('2026-01-02T00:00:00.000Z'),
@@ -141,8 +141,8 @@ function validInput(pointCount = 2): Record<string, unknown> {
     };
 }
 
-function recordPath(id: string): string {
-    return `users/user-1/healthRecords/${id}`;
+function sourceRecordPath(id: string): string {
+    return `users/user-1/healthSourceRecords/${id}`;
 }
 
 describe('health writer', () => {
@@ -156,26 +156,31 @@ describe('health writer', () => {
     });
 
     it('builds deterministic bounded chunks without persisting the raw provider account ID', async () => {
-        const built = await buildHealthWrite('user-1', validInput(1441), 10_000, fakeId);
+        const built = await buildHealthSourceRecordWrite('user-1', validInput(1441), 10_000, fakeId);
 
         expect(built.chunks).toHaveLength(2);
         expect(built.chunks[0].offsetMs).toHaveLength(1440);
         expect(built.chunks[1].offsetMs).toEqual([0]);
         expect(built.chunks.map(chunk => chunk.coverage.sampleCount)).toEqual([1441, 1441]);
-        expect(built.record.sampleChunkIds).toEqual(built.chunks.map(chunk => chunk.id));
-        expect(built.record.metricIds).toEqual([HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.Steps]);
+        expect(built.sourceRecord.sampleChunkIds).toEqual(built.chunks.map(chunk => chunk.id));
+        expect(built.sourceRecord.metricIds).toEqual([HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.Steps]);
         expect(JSON.stringify(built)).not.toContain('secret-provider-account');
-        expect(built.record.source.accountKey).toMatch(/^[a-f0-9]{64}$/);
+        expect(built.sourceRecord.source.accountKey).toMatch(/^[a-f0-9]{64}$/);
     });
 
-    it('atomically writes a record and all of its chunks', async () => {
+    it('atomically writes a source record and all of its chunks', async () => {
         const fake = fakeDatabase();
         const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
             db: fake.db as never,
             generateId: fakeId,
         });
 
-        expect(result).toMatchObject({ status: 'written', chunksWritten: 1, chunksDeleted: 0 });
+        expect(result).toMatchObject({
+            sourceRecordId: expect.stringMatching(/^[a-f0-9]{64}$/),
+            status: 'written',
+            chunksWritten: 1,
+            chunksDeleted: 0,
+        });
         expect(fake.sets).toHaveBeenCalledTimes(2);
         expect(fake.deletes).not.toHaveBeenCalled();
         expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
@@ -190,12 +195,12 @@ describe('health writer', () => {
         second.sourceRecordType = 'daily:summary';
 
         const [firstBuilt, secondBuilt] = await Promise.all([
-            buildHealthWrite('user-1', first, 10_000, joiningHashId),
-            buildHealthWrite('user-1', second, 10_000, joiningHashId),
+            buildHealthSourceRecordWrite('user-1', first, 10_000, joiningHashId),
+            buildHealthSourceRecordWrite('user-1', second, 10_000, joiningHashId),
         ]);
 
-        expect(firstBuilt.record.id).not.toBe(secondBuilt.record.id);
-        expect(firstBuilt.record.source.accountKey).not.toBe(secondBuilt.record.source.accountKey);
+        expect(firstBuilt.sourceRecord.id).not.toBe(secondBuilt.sourceRecord.id);
+        expect(firstBuilt.sourceRecord.source.accountKey).not.toBe(secondBuilt.sourceRecord.source.accountKey);
     });
 
     it('canonicalizes unordered metric and series collections before digesting and storing', async () => {
@@ -214,55 +219,60 @@ describe('health writer', () => {
         (second.sampleSeries as unknown[]).reverse();
 
         const [firstBuilt, secondBuilt] = await Promise.all([
-            buildHealthWrite('user-1', first, 10_000, fakeId),
-            buildHealthWrite('user-1', second, 10_000, fakeId),
+            buildHealthSourceRecordWrite('user-1', first, 10_000, fakeId),
+            buildHealthSourceRecordWrite('user-1', second, 10_000, fakeId),
         ]);
 
         expect(secondBuilt).toEqual(firstBuilt);
     });
 
     it('rejects unsafe user document IDs before constructing Firestore paths', async () => {
-        await expect(buildHealthWrite(' user-1 ', validInput(), 10_000, fakeId))
+        await expect(buildHealthSourceRecordWrite(' user-1 ', validInput(), 10_000, fakeId))
             .rejects.toThrow('safe bounded non-empty document ID');
-        await expect(buildHealthWrite('users/other', validInput(), 10_000, fakeId))
+        await expect(buildHealthSourceRecordWrite('users/other', validInput(), 10_000, fakeId))
             .rejects.toThrow('safe bounded non-empty document ID');
     });
 
     it('bounds one revision below half the Firestore transaction request limit', () => {
         expect(HEALTH_MAX_WRITE_BYTES).toBe(4 * 1024 * 1024);
-        const record = { id: 'record', padding: 'x'.repeat(100 * 1024) } as unknown as HealthSourceRecord;
+        const sourceRecord = {
+            id: 'source-record-id',
+            padding: 'x'.repeat(100 * 1024),
+        } as unknown as HealthSourceRecord;
         const padding = 'x'.repeat(800 * 1024);
         const chunks = Array.from({ length: 5 }, (_, index) => ({
             id: `chunk-${index}`,
             padding,
         })) as unknown as HealthSampleChunk[];
 
-        expect(() => assertHealthWriteSize(record, chunks)).toThrow(HealthWriteSizeError);
-        expect(() => assertHealthWriteSize(record, chunks)).toThrow('bounded transaction payload size');
+        expect(() => assertHealthSourceRecordWriteSize(sourceRecord, chunks)).toThrow(HealthWriteSizeError);
+        expect(() => assertHealthSourceRecordWriteSize(sourceRecord, chunks)).toThrow('bounded transaction payload size');
     });
 
     it('uses separate bounded sizes for source records and sample chunks', () => {
-        expect(HEALTH_MAX_RECORD_DOCUMENT_BYTES).toBe(256 * 1024);
+        expect(HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES).toBe(256 * 1024);
         expect(HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES).toBe(900 * 1024);
 
         const oversizedRecord = {
-            id: 'record',
-            padding: 'x'.repeat(HEALTH_MAX_RECORD_DOCUMENT_BYTES),
+            id: 'source-record-id',
+            padding: 'x'.repeat(HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES),
         } as unknown as HealthSourceRecord;
-        const smallRecord = { id: 'record' } as unknown as HealthSourceRecord;
+        const smallRecord = { id: 'source-record-id' } as unknown as HealthSourceRecord;
         const oversizedChunk = {
-            id: 'chunk',
+            id: 'sample-chunk-id',
             padding: 'x'.repeat(HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES),
         } as unknown as HealthSampleChunk;
 
-        expect(() => assertHealthWriteSize(oversizedRecord, [])).toThrow('source record record');
-        expect(() => assertHealthWriteSize(smallRecord, [oversizedChunk])).toThrow('sample chunk chunk');
+        expect(() => assertHealthSourceRecordWriteSize(oversizedRecord, []))
+            .toThrow('source record source-record-id');
+        expect(() => assertHealthSourceRecordWriteSize(smallRecord, [oversizedChunk]))
+            .toThrow('sample chunk sample-chunk-id');
     });
 
     it('treats an identical provider revision as idempotent', async () => {
         const fake = fakeDatabase();
-        const built = await buildHealthWrite('user-1', validInput(), 9_000, fakeId);
-        fake.stored.set(recordPath(built.record.id), built.record);
+        const built = await buildHealthSourceRecordWrite('user-1', validInput(), 9_000, fakeId);
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
 
         const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
             db: fake.db as never,
@@ -276,9 +286,9 @@ describe('health writer', () => {
 
     it('ignores a stale lower provider revision', async () => {
         const fake = fakeDatabase();
-        const built = await buildHealthWrite('user-1', validInput(), 9_000, fakeId);
-        built.record.source.revision.order = 2;
-        fake.stored.set(recordPath(built.record.id), built.record);
+        const built = await buildHealthSourceRecordWrite('user-1', validInput(), 9_000, fakeId);
+        built.sourceRecord.source.revision.order = 2;
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
 
         const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
             db: fake.db as never,
@@ -291,24 +301,24 @@ describe('health writer', () => {
 
     it('rejects ambiguous content at the same provider revision order', async () => {
         const fake = fakeDatabase();
-        const built = await buildHealthWrite('user-1', validInput(), 9_000, fakeId);
-        built.record.source.revision.digest = 'different-digest';
-        fake.stored.set(recordPath(built.record.id), built.record);
+        const built = await buildHealthSourceRecordWrite('user-1', validInput(), 9_000, fakeId);
+        built.sourceRecord.source.revision.digest = 'different-digest';
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
 
         await expect(replaceHealthSourceRecord('user-1', validInput(), 10_000, {
             db: fake.db as never,
             generateId: fakeId,
-        })).rejects.toBeInstanceOf(HealthRevisionConflictError);
+        })).rejects.toBeInstanceOf(HealthSourceRecordRevisionConflictError);
         expect(fake.sets).not.toHaveBeenCalled();
     });
 
     it('replaces higher revisions and document-deletes only stale leaf chunks', async () => {
         const fake = fakeDatabase();
         const input = validInput();
-        const built = await buildHealthWrite('user-1', input, 9_000, fakeId);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 9_000, fakeId);
         const staleChunkId = 'a'.repeat(64);
-        built.record.sampleChunkIds = [staleChunkId];
-        fake.stored.set(recordPath(built.record.id), built.record);
+        built.sourceRecord.sampleChunkIds = [staleChunkId];
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
         (input.revision as Record<string, unknown>).order = 2;
         (input.revision as Record<string, unknown>).token = 'revision-2';
 
@@ -322,7 +332,7 @@ describe('health writer', () => {
         expect(fake.deletes.mock.calls[0][0].path).toContain(`/healthSampleChunks/${staleChunkId}`);
     });
 
-    it('does not recreate records when account deletion is active inside the transaction', async () => {
+    it('does not recreate source records when account deletion is active inside the transaction', async () => {
         const fake = fakeDatabase();
         hoisted.deletionGuard.mockResolvedValue({ userExists: true, deletionInProgress: true, shouldSkip: true });
 
@@ -349,12 +359,12 @@ describe('health writer', () => {
         expect(fake.deletes).not.toHaveBeenCalled();
     });
 
-    it('fails closed when a stored record violates the leaf-chunk bound', async () => {
+    it('fails closed when a stored source record violates the leaf-chunk bound', async () => {
         const fake = fakeDatabase();
         const input = validInput();
-        const built = await buildHealthWrite('user-1', input, 9_000, fakeId);
-        built.record.sampleChunkIds = Array.from({ length: 201 }, (_, index) => `old-${index}`);
-        fake.stored.set(recordPath(built.record.id), built.record);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 9_000, fakeId);
+        built.sourceRecord.sampleChunkIds = Array.from({ length: 201 }, (_, index) => `old-${index}`);
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
         (input.revision as Record<string, unknown>).order = 2;
         (input.revision as Record<string, unknown>).token = 'revision-2';
 
@@ -369,9 +379,9 @@ describe('health writer', () => {
     it('fails closed before deleting a malformed stored chunk path', async () => {
         const fake = fakeDatabase();
         const input = validInput();
-        const built = await buildHealthWrite('user-1', input, 9_000, fakeId);
-        built.record.sampleChunkIds = ['nested/path'];
-        fake.stored.set(recordPath(built.record.id), built.record);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 9_000, fakeId);
+        built.sourceRecord.sampleChunkIds = ['nested/path'];
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
         (input.revision as Record<string, unknown>).order = 2;
         (input.revision as Record<string, unknown>).token = 'revision-2';
 
@@ -383,15 +393,15 @@ describe('health writer', () => {
         expect(fake.sets).not.toHaveBeenCalled();
     });
 
-    it('preserves an explicit null sample device instead of inheriting record attribution', async () => {
+    it('preserves an explicit null sample device instead of inheriting source-record attribution', async () => {
         const input = validInput();
         input.device = { manufacturer: 'Garmin', model: 'Watch' };
         const sampleSeries = input.sampleSeries as Array<Record<string, unknown>>;
         sampleSeries[0].device = null;
 
-        const built = await buildHealthWrite('user-1', input, 10_000, fakeId);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 10_000, fakeId);
 
-        expect(built.record.device).toMatchObject({ manufacturer: 'Garmin', model: 'Watch' });
+        expect(built.sourceRecord.device).toMatchObject({ manufacturer: 'Garmin', model: 'Watch' });
         expect(built.chunks[0].device).toBeNull();
     });
 
@@ -403,7 +413,7 @@ describe('health writer', () => {
         sampleSeries[0].canonicalValues = null;
         sampleSeries[0].qualityCodes = null;
 
-        const built = await buildHealthWrite('user-1', input, 10_000, fakeId);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 10_000, fakeId);
 
         expect(built.chunks[0].canonicalValues).toBeNull();
         expect(built.chunks[0].qualityCodes).toBeNull();
@@ -508,7 +518,7 @@ describe('health writer', () => {
         });
     });
 
-    it('retains imported records when a provider is disconnected', async () => {
+    it('retains imported source records when a provider is disconnected', async () => {
         const fake = fakeDatabase();
         const written = await markHealthProviderDisconnected(
             'user-1',
@@ -524,12 +534,12 @@ describe('health writer', () => {
         expect(fake.deletes).not.toHaveBeenCalled();
     });
 
-    it('preserves the existing record creation time during replacement', async () => {
+    it('preserves the existing source-record creation time during replacement', async () => {
         const fake = fakeDatabase();
         const input = validInput();
-        const built = await buildHealthWrite('user-1', input, 9_000, fakeId);
-        const existing: HealthSourceRecord = { ...built.record, createdAtMs: 0 };
-        fake.stored.set(recordPath(existing.id), existing);
+        const built = await buildHealthSourceRecordWrite('user-1', input, 9_000, fakeId);
+        const existing: HealthSourceRecord = { ...built.sourceRecord, createdAtMs: 0 };
+        fake.stored.set(sourceRecordPath(existing.id), existing);
         (input.revision as Record<string, unknown>).order = 2;
         (input.revision as Record<string, unknown>).token = 'revision-2';
 
@@ -538,6 +548,6 @@ describe('health writer', () => {
             generateId: fakeId,
         });
 
-        expect(result.record?.createdAtMs).toBe(0);
+        expect(result.sourceRecord?.createdAtMs).toBe(0);
     });
 });

@@ -1,12 +1,12 @@
 import {
     HEALTH_COVERAGE_STATUSES,
-    HEALTH_MAX_METRICS_PER_RECORD,
-    HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD,
+    HEALTH_MAX_METRICS_PER_SOURCE_RECORD,
+    HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD,
     HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
     HEALTH_NORMALIZATION_STATUSES,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SLEEP_REFERENCE_FIELDS,
     HEALTH_SLEEP_REFERENCE_METRIC_IDS,
     HEALTH_UNITS,
@@ -19,7 +19,7 @@ import {
     HealthMetricId,
     HealthProvider,
     HealthQuality,
-    HealthRecordKind,
+    HealthSourceRecordKind,
     HealthRecordingMethod,
     HealthScalar,
     HealthUnit,
@@ -37,12 +37,13 @@ const MAX_SOURCE_KEY_LENGTH = 512;
 const MAX_LABEL_LENGTH = 128;
 const MAX_NATIVE_VALUE_LENGTH = 512;
 const MAX_QUALIFIERS = 16;
-const MAX_SAMPLE_POINTS_PER_RECORD = HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
+const MAX_SAMPLE_POINTS_PER_SOURCE_RECORD = HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD
+    * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
 const RESERVED_QUALIFIER_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export class HealthWriteValidationError extends Error {
     public readonly name: string = 'HealthWriteValidationError';
-    public readonly code = 'invalid_health_record';
+    public readonly code = 'invalid_health_write';
 
     constructor(message: string) {
         super(message);
@@ -81,7 +82,7 @@ export interface HealthSourceRecordInput {
     sourceRecordKey: string;
     revision: HealthSourceRevisionInput;
     receivedAtMs: number;
-    kind: HealthRecordKind;
+    kind: HealthSourceRecordKind;
     calendarDate: string;
     startTimeMs: number;
     endTimeMs: number;
@@ -426,7 +427,7 @@ function validateMetricEntry(value: unknown, index: number): HealthMetricEntry {
 function validateSampleSeries(
     value: unknown,
     index: number,
-    recordDurationMs: number,
+    sourceRecordDurationMs: number,
 ): HealthSampleSeriesInput {
     const field = `sampleSeries[${index}]`;
     const input = objectValue(value, field);
@@ -446,14 +447,16 @@ function validateSampleSeries(
     if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && canonicalUnit) {
         throw new HealthWriteValidationError(`${field}.canonicalUnit must be omitted for non-canonical samples.`);
     }
-    if (!Array.isArray(input.offsetMs) || input.offsetMs.length === 0 || input.offsetMs.length > MAX_SAMPLE_POINTS_PER_RECORD) {
+    if (!Array.isArray(input.offsetMs)
+        || input.offsetMs.length === 0
+        || input.offsetMs.length > MAX_SAMPLE_POINTS_PER_SOURCE_RECORD) {
         throw new HealthWriteValidationError(`${field}.offsetMs must contain a bounded set of sample offsets.`);
     }
     let previousOffsetMs = -1;
     const offsetMs = Array.from(input.offsetMs).map((offset, offsetIndex) => {
         const normalized = safeInteger(offset, `${field}.offsetMs[${offsetIndex}]`);
-        if (normalized < 0 || normalized > recordDurationMs) {
-            throw new HealthWriteValidationError(`${field}.offsetMs[${offsetIndex}] is outside the record interval.`);
+        if (normalized < 0 || normalized > sourceRecordDurationMs) {
+            throw new HealthWriteValidationError(`${field}.offsetMs[${offsetIndex}] is outside the source-record interval.`);
         }
         if (offsetIndex > 0 && normalized <= previousOffsetMs) {
             throw new HealthWriteValidationError(`${field}.offsetMs must be strictly increasing.`);
@@ -522,7 +525,7 @@ function validateSampleSeries(
 }
 
 export function validateHealthSourceRecordInput(value: unknown): HealthSourceRecordInput {
-    const input = objectValue(value, 'healthRecord');
+    const input = objectValue(value, 'healthSourceRecord');
     if (!isHealthProvider(input.provider)) {
         throw new HealthWriteValidationError('provider is not supported.');
     }
@@ -531,33 +534,39 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
     if (endTimeMs < startTimeMs) {
         throw new HealthWriteValidationError('endTimeMs must be on or after startTimeMs.');
     }
-    if (!Array.isArray(input.metrics) || input.metrics.length > HEALTH_MAX_METRICS_PER_RECORD) {
-        throw new HealthWriteValidationError(`metrics must contain at most ${HEALTH_MAX_METRICS_PER_RECORD} entries.`);
+    if (!Array.isArray(input.metrics) || input.metrics.length > HEALTH_MAX_METRICS_PER_SOURCE_RECORD) {
+        throw new HealthWriteValidationError(
+            `metrics must contain at most ${HEALTH_MAX_METRICS_PER_SOURCE_RECORD} entries.`,
+        );
     }
     const metrics = Array.from(input.metrics).map(validateMetricEntry);
     const rawSampleSeries = input.sampleSeries === undefined ? [] : input.sampleSeries;
     if (!Array.isArray(rawSampleSeries)) {
         throw new HealthWriteValidationError('sampleSeries must be an array.');
     }
-    if (rawSampleSeries.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD) {
-        throw new HealthWriteValidationError(`sampleSeries cannot contain more than ${HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD} series.`);
+    if (rawSampleSeries.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD) {
+        throw new HealthWriteValidationError(
+            `sampleSeries cannot contain more than ${HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD} series.`,
+        );
     }
     const sampleSeries: HealthSampleSeriesInput[] = [];
     let sampleChunkCount = 0;
     Array.from(rawSampleSeries).forEach((series, index) => {
         const validatedSeries = validateSampleSeries(series, index, endTimeMs - startTimeMs);
         sampleChunkCount += Math.ceil(validatedSeries.offsetMs.length / HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK);
-        if (sampleChunkCount > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD) {
-            throw new HealthWriteValidationError(`sampleSeries exceeds the ${HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD}-chunk record limit.`);
+        if (sampleChunkCount > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD) {
+            throw new HealthWriteValidationError(
+                `sampleSeries exceeds the ${HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD}-chunk source-record limit.`,
+            );
         }
         sampleSeries.push(validatedSeries);
     });
     const seriesKeys = new Set(sampleSeries.map(series => series.seriesKey));
     if (seriesKeys.size !== sampleSeries.length) {
-        throw new HealthWriteValidationError('sampleSeries seriesKey values must be unique per record.');
+        throw new HealthWriteValidationError('sampleSeries seriesKey values must be unique per source record.');
     }
     if (metrics.length === 0 && sampleSeries.length === 0) {
-        throw new HealthWriteValidationError('A health record must contain metrics or sampleSeries.');
+        throw new HealthWriteValidationError('A health source record must contain metrics or sampleSeries.');
     }
     const revision = objectValue(input.revision, 'revision');
     const revisionOrder = safeInteger(revision.order, 'revision.order');
@@ -595,7 +604,7 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
             }
             return receivedAtMs;
         })(),
-        kind: enumValue(input.kind, Object.values(HEALTH_RECORD_KINDS), 'kind'),
+        kind: enumValue(input.kind, Object.values(HEALTH_SOURCE_RECORD_KINDS), 'kind'),
         calendarDate: validateCalendarDate(input.calendarDate),
         startTimeMs,
         endTimeMs,

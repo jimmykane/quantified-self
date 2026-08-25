@@ -7,7 +7,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SCHEMA_VERSION,
     HEALTH_SLEEP_REFERENCE_METRIC_IDS,
     HEALTH_SLEEP_REFERENCE_FIELDS,
@@ -70,7 +70,7 @@ function sourceRecord(input: {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id: input.id,
         userID: 'user-1',
-        kind: HEALTH_RECORD_KINDS.DailySummary,
+        kind: HEALTH_SOURCE_RECORD_KINDS.DailySummary,
         source: {
             provider: input.provider,
             accountKey: input.accountKey || `account-${input.provider}`,
@@ -108,7 +108,7 @@ function sampleChunk(input: {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id: input.id,
         userID: 'user-1',
-        parentRecordId: 'garmin-record',
+        parentSourceRecordId: 'garmin-record',
         provider: input.provider || HEALTH_PROVIDERS.GarminAPI,
         accountKey: 'garmin-account',
         metricId,
@@ -168,10 +168,10 @@ describe('unified health shared contract', () => {
             providers: [HEALTH_PROVIDERS.GarminAPI],
             metricIds: [],
             includeSamples: false,
-            recordLimit: 32,
+            sourceRecordLimit: 32,
             chunkLimit: 8,
             samplePointLimit: 10_000,
-            recordCursor: null,
+            sourceRecordCursor: null,
             chunkCursor: null,
         });
     });
@@ -184,13 +184,13 @@ describe('unified health shared contract', () => {
         [{ startDate: '2026-01-01', endDate: '2026-01-01', metricIds: ['unknown'] }, 'supported metric IDs'],
         [{ startDate: '2026-01-01', endDate: '2026-01-01', providers: new Array(1) }, 'supported providers'],
         [{ startDate: '2026-01-01', endDate: '2026-01-01', metricIds: new Array(1) }, 'supported metric IDs'],
-        [{ startDate: '2026-01-01', endDate: '2026-01-01', recordLimit: 33 }, '1 to 32'],
+        [{ startDate: '2026-01-01', endDate: '2026-01-01', sourceRecordLimit: 33 }, '1 to 32'],
         [{ startDate: '2026-01-01', endDate: '2026-01-01', chunkLimit: 9 }, '1 to 8'],
         [{ startDate: '2026-01-01', endDate: '2026-01-01', samplePointLimit: 1_439 }, '1440 to 11520'],
         [{
             startDate: '2026-01-01',
             endDate: '2026-01-01',
-            recordCursor: { calendarDate: '2026-01-01', id: 'nested/path' },
+            sourceRecordCursor: { calendarDate: '2026-01-01', id: 'nested/path' },
         }, 'safe bounded document ID'],
     ])('rejects invalid or unbounded query input %#', (query, message) => {
         expect(() => normalizeHealthRangeQuery(query)).toThrowError(new RegExp(message));
@@ -272,10 +272,10 @@ describe('unified health shared contract', () => {
             origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
             recordingMethods: [HEALTH_RECORDING_METHODS.ProviderCalculated],
         })]);
-        expect(result.observations.find(item => item.recordId === 'garmin-record')?.device).toEqual({
+        expect(result.observations.find(item => item.sourceRecordId === 'garmin-record')?.device).toEqual({
             deviceKey: 'garmin-watch-1',
         });
-        expect(result.observations.find(item => item.recordId === 'coros-record')?.coverage.status)
+        expect(result.observations.find(item => item.sourceRecordId === 'coros-record')?.coverage.status)
             .toBe(HEALTH_COVERAGE_STATUSES.Partial);
         expect(result.dailySummaries[0].sleepReferenceIds).toEqual(['sleep-session-1']);
         expect(result.coverage.find(item => item.provider === HEALTH_PROVIDERS.GarminAPI && item.metricId === HEALTH_METRIC_IDS.Steps)).toMatchObject({
@@ -591,7 +591,7 @@ describe('unified health shared contract', () => {
         });
     });
 
-    it('returns deterministic record cursors and respects provider filters', () => {
+    it('returns deterministic source-record cursors and respects provider filters', () => {
         const records = [
             sourceRecord({ id: 'a', provider: HEALTH_PROVIDERS.GarminAPI }),
             sourceRecord({ id: 'b', provider: HEALTH_PROVIDERS.COROSAPI }),
@@ -602,24 +602,24 @@ describe('unified health shared contract', () => {
             startDate: '2026-01-01',
             endDate: '2026-01-01',
             providers: [HEALTH_PROVIDERS.GarminAPI],
-            recordLimit: 1,
+            sourceRecordLimit: 1,
         });
-        expect(firstPage.observations.map(item => item.recordId)).toEqual(['a']);
-        expect(firstPage.pageInfo.recordCursor).toEqual({ calendarDate: '2026-01-01', id: 'a' });
-        expect(firstPage.pageInfo.recordAggregateComplete).toBe(false);
+        expect(firstPage.observations.map(item => item.sourceRecordId)).toEqual(['a']);
+        expect(firstPage.pageInfo.sourceRecordCursor).toEqual({ calendarDate: '2026-01-01', id: 'a' });
+        expect(firstPage.pageInfo.sourceRecordAggregateComplete).toBe(false);
 
         const secondPage = projectHealthRange(records, [], {
             startDate: '2026-01-01',
             endDate: '2026-01-01',
             providers: [HEALTH_PROVIDERS.GarminAPI],
-            recordLimit: 1,
-            recordCursor: firstPage.pageInfo.recordCursor,
+            sourceRecordLimit: 1,
+            sourceRecordCursor: firstPage.pageInfo.sourceRecordCursor,
         });
-        expect(secondPage.observations.map(item => item.recordId)).toEqual(['c']);
-        expect(secondPage.pageInfo.recordAggregateComplete).toBe(false);
+        expect(secondPage.observations.map(item => item.sourceRecordId)).toEqual(['c']);
+        expect(secondPage.pageInfo.sourceRecordAggregateComplete).toBe(false);
     });
 
-    it('supports deterministic conflict recomputation across record page boundaries', () => {
+    it('supports deterministic conflict recomputation across source-record page boundaries', () => {
         const records = [
             sourceRecord({
                 id: 'a-garmin',
@@ -635,12 +635,12 @@ describe('unified health shared contract', () => {
         const query = {
             startDate: '2026-01-01',
             endDate: '2026-01-01',
-            recordLimit: 1,
+            sourceRecordLimit: 1,
         };
         const firstPage = projectHealthRange(records, [], query);
         const secondPage = projectHealthRange(records, [], {
             ...query,
-            recordCursor: firstPage.pageInfo.recordCursor,
+            sourceRecordCursor: firstPage.pageInfo.sourceRecordCursor,
         });
 
         expect(firstPage.conflicts).toEqual([]);
@@ -668,13 +668,13 @@ describe('unified health shared contract', () => {
             startDate: '2026-01-01',
             endDate: '2026-01-01',
             metricIds: [HEALTH_METRIC_IDS.Steps],
-            recordLimit: 1,
+            sourceRecordLimit: 1,
         });
 
-        expect(result.observations.map(item => item.recordId)).toEqual(['b-steps']);
+        expect(result.observations.map(item => item.sourceRecordId)).toEqual(['b-steps']);
         expect(result.pageInfo).toMatchObject({
-            recordsTruncated: true,
-            recordCursor: { calendarDate: '2026-01-01', id: 'b-steps' },
+            sourceRecordsTruncated: true,
+            sourceRecordCursor: { calendarDate: '2026-01-01', id: 'b-steps' },
         });
     });
 
@@ -715,11 +715,11 @@ describe('unified health shared contract', () => {
             providers: [HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.COROSAPI],
             metricIds: [HEALTH_METRIC_IDS.HeartRate],
             includeSamples: true,
-            recordLimit: 10,
+            sourceRecordLimit: 10,
             chunkLimit: 8,
         });
 
-        expect(plans.records).toMatchObject({
+        expect(plans.sourceRecords).toMatchObject({
             filter: {
                 field: 'source.provider',
                 operator: 'in',
@@ -745,7 +745,7 @@ describe('unified health shared contract', () => {
             includeSamples: true,
         });
 
-        expect(plans.records.filter).toMatchObject({ field: 'metricIds', operator: 'array-contains-any' });
+        expect(plans.sourceRecords.filter).toMatchObject({ field: 'metricIds', operator: 'array-contains-any' });
         expect(plans.chunks?.filter).toMatchObject({ field: 'metricId', operator: 'in' });
     });
 });

@@ -8,7 +8,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
-    HEALTH_RECORD_KINDS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SCHEMA_VERSION,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
@@ -44,13 +44,13 @@ vi.mock('app/firebase/firestore', () => {
     };
 });
 
-function healthRecord(): HealthSourceRecord {
+function healthSourceRecord(): HealthSourceRecord {
     const startTimeMs = Date.parse('2026-01-01T00:00:00.000Z');
     return {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id: 'record-1',
         userID: 'user-1',
-        kind: HEALTH_RECORD_KINDS.DailySummary,
+        kind: HEALTH_SOURCE_RECORD_KINDS.DailySummary,
         source: {
             provider: HEALTH_PROVIDERS.GarminAPI,
             accountKey: 'opaque-account',
@@ -108,14 +108,14 @@ describe('AppHealthService', () => {
         }));
 
         expect(result.observations).toEqual([]);
-        expect(result.query.recordLimit).toBe(32);
+        expect(result.query.sourceRecordLimit).toBe(32);
         expect(collection).not.toHaveBeenCalled();
     });
 
     it('uses the shared provider-first plan for the default direct Firestore read', async () => {
         vi.mocked(collectionData).mockImplementation((target: unknown) => {
             const path = (target as { collectionRef?: { path?: string[] } }).collectionRef?.path || [];
-            return of(path.at(-1) === 'healthRecords' ? [healthRecord()] : []) as never;
+            return of(path.at(-1) === 'healthSourceRecords' ? [healthSourceRecord()] : []) as never;
         });
 
         const result = await firstValueFrom(service.watchRange('user-1', {
@@ -124,13 +124,13 @@ describe('AppHealthService', () => {
             providers: [HEALTH_PROVIDERS.GarminAPI],
             metricIds: [HEALTH_METRIC_IDS.Steps],
             includeSamples: true,
-            recordLimit: 10,
+            sourceRecordLimit: 10,
             chunkLimit: 8,
-            recordCursor: { calendarDate: '2025-12-31', id: 'previous-record' },
+            sourceRecordCursor: { calendarDate: '2025-12-31', id: 'previous-record' },
         }));
 
         expect(result.observations).toHaveLength(1);
-        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'healthRecords');
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'healthSourceRecords');
         expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'healthSampleChunks');
         expect(where).toHaveBeenCalledWith('source.provider', '==', HEALTH_PROVIDERS.GarminAPI);
         expect(where).toHaveBeenCalledWith('provider', '==', HEALTH_PROVIDERS.GarminAPI);
