@@ -249,7 +249,7 @@ describe('processActivitySyncTask', () => {
 
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
       'queue-item-1',
-      expect.any(Number),
+      nowMs + (25 * 60 * 1000),
       1500,
     );
     expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
@@ -270,6 +270,77 @@ describe('processActivitySyncTask', () => {
     );
     expect(mockLoggerWarn).not.toHaveBeenCalled();
     expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('re-enqueues an already planned COROS status poll without polling early', async () => {
+    const nowMs = 1_700_000_000_000;
+    const scheduledAtMs = nowMs + (25 * 60 * 1000);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: scheduledAtMs,
+      }),
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(false);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+      'user-1',
+      'corosAPI',
+      'queue-item-1',
+      'before_activity_sync_pending_status_poll_enqueue',
+    );
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      scheduledAtMs,
+      1500,
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        taskEnqueued: false,
+        reschedulingExistingPoll: true,
+      }),
+    );
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('processes a COROS status poll once it is within the scheduling grace window', async () => {
+    const nowMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: nowMs + (5 * 1000),
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).toHaveBeenCalledOnce();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
 
   it('does not enqueue a pending COROS status poll after account deletion starts', async () => {

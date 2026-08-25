@@ -1,6 +1,7 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
     CLOUD_TASK_RETRY_CONFIG,
     getCloudTaskRetryBackoffSeconds,
@@ -19,23 +20,88 @@ interface ActivitySyncTaskPayload {
 }
 
 const MAX_RETRY_REASON_LENGTH = 300;
+const PENDING_STATUS_POLL_SCHEDULING_GRACE_MS = 5 * 1000;
 
-function getProviderStatusPollDelaySeconds(queueItem: ActivitySyncQueueItemInterface): number {
-    const fallbackDelaySeconds = getCloudTaskRetryBackoffSeconds(queueItem.retryCount);
+function getScheduledProviderStatusPollAtMs(
+    queueItem: ActivitySyncQueueItemInterface,
+    nowMs = Date.now(),
+): number | null {
     // The retry transition records the planned poll time in the dispatch marker
     // before this worker acknowledges. Use that durable due time so a delayed
     // task does not drift from the cadence protected by the dispatcher.
     const scheduledAtMs = Number(queueItem.dispatchedToCloudTask);
-    const nowMs = Date.now();
     const remainingDelayMs = scheduledAtMs - nowMs;
-    if (
+    return (
         Number.isFinite(scheduledAtMs)
         && remainingDelayMs > 0
         && remainingDelayMs <= (CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds * 1000)
+    ) ? Math.floor(scheduledAtMs) : null;
+}
+
+function getScheduledCOROSStatusPollAtMs(
+    queueItem: ActivitySyncQueueItemInterface,
+    nowMs = Date.now(),
+): number | null {
+    if (
+        queueItem.destinationServiceName !== ServiceNames.COROSAPI
+        || !queueItem.destinationUploadID
+        || !queueItem.destinationProviderUserID
     ) {
-        return Math.max(1, Math.ceil(remainingDelayMs / 1000));
+        return null;
     }
-    return fallbackDelaySeconds;
+    const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
+    // A Cloud Task that is at (or very close to) its due time must perform the
+    // poll. Re-enqueueing its own deterministic task name would be deduped
+    // while the current task is still running.
+    return scheduledAtMs !== null
+        && (scheduledAtMs - nowMs) > PENDING_STATUS_POLL_SCHEDULING_GRACE_MS
+        ? scheduledAtMs
+        : null;
+}
+
+function getProviderStatusPollDelaySeconds(
+    queueItem: ActivitySyncQueueItemInterface,
+    nowMs = Date.now(),
+): number {
+    const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
+    if (scheduledAtMs !== null) {
+        return Math.max(1, Math.ceil((scheduledAtMs - nowMs) / 1000));
+    }
+    return getCloudTaskRetryBackoffSeconds(queueItem.retryCount);
+}
+
+async function enqueuePendingCOROSStatusPoll(
+    queueItem: ActivitySyncQueueItemInterface,
+    queueItemId: string,
+    reschedulingExistingPoll = false,
+): Promise<void> {
+    if (await shouldSkipQueueWorkForDeletedUser(
+        queueItem.userID,
+        queueItem.destinationServiceName,
+        queueItemId,
+        'before_activity_sync_pending_status_poll_enqueue',
+    )) {
+        logger.info(`[ActivitySyncTaskWorker] Skipping pending COROS status poll for item ${queueItemId} because the account is deleted or deleting.`);
+        return;
+    }
+
+    const nowMs = Date.now();
+    const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
+    const pollDelaySeconds = getProviderStatusPollDelaySeconds(queueItem, nowMs);
+    const taskEnqueued = await enqueueActivitySyncTask(
+        queueItemId,
+        scheduledAtMs ?? nowMs,
+        pollDelaySeconds,
+    );
+    logger.info('[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.', {
+        queueItemId,
+        destinationServiceName: queueItem.destinationServiceName,
+        providerStatus: 1,
+        pollDelaySeconds,
+        retryCount: queueItem.retryCount,
+        taskEnqueued,
+        ...(reschedulingExistingPoll ? { reschedulingExistingPoll: true } : {}),
+    });
 }
 
 function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string | undefined {
@@ -97,6 +163,14 @@ export const processActivitySyncTask = onTaskDispatched({
             id: queueDoc.id,
             ref: queueDoc.ref,
         }, queueItem) as ActivitySyncQueueItemInterface;
+        if (getScheduledCOROSStatusPollAtMs(processingQueueItem) !== null) {
+            // The prior worker committed the retry transition but its response
+            // may have been retried before the planned poll is due. Re-enqueue
+            // the same deterministic delayed task rather than polling COROS
+            // early and consuming another polling budget entry.
+            await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId, true);
+            return;
+        }
         const result = await processActivitySyncQueueItem(processingQueueItem);
 
         switch (result) {
@@ -110,29 +184,7 @@ export const processActivitySyncTask = onTaskDispatched({
                 logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
             case QueueResult.ProviderStatusPending: {
-                if (await shouldSkipQueueWorkForDeletedUser(
-                    processingQueueItem.userID,
-                    processingQueueItem.destinationServiceName,
-                    queueItemId,
-                    'before_activity_sync_pending_status_poll_enqueue',
-                )) {
-                    logger.info(`[ActivitySyncTaskWorker] Skipping pending COROS status poll for item ${queueItemId} because the account is deleted or deleting.`);
-                    break;
-                }
-                const pollDelaySeconds = getProviderStatusPollDelaySeconds(processingQueueItem);
-                const taskEnqueued = await enqueueActivitySyncTask(
-                    queueItemId,
-                    Date.now(),
-                    pollDelaySeconds,
-                );
-                logger.info('[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.', {
-                    queueItemId,
-                    destinationServiceName: processingQueueItem.destinationServiceName,
-                    providerStatus: 1,
-                    pollDelaySeconds,
-                    retryCount: processingQueueItem.retryCount,
-                    taskEnqueued,
-                });
+                await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId);
                 break;
             }
             case QueueResult.MovedToDLQ:
