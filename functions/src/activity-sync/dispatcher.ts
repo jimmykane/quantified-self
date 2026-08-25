@@ -1,13 +1,17 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { MAX_PENDING_TASKS, QUEUE_SCHEDULE } from '../shared/queue-config';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { enqueueActivitySyncTask, getCloudTaskQueueDepthForQueue } from '../utils';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
-import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
+import {
+    PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER,
+    PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+} from '../queue-utils';
 import {
     markQueueItemDispatchedIfUserActive,
     QueueDispatchMarkerResult,
@@ -34,6 +38,20 @@ function toDateCreatedTimestamp(value: unknown): number {
 function toUserID(value: unknown): string | null {
     const userID = `${value || ''}`.trim();
     return userID.length > 0 ? userID : null;
+}
+
+function isFutureScheduledCOROSStatusPoll(
+    queueItem: Partial<ActivitySyncQueueItemInterface>,
+    nowMs: number,
+): boolean {
+    const scheduledAtMs = toDispatchTimestamp(queueItem.dispatchedToCloudTask);
+    return queueItem.destinationServiceName === ServiceNames.COROSAPI
+        && scheduledAtMs !== null
+        && scheduledAtMs > nowMs
+        && scheduledAtMs !== PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
+        && scheduledAtMs !== PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER
+        && `${queueItem.destinationUploadID ?? ''}`.trim().length > 0
+        && `${queueItem.destinationProviderUserID ?? ''}`.trim().length > 0;
 }
 
 async function deleteActivitySyncCandidateBeforeDispatch(
@@ -107,11 +125,13 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
 
     const scanLimit = MAX_ACTIVITY_SYNC_QUEUE_SCAN;
     const pageSize = Math.min(ACTIVITY_SYNC_RECONCILIATION_PAGE_SIZE, MAX_ACTIVITY_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
-    const scannedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    const candidateDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    let inspected = 0;
+    let skippedScheduledCOROSPolls = 0;
     let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
 
-    while (scannedDocs.length < scanLimit) {
-        const remainingScanCapacity = scanLimit - scannedDocs.length;
+    while (candidateDocs.length < scanLimit) {
+        const remainingScanCapacity = scanLimit - candidateDocs.length;
         const currentPageSize = Math.min(pageSize, remainingScanCapacity);
 
         let query = admin.firestore()
@@ -129,7 +149,16 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
             break;
         }
 
-        scannedDocs.push(...pageSnapshot.docs);
+        inspected += pageSnapshot.docs.length;
+        const nonScheduledPollDocs = pageSnapshot.docs.filter(doc => {
+            const data = doc.data() as Partial<ActivitySyncQueueItemInterface>;
+            return !isFutureScheduledCOROSStatusPoll(data, nowMs);
+        });
+        // A future COROS status-only poll is already backed by a delayed Cloud
+        // Task. It must not consume this reconciliation pass's finite
+        // candidate budget, otherwise enough old polls hide newer work.
+        skippedScheduledCOROSPolls += pageSnapshot.docs.length - nonScheduledPollDocs.length;
+        candidateDocs.push(...nonScheduledPollDocs);
         if (pageSnapshot.docs.length < currentPageSize) {
             break;
         }
@@ -137,15 +166,15 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
     }
 
-    if (!scannedDocs.length) {
+    if (!candidateDocs.length) {
         return {
-            inspected: 0,
+            inspected,
             dispatched: 0,
-            skippedRecent: 0,
+            skippedRecent: skippedScheduledCOROSPolls,
         };
     }
 
-    const candidates = scannedDocs
+    const candidates = candidateDocs
         .map((doc) => {
             const data = doc.data() as Partial<ActivitySyncQueueItemInterface>;
             const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
@@ -184,7 +213,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         });
 
     let dispatched = 0;
-    let skippedRecent = 0;
+    let skippedRecent = skippedScheduledCOROSPolls;
     const dispatchLimit = Math.min(availableSlots, candidates.length);
 
     for (const candidate of candidates) {
@@ -238,7 +267,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
     }
 
     return {
-        inspected: candidates.length,
+        inspected,
         dispatched,
         skippedRecent,
     };
