@@ -14,11 +14,19 @@ const {
   mockFailedJobsGet,
   mockIsQueueItemDeletedForUserCleanup,
   mockProcessActivitySyncQueueItem,
+  mockEnqueueActivitySyncTask,
+  mockLoggerInfo,
+  mockLoggerWarn,
+  mockLoggerError,
 } = vi.hoisted(() => ({
   mockQueueGet: vi.fn(),
   mockFailedJobsGet: vi.fn(),
   mockIsQueueItemDeletedForUserCleanup: vi.fn(),
   mockProcessActivitySyncQueueItem: vi.fn(),
+  mockEnqueueActivitySyncTask: vi.fn(),
+  mockLoggerInfo: vi.fn(),
+  mockLoggerWarn: vi.fn(),
+  mockLoggerError: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/tasks', () => ({
@@ -41,6 +49,10 @@ vi.mock('../activity-sync/process-queue-item', () => ({
   processActivitySyncQueueItem: mockProcessActivitySyncQueueItem,
 }));
 
+vi.mock('../shared/cloud-tasks', () => ({
+  enqueueActivitySyncTask: mockEnqueueActivitySyncTask,
+}));
+
 vi.mock('../queue/cleanup-tombstone', () => ({
   isQueueItemDeletedForUserCleanup: mockIsQueueItemDeletedForUserCleanup,
 }));
@@ -50,6 +62,7 @@ vi.mock('../queue-utils', () => ({
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
+    ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -57,9 +70,9 @@ vi.mock('../queue-utils', () => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
+  info: mockLoggerInfo,
+  warn: mockLoggerWarn,
+  error: mockLoggerError,
 }));
 
 import { processActivitySyncTask } from './activity-sync-worker';
@@ -196,6 +209,65 @@ describe('processActivitySyncTask', () => {
     mockProcessActivitySyncQueueItem.mockResolvedValueOnce('DEFERRED');
 
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+  });
+
+  it('schedules a pending COROS status poll and completes at info level', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false, retryCount: 1 }),
+    });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async (queueItem: {
+      retryCount?: number;
+      destinationUploadID?: string;
+    }) => {
+      queueItem.retryCount = 2;
+      queueItem.destinationUploadID = 'coros-upload-1';
+      return 'PROVIDER_STATUS_PENDING';
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      expect.any(Number),
+      1800,
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        queueItemId: 'queue-item-1',
+        providerStatus: 1,
+        destinationUploadID: 'coros-upload-1',
+        pollDelaySeconds: 1800,
+        retryCount: 2,
+        taskEnqueued: true,
+      }),
+    );
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('rethrows a pending-poll scheduling failure so Cloud Tasks retries it', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROVIDER_STATUS_PENDING');
+    const schedulingError = new Error('Cloud Tasks unavailable');
+    mockEnqueueActivitySyncTask.mockRejectedValueOnce(schedulingError);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
+      .rejects
+      .toThrow('Cloud Tasks unavailable');
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Error processing item queue-item-1:',
+      schedulingError,
+    );
   });
 
   it('stops Cloud Task retries when accepted provider work requires manual reconciliation', async () => {

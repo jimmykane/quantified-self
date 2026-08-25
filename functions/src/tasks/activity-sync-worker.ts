@@ -2,6 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { enqueueActivitySyncTask } from '../shared/cloud-tasks';
 import { QueueResult } from '../queue-utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -14,6 +15,22 @@ interface ActivitySyncTaskPayload {
 }
 
 const MAX_RETRY_REASON_LENGTH = 300;
+
+function getProviderStatusPollDelaySeconds(retryCount: unknown): number {
+    // Pending polls consume the queue retry budget, so mirror the configured
+    // Cloud Tasks backoff before scheduling the next explicit status check.
+    const completedPolls = Number.isFinite(Number(retryCount))
+        ? Math.max(0, Math.floor(Number(retryCount)))
+        : 0;
+    const backoffExponent = Math.min(
+        Math.max(0, completedPolls - 1),
+        CLOUD_TASK_RETRY_CONFIG.maxDoublings,
+    );
+    return Math.min(
+        CLOUD_TASK_RETRY_CONFIG.maxBackoffSeconds,
+        CLOUD_TASK_RETRY_CONFIG.minBackoffSeconds * (2 ** backoffExponent),
+    );
+}
 
 function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string | undefined {
     const errors = Array.isArray(queueItem.errors) ? queueItem.errors : [];
@@ -70,10 +87,11 @@ export const processActivitySyncTask = onTaskDispatched({
     }
 
     try {
-        const result = await processActivitySyncQueueItem(Object.assign({
+        const processingQueueItem = Object.assign({
             id: queueDoc.id,
             ref: queueDoc.ref,
-        }, queueItem) as ActivitySyncQueueItemInterface);
+        }, queueItem) as ActivitySyncQueueItemInterface;
+        const result = await processActivitySyncQueueItem(processingQueueItem);
 
         switch (result) {
             case QueueResult.Processed:
@@ -85,6 +103,24 @@ export const processActivitySyncTask = onTaskDispatched({
             case QueueResult.Deferred:
                 logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
+            case QueueResult.ProviderStatusPending: {
+                const pollDelaySeconds = getProviderStatusPollDelaySeconds(processingQueueItem.retryCount);
+                const taskEnqueued = await enqueueActivitySyncTask(
+                    queueItemId,
+                    Date.now(),
+                    pollDelaySeconds,
+                );
+                logger.info('[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.', {
+                    queueItemId,
+                    destinationServiceName: processingQueueItem.destinationServiceName,
+                    destinationUploadID: processingQueueItem.destinationUploadID || null,
+                    providerStatus: 1,
+                    pollDelaySeconds,
+                    retryCount: processingQueueItem.retryCount,
+                    taskEnqueued,
+                });
+                break;
+            }
             case QueueResult.MovedToDLQ:
                 logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                 break;

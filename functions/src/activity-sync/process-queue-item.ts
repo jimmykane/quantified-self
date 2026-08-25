@@ -994,6 +994,7 @@ function buildPendingDestinationUploadError(
             retryMode: 'resume',
             code: 'deadline-exceeded',
             message: uploadResult.message || `${queueItem.destinationServiceName} is still processing the activity.`,
+            providerStatus: queueItem.destinationServiceName === ServiceNames.COROSAPI ? 1 : undefined,
             providerUserId,
             providerOperationId,
             dlqContext: queueItem.destinationServiceName === ServiceNames.SuuntoApp
@@ -1005,6 +1006,15 @@ function buildPendingDestinationUploadError(
     return Object.assign(new Error('Wahoo is still processing the activity.'), {
         code: 'deadline-exceeded',
     });
+}
+
+function isExpectedCOROSActivityUploadPending(error: ProviderOperationError): boolean {
+    return error.serviceName === ServiceNames.COROSAPI
+        && error.operation === 'activity_upload_status'
+        && error.disposition === 'retryable'
+        && error.retryMode === 'resume'
+        && error.code === 'deadline-exceeded'
+        && error.providerStatus === 1;
 }
 
 function buildInvalidProviderResumeStateError(
@@ -1864,6 +1874,25 @@ export async function processActivitySyncQueueItem(
                     if (!persisted) {
                         return QueueResult.Processed;
                     }
+                }
+
+                if (isExpectedCOROSActivityUploadPending(actionableError)) {
+                    const pollResult = await increaseActivitySyncRetryCountIfCurrent(
+                        queueItem,
+                        normalizedError,
+                        bulkWriter,
+                        actionableError.dlqContext,
+                    );
+                    if (pollResult === QueueResult.MovedToDLQ) {
+                        await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
+                            ...routeMeta,
+                            error: metadataError,
+                        }));
+                        logProviderFailureDecision(queueItem, actionableError, 'dlq');
+                    }
+                    return pollResult === QueueResult.RetryIncremented
+                        ? QueueResult.ProviderStatusPending
+                        : pollResult;
                 }
             } else if (actionableError.retryMode === 'restart') {
                 const cleared = await clearPendingDestinationUploadForRestart(queueItem);

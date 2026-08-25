@@ -87,6 +87,8 @@ The following FIT-only routes use `shared/activity-sync-routes.ts`, the common d
 
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
 
+For COROS-bound shared rows, provider status `1` is an expected asynchronous wait rather than a Cloud Task failure. The worker retains the upload ID, consumes the bounded polling budget, acknowledges the current task, and schedules the next status-only poll using the configured Cloud Tasks backoff (15 minutes through four hours). It emits an info-level structured poll-scheduled log; the next worker never posts the FIT again. Scheduler/transport failures, exhausted polling, and status `-1` remain warning/error paths.
+
 ## Echo suppression
 
 Provider-to-provider activity delivery can otherwise return through a destination's import feed and start a loop. The shared outbound fingerprint mechanism runs for every activity destination, not only COROS:

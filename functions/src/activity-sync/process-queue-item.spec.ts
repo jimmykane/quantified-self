@@ -139,6 +139,7 @@ vi.mock('../queue-utils', () => ({
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
+    ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -937,7 +938,7 @@ describe('activity-sync/process-queue-item', () => {
 
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
-    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(firstResult).toBe(QueueResult.ProviderStatusPending);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_coros_upload_state_persist',
@@ -957,9 +958,15 @@ describe('activity-sync/process-queue-item', () => {
       undefined,
       'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     );
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure classified.',
+      expect.anything(),
+    );
 
-    await processActivitySyncQueueItem(queueItem);
+    const secondResult = await processActivitySyncQueueItem(queueItem);
 
+    expect(secondResult).toBe(QueueResult.Processed);
     expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledWith(
       'user-1',
       '9223372036854775806',
@@ -968,6 +975,74 @@ describe('activity-sync/process-queue-item', () => {
     );
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps exhausted COROS pending polling visible as a terminal failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationServiceName: ServiceNames.COROSAPI,
+    }));
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        providerStatus: 1,
+        outcome: 'dlq',
+      }),
+    );
+  });
+
+  it('moves a permanently rejected COROS status poll to DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permanent',
+      code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.',
+      providerStatus: -1,
+      providerUserId: 'coros-user-1',
+      providerOperationId: '9223372036854775806',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        code: 'provider-processing-failed',
+        providerStatus: -1,
+      }),
+      undefined,
+      'COROS_ACTIVITY_UPLOAD_FAILED',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        providerStatus: -1,
+        outcome: 'dlq',
+      }),
+    );
   });
 
   it('retries COROS post-upload writes after the upload count marker is committed', async () => {
