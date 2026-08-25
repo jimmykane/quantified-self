@@ -8,6 +8,7 @@ import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants'
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processActivitySyncQueueItem } from '../activity-sync/process-queue-item';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
+import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface ActivitySyncTaskPayload {
@@ -104,6 +105,15 @@ export const processActivitySyncTask = onTaskDispatched({
                 logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
             case QueueResult.ProviderStatusPending: {
+                if (await shouldSkipQueueWorkForDeletedUser(
+                    processingQueueItem.userID,
+                    processingQueueItem.destinationServiceName,
+                    queueItemId,
+                    'before_activity_sync_pending_status_poll_enqueue',
+                )) {
+                    logger.info(`[ActivitySyncTaskWorker] Skipping pending COROS status poll for item ${queueItemId} because the account is deleted or deleting.`);
+                    break;
+                }
                 const pollDelaySeconds = getProviderStatusPollDelaySeconds(processingQueueItem.retryCount);
                 const taskEnqueued = await enqueueActivitySyncTask(
                     queueItemId,
@@ -113,7 +123,6 @@ export const processActivitySyncTask = onTaskDispatched({
                 logger.info('[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.', {
                     queueItemId,
                     destinationServiceName: processingQueueItem.destinationServiceName,
-                    destinationUploadID: processingQueueItem.destinationUploadID || null,
                     providerStatus: 1,
                     pollDelaySeconds,
                     retryCount: processingQueueItem.retryCount,
