@@ -199,7 +199,10 @@ function chunkMatchesKnownParentRevision(
 }
 
 function entryCanonicalUnit(entry: HealthMetricEntry): HealthUnit | null {
-  return entry.kind === 'value' && entry.canonical ? entry.canonical.unit : null;
+  if (entry.kind === 'sleep_reference') {
+    return getHealthMetricDefinition(entry.metricId).canonicalUnit;
+  }
+  return entry.canonical ? entry.canonical.unit : null;
 }
 
 function observationSort(left: HealthObservation, right: HealthObservation): number {

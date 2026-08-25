@@ -74,7 +74,8 @@ export const deleteSelf = functions
                 }, { merge: true });
                 deletionMarkerWritten = true;
             } catch (markerError) {
-                logger.error(`Failed to write user deletion marker for ${uid}. Continuing with deletion.`, markerError);
+                logger.error(`Failed to write user deletion marker for ${uid}. Aborting deletion.`, markerError);
+                throw markerError;
             }
 
             // Delete Auth User (idempotent if already deleted)

@@ -155,10 +155,12 @@
 
                 subgraph Backend["☁️ Backend Services"]
                 DeleteFn["Cloud Function: deleteSelf"]
+                Tombstone["Firestore deletion tombstone"]
                 Auth["Firebase Auth"]
 
                 Service -->|Call| DeleteFn
-                DeleteFn -->|Admin SDK| Auth
+                DeleteFn -->|"1. Write fail-closed marker"| Tombstone
+                Tombstone -->|"2. Marker stored"| Auth
                 end
 
                 subgraph Triggers["⚡ Parallel Cleanup Triggers"]
@@ -194,6 +196,9 @@
                 style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
                 style ExtensionCleanup fill:#161b22,stroke:#238636,stroke-width:2px,stroke-dasharray: 5 5
             </div>
+            <p><code>deleteSelf</code> deletes the Firebase Auth user only after the deletion tombstone is stored. If
+                that write fails, deletion aborts so guarded background writers cannot race recursive cleanup without a
+                deletion signal.</p>
         </div>
 
         <div class="card">

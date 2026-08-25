@@ -312,6 +312,9 @@ describe('unified health shared contract', () => {
             origins: [HEALTH_VALUE_ORIGINS.ProviderSummary],
             recordingMethods: [HEALTH_RECORDING_METHODS.ProviderCalculated],
         });
+        expect(result.discovery.find(item => item.metricId === HEALTH_METRIC_IDS.HeartRate)).toMatchObject({
+            canonicalUnits: [HEALTH_UNITS.BeatsPerMinute],
+        });
     });
 
     it('keeps coverage and freshness separate across aggregation, origin, and recording method', () => {

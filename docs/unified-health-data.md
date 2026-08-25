@@ -221,7 +221,7 @@ The validator also requires the health metric ID to match the referenced Sleep f
 
 Disconnect stops future provider access and changes safe sync state; it does not delete already imported health history. This matches the existing retained-import model and prevents a connection toggle from silently erasing historical analysis.
 
-Account deletion removes all health source records, chunks, and sync state through recursive deletion of `users/{uid}`. There are no top-level unified-health collections that require a separate cleanup query.
+Account deletion writes the deletion tombstone before deleting the Firebase Auth user; if that marker cannot be stored, deletion fails closed and the account remains so recursive cleanup cannot begin without a writer-visible deletion signal. After Auth deletion, the configured extension removes all health source records, chunks, and sync state through recursive deletion of `users/{uid}`. There are no top-level unified-health collections that require a separate cleanup query.
 
 Time-based health retention is intentionally uncapped for now. No `expireAt` field or TTL override exists for `healthSourceRecords` or `healthSampleChunks`. Storage remains bounded per document, replacement, and query. Revisit time-based retention only with an explicit product/privacy decision and measured storage data.
 
