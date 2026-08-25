@@ -1,0 +1,249 @@
+# Unified Health Data Foundation
+
+This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics.
+
+Provider-specific mapping remains in issues #611–#613. The Health Hub product surface remains in #614. This foundation does not start provider ingestion, backfill existing data, or change the current Sleep, Training, MCP, or activity pipelines by itself.
+
+## Goals
+
+- Give provider adapters one typed model for daily health summaries, interval summaries, point measurements, profile snapshots, and bounded high-resolution samples.
+- Preserve provider attribution, native meaning, recording method, device attribution, quality, and coverage.
+- Normalize only values with a defensible canonical meaning and unit.
+- Keep missing data missing; never turn an absent day or unsupported metric into zero.
+- Preserve conflicting source observations instead of silently selecting or averaging one.
+- Give the Angular app and an authenticated callable the same query, projection, paging, and result contracts.
+- Reuse the existing normalized `sleepSessions` model through typed references instead of copying sleep sessions or raw sleep samples.
+
+## Non-goals
+
+- No Garmin, Suunto, COROS, or Wahoo health adapter is wired in this issue.
+- No cross-provider deduplication, ranking, or source-preference policy is applied.
+- No medical interpretation or diagnosis is produced.
+- No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
+- No new MCP tool, Training metric, normalized Sleep field, dashboard tile, or public page is added.
+- No time-based retention or Firestore TTL policy is enabled for health records or sample chunks.
+
+## Architecture
+
+```text
+provider adapter (#611–#613)
+        │
+        ├─ exact provider/native semantics
+        ├─ canonical conversion only when defensible
+        └─ ordered provider revision
+        │
+        ▼
+runtime validation
+        │
+        ▼
+deletion-guarded atomic replacement
+        ├─ users/{uid}/healthRecords/{recordId}
+        ├─ users/{uid}/healthSampleChunks/{chunkId}
+        └─ users/{uid}/healthSyncState/{provider}
+        │
+        ├───────────────┬────────────────────┐
+        ▼               ▼                    ▼
+direct Firestore   queryHealthRange     account deletion
+(default app path) (auth + App Check)   (recursive user root)
+        └───────────────┬────────────────────┘
+                        ▼
+           shared query plan + projector
+                        ▼
+                 HealthRangeResult
+```
+
+The shared implementation is split intentionally:
+
+- `shared/health.ts` defines the schema, stable metric catalog, bounds, and public query/result types.
+- `shared/health-query.ts` validates range requests and projects source records into observations, discovery, coverage, freshness, daily references, conflicts, and cursors.
+- `shared/health-firestore-query.ts` creates the environment-neutral bounded Firestore plan.
+- `functions/src/health/validation.ts` validates untrusted adapter input at runtime.
+- `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
+- `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
+- `src/app/services/app.health.service.ts` provides the default direct listener and explicit callable alternative.
+
+## Stable metric catalog
+
+Metric IDs describe stable product semantics. A provider name or native field name must never become a metric ID. Provider-specific meaning belongs in `native.metric`, `semanticVariant`, native units, qualifiers, and source metadata.
+
+| Category | Stable metric IDs |
+| --- | --- |
+| Movement | `steps`, `wheelchair_pushes`, `distance`, `wheelchair_push_distance`, `floors_climbed`, `active_duration`, `moderate_intensity_duration`, `vigorous_intensity_duration`, `altitude` |
+| Energy | `active_energy`, `basal_energy`, `total_energy` |
+| Cardiovascular | `heart_rate`, `resting_heart_rate`, `heart_rate_variability`, `blood_oxygen_saturation`, `respiration_rate`, `blood_pressure_systolic`, `blood_pressure_diastolic`, `pulse_rate` |
+| Wellness | `stress_level`, `stress_state`, `stress_duration`, `body_energy`, `body_energy_change`, `recovery_score` |
+| Body | `body_weight`, `body_mass_index`, `body_fat`, `body_water`, `muscle_mass`, `bone_mass`, `skin_temperature_deviation` |
+| Fitness | `vo2_max`, `fitness_age` |
+| Sleep references | `sleep_duration`, `sleep_score` plus the applicable cardiovascular metric IDs for referenced Sleep vitals |
+
+Each catalog entry fixes its value type and canonical unit. The current canonical units are count, meters, seconds, kilocalories, beats/minute, milliseconds, percentage, breaths/minute, kilograms, kg/m², mmHg, Celsius, ml/kg/min, years, score, and category.
+
+### Metric semantics
+
+Every value or reference includes:
+
+- `aggregation`, such as total, average, minimum, maximum, latest, or sample;
+- `semanticVariant`, which distinguishes meanings that must not be combined, such as a provider daily total and a ten-minute bucket total;
+- `origin`: recorded, provider summary, or Quantified Self derived;
+- `recordingMethod`: device, manual, provider calculated, Quantified Self calculated, or unknown;
+- quality and coverage metadata;
+- optional device attribution;
+- a native metric/value/unit representation;
+- a canonical value only when `normalizationStatus` is `canonical`.
+
+`native_only` and `not_comparable` entries deliberately omit a canonical value. The runtime validator rejects a canonical unit or value that disagrees with the catalog.
+
+## Firestore model
+
+### Source records
+
+`users/{uid}/healthRecords/{recordId}` stores one provider source record. A record contains its calendar date and interval, source type/key, opaque account key, ordered revision, coverage, device, metric entries, searchable `metricIds`, and sample-chunk IDs.
+
+The record ID is a deterministic SHA-256 identifier derived from the Firebase UID, provider, raw provider account ID, provider record type, and provider record key. The account key is a separate deterministic hash. The raw provider account ID is validated for identity calculation and is never persisted or logged.
+
+### Sample chunks
+
+`users/{uid}/healthSampleChunks/{chunkId}` stores compact arrays for one provider, record, metric, semantic variant, and series. Offsets are relative to the chunk start. Native, canonical, and optional quality arrays must align exactly.
+
+Chunks are permanent leaf documents by schema. Firestore Rules do not grant access to descendants, which makes document-only deletion safe when a higher provider revision replaces stale chunks.
+
+### Sync state
+
+`users/{uid}/healthSyncState/{provider}` stores the safe aggregate state needed by a future Health Hub: ready, permission missing, reconnect required, failed, unsupported, or disconnected, plus bounded timestamps and an opaque error code. Raw error messages and payload excerpts are rejected.
+
+This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
+
+## Hard bounds
+
+Bounds protect Firestore document size, transaction limits, client reads, and projection memory. They are not a time-based retention policy.
+
+| Boundary | Limit |
+| --- | ---: |
+| Metrics per source record | 128 |
+| Sample points per chunk | 1,440 |
+| Sample chunks per record | 200 |
+| Estimated document payload | 900 KiB |
+| Estimated atomic replacement payload | 8 MiB |
+| Summary query range | 366 calendar days |
+| Sampled query range | 31 calendar days |
+| Public record page | 1–1,000 records; default 250 |
+| Firestore record fetch | Public page plus one look-ahead record |
+| Public chunk page | 1–500 chunks; default 100 |
+| Firestore chunk fetch | Public page plus one look-ahead chunk |
+| Sample points returned | 1,440–50,000; default 25,000 |
+
+Sample projection never splits a stored chunk to fit a point budget. It returns only complete matching chunks and reports truncation. The chunk cursor identifies the last consumed source chunk, which also lets sparse provider-first pages advance when their matching result is empty.
+
+## Revision and replacement contract
+
+Provider adapters must supply a non-negative ordered revision and a bounded opaque token. The writer calculates the content digest itself, excluding receipt/write timestamps so an exact redelivery remains idempotent.
+
+| Incoming revision | Result |
+| --- | --- |
+| No stored record | Write the record and all chunks atomically |
+| Lower order | Return `stale`; write nothing |
+| Same order, token, and digest | Return `unchanged`; write nothing |
+| Same order with different token or content | Throw `HealthRevisionConflictError`; write nothing |
+| Higher order | Atomically replace the record, write current chunks, and delete stale leaf chunks |
+
+Every transaction rechecks the account-deletion tombstone and user root through `getUserDeletionGuardStateInTransaction` before reading or writing feature data.
+
+## Query and projection contract
+
+`HealthRangeQuery -> HealthRangeResult` is the only public health range contract.
+
+The query accepts inclusive `YYYY-MM-DD` boundaries, provider and metric filters, sample inclusion, page limits, point limits, and stable `{ calendarDate, id }` cursors. Both the browser and Functions validate the same limits and create the same Firestore plan.
+
+Only one provider-or-metric predicate is used per Firestore collection to avoid a combinatorial index surface. Provider filtering takes precedence when both are supplied; the shared projector applies the remaining metric filter to the bounded source page. Paging is therefore source-page based: a page can contain fewer observations or chunks than its limit, including an empty matching sample page. Callers follow the corresponding cursor until its truncation flag is false.
+
+The result contains:
+
+- source-aware observations with native/canonical metric entries;
+- complete sample chunks when requested;
+- per-date observation and Sleep-reference IDs;
+- metric discovery with providers, value types, canonical units, semantic variants, first/last dates, and sample availability;
+- per-provider coverage, including requested, recorded, and partial day counts;
+- freshness with observed/received timestamps and explicit fresh, stale, or unknown state;
+- conflicts between overlapping observations with identical canonical semantics but differing values;
+- independent record/chunk cursors and truncation flags.
+
+The projector never fills gaps. A metric recorded on one of seven requested days reports one recorded day, not seven values with six zeroes.
+
+### Direct and server reads
+
+`AppHealthService.watchRange()` is the default Health Hub path. It uses owner-scoped Firestore listeners, then runs the shared projector in the app. `AppHealthService.queryRangeViaServer()` calls `queryHealthRange` for consumers that need an authenticated server read.
+
+The callable derives the data owner exclusively from `request.auth.uid`, requires App Check, validates every bound, logs only a safe error class, and returns the same `HealthRangeResult` shape.
+
+## Conflict policy
+
+Records remain source-aware. The foundation does not pick a preferred provider, blend values, or hide duplicates.
+
+A conflict is emitted only when canonical entries share metric ID, calendar date, aggregation, semantic variant, origin, canonical unit, and overlapping time intervals, come from different provider/account sources, and contain different scalar values. Native-only entries and different semantic variants are not declared conflicts.
+
+A future product layer may define an explicit source-selection policy, but it must operate on these preserved observations and expose that policy to the user.
+
+## Sleep compatibility boundary
+
+`users/{uid}/sleepSessions` remains the canonical normalized Sleep model and current Sleep query path. Unified health records must not copy a Sleep session, stage intervals, provider fields, or respiration/SpO₂/HRV sample arrays.
+
+When a health source record needs a Sleep relationship, it stores a typed `sleep_reference` containing the existing Sleep document ID and one allowlisted aggregate field:
+
+- duration or score;
+- average, minimum, or resting heart rate;
+- average or overnight HRV;
+- maximum SpO₂;
+- average respiration.
+
+The validator also requires the health metric ID to match the referenced Sleep field. For example, `durationSeconds` maps to `sleep_duration`, while `vitals.averageHeartRateBpm` maps to `heart_rate`. The referenced value is resolved by the Sleep consumer; it is not copied into the health record.
+
+## Security and privacy
+
+- Firestore Rules permit owners to get their own health documents and issue only explicitly bounded list queries.
+- All browser writes are denied. Provider adapters use the Admin SDK writer.
+- The callable requires Firebase Authentication and App Check and ignores any caller-supplied UID.
+- Provider account IDs are hashed before persistence. Credentials, raw payloads, raw values in logs, signed URLs, and free-form provider errors are prohibited.
+- Large metric/sample arrays are excluded from automatic Firestore indexes.
+- Health records, sample chunks, and sync state live below `users/{uid}`, so the configured recursive Delete User Data extension removes them with the account.
+- Background and transactional writes no-op when the user is missing or deletion is active.
+
+## Retention and disconnect
+
+Disconnect stops future provider access and changes safe sync state; it does not delete already imported health history. This matches the existing retained-import model and prevents a connection toggle from silently erasing historical analysis.
+
+Account deletion removes all health records, chunks, and sync state through recursive deletion of `users/{uid}`. There are no top-level unified-health collections that require a separate cleanup query.
+
+Time-based health retention is intentionally uncapped for now. No `expireAt` field or TTL override exists for `healthRecords` or `healthSampleChunks`. Storage remains bounded per document, replacement, and query. Revisit time-based retention only with an explicit product/privacy decision and measured storage data.
+
+## Provider adapter checklist
+
+Issues #611–#613 should implement each provider independently against this foundation:
+
+1. Confirm the documented API family, delivery mode, history/range limits, sampling cadence, permission/scopes, and revision behavior.
+2. Map only documented fields. Preserve the exact provider field/unit and semantic variant.
+3. Supply a stable provider account ID, record type/key, ordered revision, and opaque provider revision token. A revision token is an identifier such as an ETag or version marker, never an OAuth/access credential.
+4. Normalize units only where conversion is defensible; otherwise use `native_only` or `not_comparable`.
+5. Preserve recorded/provider-calculated/manual origin, device, quality, and partial coverage.
+6. Send bounded aligned sample series to the shared writer; never hand-build chunk documents.
+7. Update safe sync state with opaque error codes only.
+8. Recheck connection, entitlement, permissions, and account deletion at ingress and again before persistence.
+9. Test duplicates, stale/newer revisions, missing fields, partial days, timezone boundaries, unit conversion, sample bounds, and disconnect retention.
+10. Update this document, the provider guide, provider Help/policy/integration pages where behavior becomes user-visible, and provider-specific operational documentation.
+
+## Operational and release notes
+
+The foundation is inert until provider adapters call the writer and the Health Hub calls `AppHealthService`. There is no migration or backfill in #610.
+
+A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health Hub reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. This implementation does not deploy or mutate production infrastructure.
+
+Useful local verification:
+
+```bash
+npx vitest run src/app/shared/health.shared.spec.ts src/app/services/app.health.service.spec.ts --reporter=verbose
+npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/firestore-indexes.spec.ts
+npm run test:rules
+npm --prefix functions run build
+npm run build
+```
+
+The in-app Help content was reviewed for this foundation. No Help copy changes are required until provider health ingestion or the Health Hub becomes user-visible in #611–#614.

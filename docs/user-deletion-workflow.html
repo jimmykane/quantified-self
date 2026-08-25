@@ -228,6 +228,12 @@
                         <td>The extension removes saved routes during account deletion; <code>cleanupRouteFiles</code> covers normal route deletes, route metadata, route-scoped original files, and route quota reconciliation while skipping Firestore-owned work when account deletion is already in progress</td>
                     </tr>
                     <tr>
+                        <td><strong>Sleep &amp; Unified Health</strong></td>
+                        <td><code>users/{uid}/sleepSessions/*</code><br><code>users/{uid}/sleepSyncState/*</code><br><code>users/{uid}/healthRecords/*</code><br><code>users/{uid}/healthSampleChunks/*</code><br><code>users/{uid}/healthSyncState/*</code></td>
+                        <td>Extension</td>
+                        <td>All records remain in the recursively deleted user subtree. Provider disconnect retains imported history; account deletion removes it. Deletion-guarded writers cannot recreate records once deletion starts.</td>
+                    </tr>
+                    <tr>
                         <td><strong>Stripe Data</strong></td>
                         <td><code>customers/{uid}</code><br><code>customers/{uid}/subscriptions/*</code></td>
                         <td>Extension</td>

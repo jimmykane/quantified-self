@@ -1320,6 +1320,59 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Unified Health Records and Sync State', () => {
+            it('allows owners to get their own health documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthRecords').doc('record-1').get());
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSampleChunks').doc('chunk-1').get());
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSyncState').doc('GarminAPI').get());
+            });
+
+            it('denies reads from another account and unauthenticated reads', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const anonymousDb = testEnv.unauthenticatedContext().firestore();
+
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthRecords').doc('record-1').get());
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSampleChunks').doc('chunk-1').get());
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSyncState').doc('GarminAPI').get());
+                await assertFails(anonymousDb.collection('users').doc(userId).collection('healthRecords').doc('record-1').get());
+            });
+
+            it('allows only explicitly bounded owner list queries', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const userRef = db.collection('users').doc(userId);
+
+                await assertSucceeds(userRef.collection('healthRecords').limit(1001).get());
+                await assertFails(userRef.collection('healthRecords').limit(1002).get());
+                await assertFails(userRef.collection('healthRecords').get());
+
+                await assertSucceeds(userRef.collection('healthSampleChunks').limit(501).get());
+                await assertFails(userRef.collection('healthSampleChunks').limit(502).get());
+                await assertFails(userRef.collection('healthSampleChunks').get());
+
+                await assertSucceeds(userRef.collection('healthSyncState').limit(6).get());
+                await assertFails(userRef.collection('healthSyncState').limit(7).get());
+                await assertFails(userRef.collection('healthSyncState').get());
+            });
+
+            it('denies all browser writes to server-owned health collections', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const userRef = db.collection('users').doc(userId);
+
+                await assertFails(userRef.collection('healthRecords').doc('record-1').set({ calendarDate: '2026-01-01' }));
+                await assertFails(userRef.collection('healthSampleChunks').doc('chunk-1').set({ offsetMs: [0] }));
+                await assertFails(userRef.collection('healthSyncState').doc('GarminAPI').set({ status: 'ready' }));
+            });
+
+            it('forbids descendants beneath permanent health leaf documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await assertFails(db.doc(`users/${userId}/healthSampleChunks/chunk-1/children/forbidden`).get());
+                await assertFails(db.doc(`users/${userId}/healthSampleChunks/chunk-1/children/forbidden`).set({ value: 1 }));
+            });
+        });
+
         describe('MCP server-owned credential state', () => {
             it('should deny owners reading or writing MCP connection summaries directly', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {

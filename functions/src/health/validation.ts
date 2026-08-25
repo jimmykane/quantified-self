@@ -1,0 +1,574 @@
+import {
+    HEALTH_COVERAGE_STATUSES,
+    HEALTH_MAX_METRICS_PER_RECORD,
+    HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD,
+    HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
+    HEALTH_NORMALIZATION_STATUSES,
+    HEALTH_QUALITY_STATUSES,
+    HEALTH_RECORDING_METHODS,
+    HEALTH_RECORD_KINDS,
+    HEALTH_SLEEP_REFERENCE_FIELDS,
+    HEALTH_SLEEP_REFERENCE_METRIC_IDS,
+    HEALTH_UNITS,
+    HEALTH_VALUE_ORIGINS,
+    HEALTH_VALUE_TYPES,
+    HealthCoverage,
+    HealthDeviceAttribution,
+    HealthMetricEntry,
+    HealthMetricGoal,
+    HealthMetricId,
+    HealthProvider,
+    HealthQuality,
+    HealthRecordKind,
+    HealthRecordingMethod,
+    HealthScalar,
+    HealthUnit,
+    HealthValueOrigin,
+    HealthValueType,
+    getHealthMetricDefinition,
+    isHealthMetricId,
+    isHealthProvider,
+} from '../../../shared/health';
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_ACCOUNT_ID_LENGTH = 512;
+const MAX_SOURCE_KEY_LENGTH = 512;
+const MAX_LABEL_LENGTH = 128;
+const MAX_NATIVE_VALUE_LENGTH = 512;
+const MAX_QUALIFIERS = 16;
+const MAX_SAMPLE_POINTS_PER_RECORD = HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
+const RESERVED_QUALIFIER_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+export class HealthWriteValidationError extends Error {
+    public readonly name: string = 'HealthWriteValidationError';
+    public readonly code = 'invalid_health_record';
+
+    constructor(message: string) {
+        super(message);
+    }
+}
+
+export interface HealthSourceRevisionInput {
+    order: number;
+    token: string;
+}
+
+export interface HealthSampleSeriesInput {
+    seriesKey: string;
+    metricId: HealthMetricId;
+    valueType: HealthValueType;
+    aggregation: string;
+    semanticVariant: string;
+    origin: HealthValueOrigin;
+    recordingMethod: HealthRecordingMethod;
+    normalizationStatus: 'canonical' | 'native_only' | 'not_comparable';
+    nativeMetric: string;
+    nativeUnit?: string | null;
+    canonicalUnit?: HealthUnit | null;
+    offsetMs: number[];
+    nativeValues: HealthScalar[];
+    canonicalValues?: HealthScalar[] | null;
+    qualityCodes?: string[] | null;
+    coverage: HealthCoverage;
+    device?: HealthDeviceAttribution | null;
+}
+
+export interface HealthSourceRecordInput {
+    provider: HealthProvider;
+    providerAccountId: string;
+    sourceRecordType: string;
+    sourceRecordKey: string;
+    revision: HealthSourceRevisionInput;
+    receivedAtMs: number;
+    kind: HealthRecordKind;
+    calendarDate: string;
+    startTimeMs: number;
+    endTimeMs: number;
+    timezoneOffsetSeconds?: number | null;
+    metrics: HealthMetricEntry[];
+    coverage: HealthCoverage;
+    device?: HealthDeviceAttribution | null;
+    sampleSeries: HealthSampleSeriesInput[];
+}
+
+function objectValue(value: unknown, field: string): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new HealthWriteValidationError(`${field} must be an object.`);
+    }
+    return value as Record<string, unknown>;
+}
+
+function boundedString(value: unknown, field: string, maximum: number, allowEmpty = false): string {
+    if (typeof value !== 'string') {
+        throw new HealthWriteValidationError(`${field} must be a string.`);
+    }
+    const normalized = value.trim();
+    if ((!allowEmpty && normalized.length === 0) || normalized.length > maximum) {
+        throw new HealthWriteValidationError(`${field} must be a bounded non-empty string.`);
+    }
+    return normalized;
+}
+
+function nullableBoundedString(value: unknown, field: string, maximum: number): string | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    return boundedString(value, field, maximum);
+}
+
+function finiteNumber(value: unknown, field: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new HealthWriteValidationError(`${field} must be a finite number.`);
+    }
+    return value;
+}
+
+function safeInteger(value: unknown, field: string): number {
+    const normalized = finiteNumber(value, field);
+    if (!Number.isSafeInteger(normalized)) {
+        throw new HealthWriteValidationError(`${field} must be a safe integer.`);
+    }
+    return normalized;
+}
+
+function nullableNonNegativeNumber(value: unknown, field: string): number | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const normalized = finiteNumber(value, field);
+    if (normalized < 0) {
+        throw new HealthWriteValidationError(`${field} cannot be negative.`);
+    }
+    return normalized;
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
+    if (typeof value !== 'string' || !allowed.includes(value as T)) {
+        throw new HealthWriteValidationError(`${field} is not supported.`);
+    }
+    return value as T;
+}
+
+function validateCalendarDate(value: unknown): string {
+    const calendarDate = boundedString(value, 'calendarDate', 10);
+    const timestamp = Date.parse(`${calendarDate}T00:00:00.000Z`);
+    if (!ISO_DATE_PATTERN.test(calendarDate)
+        || !Number.isFinite(timestamp)
+        || new Date(timestamp).toISOString().slice(0, 10) !== calendarDate) {
+        throw new HealthWriteValidationError('calendarDate must be a valid YYYY-MM-DD date.');
+    }
+    return calendarDate;
+}
+
+function validateScalar(value: unknown, valueType: HealthValueType, field: string): HealthScalar {
+    if (valueType === HEALTH_VALUE_TYPES.Number) {
+        return finiteNumber(value, field);
+    }
+    if (valueType === HEALTH_VALUE_TYPES.Boolean) {
+        if (typeof value !== 'boolean') {
+            throw new HealthWriteValidationError(`${field} must be a boolean.`);
+        }
+        return value;
+    }
+    return boundedString(value, field, MAX_NATIVE_VALUE_LENGTH);
+}
+
+function validateDevice(value: unknown, field: string): HealthDeviceAttribution | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const input = objectValue(value, field);
+    return {
+        deviceKey: nullableBoundedString(input.deviceKey, `${field}.deviceKey`, MAX_LABEL_LENGTH),
+        manufacturer: nullableBoundedString(input.manufacturer, `${field}.manufacturer`, MAX_LABEL_LENGTH),
+        model: nullableBoundedString(input.model, `${field}.model`, MAX_LABEL_LENGTH),
+        displayName: nullableBoundedString(input.displayName, `${field}.displayName`, MAX_LABEL_LENGTH),
+    };
+}
+
+function validateQuality(value: unknown, field: string): HealthQuality {
+    const input = objectValue(value, field);
+    return {
+        status: enumValue(input.status, Object.values(HEALTH_QUALITY_STATUSES), `${field}.status`),
+        nativeCode: nullableBoundedString(input.nativeCode, `${field}.nativeCode`, MAX_LABEL_LENGTH),
+    };
+}
+
+function validateCoverage(value: unknown, field: string): HealthCoverage {
+    const input = objectValue(value, field);
+    return {
+        status: enumValue(input.status, Object.values(HEALTH_COVERAGE_STATUSES), `${field}.status`),
+        expectedStartTimeMs: nullableNonNegativeNumber(input.expectedStartTimeMs, `${field}.expectedStartTimeMs`),
+        expectedEndTimeMs: nullableNonNegativeNumber(input.expectedEndTimeMs, `${field}.expectedEndTimeMs`),
+        observedDurationSeconds: nullableNonNegativeNumber(input.observedDurationSeconds, `${field}.observedDurationSeconds`),
+        expectedDurationSeconds: nullableNonNegativeNumber(input.expectedDurationSeconds, `${field}.expectedDurationSeconds`),
+        sampleCount: nullableNonNegativeNumber(input.sampleCount, `${field}.sampleCount`),
+        expectedSampleCount: nullableNonNegativeNumber(input.expectedSampleCount, `${field}.expectedSampleCount`),
+        expectedUpdateIntervalMs: nullableNonNegativeNumber(input.expectedUpdateIntervalMs, `${field}.expectedUpdateIntervalMs`),
+    };
+}
+
+function validateMetricIdentity(input: Record<string, unknown>, field: string): {
+    metricId: HealthMetricId;
+    valueType: HealthValueType;
+    aggregation: string;
+    semanticVariant: string;
+    origin: HealthValueOrigin;
+    recordingMethod: HealthRecordingMethod;
+} {
+    if (!isHealthMetricId(input.metricId)) {
+        throw new HealthWriteValidationError(`${field}.metricId is not supported.`);
+    }
+    const definition = getHealthMetricDefinition(input.metricId);
+    const valueType = enumValue(input.valueType, Object.values(HEALTH_VALUE_TYPES), `${field}.valueType`);
+    if (valueType !== definition.valueType) {
+        throw new HealthWriteValidationError(`${field}.valueType must match the metric catalog.`);
+    }
+    return {
+        metricId: input.metricId,
+        valueType,
+        aggregation: boundedString(input.aggregation, `${field}.aggregation`, MAX_LABEL_LENGTH),
+        semanticVariant: boundedString(input.semanticVariant, `${field}.semanticVariant`, MAX_LABEL_LENGTH),
+        origin: enumValue(input.origin, Object.values(HEALTH_VALUE_ORIGINS), `${field}.origin`),
+        recordingMethod: enumValue(input.recordingMethod, Object.values(HEALTH_RECORDING_METHODS), `${field}.recordingMethod`),
+    };
+}
+
+function validateQualifiers(value: unknown, field: string): Record<string, string | number | boolean | null> | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const input = objectValue(value, field);
+    const entries = Object.entries(input);
+    if (entries.length > MAX_QUALIFIERS) {
+        throw new HealthWriteValidationError(`${field} contains too many qualifiers.`);
+    }
+    return entries.reduce<Record<string, string | number | boolean | null>>((result, [key, item]) => {
+        const normalizedKey = boundedString(key, `${field} key`, MAX_LABEL_LENGTH);
+        if (RESERVED_QUALIFIER_KEYS.has(normalizedKey)) {
+            throw new HealthWriteValidationError(`${field} contains a reserved qualifier key.`);
+        }
+        if (Object.prototype.hasOwnProperty.call(result, normalizedKey)) {
+            throw new HealthWriteValidationError(`${field} contains duplicate normalized qualifier keys.`);
+        }
+        if (item === null || typeof item === 'boolean') {
+            result[normalizedKey] = item;
+        } else if (typeof item === 'number') {
+            result[normalizedKey] = finiteNumber(item, `${field}.${normalizedKey}`);
+        } else {
+            result[normalizedKey] = boundedString(item, `${field}.${normalizedKey}`, MAX_NATIVE_VALUE_LENGTH, true);
+        }
+        return result;
+    }, {});
+}
+
+function validateGoal(
+    value: unknown,
+    metricId: HealthMetricId,
+    valueType: HealthValueType,
+    field: string,
+): HealthMetricGoal | null | undefined {
+    if (value === undefined || value === null) {
+        return value as null | undefined;
+    }
+    const input = objectValue(value, field);
+    let native: HealthMetricGoal['native'];
+    if (input.native === null) {
+        native = null;
+    } else if (input.native !== undefined) {
+        const nativeInput = objectValue(input.native, `${field}.native`);
+        native = {
+            metric: boundedString(nativeInput.metric, `${field}.native.metric`, MAX_LABEL_LENGTH),
+            value: validateScalar(nativeInput.value, valueType, `${field}.native.value`),
+            unit: nullableBoundedString(nativeInput.unit, `${field}.native.unit`, MAX_LABEL_LENGTH),
+            qualifiers: validateQualifiers(nativeInput.qualifiers, `${field}.native.qualifiers`),
+        };
+    }
+    let canonical: HealthMetricGoal['canonical'];
+    if (input.canonical === null) {
+        canonical = null;
+    } else if (input.canonical !== undefined) {
+        const canonicalInput = objectValue(input.canonical, `${field}.canonical`);
+        const unit = enumValue(canonicalInput.unit, Object.values(HEALTH_UNITS), `${field}.canonical.unit`);
+        if (unit !== getHealthMetricDefinition(metricId).canonicalUnit) {
+            throw new HealthWriteValidationError(`${field}.canonical.unit must match the metric catalog.`);
+        }
+        canonical = {
+            value: validateScalar(canonicalInput.value, valueType, `${field}.canonical.value`),
+            unit,
+        };
+    }
+    if (!native && !canonical) {
+        throw new HealthWriteValidationError(`${field} must contain a native or canonical goal.`);
+    }
+    return { native, canonical };
+}
+
+function validateMetricEntry(value: unknown, index: number): HealthMetricEntry {
+    const field = `metrics[${index}]`;
+    const input = objectValue(value, field);
+    const identity = validateMetricIdentity(input, field);
+    const common = {
+        ...identity,
+        quality: validateQuality(input.quality, `${field}.quality`),
+        coverage: input.coverage === undefined || input.coverage === null
+            ? input.coverage as null | undefined
+            : validateCoverage(input.coverage, `${field}.coverage`),
+        device: validateDevice(input.device, `${field}.device`),
+    };
+
+    if (input.kind === 'sleep_reference') {
+        const reference = objectValue(input.reference, `${field}.reference`);
+        if (reference.domain !== 'sleep') {
+            throw new HealthWriteValidationError(`${field}.reference.domain must be sleep.`);
+        }
+        const referenceField = enumValue(
+            reference.field,
+            Object.values(HEALTH_SLEEP_REFERENCE_FIELDS),
+            `${field}.reference.field`,
+        );
+        if (!HEALTH_SLEEP_REFERENCE_METRIC_IDS[referenceField].includes(identity.metricId)) {
+            throw new HealthWriteValidationError(`${field}.metricId does not match the referenced sleep field.`);
+        }
+        return {
+            ...common,
+            kind: 'sleep_reference',
+            reference: {
+                domain: 'sleep',
+                documentId: boundedString(reference.documentId, `${field}.reference.documentId`, MAX_SOURCE_KEY_LENGTH),
+                field: referenceField,
+            },
+        };
+    }
+
+    if (input.kind !== 'value') {
+        throw new HealthWriteValidationError(`${field}.kind is not supported.`);
+    }
+    const normalizationStatus = enumValue(
+        input.normalizationStatus,
+        Object.values(HEALTH_NORMALIZATION_STATUSES),
+        `${field}.normalizationStatus`,
+    );
+    const nativeInput = objectValue(input.native, `${field}.native`);
+    const native = {
+        metric: boundedString(nativeInput.metric, `${field}.native.metric`, MAX_LABEL_LENGTH),
+        value: validateScalar(nativeInput.value, identity.valueType, `${field}.native.value`),
+        unit: nullableBoundedString(nativeInput.unit, `${field}.native.unit`, MAX_LABEL_LENGTH),
+        qualifiers: validateQualifiers(nativeInput.qualifiers, `${field}.native.qualifiers`),
+    };
+    let canonical = null;
+    if (input.canonical !== undefined && input.canonical !== null) {
+        const canonicalInput = objectValue(input.canonical, `${field}.canonical`);
+        const canonicalUnit = enumValue(canonicalInput.unit, Object.values(HEALTH_UNITS), `${field}.canonical.unit`);
+        if (canonicalUnit !== getHealthMetricDefinition(identity.metricId).canonicalUnit) {
+            throw new HealthWriteValidationError(`${field}.canonical.unit must match the metric catalog.`);
+        }
+        canonical = {
+            value: validateScalar(canonicalInput.value, identity.valueType, `${field}.canonical.value`),
+            unit: canonicalUnit,
+        };
+    }
+    if (normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical && !canonical) {
+        throw new HealthWriteValidationError(`${field}.canonical is required for canonical values.`);
+    }
+    if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && canonical) {
+        throw new HealthWriteValidationError(`${field}.canonical must be omitted for non-canonical values.`);
+    }
+
+    return {
+        ...common,
+        kind: 'value',
+        normalizationStatus,
+        native,
+        canonical,
+        goal: validateGoal(input.goal, identity.metricId, identity.valueType, `${field}.goal`),
+    };
+}
+
+function validateSampleSeries(
+    value: unknown,
+    index: number,
+    recordDurationMs: number,
+): HealthSampleSeriesInput {
+    const field = `sampleSeries[${index}]`;
+    const input = objectValue(value, field);
+    const identity = validateMetricIdentity(input, field);
+    const normalizationStatus = enumValue(
+        input.normalizationStatus,
+        Object.values(HEALTH_NORMALIZATION_STATUSES),
+        `${field}.normalizationStatus`,
+    );
+    const canonicalUnit = input.canonicalUnit === undefined || input.canonicalUnit === null
+        ? input.canonicalUnit as null | undefined
+        : enumValue(input.canonicalUnit, Object.values(HEALTH_UNITS), `${field}.canonicalUnit`);
+    if (normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical
+        && canonicalUnit !== getHealthMetricDefinition(identity.metricId).canonicalUnit) {
+        throw new HealthWriteValidationError(`${field}.canonicalUnit must match the metric catalog.`);
+    }
+    if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && canonicalUnit) {
+        throw new HealthWriteValidationError(`${field}.canonicalUnit must be omitted for non-canonical samples.`);
+    }
+    if (!Array.isArray(input.offsetMs) || input.offsetMs.length === 0 || input.offsetMs.length > MAX_SAMPLE_POINTS_PER_RECORD) {
+        throw new HealthWriteValidationError(`${field}.offsetMs must contain a bounded set of sample offsets.`);
+    }
+    let previousOffsetMs = -1;
+    const offsetMs = input.offsetMs.map((offset, offsetIndex) => {
+        const normalized = safeInteger(offset, `${field}.offsetMs[${offsetIndex}]`);
+        if (normalized < 0 || normalized > recordDurationMs) {
+            throw new HealthWriteValidationError(`${field}.offsetMs[${offsetIndex}] is outside the record interval.`);
+        }
+        if (offsetIndex > 0 && normalized <= previousOffsetMs) {
+            throw new HealthWriteValidationError(`${field}.offsetMs must be strictly increasing.`);
+        }
+        previousOffsetMs = normalized;
+        return normalized;
+    });
+    if (!Array.isArray(input.nativeValues) || input.nativeValues.length !== offsetMs.length) {
+        throw new HealthWriteValidationError(`${field}.nativeValues must align with offsetMs.`);
+    }
+    const nativeValues = input.nativeValues.map((item, itemIndex) => validateScalar(
+        item,
+        identity.valueType,
+        `${field}.nativeValues[${itemIndex}]`,
+    ));
+    let canonicalValues: HealthScalar[] | null | undefined;
+    if (input.canonicalValues === null) {
+        canonicalValues = null;
+    } else if (input.canonicalValues !== undefined) {
+        if (!Array.isArray(input.canonicalValues) || input.canonicalValues.length !== offsetMs.length) {
+            throw new HealthWriteValidationError(`${field}.canonicalValues must align with offsetMs.`);
+        }
+        canonicalValues = input.canonicalValues.map((item, itemIndex) => validateScalar(
+            item,
+            identity.valueType,
+            `${field}.canonicalValues[${itemIndex}]`,
+        ));
+    }
+    if (normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical && !canonicalValues) {
+        throw new HealthWriteValidationError(`${field}.canonicalValues are required for canonical samples.`);
+    }
+    if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && canonicalValues) {
+        throw new HealthWriteValidationError(`${field}.canonicalValues must be omitted for non-canonical samples.`);
+    }
+    let qualityCodes: string[] | null | undefined;
+    if (input.qualityCodes === null) {
+        qualityCodes = null;
+    } else if (input.qualityCodes !== undefined) {
+        if (!Array.isArray(input.qualityCodes) || input.qualityCodes.length !== offsetMs.length) {
+            throw new HealthWriteValidationError(`${field}.qualityCodes must align with offsetMs.`);
+        }
+        qualityCodes = input.qualityCodes.map((code, codeIndex) => boundedString(
+            code,
+            `${field}.qualityCodes[${codeIndex}]`,
+            MAX_LABEL_LENGTH,
+            true,
+        ));
+    }
+    return {
+        ...identity,
+        seriesKey: boundedString(input.seriesKey, `${field}.seriesKey`, MAX_LABEL_LENGTH),
+        normalizationStatus,
+        nativeMetric: boundedString(input.nativeMetric, `${field}.nativeMetric`, MAX_LABEL_LENGTH),
+        nativeUnit: nullableBoundedString(input.nativeUnit, `${field}.nativeUnit`, MAX_LABEL_LENGTH),
+        canonicalUnit,
+        offsetMs,
+        nativeValues,
+        canonicalValues,
+        qualityCodes,
+        coverage: validateCoverage(input.coverage, `${field}.coverage`),
+        device: validateDevice(input.device, `${field}.device`),
+    };
+}
+
+export function validateHealthSourceRecordInput(value: unknown): HealthSourceRecordInput {
+    const input = objectValue(value, 'healthRecord');
+    if (!isHealthProvider(input.provider)) {
+        throw new HealthWriteValidationError('provider is not supported.');
+    }
+    const startTimeMs = safeInteger(input.startTimeMs, 'startTimeMs');
+    const endTimeMs = safeInteger(input.endTimeMs, 'endTimeMs');
+    if (endTimeMs < startTimeMs) {
+        throw new HealthWriteValidationError('endTimeMs must be on or after startTimeMs.');
+    }
+    if (!Array.isArray(input.metrics) || input.metrics.length > HEALTH_MAX_METRICS_PER_RECORD) {
+        throw new HealthWriteValidationError(`metrics must contain at most ${HEALTH_MAX_METRICS_PER_RECORD} entries.`);
+    }
+    const metrics = input.metrics.map(validateMetricEntry);
+    const rawSampleSeries = input.sampleSeries === undefined ? [] : input.sampleSeries;
+    if (!Array.isArray(rawSampleSeries)) {
+        throw new HealthWriteValidationError('sampleSeries must be an array.');
+    }
+    if (rawSampleSeries.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD) {
+        throw new HealthWriteValidationError(`sampleSeries cannot contain more than ${HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD} series.`);
+    }
+    const sampleSeries: HealthSampleSeriesInput[] = [];
+    let sampleChunkCount = 0;
+    rawSampleSeries.forEach((series, index) => {
+        const validatedSeries = validateSampleSeries(series, index, endTimeMs - startTimeMs);
+        sampleChunkCount += Math.ceil(validatedSeries.offsetMs.length / HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK);
+        if (sampleChunkCount > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD) {
+            throw new HealthWriteValidationError(`sampleSeries exceeds the ${HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD}-chunk record limit.`);
+        }
+        sampleSeries.push(validatedSeries);
+    });
+    const seriesKeys = new Set(sampleSeries.map(series => series.seriesKey));
+    if (seriesKeys.size !== sampleSeries.length) {
+        throw new HealthWriteValidationError('sampleSeries seriesKey values must be unique per record.');
+    }
+    if (metrics.length === 0 && sampleSeries.length === 0) {
+        throw new HealthWriteValidationError('A health record must contain metrics or sampleSeries.');
+    }
+    const revision = objectValue(input.revision, 'revision');
+    const revisionOrder = safeInteger(revision.order, 'revision.order');
+    if (revisionOrder < 0) {
+        throw new HealthWriteValidationError('revision.order cannot be negative.');
+    }
+    let timezoneOffsetSeconds: number | null | undefined;
+    if (input.timezoneOffsetSeconds === null) {
+        timezoneOffsetSeconds = null;
+    } else if (input.timezoneOffsetSeconds !== undefined) {
+        timezoneOffsetSeconds = safeInteger(input.timezoneOffsetSeconds, 'timezoneOffsetSeconds');
+        if (Math.abs(timezoneOffsetSeconds) > 18 * 60 * 60) {
+            throw new HealthWriteValidationError('timezoneOffsetSeconds is outside the supported range.');
+        }
+    }
+
+    return {
+        provider: input.provider,
+        providerAccountId: boundedString(input.providerAccountId, 'providerAccountId', MAX_ACCOUNT_ID_LENGTH),
+        sourceRecordType: boundedString(input.sourceRecordType, 'sourceRecordType', MAX_LABEL_LENGTH),
+        sourceRecordKey: boundedString(input.sourceRecordKey, 'sourceRecordKey', MAX_SOURCE_KEY_LENGTH),
+        revision: {
+            order: revisionOrder,
+            token: boundedString(revision.token, 'revision.token', MAX_SOURCE_KEY_LENGTH),
+        },
+        receivedAtMs: (() => {
+            const receivedAtMs = safeInteger(input.receivedAtMs, 'receivedAtMs');
+            if (receivedAtMs < 0) {
+                throw new HealthWriteValidationError('receivedAtMs cannot be negative.');
+            }
+            return receivedAtMs;
+        })(),
+        kind: enumValue(input.kind, Object.values(HEALTH_RECORD_KINDS), 'kind'),
+        calendarDate: validateCalendarDate(input.calendarDate),
+        startTimeMs,
+        endTimeMs,
+        timezoneOffsetSeconds,
+        metrics,
+        coverage: validateCoverage(input.coverage, 'coverage'),
+        device: validateDevice(input.device, 'device'),
+        sampleSeries,
+    };
+}

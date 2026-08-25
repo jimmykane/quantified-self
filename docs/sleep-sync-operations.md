@@ -9,6 +9,21 @@ times, average sleep heart rate, resting heart rate, overnight HRV, and optional
 It does not provide sleep-stage intervals, so COROS sessions retain their duration as an
 unknown stage rather than inferred Light, Deep, REM, or Awake stages.
 
+## Unified Health Compatibility Boundary
+
+The unified health foundation does not replace or migrate this pipeline. `users/{uid}/sleepSessions`
+remains the canonical normalized Sleep store, and existing dashboard, Training, and MCP Sleep reads
+continue to use it.
+
+Future provider health adapters may create typed references to an existing Sleep document and an
+allowlisted aggregate field (duration, score, aggregate HR/HRV, maximum SpO₂, or average respiration).
+They must not copy Sleep sessions, stages, provider fields, or respiration/SpO₂/HRV sample arrays into
+`healthRecords` or `healthSampleChunks`. The reference validator requires the stable health metric ID
+to match the referenced Sleep field. See [Unified health data foundation](unified-health-data.md).
+
+Provider disconnect retains both normalized Sleep sessions and imported unified health history.
+Account deletion recursively removes both because they remain below `users/{uid}`.
+
 ## Provider Kill Switch
 
 Sleep provider disablement is source controlled in:

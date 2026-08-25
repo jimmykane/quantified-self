@@ -1,0 +1,71 @@
+import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
+import {
+    HealthRangeQuery,
+    HealthRangeResult,
+    HealthSampleChunk,
+    HealthSourceRecord,
+} from '../../../shared/health';
+import {
+    HealthFirestoreQueryPlan,
+    planHealthFirestoreQueries,
+} from '../../../shared/health-firestore-query';
+import { projectHealthRange } from '../../../shared/health-query';
+
+export interface HealthQueryDependencies {
+    db?: admin.firestore.Firestore;
+    nowMs?: number;
+}
+
+function applyQueryPlan(
+    collection: admin.firestore.CollectionReference,
+    plan: HealthFirestoreQueryPlan,
+): admin.firestore.Query {
+    let query: admin.firestore.Query = collection
+        .where('calendarDate', '>=', plan.startDate)
+        .where('calendarDate', '<=', plan.endDate);
+    if (plan.filter) {
+        query = query.where(plan.filter.field, plan.filter.operator, plan.filter.value);
+    }
+    query = query
+        .orderBy('calendarDate', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc');
+    if (plan.cursor) {
+        query = query.startAfter(plan.cursor.calendarDate, plan.cursor.id);
+    }
+    return query.limit(plan.fetchLimit);
+}
+
+function userCollection(
+    db: admin.firestore.Firestore,
+    userID: string,
+    collectionId: string,
+): admin.firestore.CollectionReference {
+    return db.collection('users').doc(userID).collection(collectionId);
+}
+
+export async function readHealthRange(
+    userID: string,
+    queryValue: HealthRangeQuery | unknown,
+    dependencies: HealthQueryDependencies = {},
+): Promise<HealthRangeResult> {
+    const db = dependencies.db || admin.firestore();
+    const plans = planHealthFirestoreQueries(queryValue);
+    const recordQuery = applyQueryPlan(userCollection(db, userID, plans.records.collectionId), plans.records);
+    const chunkQuery = plans.chunks
+        ? applyQueryPlan(userCollection(db, userID, plans.chunks.collectionId), plans.chunks)
+        : null;
+    const [recordSnapshot, chunkSnapshot] = await Promise.all([
+        recordQuery.get(),
+        chunkQuery?.get() || Promise.resolve(null),
+    ]);
+    const records = recordSnapshot.docs.map(snapshot => ({
+        ...snapshot.data(),
+        id: snapshot.id,
+    }) as HealthSourceRecord);
+    const chunks = (chunkSnapshot?.docs || []).map(snapshot => ({
+        ...snapshot.data(),
+        id: snapshot.id,
+    }) as HealthSampleChunk);
+    return projectHealthRange(records, chunks, plans.query, dependencies.nowMs);
+}

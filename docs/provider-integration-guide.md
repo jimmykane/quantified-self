@@ -47,6 +47,19 @@ Provider OAuth / webhook / history request
 
 This is preferred over processing partner payloads directly in a webhook or callable because provider requests can be retried, payloads may be incomplete, original files may need another download, and processing can exceed partner timeouts.
 
+Provider health/wellness data uses the separate [unified health foundation](unified-health-data.md):
+
+```text
+Provider webhook / polling / history work
+        -> provider-specific mapper
+        -> shared runtime validation
+        -> deletion-guarded revision replacement
+        -> bounded source records and sample chunks
+        -> shared direct/callable query projection
+```
+
+Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed.
+
 Add a provider-specific architecture document under `docs/` when the integration has meaningful protocol, data-flow, rollout, or operational detail. Link it from the Architecture Documentation section of `README.md`; Wahoo is the reference example.
 
 Use the existing provider structure before inventing a parallel abstraction:
@@ -69,6 +82,7 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 5. Add the environment configuration in `functions/src/config.ts`. Match established providers by requiring credentials when the integration runs; add a feature gate only when an explicitly approved staged rollout or operational requirement needs one. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
+8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
 
 ## 4. OAuth and provider identity
 
@@ -113,6 +127,9 @@ Separate state by trust boundary.
 | Safe connection status           | `users/{uid}/meta/<Provider>`               | Owner may read the limited projection; client does not write it    |
 | Queue and failed jobs            | Server-owned queue and DLQ collections      | No client writes; admin read only where the Rules model permits it |
 | Imported event and original file | Existing event/file model                   | Follow the established event and Storage access model              |
+| Imported health source record    | `users/{uid}/healthRecords`                  | Owner bounded read; server writes only                              |
+| High-resolution health samples  | `users/{uid}/healthSampleChunks`             | Owner bounded read; server writes only                              |
+| Safe health sync status         | `users/{uid}/healthSyncState`                | Owner bounded read; server writes only                              |
 
 For every new persistent write path:
 
@@ -121,6 +138,8 @@ For every new persistent write path:
 - Keep provider credentials and signed download URLs out of safe metadata, events, error text, analytics, logs, and admin responses.
 - Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
+- Use deterministic opaque provider-account and record IDs for health data. Never persist the raw provider account ID, free-form provider error, or raw provider payload in the unified health collections.
+- Keep health sample documents and reads strictly bounded. Time-based retention is intentionally uncapped until product/privacy policy explicitly changes it; do not add ad hoc TTL in a provider adapter.
 
 ## 6. Ingestion: webhooks, history, and idempotent queues
 
@@ -265,6 +284,8 @@ Account deletion is not merely token deletion. Add provider identity discovery a
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
+Unified health history is retained on provider disconnect and removed on account deletion. Its collections live below `users/{uid}`, so the configured recursive extension owns account cleanup; provider adapters must not delete historical health records during ordinary deauthorization.
+
 ## 9. Frontend, help, public pages, and attribution
 
 The frontend should reuse the Services and provider-presentation patterns rather than create a one-off integration page.
@@ -311,6 +332,7 @@ Add deterministic tests next to the code being changed. The minimum set for an a
 | Area             | Required assertions                                                                                                                                                                             |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Shared contracts | Service enum/metadata, provider presentation, source icon, function manifest, and required configuration validation (plus any explicitly approved rollout gate).                                  |
+| Health/wellness  | Native/canonical semantics, source attribution, coverage, missing-data behavior, ordered revision replacement, bounded chunks/queries, conflict preservation, Sleep references, disconnect retention, and deletion guards. |
 | OAuth            | State binding, approved redirect, explicit provider denial, incomplete callback, token refresh/rotation, stable identity, duplicate handling, and disconnect after entitlement expiry.             |
 | API boundary     | Request timeout, input normalization, pagination, rate-limit mapping, secret redaction, and no unsafe retry behavior.                                                                           |
 | Webhook/history  | Health and delivery acknowledgement, authentication, entitlement/connection/deletion rejection, lossless 64-bit IDs, deterministic IDs, duplicate delivery, out-of-order or newer revision, inclusive/date-window boundaries, skip rules, and lease contention. |
@@ -362,6 +384,7 @@ Run commands from the appropriate checked-out worktree. Do not deploy, publish, 
 - **Trusting a partner URL.** Defend against SSRF, redirects, private addresses, oversized responses, invalid content, and unbounded requests.
 - **Checking account deletion only at ingress.** Deletion can begin during download or parsing. Guard before enqueue, processing, persistence, and transactional follow-up writes.
 - **Deleting a root document non-recursively.** Token roots and feature state can have subcollections. Use `recursiveDelete` for subtree-capable cleanup.
+- **Copying Sleep or flattening provider health into one preferred value.** Keep `sleepSessions` canonical, reference allowlisted aggregates, preserve every source observation, and make any future source-selection policy explicit.
 - **Making disconnect dependent on Pro.** Users must be able to revoke access after their plan changes. Separate connect/import authorization from disconnect authorization.
 - **Giving the client access to useful-looking operational fields.** Token roots, optional mappings, queues, retry state, and disconnect controls are backend-owned even when the browser shows a connection badge.
 - **Adding only the service card.** A provider is incomplete without help, policies, integration page/SEO where appropriate, attribution, Rules, admin visibility, cleanup, and tests.
@@ -382,6 +405,7 @@ Use this checklist in every provider integration PR or implementation handoff:
 - [ ] Queue dispatch, TTL, retry/DLQ, and scheduled safety net are wired.
 - [ ] Disconnect, entitlement, pending retry, account deletion, and recursive cleanup cover every owned collection.
 - [ ] Firestore/Storage Rules, indexes, TTL, configuration, and any approved feature gate are reviewed.
+- [ ] Health/wellness mappings use the unified model, bounded writer/query contracts, source-aware conflicts, and Sleep references without duplicating Sleep data.
 - [ ] Services UI, accessibility, icons, source/destination labels, Help, Policies, public integration page, metadata, sitemap, and internal links are updated as applicable.
 - [ ] Admin queue stats, DLQ analysis, user filtering/enrichment, and logos are updated.
 - [ ] Unit, Rules, frontend, admin, shared-library, and build verification passed.
