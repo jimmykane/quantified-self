@@ -1369,8 +1369,11 @@ and SWOLF change. Training compares:
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
 
-The swimming-pace and durability trajectory x-axes use the shared compact `W35` marker convention. The visible key
-defines `W` as a Monday–Sunday UTC week, while their tooltips retain the full week number and date range.
+The swimming-pace and durability trajectory x-axes use compact `W35` markers only on phone viewports; their visible
+key defines `W` as a Monday–Sunday UTC week. Wider viewports show the week-start date instead, while tooltips retain
+the full week number and date range. The durability summary remains a fixed twelve UTC weeks, but, when a later
+candidate workout exists, its chart collapses only a leading uninterrupted run of weeks with zero candidates into a
+short note. Any later zero-candidate week remains visible in the plot so training interruptions are not hidden.
 
 The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
 frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,

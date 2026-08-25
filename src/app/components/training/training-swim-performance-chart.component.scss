@@ -11,8 +11,9 @@ header p, footer span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant
 .swim-performance-guidance-next { color: var(--mat-sys-on-surface-variant); }
 .swim-performance-guidance-next strong { color: var(--mat-sys-primary); }
 .swim-performance-chart { flex: 1 1 auto; width: 100%; min-height: 230px; }
-.swim-performance-week-note { margin: 2px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size, 12px); line-height: 1.3; }
+.swim-performance-week-note { display: none; margin: 2px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size, 12px); line-height: 1.3; }
 .swim-performance-week-note strong { color: var(--mat-sys-on-surface); }
 footer { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 footer strong { font-size: var(--training-inter-body-font-size, 14px); }
 @media (max-width: 640px) { .swim-performance-layout { padding: 16px; } .swim-performance-chart { min-height: 260px; } }
+@media (max-width: 599.98px) { .swim-performance-week-note { display: block; } }

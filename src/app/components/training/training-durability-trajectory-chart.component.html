@@ -21,6 +21,9 @@
         <span>{{ view.exclusionSummary }}</span>
       }
     </div>
+    @if (leadingNoActivityText) {
+      <p class="durability-trajectory-leading-gap">{{ leadingNoActivityText }}</p>
+    }
     <div class="durability-trajectory-scroll">
       <div
         #chartDiv

@@ -23,6 +23,7 @@ import {
   formatDashboardDataDisplay,
   formatDashboardDateByInterval,
   formatDashboardDateRange,
+  formatDashboardWeeklyAxisLabel,
   formatDashboardWeekRangeLabel,
   formatDashboardNumericValue,
   getDashboardAxisDateFormat,
@@ -118,6 +119,13 @@ describe('dashboard-chart-data.helper', () => {
     )).toBe('W22 · 25 May');
     expect(formatDashboardDateByInterval(weekStart, TimeIntervals.Weekly, 'en-GB', 'UTC'))
       .toBe('Week 22 25 May 2026');
+  });
+
+  it('uses week markers only for compact weekly chart axes', () => {
+    const weekStart = Date.UTC(2026, 4, 25);
+
+    expect(formatDashboardWeeklyAxisLabel(weekStart, true, 'en-GB', 'UTC')).toBe('W22');
+    expect(formatDashboardWeeklyAxisLabel(weekStart, false, 'en-GB', 'UTC')).toBe('25 May');
   });
 
   it('should format bounded date ranges using an explicit query timezone when provided', () => {

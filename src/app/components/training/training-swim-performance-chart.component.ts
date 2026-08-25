@@ -9,7 +9,7 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
-import { TimeIntervals, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import type { DashboardTrainingSwimPerformanceContext } from '../../helpers/dashboard-derived-metrics.helper';
 import type { DashboardDerivedMetricStatus } from '../../helpers/derived-metric-status.helper';
@@ -35,7 +35,7 @@ import {
 } from '../../helpers/dashboard-echarts-style.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import {
-  formatDashboardAxisDateByInterval,
+  formatDashboardWeeklyAxisLabel,
   formatDashboardWeekRangeLabel,
 } from '../../helpers/dashboard-chart-data.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -184,10 +184,9 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
         axisLabel: {
           color: style.textColor,
           hideOverlap: true,
-          formatter: (value: number | string) => formatDashboardAxisDateByInterval(
+          formatter: (value: number | string) => formatDashboardWeeklyAxisLabel(
             Number(value),
-            TimeIntervals.Weekly,
-            true,
+            isEChartsMobileTooltipViewport(),
             undefined,
             'UTC',
           ),

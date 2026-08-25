@@ -250,6 +250,32 @@ export function formatDashboardAxisDateByInterval(
   return `W${week} · ${dateLabel}`;
 }
 
+/**
+ * Formats a weekly chart axis for the available horizontal space. Phone
+ * charts use the compact ISO-week marker; wider charts keep the familiar
+ * week-start date while the tooltip supplies the full UTC range.
+ */
+export function formatDashboardWeeklyAxisLabel(
+  value: number | Date,
+  compact = false,
+  locale = getBrowserLocale(),
+  timeZone?: string,
+): string {
+  const date = toValidDate(value);
+  if (!date) {
+    return '';
+  }
+
+  if (compact) {
+    return formatDashboardAxisDateByInterval(date, TimeIntervals.Weekly, true, locale, timeZone);
+  }
+
+  return date.toLocaleDateString(
+    locale,
+    withOptionalTimeZone({ day: 'numeric', month: 'short' }, timeZone),
+  );
+}
+
 export function formatDashboardWeekRangeLabel(
   value: number | Date | string,
   locale = getBrowserLocale(),

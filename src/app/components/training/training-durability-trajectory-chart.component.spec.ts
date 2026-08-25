@@ -1,11 +1,10 @@
 import { ElementRef, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
-import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
-import { formatDashboardAxisDateByInterval } from '../../helpers/dashboard-chart-data.helper';
+import { formatDashboardWeeklyAxisLabel } from '../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -215,9 +214,9 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/3');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
-    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 3, 20))).toBe('W17');
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 3, 20))).not.toMatch(/^W\d+$/);
     expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 3, 20))).toBe(
-      formatDashboardAxisDateByInterval(Date.UTC(2026, 3, 20), TimeIntervals.Weekly, true, undefined, 'UTC'),
+      formatDashboardWeeklyAxisLabel(Date.UTC(2026, 3, 20), false, undefined, 'UTC'),
     );
     expect(option.tooltip).toEqual(expect.objectContaining({
       appendTo: getOrCreateEChartsTooltipHost,
@@ -257,6 +256,27 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.tooltip.formatter([{ dataIndex: 1 }])).toContain('Unsupported context');
   });
 
+  it('summarizes only leading zero-activity weeks and keeps later gaps in the chart', () => {
+    const component = createComponent();
+    const view = trajectory();
+    view.points[0] = { ...view.points[0], candidateActivityCount: 0, sourceActivityCount: 0, value: null, eligibleSampleCount: 0, hasEligibleSamples: false };
+    view.points[1] = { ...view.points[1], candidateActivityCount: 0, sourceActivityCount: 0, value: null, eligibleSampleCount: 0, hasEligibleSamples: false };
+    view.points[2] = { ...view.points[2], candidateActivityCount: 0, sourceActivityCount: 0, value: null, eligibleSampleCount: 0, hasEligibleSamples: false };
+    view.points[5] = { ...view.points[5], candidateActivityCount: 0, sourceActivityCount: 0, value: null, eligibleSampleCount: 0, hasEligibleSamples: false };
+    component.trajectory = view;
+    component.status = 'ready';
+    component.chartDiv = new ElementRef(document.createElement('div'));
+    (component as any).refreshLabels();
+
+    const option = (component as any).buildOption();
+
+    expect(component.leadingNoActivityText).toBe('No workouts in the first 3 weeks.');
+    expect(option.xAxis.data).toHaveLength(9);
+    expect(option.xAxis.data[0]).toBe(view.points[3].weekStartDayMs);
+    expect(option.series[0].data[2]).toBe(0);
+    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('No activity');
+  });
+
   it('keeps the twelve-week evidence chart horizontally readable on narrow screens', () => {
     const styles = readFileSync(resolve(
       process.cwd(),
@@ -266,6 +286,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(styles).toContain('.durability-trajectory-scroll { width: 100%; overflow-x: auto;');
     expect(styles).toContain('.durability-trajectory-chart { width: 100%; min-width: 720px; height: 270px; }');
     expect(styles).toContain('@media (max-width: 640px)');
+    expect(styles).toContain('@media (max-width: 599.98px) { .durability-trajectory-week-note { display: block; } }');
   });
 
   it('keeps mobile tooltips tap-triggered and visible outside the horizontal chart scroller', () => {
