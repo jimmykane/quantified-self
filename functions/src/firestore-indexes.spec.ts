@@ -553,4 +553,95 @@ describe('firestore indexes', () => {
             density: 'SPARSE_ALL',
         });
     });
+
+    it('keeps only the automatic health indexes needed for bounded date reads and disables TTL', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'healthSourceRecords',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'source.provider', order: 'ASCENDING' },
+                    { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'healthSourceRecords',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'metricIds', arrayConfig: 'CONTAINS' },
+                    { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'provider', order: 'ASCENDING' },
+                    { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'metricId', order: 'ASCENDING' },
+                    { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+        ]));
+        expect(config.fieldOverrides).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'healthSourceRecords',
+                fieldPath: '*',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'healthSourceRecords',
+                fieldPath: 'calendarDate',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                ],
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                fieldPath: '*',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                fieldPath: 'calendarDate',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                ],
+            },
+            {
+                collectionGroup: 'healthSyncState',
+                fieldPath: '*',
+                ttl: false,
+                indexes: [],
+            },
+        ]));
+        expect(config.fieldOverrides.some(override => (
+            (override.collectionGroup === 'healthSourceRecords'
+                || override.collectionGroup === 'healthSampleChunks'
+                || override.collectionGroup === 'healthSyncState')
+            && override.ttl === true
+        ))).toBe(false);
+    });
 });

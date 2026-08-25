@@ -330,6 +330,34 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Unified health source records are private owner-readable, server-written data.
+        // List reads must carry the public page limit plus one look-ahead document.
+        match /healthSourceRecords/{sourceRecordID} {
+          allow get: if isOwner();
+          allow list: if isOwner()
+            && request.query.limit != null
+            && request.query.limit <= 33;
+          allow write: if false;
+        }
+
+        // Sample chunks are permanent leaf documents. Nested documents are not
+        // matched, preserving the writer's document-only stale-chunk delete invariant.
+        match /healthSampleChunks/{chunkID} {
+          allow get: if isOwner();
+          allow list: if isOwner()
+            && request.query.limit != null
+            && request.query.limit <= 9;
+          allow write: if false;
+        }
+
+        match /healthSyncState/{providerID} {
+          allow get: if isOwner();
+          allow list: if isOwner()
+            && request.query.limit != null
+            && request.query.limit <= 6;
+          allow write: if false;
+        }
+
         // MCP connection summaries and all credential state are server-owned.
         // The app uses authenticated, App-Check-protected callables to list
         // and revoke connections without exposing token material.

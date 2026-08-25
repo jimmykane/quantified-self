@@ -212,8 +212,11 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
+Unified health history under `users/{uid}/healthSourceRecords` and `healthSampleChunks` has no time-based TTL. It is bounded per document, atomic replacement, and query; provider disconnect retains imported history, while recursive account deletion removes the complete user-scoped health subtree. See [Unified health data foundation](docs/unified-health-data.md).
+
 ## Architecture documentation
 
+- [Unified health data foundation](docs/unified-health-data.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)

@@ -220,7 +220,7 @@ describe('deleteSelf Cloud Function', () => {
         expect(result).toEqual({ success: true });
     });
 
-    it('should continue deleting the user if writing the deletion marker fails', async () => {
+    it('should fail closed without deleting the user if writing the deletion marker fails', async () => {
         const uid = 'test-uid';
         const context = {
             rawRequest: {},
@@ -234,14 +234,17 @@ describe('deleteSelf Cloud Function', () => {
         const markerError = new Error('Marker write failed');
         deletionMarkerSetMock.mockRejectedValueOnce(markerError);
 
-        const result = await (deleteSelf as any)({}, context);
+        await expect((deleteSelf as any)({}, context)).rejects.toMatchObject({
+            code: 'internal',
+            message: 'Unable to delete user'
+        });
 
-        expect(deleteUserMock).toHaveBeenCalledWith(uid);
+        expect(deleteUserMock).not.toHaveBeenCalled();
         expect(loggerErrorMock).toHaveBeenCalledWith(
-            `Failed to write user deletion marker for ${uid}. Continuing with deletion.`,
+            `Failed to write user deletion marker for ${uid}. Aborting deletion.`,
             markerError
         );
-        expect(result).toEqual({ success: true });
+        expect(mailSetMock).not.toHaveBeenCalled();
     });
 
     it('should return success even when queuing confirmation email fails', async () => {
