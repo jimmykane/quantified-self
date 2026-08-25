@@ -31,7 +31,8 @@
         <p class="swim-performance-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ view.nextStepText }}</p>
       }
     </div>
-    <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart"></div>
+    <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart. Weekly markers start on Monday in UTC."></div>
+    <p class="swim-performance-week-note"><strong>W</strong> = Mon–Sun (UTC)</p>
     <footer>
       @if (view.swolfContextText && view.latestSwolfText) {
         <strong>Comparable pool SWOLF <app-training-metric-text [text]="view.latestSwolfText"></app-training-metric-text></strong>

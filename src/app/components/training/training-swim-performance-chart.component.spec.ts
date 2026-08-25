@@ -1,7 +1,8 @@
 import { ElementRef, SimpleChange } from '@angular/core';
-import { SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { SwimPaceUnits, TimeIntervals } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import type { DashboardTrainingSwimPerformanceContext } from '../../helpers/dashboard-derived-metrics.helper';
+import { formatDashboardAxisDateByInterval } from '../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { TrainingSwimPerformanceChartComponent } from './training-swim-performance-chart.component';
@@ -56,6 +57,11 @@ describe('TrainingSwimPerformanceChartComponent', () => {
     expect(option.yAxis.inverse).toBe(true);
     expect(option.series.map((series: any) => series.name)).toEqual(['Pool', 'Open water']);
     expect(option.series[1].lineStyle.type).toBe('dashed');
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 6, 6))).toBe('W28');
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 6, 6))).toBe(
+      formatDashboardAxisDateByInterval(Date.UTC(2026, 6, 6), TimeIntervals.Weekly, true, undefined, 'UTC'),
+    );
+    expect(option.tooltip.formatter([{ data: [Date.UTC(2026, 6, 6), 100] }])).toContain('Week 28');
     expect(option.tooltip).toEqual(expect.objectContaining({
       appendTo: getOrCreateEChartsTooltipHost,
       confine: false,

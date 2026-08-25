@@ -15,7 +15,11 @@ import {
   buildDashboardEChartsTooltipChrome,
   renderDashboardEChartsTooltipCard,
 } from '../../helpers/dashboard-echarts-style.helper';
-import { formatDashboardWeekRangeLabel } from '../../helpers/dashboard-chart-data.helper';
+import {
+  formatDashboardAxisDateByInterval,
+  formatDashboardWeekRangeLabel,
+} from '../../helpers/dashboard-chart-data.helper';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import type { DashboardDerivedMetricStatus } from '../../helpers/derived-metric-status.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
@@ -132,7 +136,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       ? ` · ${trajectory.unavailableMetricWeekCount} with eligible samples but no ${trajectory.metricLabel.toLowerCase()}`
       : '';
     this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks produced comparable evidence · ${trajectory.noEligibleWeekCount} without an eligible sample${unavailableMetricText}`;
-    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible workout counts, and ${trajectory.metricLabel.toLowerCase()}`;
+    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with weekly markers starting Monday in UTC, candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible workout counts, and ${trajectory.metricLabel.toLowerCase()}`;
   }
 
   private buildOption(): ChartOption {
@@ -142,11 +146,6 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
     }
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv.nativeElement.clientWidth || 0);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const weekLabelFormatter = new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    });
     const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.sourceActivityCount));
     return {
       animation: false,
@@ -217,7 +216,13 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         axisLabel: {
           color: style.textColor,
           interval: 0,
-          formatter: (value: number | string) => weekLabelFormatter.format(new Date(Number(value))),
+          formatter: (value: number | string) => formatDashboardAxisDateByInterval(
+            Number(value),
+            TimeIntervals.Weekly,
+            true,
+            undefined,
+            'UTC',
+          ),
         },
       },
       yAxis: [{

@@ -1,9 +1,11 @@
 import { ElementRef, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
+import { formatDashboardAxisDateByInterval } from '../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -213,6 +215,10 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/3');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 3, 20))).toBe('W17');
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 3, 20))).toBe(
+      formatDashboardAxisDateByInterval(Date.UTC(2026, 3, 20), TimeIntervals.Weekly, true, undefined, 'UTC'),
+    );
     expect(option.tooltip).toEqual(expect.objectContaining({
       appendTo: getOrCreateEChartsTooltipHost,
       confine: false,
@@ -223,6 +229,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(component.availabilityText).toContain('1 with eligible samples but no aerobic decoupling');
 
     const emptyTooltip = option.tooltip.formatter([{ dataIndex: 1 }]);
+    expect(option.tooltip.formatter([{ dataIndex: 0 }])).toContain('Week 17');
     expect(emptyTooltip).toContain('No comparable sample');
     expect(emptyTooltip).toContain('Power recorded');
     expect(emptyTooltip).toContain('0 workouts');
