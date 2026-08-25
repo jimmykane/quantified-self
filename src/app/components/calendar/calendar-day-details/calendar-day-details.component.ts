@@ -16,7 +16,6 @@ import {
   buildActivityCalendarVolumeStats,
 } from '../../../helpers/activity-calendar-volume.helper';
 import type { SummaryStatsSettingsLike } from '../../../helpers/summary-stats.helper';
-import type { BottomSheetHeaderTitleSegment } from '../../shared/bottom-sheet-header/bottom-sheet-header.component';
 import { SharedModule } from '../../../modules/shared.module';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
@@ -66,8 +65,6 @@ export class CalendarDayDetailsComponent {
     year: 'numeric',
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
-  readonly titleSegments: BottomSheetHeaderTitleSegment[] = this.titleFormatter.formatToParts(this.data.day.date)
-    .map((part) => ({ text: part.value, isNumeric: part.type === 'day' || part.type === 'year' }));
   readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
   readonly familyVolumeRows = this.buildFamilyVolumeRows();
 

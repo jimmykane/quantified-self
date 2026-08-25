@@ -1,12 +1,19 @@
 :host {
+  box-sizing: border-box;
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
 }
 
 .calendar-day-details {
+  box-sizing: border-box;
   display: flex;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
@@ -15,12 +22,22 @@
 }
 
 .calendar-day-details-content {
+  box-sizing: border-box;
   display: grid;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   gap: 18px;
   padding: 16px;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+.calendar-day-details-content > * {
+  min-width: 0;
 }
 
 .calendar-day-total {

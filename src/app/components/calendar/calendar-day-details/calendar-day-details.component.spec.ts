@@ -30,15 +30,16 @@ describe('CalendarDayDetailsComponent', () => {
       .toBe('/user/user-1/event/event-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
-    expect([...fixture.nativeElement.querySelectorAll('.bottom-sheet-title-numeric')]
-      .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['3', '2026']);
+    expect(fixture.nativeElement.querySelector('app-bottom-sheet-header h2')?.textContent?.trim())
+      .toBe('Monday, August 3, 2026');
+    expect(fixture.nativeElement.querySelectorAll('.bottom-sheet-title-numeric')).toHaveLength(0);
     expect([...fixture.nativeElement.querySelectorAll('.calendar-day-event-metric')]
       .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
     expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
       .toEqual(['Activities', 'Activity details']);
   });
 
-  it('uses Barlow Condensed for numeric day-detail content without changing adjacent copy', () => {
+  it('uses Barlow Condensed only for numeric day-detail content, not the date title', () => {
     const detailsStyles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
       'utf8',
@@ -47,8 +48,8 @@ describe('CalendarDayDetailsComponent', () => {
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-volume-list/activity-calendar-volume-list.component.scss'),
       'utf8',
     );
-    const headerStyles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/shared/bottom-sheet-header/bottom-sheet-header.component.scss'),
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.html'),
       'utf8',
     );
 
@@ -58,9 +59,8 @@ describe('CalendarDayDetailsComponent', () => {
     expect(listStyles).toMatch(
       /\.calendar-family-volume-count-value\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
     );
-    expect(headerStyles).toMatch(
-      /\.bottom-sheet-title-numeric\s*\{[^}]*font-family:\s*'Barlow Condensed', sans-serif/s,
-    );
+    expect(template).toContain('<app-bottom-sheet-header [title]="title" icon="calendar_month">');
+    expect(template).not.toContain('[titleSegments]');
   });
 
   it('keeps a family summary non-clickable when it contains multiple events', async () => {
@@ -156,8 +156,10 @@ describe('CalendarDayDetailsComponent', () => {
     const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
 
     expect(componentStyles).toMatch(/:host\s*\{[^}]*display:\s*flex[^}]*min-height:\s*0/s);
+    expect(componentStyles).toMatch(/:host\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden/s);
     expect(componentStyles).toMatch(/\.calendar-day-details\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s);
-    expect(componentStyles).toMatch(/\.calendar-day-details-content\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s);
+    expect(componentStyles).toMatch(/\.calendar-day-details-content\s*\{[^}]*max-width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto[^}]*overscroll-behavior-x:\s*none[^}]*touch-action:\s*pan-y/s);
+    expect(componentStyles).toMatch(/\.calendar-day-details-content > \*\s*\{[^}]*min-width:\s*0/s);
     expect(globalStyles).toMatch(/\.mat-bottom-sheet-container\s*\{[^}]*display:\s*flex !important/s);
   });
 
