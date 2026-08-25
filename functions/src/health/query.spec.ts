@@ -56,6 +56,9 @@ function fakeDatabase(recordDocs: HealthSourceRecord[]) {
                 collection: vi.fn((collectionId: string) => makeQuery(collectionId)),
             })),
         })),
+        runTransaction: vi.fn(async (runner: (transaction: { get: (query: { get: () => unknown }) => unknown }) => unknown) => runner({
+            get: (query: { get: () => unknown }) => query.get(),
+        })),
     };
     return { db, operations };
 }
@@ -118,6 +121,7 @@ describe('server health range reader', () => {
             { method: 'limit', args: [11] },
         ]));
         expect(fake.operations.has('healthSampleChunks')).toBe(false);
+        expect(fake.db.runTransaction).toHaveBeenCalledWith(expect.any(Function), { readOnly: true });
     });
 
     it('applies the stable date/id cursor and separately bounds sample chunks', async () => {
@@ -128,7 +132,7 @@ describe('server health range reader', () => {
             includeSamples: true,
             recordCursor: { calendarDate: '2026-01-02', id: 'record-2' },
             chunkCursor: { calendarDate: '2026-01-03', id: 'chunk-3' },
-            chunkLimit: 20,
+            chunkLimit: 8,
         }, { db: fake.db as never });
 
         expect(fake.operations.get('healthRecords')).toEqual(expect.arrayContaining([
@@ -136,7 +140,7 @@ describe('server health range reader', () => {
         ]));
         expect(fake.operations.get('healthSampleChunks')).toEqual(expect.arrayContaining([
             { method: 'startAfter', args: ['2026-01-03', 'chunk-3'] },
-            { method: 'limit', args: [21] },
+            { method: 'limit', args: [9] },
         ]));
     });
 });

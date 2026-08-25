@@ -11,6 +11,7 @@ import {
   HEALTH_MAX_SUMMARY_RANGE_DAYS,
   HEALTH_NORMALIZATION_STATUSES,
   HealthConflict,
+  HealthCoverageStatus,
   HealthDailySummary,
   HealthFreshnessResult,
   HealthMetricCoverageResult,
@@ -23,9 +24,11 @@ import {
   HealthQueryCursor,
   HealthRangeQuery,
   HealthRangeResult,
+  HealthRecordingMethod,
   HealthSampleChunk,
   HealthSourceRecord,
   HealthUnit,
+  HealthValueOrigin,
   HealthValueType,
   NormalizedHealthRangeQuery,
   getHealthMetricDefinition,
@@ -87,20 +90,28 @@ function normalizeProviders(value: unknown): HealthProvider[] {
   if (value === undefined || value === null) {
     return [];
   }
-  if (!Array.isArray(value) || value.length > 5 || value.some(provider => !isHealthProvider(provider))) {
+  if (!Array.isArray(value)) {
     throw new HealthQueryValidationError('providers must contain at most five supported providers.');
   }
-  return [...new Set(value as HealthProvider[])];
+  const providers = Array.from(value);
+  if (providers.length > 5 || providers.some(provider => !isHealthProvider(provider))) {
+    throw new HealthQueryValidationError('providers must contain at most five supported providers.');
+  }
+  return [...new Set(providers as HealthProvider[])];
 }
 
 function normalizeMetricIds(value: unknown): HealthMetricId[] {
   if (value === undefined || value === null) {
     return [];
   }
-  if (!Array.isArray(value) || value.length > 30 || value.some(metricId => !isHealthMetricId(metricId))) {
+  if (!Array.isArray(value)) {
     throw new HealthQueryValidationError('metricIds must contain at most 30 supported metric IDs.');
   }
-  return [...new Set(value as HealthMetricId[])];
+  const metricIds = Array.from(value);
+  if (metricIds.length > 30 || metricIds.some(metricId => !isHealthMetricId(metricId))) {
+    throw new HealthQueryValidationError('metricIds must contain at most 30 supported metric IDs.');
+  }
+  return [...new Set(metricIds as HealthMetricId[])];
 }
 
 export function normalizeHealthRangeQuery(value: HealthRangeQuery | unknown): NormalizedHealthRangeQuery {
@@ -147,7 +158,11 @@ function compareDateAndId(
   left: Pick<HealthSourceRecord | HealthSampleChunk, 'calendarDate' | 'id'>,
   right: Pick<HealthSourceRecord | HealthSampleChunk, 'calendarDate' | 'id'>,
 ): number {
-  return left.calendarDate.localeCompare(right.calendarDate) || left.id.localeCompare(right.id);
+  return compareText(left.calendarDate, right.calendarDate) || compareText(left.id, right.id);
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function isAfterCursor(
@@ -165,15 +180,28 @@ function metricMatches(metricId: HealthMetricId, metricIds: readonly HealthMetri
   return metricIds.length === 0 || metricIds.includes(metricId);
 }
 
+function chunkMatchesKnownParentRevision(
+  chunk: HealthSampleChunk,
+  recordsById: ReadonlyMap<string, HealthSourceRecord>,
+): boolean {
+  const parent = recordsById.get(chunk.parentRecordId);
+  if (!parent) {
+    return true;
+  }
+  return chunk.revision.order === parent.source.revision.order
+    && chunk.revision.token === parent.source.revision.token
+    && chunk.revision.digest === parent.source.revision.digest;
+}
+
 function entryCanonicalUnit(entry: HealthMetricEntry): HealthUnit | null {
   return entry.kind === 'value' && entry.canonical ? entry.canonical.unit : null;
 }
 
 function observationSort(left: HealthObservation, right: HealthObservation): number {
-  return left.calendarDate.localeCompare(right.calendarDate)
+  return compareText(left.calendarDate, right.calendarDate)
     || left.startTimeMs - right.startTimeMs
-    || left.provider.localeCompare(right.provider)
-    || left.id.localeCompare(right.id);
+    || compareText(left.provider, right.provider)
+    || compareText(left.id, right.id);
 }
 
 function addUnique<T>(values: T[], value: T): void {
@@ -187,7 +215,10 @@ interface DiscoveryAccumulator {
   providers: HealthProvider[];
   valueTypes: HealthValueType[];
   canonicalUnits: HealthUnit[];
+  aggregations: string[];
   semanticVariants: string[];
+  origins: HealthValueOrigin[];
+  recordingMethods: HealthRecordingMethod[];
   firstDate: string;
   lastDate: string;
   hasSamples: boolean;
@@ -200,7 +231,10 @@ function addDiscoveryEntry(
     provider: HealthProvider;
     valueType: HealthValueType;
     canonicalUnit: HealthUnit | null;
+    aggregation: string;
     semanticVariant: string;
+    origin: HealthValueOrigin;
+    recordingMethod: HealthRecordingMethod;
     calendarDate: string;
     hasSamples: boolean;
   },
@@ -210,7 +244,10 @@ function addDiscoveryEntry(
     providers: [],
     valueTypes: [],
     canonicalUnits: [],
+    aggregations: [],
     semanticVariants: [],
+    origins: [],
+    recordingMethods: [],
     firstDate: input.calendarDate,
     lastDate: input.calendarDate,
     hasSamples: false,
@@ -220,7 +257,10 @@ function addDiscoveryEntry(
   if (input.canonicalUnit) {
     addUnique(current.canonicalUnits, input.canonicalUnit);
   }
+  addUnique(current.aggregations, input.aggregation);
   addUnique(current.semanticVariants, input.semanticVariant);
+  addUnique(current.origins, input.origin);
+  addUnique(current.recordingMethods, input.recordingMethod);
   current.firstDate = current.firstDate < input.calendarDate ? current.firstDate : input.calendarDate;
   current.lastDate = current.lastDate > input.calendarDate ? current.lastDate : input.calendarDate;
   current.hasSamples ||= input.hasSamples;
@@ -230,14 +270,35 @@ function addDiscoveryEntry(
 interface CoverageAccumulator {
   metricId: HealthMetricId;
   provider: HealthProvider;
+  accountKey: string;
+  aggregation: string;
   semanticVariant: string;
+  origin: HealthValueOrigin;
+  recordingMethod: HealthRecordingMethod;
   dates: Set<string>;
   partialDates: Set<string>;
+  unknownDates: Set<string>;
   latestDate: string;
 }
 
-function coverageKey(metricId: HealthMetricId, provider: HealthProvider, semanticVariant: string): string {
-  return `${metricId}\u0000${provider}\u0000${semanticVariant}`;
+function metricSeriesKey(input: {
+  metricId: HealthMetricId;
+  provider: HealthProvider;
+  accountKey: string;
+  aggregation: string;
+  semanticVariant: string;
+  origin: HealthValueOrigin;
+  recordingMethod: HealthRecordingMethod;
+}): string {
+  return JSON.stringify([
+    input.metricId,
+    input.provider,
+    input.accountKey,
+    input.aggregation,
+    input.semanticVariant,
+    input.origin,
+    input.recordingMethod,
+  ]);
 }
 
 function addCoverage(
@@ -245,23 +306,36 @@ function addCoverage(
   input: {
     metricId: HealthMetricId;
     provider: HealthProvider;
+    accountKey: string;
+    aggregation: string;
     semanticVariant: string;
+    origin: HealthValueOrigin;
+    recordingMethod: HealthRecordingMethod;
     calendarDate: string;
-    partial: boolean;
+    status: HealthCoverageStatus;
   },
 ): void {
-  const key = coverageKey(input.metricId, input.provider, input.semanticVariant);
+  const key = metricSeriesKey(input);
   const current = target.get(key) || {
     metricId: input.metricId,
     provider: input.provider,
+    accountKey: input.accountKey,
+    aggregation: input.aggregation,
     semanticVariant: input.semanticVariant,
+    origin: input.origin,
+    recordingMethod: input.recordingMethod,
     dates: new Set<string>(),
     partialDates: new Set<string>(),
+    unknownDates: new Set<string>(),
     latestDate: input.calendarDate,
   };
   current.dates.add(input.calendarDate);
-  if (input.partial) {
+  if (input.status === HEALTH_COVERAGE_STATUSES.Partial) {
     current.partialDates.add(input.calendarDate);
+    current.unknownDates.delete(input.calendarDate);
+  } else if (input.status === HEALTH_COVERAGE_STATUSES.Unknown
+    && !current.partialDates.has(input.calendarDate)) {
+    current.unknownDates.add(input.calendarDate);
   }
   current.latestDate = current.latestDate > input.calendarDate ? current.latestDate : input.calendarDate;
   target.set(key, current);
@@ -270,7 +344,11 @@ function addCoverage(
 interface FreshnessAccumulator {
   metricId: HealthMetricId;
   provider: HealthProvider;
+  accountKey: string;
+  aggregation: string;
   semanticVariant: string;
+  origin: HealthValueOrigin;
+  recordingMethod: HealthRecordingMethod;
   lastObservedAtMs: number;
   lastReceivedAtMs: number;
   staleAfterMs: number | null;
@@ -280,7 +358,7 @@ function addFreshness(
   target: Map<string, FreshnessAccumulator>,
   input: FreshnessAccumulator,
 ): void {
-  const key = coverageKey(input.metricId, input.provider, input.semanticVariant);
+  const key = metricSeriesKey(input);
   const current = target.get(key);
   if (!current || input.lastObservedAtMs > current.lastObservedAtMs) {
     target.set(key, input);
@@ -304,7 +382,7 @@ function intervalsOverlap(left: HealthObservation, right: HealthObservation): bo
   return left.startTimeMs <= right.endTimeMs && right.startTimeMs <= left.endTimeMs;
 }
 
-function buildConflicts(observations: readonly HealthObservation[]): HealthConflict[] {
+export function findHealthConflicts(observations: readonly HealthObservation[]): HealthConflict[] {
   const candidates = new Map<string, HealthObservation[]>();
   for (const observation of observations) {
     const entry = observation.entry;
@@ -315,14 +393,14 @@ function buildConflicts(observations: readonly HealthObservation[]): HealthConfl
     ) {
       continue;
     }
-    const key = [
+    const key = JSON.stringify([
       entry.metricId,
       observation.calendarDate,
       entry.aggregation,
       entry.semanticVariant,
       entry.origin,
       entry.canonical.unit,
-    ].join('\u0000');
+    ]);
     candidates.set(key, [...(candidates.get(key) || []), observation]);
   }
 
@@ -351,19 +429,31 @@ function buildConflicts(observations: readonly HealthObservation[]): HealthConfl
     const conflicting = group.filter(item => conflictingIds.has(item.id));
     const first = conflicting[0];
     const firstEntry = first.entry as HealthMetricValue;
+    const sources = [...new Map(conflicting.map(item => [
+      JSON.stringify([item.provider, item.accountKey]),
+      { provider: item.provider, accountKey: item.accountKey },
+    ])).values()].sort((left, right) => compareText(left.provider, right.provider)
+      || compareText(left.accountKey, right.accountKey));
     conflicts.push({
       metricId: firstEntry.metricId,
       calendarDate: first.calendarDate,
       aggregation: firstEntry.aggregation,
       semanticVariant: firstEntry.semanticVariant,
+      origin: firstEntry.origin,
       canonicalUnit: firstEntry.canonical!.unit,
-      observationIds: conflicting.map(item => item.id).sort(),
-      providers: [...new Set(conflicting.map(item => item.provider))].sort(),
+      observationIds: conflicting.map(item => item.id).sort(compareText),
+      providers: [...new Set(conflicting.map(item => item.provider))].sort(compareText),
+      sources,
+      recordingMethods: [...new Set(conflicting.map(item => item.entry.recordingMethod))].sort(compareText),
     });
   }
-  return conflicts.sort((left, right) => left.calendarDate.localeCompare(right.calendarDate)
-    || left.metricId.localeCompare(right.metricId)
-    || left.semanticVariant.localeCompare(right.semanticVariant));
+  return conflicts.sort((left, right) => compareText(left.calendarDate, right.calendarDate)
+    || compareText(left.metricId, right.metricId)
+    || compareText(left.aggregation, right.aggregation)
+    || compareText(left.semanticVariant, right.semanticVariant)
+    || compareText(left.origin, right.origin)
+    || compareText(left.canonicalUnit, right.canonicalUnit)
+    || compareText(left.observationIds.join('\u0000'), right.observationIds.join('\u0000')));
 }
 
 function cursorForLast(values: readonly Pick<HealthSourceRecord | HealthSampleChunk, 'calendarDate' | 'id'>[]): HealthQueryCursor | null {
@@ -405,12 +495,19 @@ export function projectHealthRange(
     : [];
   const chunkPageTruncated = primaryMatchingChunks.length > query.chunkLimit;
   const selectedChunkPage = primaryMatchingChunks.slice(0, query.chunkLimit);
+  const recordsById = new Map(records.map(record => [record.id, record]));
   const selectedChunks: HealthSampleChunk[] = [];
   let returnedSamplePoints = 0;
   let pointLimitTruncated = false;
+  let sampleRevisionMismatchCount = 0;
   let lastConsumedChunk: HealthSampleChunk | null = null;
   for (const chunk of selectedChunkPage) {
     if (!metricMatches(chunk.metricId, query.metricIds)) {
+      lastConsumedChunk = chunk;
+      continue;
+    }
+    if (!chunkMatchesKnownParentRevision(chunk, recordsById)) {
+      sampleRevisionMismatchCount += 1;
       lastConsumedChunk = chunk;
       continue;
     }
@@ -434,6 +531,7 @@ export function projectHealthRange(
       if (!metricMatches(entry.metricId, query.metricIds)) {
         return;
       }
+      const entryCoverage = entry.coverage || record.coverage;
       const observation: HealthObservation = {
         id: `${record.id}:${index}`,
         recordId: record.id,
@@ -446,6 +544,8 @@ export function projectHealthRange(
         sourceRecordType: record.source.sourceRecordType,
         sourceRecordKey: record.source.sourceRecordKey,
         receivedAtMs: record.source.receivedAtMs,
+        coverage: entryCoverage,
+        device: entry.device === undefined ? record.device ?? null : entry.device,
         entry,
       };
       observations.push(observation);
@@ -454,23 +554,33 @@ export function projectHealthRange(
         provider: record.source.provider,
         valueType: entry.valueType,
         canonicalUnit: entryCanonicalUnit(entry),
+        aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
+        origin: entry.origin,
+        recordingMethod: entry.recordingMethod,
         calendarDate: record.calendarDate,
         hasSamples: false,
       });
-      const entryCoverage = entry.coverage || record.coverage;
       addCoverage(coverage, {
         metricId: entry.metricId,
         provider: record.source.provider,
+        accountKey: record.source.accountKey,
+        aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
+        origin: entry.origin,
+        recordingMethod: entry.recordingMethod,
         calendarDate: record.calendarDate,
-        partial: entryCoverage.status === HEALTH_COVERAGE_STATUSES.Partial,
+        status: entryCoverage.status,
       });
       const expectedUpdateIntervalMs = entryCoverage.expectedUpdateIntervalMs;
       addFreshness(freshness, {
         metricId: entry.metricId,
         provider: record.source.provider,
+        accountKey: record.source.accountKey,
+        aggregation: entry.aggregation,
         semanticVariant: entry.semanticVariant,
+        origin: entry.origin,
+        recordingMethod: entry.recordingMethod,
         lastObservedAtMs: record.endTimeMs,
         lastReceivedAtMs: record.source.receivedAtMs,
         staleAfterMs: typeof expectedUpdateIntervalMs === 'number' && expectedUpdateIntervalMs > 0
@@ -487,24 +597,35 @@ export function projectHealthRange(
       provider: chunk.provider,
       valueType: chunk.valueType,
       canonicalUnit: chunk.canonicalUnit || null,
+      aggregation: chunk.aggregation,
       semanticVariant: chunk.semanticVariant,
+      origin: chunk.origin,
+      recordingMethod: chunk.recordingMethod,
       calendarDate: chunk.calendarDate,
       hasSamples: true,
     });
     addCoverage(coverage, {
       metricId: chunk.metricId,
       provider: chunk.provider,
+      accountKey: chunk.accountKey,
+      aggregation: chunk.aggregation,
       semanticVariant: chunk.semanticVariant,
+      origin: chunk.origin,
+      recordingMethod: chunk.recordingMethod,
       calendarDate: chunk.calendarDate,
-      partial: chunk.coverage.status === HEALTH_COVERAGE_STATUSES.Partial,
+      status: chunk.coverage.status,
     });
     const expectedUpdateIntervalMs = chunk.coverage.expectedUpdateIntervalMs;
     addFreshness(freshness, {
       metricId: chunk.metricId,
       provider: chunk.provider,
+      accountKey: chunk.accountKey,
+      aggregation: chunk.aggregation,
       semanticVariant: chunk.semanticVariant,
+      origin: chunk.origin,
+      recordingMethod: chunk.recordingMethod,
       lastObservedAtMs: chunk.endTimeMs,
-      lastReceivedAtMs: chunk.updatedAtMs,
+      lastReceivedAtMs: chunk.receivedAtMs,
       staleAfterMs: typeof expectedUpdateIntervalMs === 'number' && expectedUpdateIntervalMs > 0
         ? expectedUpdateIntervalMs
         : null,
@@ -531,14 +652,24 @@ export function projectHealthRange(
   const coverageResult: HealthMetricCoverageResult[] = [...coverage.values()].map(item => ({
     metricId: item.metricId,
     provider: item.provider,
+    accountKey: item.accountKey,
+    aggregation: item.aggregation,
     semanticVariant: item.semanticVariant,
+    origin: item.origin,
+    recordingMethod: item.recordingMethod,
     requestedDays: days,
     recordedDays: item.dates.size,
+    missingDays: Math.max(0, days - item.dates.size),
     partialDays: item.partialDates.size,
+    unknownDays: item.unknownDates.size,
     latestDate: item.latestDate,
-  })).sort((left, right) => left.metricId.localeCompare(right.metricId)
-    || left.provider.localeCompare(right.provider)
-    || left.semanticVariant.localeCompare(right.semanticVariant));
+  })).sort((left, right) => compareText(left.metricId, right.metricId)
+    || compareText(left.provider, right.provider)
+    || compareText(left.accountKey, right.accountKey)
+    || compareText(left.aggregation, right.aggregation)
+    || compareText(left.origin, right.origin)
+    || compareText(left.recordingMethod, right.recordingMethod)
+    || compareText(left.semanticVariant, right.semanticVariant));
 
   const freshnessResult: HealthFreshnessResult[] = [...freshness.values()].map((item): HealthFreshnessResult => {
     const ageMs = Math.max(0, nowMs - item.lastObservedAtMs);
@@ -549,31 +680,42 @@ export function projectHealthRange(
         ? 'unknown'
         : ageMs > item.staleAfterMs ? 'stale' : 'fresh',
     };
-  }).sort((left, right) => left.metricId.localeCompare(right.metricId)
-    || left.provider.localeCompare(right.provider)
-    || left.semanticVariant.localeCompare(right.semanticVariant));
+  }).sort((left, right) => compareText(left.metricId, right.metricId)
+    || compareText(left.provider, right.provider)
+    || compareText(left.accountKey, right.accountKey)
+    || compareText(left.aggregation, right.aggregation)
+    || compareText(left.origin, right.origin)
+    || compareText(left.recordingMethod, right.recordingMethod)
+    || compareText(left.semanticVariant, right.semanticVariant));
 
   const discoveryResult: HealthMetricDiscovery[] = [...discovery.values()].map(item => ({
     ...item,
-    providers: item.providers.sort(),
-    valueTypes: item.valueTypes.sort(),
-    canonicalUnits: item.canonicalUnits.sort(),
-    semanticVariants: item.semanticVariants.sort(),
-  })).sort((left, right) => left.metricId.localeCompare(right.metricId));
+    providers: item.providers.sort(compareText),
+    valueTypes: item.valueTypes.sort(compareText),
+    canonicalUnits: item.canonicalUnits.sort(compareText),
+    aggregations: item.aggregations.sort(compareText),
+    semanticVariants: item.semanticVariants.sort(compareText),
+    origins: item.origins.sort(compareText),
+    recordingMethods: item.recordingMethods.sort(compareText),
+  })).sort((left, right) => compareText(left.metricId, right.metricId));
 
   const samplesTruncated = chunkPageTruncated || pointLimitTruncated;
   return {
     query,
     observations,
     sampleChunks: selectedChunks,
-    dailySummaries: [...daily.values()].sort((left, right) => left.calendarDate.localeCompare(right.calendarDate)),
+    dailySummaries: [...daily.values()].sort((left, right) => compareText(left.calendarDate, right.calendarDate)),
     discovery: discoveryResult,
     coverage: coverageResult,
     freshness: freshnessResult,
-    conflicts: buildConflicts(observations),
+    conflicts: findHealthConflicts(observations),
     pageInfo: {
       recordsTruncated,
       samplesTruncated,
+      sampleRevisionMismatchCount,
+      recordAggregateComplete: query.recordCursor === null && !recordsTruncated,
+      sampleAggregateComplete: !query.includeSamples
+        || (query.chunkCursor === null && !samplesTruncated && sampleRevisionMismatchCount === 0),
       recordCursor: recordsTruncated ? cursorForLast(selectedRecords) : null,
       chunkCursor: samplesTruncated && lastConsumedChunk ? cursorForLast([lastConsumedChunk]) : null,
       returnedSamplePoints,

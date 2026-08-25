@@ -2166,37 +2166,49 @@
     },
     {
       "collectionGroup": "healthRecords",
-      "fieldPath": "metrics",
+      "fieldPath": "*",
       "ttl": false,
       "indexes": []
     },
     {
       "collectionGroup": "healthRecords",
-      "fieldPath": "sampleChunkIds",
+      "fieldPath": "calendarDate",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "healthSampleChunks",
+      "fieldPath": "*",
       "ttl": false,
       "indexes": []
     },
     {
       "collectionGroup": "healthSampleChunks",
-      "fieldPath": "offsetMs",
+      "fieldPath": "calendarDate",
       "ttl": false,
-      "indexes": []
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
     },
     {
-      "collectionGroup": "healthSampleChunks",
-      "fieldPath": "nativeValues",
-      "ttl": false,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "healthSampleChunks",
-      "fieldPath": "canonicalValues",
-      "ttl": false,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "healthSampleChunks",
-      "fieldPath": "qualityCodes",
+      "collectionGroup": "healthSyncState",
+      "fieldPath": "*",
       "ttl": false,
       "indexes": []
     }

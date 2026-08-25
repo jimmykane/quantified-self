@@ -108,7 +108,7 @@ describe('AppHealthService', () => {
         }));
 
         expect(result.observations).toEqual([]);
-        expect(result.query.recordLimit).toBe(250);
+        expect(result.query.recordLimit).toBe(32);
         expect(collection).not.toHaveBeenCalled();
     });
 
@@ -125,7 +125,7 @@ describe('AppHealthService', () => {
             metricIds: [HEALTH_METRIC_IDS.Steps],
             includeSamples: true,
             recordLimit: 10,
-            chunkLimit: 20,
+            chunkLimit: 8,
             recordCursor: { calendarDate: '2025-12-31', id: 'previous-record' },
         }));
 
@@ -138,7 +138,7 @@ describe('AppHealthService', () => {
         expect(documentId).toHaveBeenCalled();
         expect(startAfter).toHaveBeenCalledWith('2025-12-31', 'previous-record');
         expect(limit).toHaveBeenCalledWith(11);
-        expect(limit).toHaveBeenCalledWith(21);
+        expect(limit).toHaveBeenCalledWith(9);
     });
 
     it('uses the metric index when no provider is requested', async () => {

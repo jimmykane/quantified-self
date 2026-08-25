@@ -55,10 +55,10 @@ export async function readHealthRange(
     const chunkQuery = plans.chunks
         ? applyQueryPlan(userCollection(db, userID, plans.chunks.collectionId), plans.chunks)
         : null;
-    const [recordSnapshot, chunkSnapshot] = await Promise.all([
-        recordQuery.get(),
-        chunkQuery?.get() || Promise.resolve(null),
-    ]);
+    const [recordSnapshot, chunkSnapshot] = await db.runTransaction(async transaction => Promise.all([
+        transaction.get(recordQuery),
+        chunkQuery ? transaction.get(chunkQuery) : Promise.resolve(null),
+    ]), { readOnly: true });
     const records = recordSnapshot.docs.map(snapshot => ({
         ...snapshot.data(),
         id: snapshot.id,

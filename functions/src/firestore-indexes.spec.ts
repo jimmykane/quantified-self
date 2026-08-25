@@ -554,7 +554,7 @@ describe('firestore indexes', () => {
         });
     });
 
-    it('keeps unified health reads deployable without indexing sample payload arrays or enabling TTL', () => {
+    it('keeps only the automatic health indexes needed for bounded date reads and disables TTL', () => {
         const config = loadFirestoreIndexes();
 
         expect(config.indexes).toEqual(expect.arrayContaining([
@@ -599,23 +599,48 @@ describe('firestore indexes', () => {
                 density: 'SPARSE_ALL',
             },
         ]));
-        for (const [collectionGroup, fieldPath] of [
-            ['healthRecords', 'metrics'],
-            ['healthRecords', 'sampleChunkIds'],
-            ['healthSampleChunks', 'offsetMs'],
-            ['healthSampleChunks', 'nativeValues'],
-            ['healthSampleChunks', 'canonicalValues'],
-            ['healthSampleChunks', 'qualityCodes'],
-        ]) {
-            expect(config.fieldOverrides).toContainEqual({
-                collectionGroup,
-                fieldPath,
+        expect(config.fieldOverrides).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'healthRecords',
+                fieldPath: '*',
                 ttl: false,
                 indexes: [],
-            });
-        }
+            },
+            {
+                collectionGroup: 'healthRecords',
+                fieldPath: 'calendarDate',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                ],
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                fieldPath: '*',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'healthSampleChunks',
+                fieldPath: 'calendarDate',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                ],
+            },
+            {
+                collectionGroup: 'healthSyncState',
+                fieldPath: '*',
+                ttl: false,
+                indexes: [],
+            },
+        ]));
         expect(config.fieldOverrides.some(override => (
-            (override.collectionGroup === 'healthRecords' || override.collectionGroup === 'healthSampleChunks')
+            (override.collectionGroup === 'healthRecords'
+                || override.collectionGroup === 'healthSampleChunks'
+                || override.collectionGroup === 'healthSyncState')
             && override.ttl === true
         ))).toBe(false);
     });

@@ -1343,12 +1343,12 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 const userRef = db.collection('users').doc(userId);
 
-                await assertSucceeds(userRef.collection('healthRecords').limit(1001).get());
-                await assertFails(userRef.collection('healthRecords').limit(1002).get());
+                await assertSucceeds(userRef.collection('healthRecords').limit(33).get());
+                await assertFails(userRef.collection('healthRecords').limit(34).get());
                 await assertFails(userRef.collection('healthRecords').get());
 
-                await assertSucceeds(userRef.collection('healthSampleChunks').limit(501).get());
-                await assertFails(userRef.collection('healthSampleChunks').limit(502).get());
+                await assertSucceeds(userRef.collection('healthSampleChunks').limit(9).get());
+                await assertFails(userRef.collection('healthSampleChunks').limit(10).get());
                 await assertFails(userRef.collection('healthSampleChunks').get());
 
                 await assertSucceeds(userRef.collection('healthSyncState').limit(6).get());

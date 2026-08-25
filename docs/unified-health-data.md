@@ -103,7 +103,7 @@ The record ID is a deterministic SHA-256 identifier derived from the Firebase UI
 
 ### Sample chunks
 
-`users/{uid}/healthSampleChunks/{chunkId}` stores compact arrays for one provider, record, metric, semantic variant, and series. Offsets are relative to the chunk start. Native, canonical, and optional quality arrays must align exactly.
+`users/{uid}/healthSampleChunks/{chunkId}` stores compact arrays for one provider, record, metric, semantic variant, and series. Offsets and value arrays are chunk-local and must align exactly. Coverage is repeated series-level metadata, so its `sampleCount` is the validated total across the source series rather than the current chunk length. Each chunk retains the provider receipt time so sample freshness does not substitute a local write timestamp.
 
 Chunks are permanent leaf documents by schema. Firestore Rules do not grant access to descendants, which makes document-only deletion safe when a higher provider revision replaces stale chunks.
 
@@ -122,15 +122,21 @@ Bounds protect Firestore document size, transaction limits, client reads, and pr
 | Metrics per source record | 128 |
 | Sample points per chunk | 1,440 |
 | Sample chunks per record | 200 |
-| Estimated document payload | 900 KiB |
-| Estimated atomic replacement payload | 8 MiB |
+| Estimated source-record payload | 256 KiB |
+| Estimated sample-chunk payload | 900 KiB |
+| Estimated payload per revision | 4 MiB |
+| Worst-case old + new replacement data | 8 MiB before index/protocol overhead |
 | Summary query range | 366 calendar days |
 | Sampled query range | 31 calendar days |
-| Public record page | 1–1,000 records; default 250 |
+| Public record page | 1–32 records; default 32 |
 | Firestore record fetch | Public page plus one look-ahead record |
-| Public chunk page | 1–500 chunks; default 100 |
+| Public chunk page | 1–8 chunks; default 8 |
 | Firestore chunk fetch | Public page plus one look-ahead chunk |
-| Sample points returned | 1,440–50,000; default 25,000 |
+| Sample points returned | 1,440–11,520; default 10,000 |
+
+The per-revision payload stays below half Firestore's 10 MiB transaction request limit because replacing a record can both write the new revision and delete the previous revision. The largest combined record/chunk fetch, including both look-ahead documents, is under 17 MiB. That leaves material serialization and projection headroom below the 32 MB non-streaming response limit for a second-generation HTTP function. See the official [Firestore quotas](https://firebase.google.com/docs/firestore/quotas) and [Cloud Functions quotas](https://firebase.google.com/docs/functions/quotas).
+
+Automatic indexes are disabled for every health collection except the date field needed by unfiltered range reads; the four explicit provider/metric/date composites remain available. This leaves write-request headroom for index entries and protocol overhead.
 
 Sample projection never splits a stored chunk to fit a point budget. It returns only complete matching chunks and reports truncation. The chunk cursor identifies the last consumed source chunk, which also lets sparse provider-first pages advance when their matching result is empty.
 
@@ -156,22 +162,26 @@ The query accepts inclusive `YYYY-MM-DD` boundaries, provider and metric filters
 
 Only one provider-or-metric predicate is used per Firestore collection to avoid a combinatorial index surface. Provider filtering takes precedence when both are supplied; the shared projector applies the remaining metric filter to the bounded source page. Paging is therefore source-page based: a page can contain fewer observations or chunks than its limit, including an empty matching sample page. Callers follow the corresponding cursor until its truncation flag is false.
 
+Daily summaries, discovery, coverage, freshness, and conflicts describe the current source page. `recordAggregateComplete` and `sampleAggregateComplete` are true only when the corresponding result was produced without an input cursor and has no later page. A paged consumer combines observations/chunks across every page before presenting range-wide aggregates; `findHealthConflicts()` recomputes conflicts across record-page boundaries. Each observation carries effective record-or-entry coverage and device attribution for this purpose.
+
 The result contains:
 
 - source-aware observations with native/canonical metric entries;
 - complete sample chunks when requested;
 - per-date observation and Sleep-reference IDs;
-- metric discovery with providers, value types, canonical units, semantic variants, first/last dates, and sample availability;
-- per-provider coverage, including requested, recorded, and partial day counts;
-- freshness with observed/received timestamps and explicit fresh, stale, or unknown state;
-- conflicts between overlapping observations with identical canonical semantics but differing values;
+- metric discovery with providers, value types, canonical units, aggregations, semantic variants, origins, recording methods, first/last dates, and sample availability;
+- per-provider/account and semantic-series coverage, including requested, recorded, missing, partial, and unknown day counts;
+- per-provider/account semantic-series freshness with observed/received timestamps and explicit fresh, stale, or unknown state;
+- conflicts between overlapping observations with identical canonical semantics but differing values, including origin, deterministic provider/account source pairs, and involved recording methods;
 - independent record/chunk cursors and truncation flags.
 
 The projector never fills gaps. A metric recorded on one of seven requested days reports one recorded day, not seven values with six zeroes.
 
 ### Direct and server reads
 
-`AppHealthService.watchRange()` is the default Health Hub path. It uses owner-scoped Firestore listeners, then runs the shared projector in the app. `AppHealthService.queryRangeViaServer()` calls `queryHealthRange` for consumers that need an authenticated server read.
+`AppHealthService.watchRange()` is the default Health Hub path. It uses owner-scoped Firestore listeners, then runs the shared projector in the app. Separate record/chunk listeners can emit one side of an atomic replacement first; the projector suppresses any chunk whose revision disagrees with a parent record present in the same source page, reports `sampleRevisionMismatchCount`, and marks the sample aggregate incomplete until the listeners converge.
+
+`AppHealthService.queryRangeViaServer()` calls `queryHealthRange` for consumers that need an authenticated server read. The server executes record and chunk queries in one read-only Firestore transaction so both snapshots share one consistent read time.
 
 The callable derives the data owner exclusively from `request.auth.uid`, requires App Check, validates every bound, logs only a safe error class, and returns the same `HealthRangeResult` shape.
 

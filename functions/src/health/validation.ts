@@ -31,6 +31,7 @@ import {
 } from '../../../shared/health';
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SAFE_DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_ACCOUNT_ID_LENGTH = 512;
 const MAX_SOURCE_KEY_LENGTH = 512;
 const MAX_LABEL_LENGTH = 128;
@@ -119,6 +120,14 @@ function nullableBoundedString(value: unknown, field: string, maximum: number): 
     return boundedString(value, field, maximum);
 }
 
+function safeDocumentId(value: unknown, field: string): string {
+    const documentId = boundedString(value, field, 128);
+    if (!SAFE_DOCUMENT_ID_PATTERN.test(documentId)) {
+        throw new HealthWriteValidationError(`${field} must be a safe bounded document ID.`);
+    }
+    return documentId;
+}
+
 function finiteNumber(value: unknown, field: string): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         throw new HealthWriteValidationError(`${field} must be a finite number.`);
@@ -142,6 +151,17 @@ function nullableNonNegativeNumber(value: unknown, field: string): number | null
         return null;
     }
     const normalized = finiteNumber(value, field);
+    if (normalized < 0) {
+        throw new HealthWriteValidationError(`${field} cannot be negative.`);
+    }
+    return normalized;
+}
+
+function nullableNonNegativeSafeInteger(value: unknown, field: string): number | null | undefined {
+    if (value === undefined || value === null) {
+        return value as null | undefined;
+    }
+    const normalized = safeInteger(value, field);
     if (normalized < 0) {
         throw new HealthWriteValidationError(`${field} cannot be negative.`);
     }
@@ -205,16 +225,22 @@ function validateQuality(value: unknown, field: string): HealthQuality {
 
 function validateCoverage(value: unknown, field: string): HealthCoverage {
     const input = objectValue(value, field);
-    return {
+    const coverage: HealthCoverage = {
         status: enumValue(input.status, Object.values(HEALTH_COVERAGE_STATUSES), `${field}.status`),
-        expectedStartTimeMs: nullableNonNegativeNumber(input.expectedStartTimeMs, `${field}.expectedStartTimeMs`),
-        expectedEndTimeMs: nullableNonNegativeNumber(input.expectedEndTimeMs, `${field}.expectedEndTimeMs`),
+        expectedStartTimeMs: nullableNonNegativeSafeInteger(input.expectedStartTimeMs, `${field}.expectedStartTimeMs`),
+        expectedEndTimeMs: nullableNonNegativeSafeInteger(input.expectedEndTimeMs, `${field}.expectedEndTimeMs`),
         observedDurationSeconds: nullableNonNegativeNumber(input.observedDurationSeconds, `${field}.observedDurationSeconds`),
         expectedDurationSeconds: nullableNonNegativeNumber(input.expectedDurationSeconds, `${field}.expectedDurationSeconds`),
-        sampleCount: nullableNonNegativeNumber(input.sampleCount, `${field}.sampleCount`),
-        expectedSampleCount: nullableNonNegativeNumber(input.expectedSampleCount, `${field}.expectedSampleCount`),
-        expectedUpdateIntervalMs: nullableNonNegativeNumber(input.expectedUpdateIntervalMs, `${field}.expectedUpdateIntervalMs`),
+        sampleCount: nullableNonNegativeSafeInteger(input.sampleCount, `${field}.sampleCount`),
+        expectedSampleCount: nullableNonNegativeSafeInteger(input.expectedSampleCount, `${field}.expectedSampleCount`),
+        expectedUpdateIntervalMs: nullableNonNegativeSafeInteger(input.expectedUpdateIntervalMs, `${field}.expectedUpdateIntervalMs`),
     };
+    if (typeof coverage.expectedStartTimeMs === 'number'
+        && typeof coverage.expectedEndTimeMs === 'number'
+        && coverage.expectedEndTimeMs < coverage.expectedStartTimeMs) {
+        throw new HealthWriteValidationError(`${field}.expectedEndTimeMs must be on or after expectedStartTimeMs.`);
+    }
+    return coverage;
 }
 
 function validateMetricIdentity(input: Record<string, unknown>, field: string): {
@@ -347,7 +373,7 @@ function validateMetricEntry(value: unknown, index: number): HealthMetricEntry {
             kind: 'sleep_reference',
             reference: {
                 domain: 'sleep',
-                documentId: boundedString(reference.documentId, `${field}.reference.documentId`, MAX_SOURCE_KEY_LENGTH),
+                documentId: safeDocumentId(reference.documentId, `${field}.reference.documentId`),
                 field: referenceField,
             },
         };
@@ -424,7 +450,7 @@ function validateSampleSeries(
         throw new HealthWriteValidationError(`${field}.offsetMs must contain a bounded set of sample offsets.`);
     }
     let previousOffsetMs = -1;
-    const offsetMs = input.offsetMs.map((offset, offsetIndex) => {
+    const offsetMs = Array.from(input.offsetMs).map((offset, offsetIndex) => {
         const normalized = safeInteger(offset, `${field}.offsetMs[${offsetIndex}]`);
         if (normalized < 0 || normalized > recordDurationMs) {
             throw new HealthWriteValidationError(`${field}.offsetMs[${offsetIndex}] is outside the record interval.`);
@@ -438,7 +464,7 @@ function validateSampleSeries(
     if (!Array.isArray(input.nativeValues) || input.nativeValues.length !== offsetMs.length) {
         throw new HealthWriteValidationError(`${field}.nativeValues must align with offsetMs.`);
     }
-    const nativeValues = input.nativeValues.map((item, itemIndex) => validateScalar(
+    const nativeValues = Array.from(input.nativeValues).map((item, itemIndex) => validateScalar(
         item,
         identity.valueType,
         `${field}.nativeValues[${itemIndex}]`,
@@ -450,7 +476,7 @@ function validateSampleSeries(
         if (!Array.isArray(input.canonicalValues) || input.canonicalValues.length !== offsetMs.length) {
             throw new HealthWriteValidationError(`${field}.canonicalValues must align with offsetMs.`);
         }
-        canonicalValues = input.canonicalValues.map((item, itemIndex) => validateScalar(
+        canonicalValues = Array.from(input.canonicalValues).map((item, itemIndex) => validateScalar(
             item,
             identity.valueType,
             `${field}.canonicalValues[${itemIndex}]`,
@@ -469,12 +495,15 @@ function validateSampleSeries(
         if (!Array.isArray(input.qualityCodes) || input.qualityCodes.length !== offsetMs.length) {
             throw new HealthWriteValidationError(`${field}.qualityCodes must align with offsetMs.`);
         }
-        qualityCodes = input.qualityCodes.map((code, codeIndex) => boundedString(
+        qualityCodes = Array.from(input.qualityCodes).map((code, codeIndex) => boundedString(
             code,
             `${field}.qualityCodes[${codeIndex}]`,
             MAX_LABEL_LENGTH,
-            true,
         ));
+    }
+    const coverage = validateCoverage(input.coverage, `${field}.coverage`);
+    if (typeof coverage.sampleCount === 'number' && coverage.sampleCount !== offsetMs.length) {
+        throw new HealthWriteValidationError(`${field}.coverage.sampleCount must match the aligned sample arrays.`);
     }
     return {
         ...identity,
@@ -487,7 +516,7 @@ function validateSampleSeries(
         nativeValues,
         canonicalValues,
         qualityCodes,
-        coverage: validateCoverage(input.coverage, `${field}.coverage`),
+        coverage: { ...coverage, sampleCount: offsetMs.length },
         device: validateDevice(input.device, `${field}.device`),
     };
 }
@@ -505,7 +534,7 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
     if (!Array.isArray(input.metrics) || input.metrics.length > HEALTH_MAX_METRICS_PER_RECORD) {
         throw new HealthWriteValidationError(`metrics must contain at most ${HEALTH_MAX_METRICS_PER_RECORD} entries.`);
     }
-    const metrics = input.metrics.map(validateMetricEntry);
+    const metrics = Array.from(input.metrics).map(validateMetricEntry);
     const rawSampleSeries = input.sampleSeries === undefined ? [] : input.sampleSeries;
     if (!Array.isArray(rawSampleSeries)) {
         throw new HealthWriteValidationError('sampleSeries must be an array.');
@@ -515,7 +544,7 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
     }
     const sampleSeries: HealthSampleSeriesInput[] = [];
     let sampleChunkCount = 0;
-    rawSampleSeries.forEach((series, index) => {
+    Array.from(rawSampleSeries).forEach((series, index) => {
         const validatedSeries = validateSampleSeries(series, index, endTimeMs - startTimeMs);
         sampleChunkCount += Math.ceil(validatedSeries.offsetMs.length / HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK);
         if (sampleChunkCount > HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD) {
@@ -544,12 +573,17 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
             throw new HealthWriteValidationError('timezoneOffsetSeconds is outside the supported range.');
         }
     }
+    const providerAccountId = boundedString(input.providerAccountId, 'providerAccountId', MAX_ACCOUNT_ID_LENGTH);
+    const sourceRecordKey = boundedString(input.sourceRecordKey, 'sourceRecordKey', MAX_SOURCE_KEY_LENGTH);
+    if (sourceRecordKey === providerAccountId) {
+        throw new HealthWriteValidationError('sourceRecordKey must not expose the raw provider account ID.');
+    }
 
     return {
         provider: input.provider,
-        providerAccountId: boundedString(input.providerAccountId, 'providerAccountId', MAX_ACCOUNT_ID_LENGTH),
+        providerAccountId,
         sourceRecordType: boundedString(input.sourceRecordType, 'sourceRecordType', MAX_LABEL_LENGTH),
-        sourceRecordKey: boundedString(input.sourceRecordKey, 'sourceRecordKey', MAX_SOURCE_KEY_LENGTH),
+        sourceRecordKey,
         revision: {
             order: revisionOrder,
             token: boundedString(revision.token, 'revision.token', MAX_SOURCE_KEY_LENGTH),

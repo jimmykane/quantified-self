@@ -101,12 +101,38 @@ describe('health write validation', () => {
         expect(() => validateHealthSourceRecordInput(input)).toThrow('canonical.unit must match the metric catalog');
     });
 
+    it('does not allow the raw provider account ID to become persisted record metadata', () => {
+        const input = validInput();
+        input.sourceRecordKey = input.providerAccountId;
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow(
+            'sourceRecordKey must not expose the raw provider account ID',
+        );
+    });
+
     it('rejects non-finite numbers before they can reach Firestore', () => {
         const input = validInput();
         const metrics = input.metrics as Array<Record<string, unknown>>;
         metrics[0].native = { metric: 'steps', value: Number.NaN };
 
         expect(() => validateHealthSourceRecordInput(input)).toThrow('native.value must be a finite number');
+    });
+
+    it('requires ordered integer coverage boundaries and counts', () => {
+        const reversed = validInput();
+        reversed.coverage = {
+            status: HEALTH_COVERAGE_STATUSES.Partial,
+            expectedStartTimeMs: 2_000,
+            expectedEndTimeMs: 1_000,
+        };
+        expect(() => validateHealthSourceRecordInput(reversed)).toThrow('expectedEndTimeMs must be on or after');
+
+        const fractionalCount = validInput();
+        fractionalCount.coverage = {
+            status: HEALTH_COVERAGE_STATUSES.Partial,
+            sampleCount: 1.5,
+        };
+        expect(() => validateHealthSourceRecordInput(fractionalCount)).toThrow('sampleCount must be a safe integer');
     });
 
     it('requires aligned, strictly increasing sample arrays', () => {
@@ -118,6 +144,39 @@ describe('health write validation', () => {
         sampleSeries[0].qualityCodes = ['valid', 'valid', 'valid'];
 
         expect(() => validateHealthSourceRecordInput(input)).toThrow('offsetMs must be strictly increasing');
+    });
+
+    it('derives and validates series-level sample coverage counts', () => {
+        const derived = validInput();
+        const derivedSeries = derived.sampleSeries as Array<Record<string, unknown>>;
+        derivedSeries[0].coverage = { status: HEALTH_COVERAGE_STATUSES.Complete };
+        expect(validateHealthSourceRecordInput(derived).sampleSeries[0].coverage.sampleCount).toBe(2);
+
+        const mismatched = validInput();
+        const mismatchedSeries = mismatched.sampleSeries as Array<Record<string, unknown>>;
+        mismatchedSeries[0].coverage = { status: HEALTH_COVERAGE_STATUSES.Complete, sampleCount: 1 };
+        expect(() => validateHealthSourceRecordInput(mismatched)).toThrow(
+            'coverage.sampleCount must match the aligned sample arrays',
+        );
+    });
+
+    it('rejects sparse adapter arrays instead of letting holes reach Firestore', () => {
+        const sparseMetrics = validInput();
+        sparseMetrics.metrics = new Array(1);
+        expect(() => validateHealthSourceRecordInput(sparseMetrics)).toThrow('metrics[0] must be an object');
+
+        const sparseOffsets = validInput();
+        const sampleSeries = sparseOffsets.sampleSeries as Array<Record<string, unknown>>;
+        sampleSeries[0].offsetMs = new Array(2);
+        expect(() => validateHealthSourceRecordInput(sparseOffsets)).toThrow('offsetMs[0] must be a finite number');
+    });
+
+    it('rejects empty sample quality codes', () => {
+        const input = validInput();
+        const sampleSeries = input.sampleSeries as Array<Record<string, unknown>>;
+        sampleSeries[0].qualityCodes = ['valid', '   '];
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow('qualityCodes[1] must be a bounded non-empty string');
     });
 
     it('never accepts canonical sample values without the catalog unit', () => {
@@ -188,5 +247,9 @@ describe('health write validation', () => {
 
         metrics[0].reference = { domain: 'sleep', documentId: 'sleep-session-1', field: 'durationSeconds' };
         expect(() => validateHealthSourceRecordInput(input)).toThrow('metricId does not match the referenced sleep field');
+
+        metrics[0].metricId = HEALTH_METRIC_IDS.SleepDuration;
+        metrics[0].reference = { domain: 'sleep', documentId: 'nested/sleep-session', field: 'durationSeconds' };
+        expect(() => validateHealthSourceRecordInput(input)).toThrow('safe bounded document ID');
     });
 });

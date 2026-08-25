@@ -7,14 +7,20 @@ export const HEALTH_SYNC_STATE_COLLECTION_ID = 'healthSyncState';
 export const HEALTH_MAX_METRICS_PER_RECORD = 128;
 export const HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK = 1_440;
 export const HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD = 200;
-export const HEALTH_MAX_DOCUMENT_BYTES = 900 * 1024;
-export const HEALTH_MAX_WRITE_BYTES = 8 * 1024 * 1024;
-export const HEALTH_DEFAULT_RECORD_PAGE_SIZE = 250;
-export const HEALTH_MAX_RECORD_PAGE_SIZE = 1_000;
-export const HEALTH_DEFAULT_CHUNK_PAGE_SIZE = 100;
-export const HEALTH_MAX_CHUNK_PAGE_SIZE = 500;
-export const HEALTH_DEFAULT_SAMPLE_POINT_LIMIT = 25_000;
-export const HEALTH_MAX_SAMPLE_POINT_LIMIT = 50_000;
+export const HEALTH_MAX_RECORD_DOCUMENT_BYTES = 256 * 1024;
+export const HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES = 900 * 1024;
+// A replacement can include both the incoming revision and deletion of the
+// previous revision. Keep each side below half Firestore's 10 MiB request cap,
+// leaving headroom for document names, index entries, and protocol overhead.
+export const HEALTH_MAX_WRITE_BYTES = 4 * 1024 * 1024;
+export const HEALTH_DEFAULT_RECORD_PAGE_SIZE = 32;
+export const HEALTH_MAX_RECORD_PAGE_SIZE = 32;
+export const HEALTH_DEFAULT_CHUNK_PAGE_SIZE = 8;
+export const HEALTH_MAX_CHUNK_PAGE_SIZE = 8;
+export const HEALTH_DEFAULT_SAMPLE_POINT_LIMIT = 10_000;
+export const HEALTH_MAX_SAMPLE_POINT_LIMIT = HEALTH_MAX_CHUNK_PAGE_SIZE * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
+export const HEALTH_MAX_QUERY_FETCH_BYTES = (HEALTH_MAX_RECORD_PAGE_SIZE + 1) * HEALTH_MAX_RECORD_DOCUMENT_BYTES
+  + (HEALTH_MAX_CHUNK_PAGE_SIZE + 1) * HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES;
 export const HEALTH_MAX_SUMMARY_RANGE_DAYS = 366;
 export const HEALTH_MAX_SAMPLE_RANGE_DAYS = 31;
 
@@ -167,11 +173,11 @@ function metric(
   category: HealthMetricDefinition['category'],
   canonicalUnit: HealthUnit,
   valueType: HealthValueType = HEALTH_VALUE_TYPES.Number,
-): HealthMetricDefinition {
-  return { id, label, category, canonicalUnit, valueType };
+): Readonly<HealthMetricDefinition> {
+  return Object.freeze({ id, label, category, canonicalUnit, valueType });
 }
 
-export const HEALTH_METRIC_CATALOG: Readonly<Record<HealthMetricId, HealthMetricDefinition>> = {
+export const HEALTH_METRIC_CATALOG: Readonly<Record<HealthMetricId, Readonly<HealthMetricDefinition>>> = Object.freeze({
   [HEALTH_METRIC_IDS.Steps]: metric(HEALTH_METRIC_IDS.Steps, 'Steps', 'movement', HEALTH_UNITS.Count),
   [HEALTH_METRIC_IDS.WheelchairPushes]: metric(HEALTH_METRIC_IDS.WheelchairPushes, 'Wheelchair pushes', 'movement', HEALTH_UNITS.Count),
   [HEALTH_METRIC_IDS.Distance]: metric(HEALTH_METRIC_IDS.Distance, 'Distance', 'movement', HEALTH_UNITS.Meter),
@@ -209,7 +215,7 @@ export const HEALTH_METRIC_CATALOG: Readonly<Record<HealthMetricId, HealthMetric
   [HEALTH_METRIC_IDS.FitnessAge]: metric(HEALTH_METRIC_IDS.FitnessAge, 'Fitness age', 'fitness', HEALTH_UNITS.Years),
   [HEALTH_METRIC_IDS.SleepDuration]: metric(HEALTH_METRIC_IDS.SleepDuration, 'Sleep duration', 'sleep', HEALTH_UNITS.Second),
   [HEALTH_METRIC_IDS.SleepScore]: metric(HEALTH_METRIC_IDS.SleepScore, 'Sleep score', 'sleep', HEALTH_UNITS.Score),
-};
+});
 
 export interface HealthDeviceAttribution {
   deviceKey?: string | null;
@@ -285,17 +291,17 @@ export const HEALTH_SLEEP_REFERENCE_FIELDS = {
 
 export type HealthSleepReferenceField = typeof HEALTH_SLEEP_REFERENCE_FIELDS[keyof typeof HEALTH_SLEEP_REFERENCE_FIELDS];
 
-export const HEALTH_SLEEP_REFERENCE_METRIC_IDS: Readonly<Record<HealthSleepReferenceField, readonly HealthMetricId[]>> = {
-  [HEALTH_SLEEP_REFERENCE_FIELDS.DurationSeconds]: [HEALTH_METRIC_IDS.SleepDuration],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.Score]: [HEALTH_METRIC_IDS.SleepScore],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageHeartRate]: [HEALTH_METRIC_IDS.HeartRate],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.MinimumHeartRate]: [HEALTH_METRIC_IDS.HeartRate],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.RestingHeartRate]: [HEALTH_METRIC_IDS.RestingHeartRate],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageHrv]: [HEALTH_METRIC_IDS.HeartRateVariability],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.OvernightHrv]: [HEALTH_METRIC_IDS.HeartRateVariability],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.MaximumSpo2]: [HEALTH_METRIC_IDS.BloodOxygenSaturation],
-  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageRespiration]: [HEALTH_METRIC_IDS.RespirationRate],
-};
+export const HEALTH_SLEEP_REFERENCE_METRIC_IDS: Readonly<Record<HealthSleepReferenceField, readonly HealthMetricId[]>> = Object.freeze({
+  [HEALTH_SLEEP_REFERENCE_FIELDS.DurationSeconds]: Object.freeze([HEALTH_METRIC_IDS.SleepDuration]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.Score]: Object.freeze([HEALTH_METRIC_IDS.SleepScore]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageHeartRate]: Object.freeze([HEALTH_METRIC_IDS.HeartRate]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.MinimumHeartRate]: Object.freeze([HEALTH_METRIC_IDS.HeartRate]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.RestingHeartRate]: Object.freeze([HEALTH_METRIC_IDS.RestingHeartRate]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageHrv]: Object.freeze([HEALTH_METRIC_IDS.HeartRateVariability]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.OvernightHrv]: Object.freeze([HEALTH_METRIC_IDS.HeartRateVariability]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.MaximumSpo2]: Object.freeze([HEALTH_METRIC_IDS.BloodOxygenSaturation]),
+  [HEALTH_SLEEP_REFERENCE_FIELDS.AverageRespiration]: Object.freeze([HEALTH_METRIC_IDS.RespirationRate]),
+});
 
 export interface HealthSleepMetricReference extends HealthMetricBase {
   kind: 'sleep_reference';
@@ -362,6 +368,7 @@ export interface HealthSampleChunk {
   calendarDate: string;
   startTimeMs: number;
   endTimeMs: number;
+  receivedAtMs: number;
   timezoneOffsetSeconds?: number | null;
   seriesKey: string;
   chunkIndex: number;
@@ -439,6 +446,8 @@ export interface HealthObservation {
   sourceRecordType: string;
   sourceRecordKey: string;
   receivedAtMs: number;
+  coverage: HealthCoverage;
+  device: HealthDeviceAttribution | null;
   entry: HealthMetricEntry;
 }
 
@@ -454,7 +463,10 @@ export interface HealthMetricDiscovery {
   providers: HealthProvider[];
   valueTypes: HealthValueType[];
   canonicalUnits: HealthUnit[];
+  aggregations: string[];
   semanticVariants: string[];
+  origins: HealthValueOrigin[];
+  recordingMethods: HealthRecordingMethod[];
   firstDate: string;
   lastDate: string;
   hasSamples: boolean;
@@ -463,17 +475,27 @@ export interface HealthMetricDiscovery {
 export interface HealthMetricCoverageResult {
   metricId: HealthMetricId;
   provider: HealthProvider;
+  accountKey: string;
+  aggregation: string;
   semanticVariant: string;
+  origin: HealthValueOrigin;
+  recordingMethod: HealthRecordingMethod;
   requestedDays: number;
   recordedDays: number;
+  missingDays: number;
   partialDays: number;
+  unknownDays: number;
   latestDate: string;
 }
 
 export interface HealthFreshnessResult {
   metricId: HealthMetricId;
   provider: HealthProvider;
+  accountKey: string;
+  aggregation: string;
   semanticVariant: string;
+  origin: HealthValueOrigin;
+  recordingMethod: HealthRecordingMethod;
   lastObservedAtMs: number;
   lastReceivedAtMs: number;
   ageMs: number;
@@ -486,14 +508,23 @@ export interface HealthConflict {
   calendarDate: string;
   aggregation: string;
   semanticVariant: string;
+  origin: HealthValueOrigin;
   canonicalUnit: HealthUnit;
   observationIds: string[];
   providers: HealthProvider[];
+  sources: Array<{
+    provider: HealthProvider;
+    accountKey: string;
+  }>;
+  recordingMethods: HealthRecordingMethod[];
 }
 
 export interface HealthRangePageInfo {
   recordsTruncated: boolean;
   samplesTruncated: boolean;
+  sampleRevisionMismatchCount: number;
+  recordAggregateComplete: boolean;
+  sampleAggregateComplete: boolean;
   recordCursor: HealthQueryCursor | null;
   chunkCursor: HealthQueryCursor | null;
   returnedSamplePoints: number;
@@ -519,6 +550,6 @@ export function isHealthMetricId(value: unknown): value is HealthMetricId {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(HEALTH_METRIC_CATALOG, value);
 }
 
-export function getHealthMetricDefinition(metricId: HealthMetricId): HealthMetricDefinition {
+export function getHealthMetricDefinition(metricId: HealthMetricId): Readonly<HealthMetricDefinition> {
   return HEALTH_METRIC_CATALOG[metricId];
 }

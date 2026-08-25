@@ -1,8 +1,9 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
-    HEALTH_MAX_DOCUMENT_BYTES,
+    HEALTH_MAX_RECORD_DOCUMENT_BYTES,
     HEALTH_MAX_SAMPLE_CHUNKS_PER_RECORD,
+    HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES,
     HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
     HEALTH_MAX_WRITE_BYTES,
     HEALTH_PROVIDERS,
@@ -89,6 +90,27 @@ function stableComparableValue(value: unknown): unknown {
     }, {});
 }
 
+function stableValueKey(value: unknown): string {
+    return JSON.stringify(stableComparableValue(value));
+}
+
+function sortStableValues<T>(values: readonly T[]): T[] {
+    return values
+        .map((value, index) => ({ value, index, key: stableValueKey(value) }))
+        .sort((left, right) => (
+            left.key < right.key ? -1 : left.key > right.key ? 1 : left.index - right.index
+        ))
+        .map(item => item.value);
+}
+
+function canonicalizeInput(input: HealthSourceRecordInput): HealthSourceRecordInput {
+    return {
+        ...input,
+        metrics: sortStableValues(input.metrics),
+        sampleSeries: sortStableValues(input.sampleSeries),
+    };
+}
+
 async function generateOpaqueId(generateId: HealthIdGenerator, parts: readonly string[]): Promise<string> {
     // One length-preserving JSON part avoids delimiter collisions inside the shared ID generator.
     const id = await generateId([JSON.stringify(parts)]);
@@ -99,8 +121,12 @@ async function generateOpaqueId(generateId: HealthIdGenerator, parts: readonly s
 }
 
 function validateWriteContext(userID: string, nowMs: number): void {
-    if (typeof userID !== 'string' || userID.trim().length === 0 || userID.length > 128) {
-        throw new HealthWriteValidationError('userID must be a bounded non-empty string.');
+    if (typeof userID !== 'string'
+        || userID.trim().length === 0
+        || userID !== userID.trim()
+        || userID.includes('/')
+        || userID.length > 128) {
+        throw new HealthWriteValidationError('userID must be a safe bounded non-empty document ID.');
     }
     if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
         throw new HealthWriteValidationError('nowMs must be a non-negative safe integer.');
@@ -108,16 +134,24 @@ function validateWriteContext(userID: string, nowMs: number): void {
 }
 
 function documentBytes(value: unknown): number {
-    return Buffer.byteLength(JSON.stringify(cleanUndefined(value)), 'utf8');
+    const serialized = JSON.stringify(value);
+    if (typeof serialized !== 'string') {
+        throw new HealthWriteSizeError('Health document could not be serialized for bounded-size validation.');
+    }
+    return Buffer.byteLength(serialized, 'utf8');
 }
 
 export function assertHealthWriteSize(record: HealthSourceRecord, chunks: readonly HealthSampleChunk[]): void {
-    const documents = [record, ...chunks];
-    const oversizedDocument = documents.find(document => documentBytes(document) > HEALTH_MAX_DOCUMENT_BYTES);
-    if (oversizedDocument) {
-        throw new HealthWriteSizeError(`Health document ${oversizedDocument.id} exceeds the bounded document size.`);
+    const recordBytes = documentBytes(record);
+    if (recordBytes > HEALTH_MAX_RECORD_DOCUMENT_BYTES) {
+        throw new HealthWriteSizeError(`Health source record ${record.id} exceeds the bounded document size.`);
     }
-    const totalBytes = documents.reduce((total, document) => total + documentBytes(document), 0);
+    const chunkSizes = chunks.map(chunk => ({ chunk, bytes: documentBytes(chunk) }));
+    const oversizedChunk = chunkSizes.find(item => item.bytes > HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES);
+    if (oversizedChunk) {
+        throw new HealthWriteSizeError(`Health sample chunk ${oversizedChunk.chunk.id} exceeds the bounded document size.`);
+    }
+    const totalBytes = recordBytes + chunkSizes.reduce((total, item) => total + item.bytes, 0);
     if (totalBytes > HEALTH_MAX_WRITE_BYTES) {
         throw new HealthWriteSizeError('Health record replacement exceeds the bounded transaction payload size.');
     }
@@ -147,7 +181,7 @@ export async function buildHealthWrite(
     generateId: HealthIdGenerator = generateIDFromParts,
 ): Promise<BuiltHealthWrite> {
     validateWriteContext(userID, nowMs);
-    const input = validateHealthSourceRecordInput(value);
+    const input = canonicalizeInput(validateHealthSourceRecordInput(value));
     const accountKey = await generateOpaqueId(generateId, [
         'health-account-v1',
         userID,
@@ -206,17 +240,19 @@ export async function buildHealthWrite(
                 calendarDate: input.calendarDate,
                 startTimeMs: input.startTimeMs + firstOffsetMs,
                 endTimeMs: input.startTimeMs + firstOffsetMs + (offsetMs[offsetMs.length - 1] || 0),
+                receivedAtMs: input.receivedAtMs,
                 timezoneOffsetSeconds: input.timezoneOffsetSeconds,
                 seriesKey: series.seriesKey,
                 chunkIndex,
                 offsetMs,
                 nativeValues: series.nativeValues.slice(sliceStart, sliceEnd),
-                canonicalValues: series.canonicalValues?.slice(sliceStart, sliceEnd),
-                qualityCodes: series.qualityCodes?.slice(sliceStart, sliceEnd),
-                coverage: {
-                    ...series.coverage,
-                    sampleCount: offsetMs.length,
-                },
+                canonicalValues: series.canonicalValues === null
+                    ? null
+                    : series.canonicalValues?.slice(sliceStart, sliceEnd),
+                qualityCodes: series.qualityCodes === null
+                    ? null
+                    : series.qualityCodes?.slice(sliceStart, sliceEnd),
+                coverage: series.coverage,
                 device: series.device === undefined ? input.device : series.device,
                 revision,
                 createdAtMs: nowMs,
@@ -229,7 +265,7 @@ export async function buildHealthWrite(
     const metricIds = [...new Set([
         ...input.metrics.map(metric => metric.metricId),
         ...input.sampleSeries.map(series => series.metricId),
-    ])];
+    ])].sort();
     const record: HealthSourceRecord = {
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id,
@@ -381,6 +417,22 @@ function optionalSyncTime(value: unknown, field: string): number | null | undefi
     return value;
 }
 
+function monotonicSyncTime(
+    incoming: number | null | undefined,
+    existing: unknown,
+    staleUpdate: boolean,
+): number | null | undefined {
+    if (staleUpdate && incoming === null) {
+        return undefined;
+    }
+    if (incoming === null || incoming === undefined) {
+        return incoming;
+    }
+    return typeof existing === 'number' && Number.isSafeInteger(existing) && existing > incoming
+        ? undefined
+        : incoming;
+}
+
 function validateSyncUpdate(provider: unknown, value: unknown): { provider: HealthProvider; update: HealthSyncStateUpdate } {
     if (!isHealthProvider(provider) || provider === HEALTH_PROVIDERS.QuantifiedSelf) {
         throw new HealthWriteValidationError('Health sync provider is not supported.');
@@ -443,11 +495,29 @@ export async function updateHealthSyncState(
             return false;
         }
         const snapshot = await transaction.get(stateRef);
+        const existing = snapshot.exists
+            ? snapshot.data() as Partial<HealthSyncState>
+            : null;
+        const existingUpdatedAtMs = typeof existing?.updatedAtMs === 'number'
+            && Number.isSafeInteger(existing.updatedAtMs)
+            ? existing.updatedAtMs
+            : null;
+        const staleUpdate = existingUpdatedAtMs !== null && existingUpdatedAtMs > nowMs;
+        const updatedAtMs = existingUpdatedAtMs === null
+            ? nowMs
+            : Math.max(existingUpdatedAtMs, nowMs);
         const state: Partial<HealthSyncState> & Pick<HealthSyncState, 'provider' | 'updatedAtMs'> = cleanUndefined({
             provider,
             ...update,
-            status: update.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
-            updatedAtMs: nowMs,
+            status: staleUpdate
+                ? undefined
+                : update.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
+            lastWebhookAtMs: monotonicSyncTime(update.lastWebhookAtMs, existing?.lastWebhookAtMs, staleUpdate),
+            lastPollAtMs: monotonicSyncTime(update.lastPollAtMs, existing?.lastPollAtMs, staleUpdate),
+            lastSyncedAtMs: monotonicSyncTime(update.lastSyncedAtMs, existing?.lastSyncedAtMs, staleUpdate),
+            lastObservedAtMs: monotonicSyncTime(update.lastObservedAtMs, existing?.lastObservedAtMs, staleUpdate),
+            lastErrorCode: staleUpdate ? undefined : update.lastErrorCode,
+            updatedAtMs,
         });
         transaction.set(stateRef, state, { merge: true });
         return true;
