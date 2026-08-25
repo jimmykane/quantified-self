@@ -138,7 +138,7 @@ For every new persistent write path:
 - Keep provider credentials and signed download URLs out of safe metadata, events, error text, analytics, logs, and admin responses.
 - Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
-- Use deterministic opaque provider-account and source-record IDs for health data. Never persist the raw provider account ID, free-form provider error, or raw provider payload in the unified health collections.
+- Use the shared health writer's deterministic opaque provider-account ID, source-record ID, account-scoped source-key hash, and hashed revision token. Never persist the raw provider account ID, raw provider record key or revision token, free-form provider error, or raw provider payload in the unified health collections.
 - Keep health sample documents and reads strictly bounded. Time-based retention is intentionally uncapped until product/privacy policy explicitly changes it; do not add ad hoc TTL in a provider adapter.
 
 ## 6. Ingestion: webhooks, history, and idempotent queues

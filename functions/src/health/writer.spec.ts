@@ -168,6 +168,20 @@ describe('health writer', () => {
         expect(built.sourceRecord.source.accountKey).toMatch(/^[a-f0-9]{64}$/);
     });
 
+    it('persists an opaque source key when an adapter key contains the raw provider account ID', async () => {
+        const input = validInput();
+        input.providerAccountId = 'account-id';
+        input.sourceRecordKey = 'account-id:daily:2026-01-01';
+        (input.revision as Record<string, unknown>).token = 'account-id:revision:1';
+
+        const built = await buildHealthSourceRecordWrite('user-1', input, 10_000, fakeId);
+
+        expect(built.sourceRecord.source.sourceRecordKey).toMatch(/^[a-f0-9]{64}$/);
+        expect(built.sourceRecord.source.sourceRecordKey).not.toBe(input.sourceRecordKey);
+        expect(built.sourceRecord.source.revision.token).toMatch(/^[a-f0-9]{64}$/);
+        expect(JSON.stringify(built)).not.toContain('account-id');
+    });
+
     it('atomically writes a source record and all of its chunks', async () => {
         const fake = fakeDatabase();
         const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
@@ -267,6 +281,29 @@ describe('health writer', () => {
             .toThrow('source record source-record-id');
         expect(() => assertHealthSourceRecordWriteSize(smallRecord, [oversizedChunk]))
             .toThrow('sample chunk sample-chunk-id');
+    });
+
+    it('stops measuring chunks as soon as the cumulative write budget is exceeded', () => {
+        const sourceRecord = {
+            id: 'source-record-id',
+            padding: 'x'.repeat(100 * 1024),
+        } as unknown as HealthSourceRecord;
+        const padding = 'x'.repeat(800 * 1024);
+        const chunks = new Proxy(Array.from({ length: 6 }, (_, index) => ({
+            id: `chunk-${index}`,
+            padding,
+        })) as unknown as HealthSampleChunk[], {
+            get(target, property, receiver) {
+                if (property === '5') {
+                    throw new Error('size validator read beyond the cumulative write budget');
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
+
+        expect(() => assertHealthSourceRecordWriteSize(sourceRecord, chunks)).toThrow(HealthWriteSizeError);
+        expect(() => assertHealthSourceRecordWriteSize(sourceRecord, chunks))
+            .toThrow('bounded transaction payload size');
     });
 
     it('treats an identical provider revision as idempotent', async () => {

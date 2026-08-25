@@ -3,6 +3,7 @@ import {
     HEALTH_MAX_METRICS_PER_SOURCE_RECORD,
     HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD,
     HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK,
+    HEALTH_MAX_WRITE_BYTES,
     HEALTH_NORMALIZATION_STATUSES,
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
@@ -47,6 +48,45 @@ export class HealthWriteValidationError extends Error {
 
     constructor(message: string) {
         super(message);
+    }
+}
+
+export class HealthWriteSizeError extends HealthWriteValidationError {
+    public readonly name = 'HealthWriteSizeError';
+}
+
+class HealthWriteUtf8Budget {
+    private consumedBytes = 0;
+
+    public addJsonValue(value: unknown): void {
+        this.addSerializedValue(value, 0);
+    }
+
+    public addJsonCollectionValue(value: unknown, index: number): void {
+        this.addSerializedValue(value, index > 0 ? 1 : 0);
+    }
+
+    private addSerializedValue(value: unknown, separatorBytes: number): void {
+        let serialized: string | undefined;
+        try {
+            serialized = JSON.stringify(value);
+        } catch {
+            throw new HealthWriteSizeError(
+                'Health source-record input could not be serialized for cumulative JSON UTF-8 validation.',
+            );
+        }
+        if (typeof serialized !== 'string') {
+            throw new HealthWriteSizeError(
+                'Health source-record input could not be serialized for cumulative JSON UTF-8 validation.',
+            );
+        }
+        const nextBytes = this.consumedBytes + separatorBytes + Buffer.byteLength(serialized, 'utf8');
+        if (nextBytes > HEALTH_MAX_WRITE_BYTES) {
+            throw new HealthWriteSizeError(
+                'Health source-record input exceeds the cumulative JSON UTF-8 budget.',
+            );
+        }
+        this.consumedBytes = nextBytes;
     }
 }
 
@@ -103,6 +143,9 @@ function objectValue(value: unknown, field: string): Record<string, unknown> {
 function boundedString(value: unknown, field: string, maximum: number, allowEmpty = false): string {
     if (typeof value !== 'string') {
         throw new HealthWriteValidationError(`${field} must be a string.`);
+    }
+    if (value.length > maximum) {
+        throw new HealthWriteValidationError(`${field} must be a bounded non-empty string.`);
     }
     const normalized = value.trim();
     if ((!allowEmpty && normalized.length === 0) || normalized.length > maximum) {
@@ -428,6 +471,7 @@ function validateSampleSeries(
     value: unknown,
     index: number,
     sourceRecordDurationMs: number,
+    writeBudget: HealthWriteUtf8Budget,
 ): HealthSampleSeriesInput {
     const field = `sampleSeries[${index}]`;
     const input = objectValue(value, field);
@@ -452,75 +496,129 @@ function validateSampleSeries(
         || input.offsetMs.length > MAX_SAMPLE_POINTS_PER_SOURCE_RECORD) {
         throw new HealthWriteValidationError(`${field}.offsetMs must contain a bounded set of sample offsets.`);
     }
-    let previousOffsetMs = -1;
-    const offsetMs = Array.from(input.offsetMs).map((offset, offsetIndex) => {
-        const normalized = safeInteger(offset, `${field}.offsetMs[${offsetIndex}]`);
-        if (normalized < 0 || normalized > sourceRecordDurationMs) {
-            throw new HealthWriteValidationError(`${field}.offsetMs[${offsetIndex}] is outside the source-record interval.`);
-        }
-        if (offsetIndex > 0 && normalized <= previousOffsetMs) {
-            throw new HealthWriteValidationError(`${field}.offsetMs must be strictly increasing.`);
-        }
-        previousOffsetMs = normalized;
-        return normalized;
-    });
-    if (!Array.isArray(input.nativeValues) || input.nativeValues.length !== offsetMs.length) {
+    const pointCount = input.offsetMs.length;
+    if (!Array.isArray(input.nativeValues) || input.nativeValues.length !== pointCount) {
         throw new HealthWriteValidationError(`${field}.nativeValues must align with offsetMs.`);
     }
-    const nativeValues = Array.from(input.nativeValues).map((item, itemIndex) => validateScalar(
-        item,
-        identity.valueType,
-        `${field}.nativeValues[${itemIndex}]`,
-    ));
+    let canonicalValueInput: unknown[] | null | undefined;
     let canonicalValues: HealthScalar[] | null | undefined;
     if (input.canonicalValues === null) {
+        canonicalValueInput = null;
         canonicalValues = null;
     } else if (input.canonicalValues !== undefined) {
-        if (!Array.isArray(input.canonicalValues) || input.canonicalValues.length !== offsetMs.length) {
+        if (!Array.isArray(input.canonicalValues) || input.canonicalValues.length !== pointCount) {
             throw new HealthWriteValidationError(`${field}.canonicalValues must align with offsetMs.`);
         }
-        canonicalValues = Array.from(input.canonicalValues).map((item, itemIndex) => validateScalar(
-            item,
-            identity.valueType,
-            `${field}.canonicalValues[${itemIndex}]`,
-        ));
+        canonicalValueInput = input.canonicalValues;
+        canonicalValues = [];
     }
-    if (normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical && !canonicalValues) {
+    if (normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical && !canonicalValueInput) {
         throw new HealthWriteValidationError(`${field}.canonicalValues are required for canonical samples.`);
     }
-    if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && canonicalValues) {
+    if (normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical && Array.isArray(canonicalValueInput)) {
         throw new HealthWriteValidationError(`${field}.canonicalValues must be omitted for non-canonical samples.`);
     }
+    let qualityCodeInput: unknown[] | null | undefined;
     let qualityCodes: string[] | null | undefined;
     if (input.qualityCodes === null) {
+        qualityCodeInput = null;
         qualityCodes = null;
     } else if (input.qualityCodes !== undefined) {
-        if (!Array.isArray(input.qualityCodes) || input.qualityCodes.length !== offsetMs.length) {
+        if (!Array.isArray(input.qualityCodes) || input.qualityCodes.length !== pointCount) {
             throw new HealthWriteValidationError(`${field}.qualityCodes must align with offsetMs.`);
         }
-        qualityCodes = Array.from(input.qualityCodes).map((code, codeIndex) => boundedString(
-            code,
-            `${field}.qualityCodes[${codeIndex}]`,
-            MAX_LABEL_LENGTH,
-        ));
+        qualityCodeInput = input.qualityCodes;
+        qualityCodes = [];
     }
     const coverage = validateCoverage(input.coverage, `${field}.coverage`);
-    if (typeof coverage.sampleCount === 'number' && coverage.sampleCount !== offsetMs.length) {
-        throw new HealthWriteValidationError(`${field}.coverage.sampleCount must match the aligned sample arrays.`);
-    }
-    return {
+    const common = {
         ...identity,
         seriesKey: boundedString(input.seriesKey, `${field}.seriesKey`, MAX_LABEL_LENGTH),
         normalizationStatus,
         nativeMetric: boundedString(input.nativeMetric, `${field}.nativeMetric`, MAX_LABEL_LENGTH),
         nativeUnit: nullableBoundedString(input.nativeUnit, `${field}.nativeUnit`, MAX_LABEL_LENGTH),
         canonicalUnit,
+        coverage: { ...coverage, sampleCount: pointCount },
+        device: validateDevice(input.device, `${field}.device`),
+    };
+    writeBudget.addJsonCollectionValue({
+        ...common,
+        offsetMs: [],
+        nativeValues: [],
+        canonicalValues,
+        qualityCodes,
+    }, index);
+
+    const offsetMs: number[] = [];
+    const nativeValues: HealthScalar[] = [];
+    let previousOffsetMs = -1;
+    for (let itemIndex = 0; itemIndex < pointCount; itemIndex += 1) {
+        const offset = safeInteger(input.offsetMs[itemIndex], `${field}.offsetMs[${itemIndex}]`);
+        if (offset < 0 || offset > sourceRecordDurationMs) {
+            throw new HealthWriteValidationError(`${field}.offsetMs[${itemIndex}] is outside the source-record interval.`);
+        }
+        if (itemIndex > 0 && offset <= previousOffsetMs) {
+            throw new HealthWriteValidationError(`${field}.offsetMs must be strictly increasing.`);
+        }
+        const rawNativeValue = input.nativeValues[itemIndex];
+        const nativeValue = validateScalar(
+            rawNativeValue,
+            identity.valueType,
+            `${field}.nativeValues[${itemIndex}]`,
+        );
+        const rawCanonicalValue = canonicalValueInput?.[itemIndex];
+        const canonicalValue = canonicalValueInput
+            ? validateScalar(
+                rawCanonicalValue,
+                identity.valueType,
+                `${field}.canonicalValues[${itemIndex}]`,
+            )
+            : undefined;
+        const rawQualityCode = qualityCodeInput?.[itemIndex];
+        const qualityCode = qualityCodeInput
+            ? boundedString(
+                rawQualityCode,
+                `${field}.qualityCodes[${itemIndex}]`,
+                MAX_LABEL_LENGTH,
+            )
+            : undefined;
+
+        writeBudget.addJsonCollectionValue(offset, itemIndex);
+        writeBudget.addJsonCollectionValue(
+            typeof rawNativeValue === 'string' ? rawNativeValue : nativeValue,
+            itemIndex,
+        );
+        if (canonicalValueInput) {
+            writeBudget.addJsonCollectionValue(
+                typeof rawCanonicalValue === 'string' ? rawCanonicalValue : canonicalValue,
+                itemIndex,
+            );
+        }
+        if (qualityCodeInput) {
+            writeBudget.addJsonCollectionValue(rawQualityCode, itemIndex);
+        }
+
+        previousOffsetMs = offset;
+        offsetMs.push(offset);
+        nativeValues.push(nativeValue);
+        if (canonicalValueInput) {
+            (canonicalValues as HealthScalar[]).push(canonicalValue as HealthScalar);
+        }
+        if (qualityCodeInput) {
+            (qualityCodes as string[]).push(qualityCode as string);
+        }
+    }
+
+    if (typeof coverage.sampleCount === 'number' && coverage.sampleCount !== pointCount) {
+        throw new HealthWriteValidationError(`${field}.coverage.sampleCount must match the aligned sample arrays.`);
+    }
+
+    return {
+        ...common,
         offsetMs,
         nativeValues,
         canonicalValues,
         qualityCodes,
-        coverage: { ...coverage, sampleCount: offsetMs.length },
-        device: validateDevice(input.device, `${field}.device`),
     };
 }
 
@@ -539,7 +637,13 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
             `metrics must contain at most ${HEALTH_MAX_METRICS_PER_SOURCE_RECORD} entries.`,
         );
     }
-    const metrics = Array.from(input.metrics).map(validateMetricEntry);
+    const writeBudget = new HealthWriteUtf8Budget();
+    const metrics: HealthMetricEntry[] = [];
+    for (let index = 0; index < input.metrics.length; index += 1) {
+        const metric = validateMetricEntry(input.metrics[index], index);
+        writeBudget.addJsonCollectionValue(metric, index);
+        metrics.push(metric);
+    }
     const rawSampleSeries = input.sampleSeries === undefined ? [] : input.sampleSeries;
     if (!Array.isArray(rawSampleSeries)) {
         throw new HealthWriteValidationError('sampleSeries must be an array.');
@@ -551,8 +655,13 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
     }
     const sampleSeries: HealthSampleSeriesInput[] = [];
     let sampleChunkCount = 0;
-    Array.from(rawSampleSeries).forEach((series, index) => {
-        const validatedSeries = validateSampleSeries(series, index, endTimeMs - startTimeMs);
+    for (let index = 0; index < rawSampleSeries.length; index += 1) {
+        const validatedSeries = validateSampleSeries(
+            rawSampleSeries[index],
+            index,
+            endTimeMs - startTimeMs,
+            writeBudget,
+        );
         sampleChunkCount += Math.ceil(validatedSeries.offsetMs.length / HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK);
         if (sampleChunkCount > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD) {
             throw new HealthWriteValidationError(
@@ -560,7 +669,7 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
             );
         }
         sampleSeries.push(validatedSeries);
-    });
+    }
     const seriesKeys = new Set(sampleSeries.map(series => series.seriesKey));
     if (seriesKeys.size !== sampleSeries.length) {
         throw new HealthWriteValidationError('sampleSeries seriesKey values must be unique per source record.');
@@ -584,11 +693,7 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
     }
     const providerAccountId = boundedString(input.providerAccountId, 'providerAccountId', MAX_ACCOUNT_ID_LENGTH);
     const sourceRecordKey = boundedString(input.sourceRecordKey, 'sourceRecordKey', MAX_SOURCE_KEY_LENGTH);
-    if (sourceRecordKey === providerAccountId) {
-        throw new HealthWriteValidationError('sourceRecordKey must not expose the raw provider account ID.');
-    }
-
-    return {
+    const result: HealthSourceRecordInput = {
         provider: input.provider,
         providerAccountId,
         sourceRecordType: boundedString(input.sourceRecordType, 'sourceRecordType', MAX_LABEL_LENGTH),
@@ -614,4 +719,10 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
         device: validateDevice(input.device, 'device'),
         sampleSeries,
     };
+    writeBudget.addJsonValue({
+        ...result,
+        metrics: [],
+        sampleSeries: [],
+    });
+    return result;
 }

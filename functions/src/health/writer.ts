@@ -26,9 +26,12 @@ import {
 import { generateIDFromParts } from '../shared/id-generator';
 import {
     HealthSourceRecordInput,
+    HealthWriteSizeError,
     HealthWriteValidationError,
     validateHealthSourceRecordInput,
 } from './validation';
+
+export { HealthWriteSizeError } from './validation';
 
 type HealthIdGenerator = (parts: string[]) => Promise<string>;
 const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
@@ -54,14 +57,6 @@ export class HealthSourceRecordRevisionConflictError extends Error {
 
     constructor(public readonly sourceRecordId: string) {
         super(`Health source record ${sourceRecordId} has conflicting content for the same provider revision order.`);
-    }
-}
-
-export class HealthWriteSizeError extends HealthWriteValidationError {
-    public readonly name = 'HealthWriteSizeError';
-
-    constructor(message: string) {
-        super(message);
     }
 }
 
@@ -149,15 +144,22 @@ export function assertHealthSourceRecordWriteSize(
     if (sourceRecordBytes > HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES) {
         throw new HealthWriteSizeError(`Health source record ${sourceRecord.id} exceeds the bounded document size.`);
     }
-    const chunkSizes = chunks.map(chunk => ({ chunk, bytes: documentBytes(chunk) }));
-    const oversizedChunk = chunkSizes.find(item => item.bytes > HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES);
-    if (oversizedChunk) {
-        throw new HealthWriteSizeError(`Health sample chunk ${oversizedChunk.chunk.id} exceeds the bounded document size.`);
+    let totalBytes = sourceRecordBytes;
+    for (const chunk of chunks) {
+        totalBytes = addHealthSampleChunkWriteBytes(totalBytes, chunk);
     }
-    const totalBytes = sourceRecordBytes + chunkSizes.reduce((total, item) => total + item.bytes, 0);
-    if (totalBytes > HEALTH_MAX_WRITE_BYTES) {
+}
+
+function addHealthSampleChunkWriteBytes(totalBytes: number, chunk: HealthSampleChunk): number {
+    const chunkBytes = documentBytes(chunk);
+    if (chunkBytes > HEALTH_MAX_SAMPLE_CHUNK_DOCUMENT_BYTES) {
+        throw new HealthWriteSizeError(`Health sample chunk ${chunk.id} exceeds the bounded document size.`);
+    }
+    const nextBytes = totalBytes + chunkBytes;
+    if (nextBytes > HEALTH_MAX_WRITE_BYTES) {
         throw new HealthWriteSizeError('Health source-record replacement exceeds the bounded transaction payload size.');
     }
+    return nextBytes;
 }
 
 function digestPayload(input: HealthSourceRecordInput): unknown {
@@ -191,6 +193,14 @@ export async function buildHealthSourceRecordWrite(
         input.provider,
         input.providerAccountId,
     ]);
+    const opaqueSourceRecordKey = await generateOpaqueId(generateId, [
+        'health-source-key-v1',
+        userID,
+        input.provider,
+        accountKey,
+        input.sourceRecordType,
+        input.sourceRecordKey,
+    ]);
     const id = await generateOpaqueId(generateId, [
         'health-source-record-v1',
         userID,
@@ -203,14 +213,20 @@ export async function buildHealthSourceRecordWrite(
         'health-source-record-content-v1',
         JSON.stringify(digestPayload(input)),
     ]);
+    const opaqueRevisionToken = await generateOpaqueId(generateId, [
+        'health-revision-token-v1',
+        id,
+        input.revision.token,
+    ]);
     const revision = {
         order: input.revision.order,
-        token: input.revision.token,
+        token: opaqueRevisionToken,
         digest,
     };
 
-    const chunkGroups = await Promise.all(input.sampleSeries.map(async (series) => {
-        const chunks: HealthSampleChunk[] = [];
+    const chunks: HealthSampleChunk[] = [];
+    let chunkWriteBytes = 0;
+    for (const series of input.sampleSeries) {
         const chunkCount = Math.ceil(series.offsetMs.length / HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK);
         for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
             const sliceStart = chunkIndex * HEALTH_MAX_SAMPLE_POINTS_PER_CHUNK;
@@ -223,7 +239,7 @@ export async function buildHealthSourceRecordWrite(
                 series.seriesKey,
                 String(chunkIndex),
             ]);
-            chunks.push({
+            const chunk = cleanUndefined<HealthSampleChunk>({
                 schemaVersion: HEALTH_SCHEMA_VERSION,
                 id: chunkId,
                 userID,
@@ -261,15 +277,15 @@ export async function buildHealthSourceRecordWrite(
                 createdAtMs: nowMs,
                 updatedAtMs: nowMs,
             });
+            chunkWriteBytes = addHealthSampleChunkWriteBytes(chunkWriteBytes, chunk);
+            chunks.push(chunk);
         }
-        return chunks;
-    }));
-    const chunks = chunkGroups.flat();
+    }
     const metricIds = [...new Set([
         ...input.metrics.map(metric => metric.metricId),
         ...input.sampleSeries.map(series => series.metricId),
     ])].sort();
-    const sourceRecord: HealthSourceRecord = {
+    const sourceRecord = cleanUndefined<HealthSourceRecord>({
         schemaVersion: HEALTH_SCHEMA_VERSION,
         id,
         userID,
@@ -278,7 +294,7 @@ export async function buildHealthSourceRecordWrite(
             provider: input.provider,
             accountKey,
             sourceRecordType: input.sourceRecordType,
-            sourceRecordKey: input.sourceRecordKey,
+            sourceRecordKey: opaqueSourceRecordKey,
             revision,
             receivedAtMs: input.receivedAtMs,
         },
@@ -293,10 +309,9 @@ export async function buildHealthSourceRecordWrite(
         sampleChunkIds: chunks.map(chunk => chunk.id),
         createdAtMs: nowMs,
         updatedAtMs: nowMs,
-    };
-    const result = cleanUndefined({ sourceRecord, chunks });
-    assertHealthSourceRecordWriteSize(result.sourceRecord, result.chunks);
-    return result;
+    });
+    assertHealthSourceRecordWriteSize(sourceRecord, chunks);
+    return { sourceRecord, chunks };
 }
 
 function userHealthCollection(

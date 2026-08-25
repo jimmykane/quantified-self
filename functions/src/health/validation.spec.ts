@@ -11,7 +11,11 @@ import {
     HEALTH_VALUE_ORIGINS,
     HEALTH_VALUE_TYPES,
 } from '../../../shared/health';
-import { HealthWriteValidationError, validateHealthSourceRecordInput } from './validation';
+import {
+    HealthWriteSizeError,
+    HealthWriteValidationError,
+    validateHealthSourceRecordInput,
+} from './validation';
 
 function validInput(): Record<string, unknown> {
     return {
@@ -105,12 +109,12 @@ describe('health write validation', () => {
         expect(() => validateHealthSourceRecordInput(input)).toThrow('canonical.unit must match the metric catalog');
     });
 
-    it('does not allow the raw provider account ID to become persisted source-record metadata', () => {
+    it('preserves provider source identity for writer-side opaque hashing', () => {
         const input = validInput();
-        input.sourceRecordKey = input.providerAccountId;
+        input.sourceRecordKey = 'provider-account-1:daily:2026-01-01';
 
-        expect(() => validateHealthSourceRecordInput(input)).toThrow(
-            'sourceRecordKey must not expose the raw provider account ID',
+        expect(validateHealthSourceRecordInput(input).sourceRecordKey).toBe(
+            'provider-account-1:daily:2026-01-01',
         );
     });
 
@@ -219,6 +223,113 @@ describe('health write validation', () => {
         input.sampleSeries = Array.from({ length: 201 }, () => sample);
 
         expect(() => validateHealthSourceRecordInput(input)).toThrow('cannot contain more than 200 series');
+    });
+
+    it('stops cloning category samples when their cumulative JSON UTF-8 budget is exhausted', () => {
+        const input = validInput();
+        const pointCount = 3_000;
+        const offsets = Array.from({ length: pointCount }, (_, index) => index * 1_000);
+        const largeMultibyteValue = '💣'.repeat(256);
+        const firstSeries = {
+            ...(input.sampleSeries as Array<Record<string, unknown>>)[0],
+            seriesKey: 'stress-state-primary',
+            metricId: HEALTH_METRIC_IDS.StressState,
+            valueType: HEALTH_VALUE_TYPES.Category,
+            normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly,
+            nativeMetric: 'stressState',
+            nativeUnit: null,
+            canonicalUnit: null,
+            offsetMs: offsets,
+            nativeValues: Array(pointCount).fill(largeMultibyteValue),
+            canonicalValues: null,
+            qualityCodes: null,
+            coverage: { status: HEALTH_COVERAGE_STATUSES.Complete, sampleCount: pointCount },
+        };
+        const secondValues = new Proxy(Array(pointCount).fill(largeMultibyteValue), {
+            get(target, property, receiver) {
+                if (typeof property === 'string' && /^\d+$/.test(property) && Number(property) >= 2_000) {
+                    throw new Error('validator read beyond the cumulative UTF-8 budget');
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
+        input.sampleSeries = [firstSeries, {
+            ...firstSeries,
+            seriesKey: 'stress-state-secondary',
+            nativeValues: secondValues,
+        }];
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow(HealthWriteSizeError);
+        expect(() => validateHealthSourceRecordInput(input)).toThrow('cumulative JSON UTF-8 budget');
+    });
+
+    it('counts multibyte quality codes in the same cumulative JSON UTF-8 budget', () => {
+        const input = validInput();
+        const pointCount = 12_500;
+        const sampleSeries = input.sampleSeries as Array<Record<string, unknown>>;
+        sampleSeries[0].offsetMs = Array.from({ length: pointCount }, (_, index) => index * 1_000);
+        sampleSeries[0].nativeValues = Array(pointCount).fill(60);
+        sampleSeries[0].canonicalValues = Array(pointCount).fill(60);
+        sampleSeries[0].qualityCodes = new Proxy(Array(pointCount).fill('✓'.repeat(128)), {
+            get(target, property, receiver) {
+                if (typeof property === 'string' && /^\d+$/.test(property) && Number(property) >= 11_500) {
+                    throw new Error('validator read beyond the cumulative UTF-8 budget');
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
+        sampleSeries[0].coverage = { status: HEALTH_COVERAGE_STATUSES.Complete, sampleCount: pointCount };
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow(HealthWriteSizeError);
+        expect(() => validateHealthSourceRecordInput(input)).toThrow('cumulative JSON UTF-8 budget');
+    });
+
+    it('rejects an oversized raw string before trimming it into a small accepted value', () => {
+        const input = validInput();
+        const sampleSeries = input.sampleSeries as Array<Record<string, unknown>>;
+        sampleSeries[0].metricId = HEALTH_METRIC_IDS.StressState;
+        sampleSeries[0].valueType = HEALTH_VALUE_TYPES.Category;
+        sampleSeries[0].normalizationStatus = HEALTH_NORMALIZATION_STATUSES.NativeOnly;
+        sampleSeries[0].nativeMetric = 'stressState';
+        sampleSeries[0].nativeUnit = null;
+        sampleSeries[0].canonicalUnit = null;
+        sampleSeries[0].offsetMs = [0];
+        sampleSeries[0].nativeValues = [`${' '.repeat(5 * 1024 * 1024)}ok`];
+        sampleSeries[0].canonicalValues = null;
+        sampleSeries[0].qualityCodes = null;
+        sampleSeries[0].coverage = { status: HEALTH_COVERAGE_STATUSES.Complete, sampleCount: 1 };
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow(
+            'nativeValues[0] must be a bounded non-empty string',
+        );
+    });
+
+    it('counts bounded raw string padding before normalized sample values are retained', () => {
+        const input = validInput();
+        const pointCount = 10_000;
+        const paddedValue = `${' '.repeat(510)}x`;
+        const sampleSeries = input.sampleSeries as Array<Record<string, unknown>>;
+        sampleSeries[0].metricId = HEALTH_METRIC_IDS.StressState;
+        sampleSeries[0].valueType = HEALTH_VALUE_TYPES.Category;
+        sampleSeries[0].normalizationStatus = HEALTH_NORMALIZATION_STATUSES.NativeOnly;
+        sampleSeries[0].nativeMetric = 'stressState';
+        sampleSeries[0].nativeUnit = null;
+        sampleSeries[0].canonicalUnit = null;
+        sampleSeries[0].offsetMs = Array.from({ length: pointCount }, (_, index) => index * 1_000);
+        sampleSeries[0].nativeValues = new Proxy(Array(pointCount).fill(paddedValue), {
+            get(target, property, receiver) {
+                if (typeof property === 'string' && /^\d+$/.test(property) && Number(property) >= 9_000) {
+                    throw new Error('validator read beyond the raw UTF-8 budget');
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
+        sampleSeries[0].canonicalValues = null;
+        sampleSeries[0].qualityCodes = null;
+        sampleSeries[0].coverage = { status: HEALTH_COVERAGE_STATUSES.Complete, sampleCount: pointCount };
+
+        expect(() => validateHealthSourceRecordInput(input)).toThrow(HealthWriteSizeError);
+        expect(() => validateHealthSourceRecordInput(input)).toThrow('cumulative JSON UTF-8 budget');
     });
 
     it('accepts sleep references only to the existing allowlisted sleep model', () => {

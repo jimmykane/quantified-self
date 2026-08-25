@@ -97,9 +97,9 @@ Every value or reference includes:
 
 ### Source records
 
-`users/{uid}/healthSourceRecords/{sourceRecordId}` stores one provider source record. A source record contains its calendar date and interval, source type/key, opaque account key, ordered revision, coverage, device, metric entries, searchable `metricIds`, and sample-chunk IDs.
+`users/{uid}/healthSourceRecords/{sourceRecordId}` stores one provider source record. A source record contains its calendar date and interval, source type, opaque source key, opaque account key, ordered revision, coverage, device, metric entries, searchable `metricIds`, and sample-chunk IDs.
 
-The source-record ID is a deterministic SHA-256 identifier derived from the Firebase UID, provider, raw provider account ID, provider record type, and provider record key. The account key is a separate deterministic hash. The raw provider account ID is validated for identity calculation and is never persisted or logged.
+The source-record ID is a deterministic SHA-256 identifier derived from the Firebase UID, provider, raw provider account ID, provider record type, and provider record key. The account key is a separate deterministic hash. The persisted source key is another account-scoped deterministic hash of the provider record key, and the persisted revision token is a source-record-scoped hash of the adapter token. Raw provider account IDs, record keys, and revision tokens remain in writer memory only for identity, revision, and digest calculation; none is persisted or logged.
 
 ### Sample chunks
 
@@ -134,6 +134,8 @@ Bounds protect Firestore document size, transaction limits, client reads, and pr
 | Firestore chunk fetch | Public page plus one look-ahead chunk |
 | Sample points returned | 1,440–11,520; default 10,000 |
 
+The validator counts recognized input JSON-escaped UTF-8 bytes cumulatively while walking aligned metric/sample values, charges raw sample strings before trimming, and stops before retaining the element that would cross 4 MiB. The writer then cleans, measures, and retains one sample chunk at a time with the same cumulative ceiling before applying the exact final source-record-plus-chunks check. This bounds validation and construction amplification; the final estimate remains authoritative because repeated chunk metadata changes the persisted size.
+
 The per-revision payload stays below half Firestore's 10 MiB transaction request limit because replacing a source record can both write the new revision and delete the previous revision. The largest combined source-record/chunk fetch, including both look-ahead documents, is under 17 MiB. That leaves material serialization and projection headroom below the 32 MB non-streaming response limit for a second-generation HTTP function. See the official [Firestore quotas](https://firebase.google.com/docs/firestore/quotas) and [Cloud Functions quotas](https://firebase.google.com/docs/functions/quotas).
 
 Automatic indexes are disabled for every health collection except the date field needed by unfiltered range reads; the four explicit provider/metric/date composites remain available. This leaves write-request headroom for index entries and protocol overhead.
@@ -142,7 +144,7 @@ Sample projection never splits a stored chunk to fit a point budget. It returns 
 
 ## Revision and replacement contract
 
-Provider adapters must supply a non-negative ordered revision and a bounded opaque token. The writer calculates the content digest itself, excluding receipt/write timestamps so an exact redelivery remains idempotent.
+Provider adapters must supply a non-negative ordered revision and a bounded stable token. The writer hashes that token before persistence and calculates the content digest itself, excluding receipt/write timestamps so an exact redelivery remains idempotent.
 
 | Incoming revision | Result |
 | --- | --- |
@@ -212,7 +214,7 @@ The validator also requires the health metric ID to match the referenced Sleep f
 - Firestore Rules permit owners to get their own health documents and issue only explicitly bounded list queries.
 - All browser writes are denied. Provider adapters use the Admin SDK writer.
 - The callable requires Firebase Authentication and App Check and ignores any caller-supplied UID.
-- Provider account IDs are hashed before persistence. Credentials, raw payloads, raw values in logs, signed URLs, and free-form provider errors are prohibited.
+- Provider account IDs, provider source-record keys, and provider revision tokens are hashed before persistence. Credentials, raw payloads, raw values in logs, signed URLs, and free-form provider errors are prohibited.
 - Large metric/sample arrays are excluded from automatic Firestore indexes.
 - Health source records, sample chunks, and sync state live below `users/{uid}`, so the configured recursive Delete User Data extension removes them with the account.
 - Background and transactional writes no-op when the user is missing or deletion is active.
@@ -231,7 +233,7 @@ Issues #611–#613 should implement each provider independently against this fou
 
 1. Confirm the documented API family, delivery mode, history/range limits, sampling cadence, permission/scopes, and revision behavior.
 2. Map only documented fields. Preserve the exact provider field/unit and semantic variant.
-3. Supply a stable provider account ID, record type/key, ordered revision, and opaque provider revision token. A revision token is an identifier such as an ETag or version marker, never an OAuth/access credential.
+3. Supply a stable provider account ID, record type/key, ordered revision, and stable provider revision token. The shared writer derives account-scoped opaque persisted identities from the raw account ID and record key and hashes the revision token before storage. A revision token is an identifier such as an ETag or version marker, never an OAuth/access credential.
 4. Normalize units only where conversion is defensible; otherwise use `native_only` or `not_comparable`.
 5. Preserve recorded/provider-calculated/manual origin, device, quality, and partial coverage.
 6. Send bounded aligned sample series to the shared writer; never hand-build chunk documents.

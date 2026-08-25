@@ -316,6 +316,7 @@ export type HealthMetricEntry = HealthMetricValue | HealthSleepMetricReference;
 
 export interface HealthSourceRecordRevision {
   order: number;
+  /** Source-record-scoped opaque hash of the adapter's revision token. */
   token: string;
   digest: string;
 }
@@ -324,6 +325,7 @@ export interface HealthSourceMetadata {
   provider: HealthProvider;
   accountKey: string;
   sourceRecordType: string;
+  /** Account-scoped opaque hash of the adapter's source-record key. */
   sourceRecordKey: string;
   revision: HealthSourceRecordRevision;
   receivedAtMs: number;
@@ -444,6 +446,7 @@ export interface HealthObservation {
   endTimeMs: number;
   timezoneOffsetSeconds?: number | null;
   sourceRecordType: string;
+  /** Account-scoped opaque hash; never the raw adapter source-record key. */
   sourceRecordKey: string;
   receivedAtMs: number;
   coverage: HealthCoverage;
