@@ -317,6 +317,42 @@ describe('processActivitySyncTask', () => {
     expect(mockLoggerError).not.toHaveBeenCalled();
   });
 
+  it('keeps the original COROS poll schedule when the deletion guard spans its due time', async () => {
+    const nowMs = 1_700_000_000_000;
+    const scheduledAtMs = nowMs + (6 * 1000);
+    let currentNowMs = nowMs;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentNowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: scheduledAtMs,
+      }),
+    });
+    mockShouldSkipQueueWorkForDeletedUser.mockImplementationOnce(async () => {
+      currentNowMs = scheduledAtMs + 1;
+      return false;
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      scheduledAtMs,
+      1,
+    );
+  });
+
   it('processes a COROS status poll once it is within the scheduling grace window', async () => {
     const nowMs = 1_700_000_000_000;
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);

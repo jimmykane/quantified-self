@@ -22,6 +22,11 @@ interface ActivitySyncTaskPayload {
 const MAX_RETRY_REASON_LENGTH = 300;
 const PENDING_STATUS_POLL_SCHEDULING_GRACE_MS = 5 * 1000;
 
+interface PendingCOROSStatusPollOptions {
+    reschedulingExistingPoll?: boolean;
+    scheduledAtMs?: number;
+}
+
 function getScheduledProviderStatusPollAtMs(
     queueItem: ActivitySyncQueueItemInterface,
     nowMs = Date.now(),
@@ -73,7 +78,7 @@ function getProviderStatusPollDelaySeconds(
 async function enqueuePendingCOROSStatusPoll(
     queueItem: ActivitySyncQueueItemInterface,
     queueItemId: string,
-    reschedulingExistingPoll = false,
+    options: PendingCOROSStatusPollOptions = {},
 ): Promise<void> {
     if (await shouldSkipQueueWorkForDeletedUser(
         queueItem.userID,
@@ -86,8 +91,16 @@ async function enqueuePendingCOROSStatusPoll(
     }
 
     const nowMs = Date.now();
-    const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
-    const pollDelaySeconds = getProviderStatusPollDelaySeconds(queueItem, nowMs);
+    // Keep the due time captured before the deletion guard. If that guard
+    // spans the due time, falling back to the regular retry delay would defer
+    // an already-due status poll by another full backoff period.
+    const explicitScheduledAtMs = Number(options.scheduledAtMs);
+    const scheduledAtMs = Number.isFinite(explicitScheduledAtMs) && explicitScheduledAtMs > 0
+        ? Math.floor(explicitScheduledAtMs)
+        : getScheduledProviderStatusPollAtMs(queueItem, nowMs);
+    const pollDelaySeconds = scheduledAtMs !== null
+        ? Math.max(1, Math.ceil((scheduledAtMs - nowMs) / 1000))
+        : getProviderStatusPollDelaySeconds(queueItem, nowMs);
     const taskEnqueued = await enqueueActivitySyncTask(
         queueItemId,
         scheduledAtMs ?? nowMs,
@@ -100,7 +113,7 @@ async function enqueuePendingCOROSStatusPoll(
         pollDelaySeconds,
         retryCount: queueItem.retryCount,
         taskEnqueued,
-        ...(reschedulingExistingPoll ? { reschedulingExistingPoll: true } : {}),
+        ...(options.reschedulingExistingPoll ? { reschedulingExistingPoll: true } : {}),
     });
 }
 
@@ -163,12 +176,16 @@ export const processActivitySyncTask = onTaskDispatched({
             id: queueDoc.id,
             ref: queueDoc.ref,
         }, queueItem) as ActivitySyncQueueItemInterface;
-        if (getScheduledCOROSStatusPollAtMs(processingQueueItem) !== null) {
+        const scheduledCOROSStatusPollAtMs = getScheduledCOROSStatusPollAtMs(processingQueueItem);
+        if (scheduledCOROSStatusPollAtMs !== null) {
             // The prior worker committed the retry transition but its response
             // may have been retried before the planned poll is due. Re-enqueue
             // the same deterministic delayed task rather than polling COROS
             // early and consuming another polling budget entry.
-            await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId, true);
+            await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId, {
+                scheduledAtMs: scheduledCOROSStatusPollAtMs,
+                reschedulingExistingPoll: true,
+            });
             return;
         }
         const result = await processActivitySyncQueueItem(processingQueueItem);
