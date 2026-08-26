@@ -89,7 +89,7 @@ interface QueueRowBase {
 }
 
 const EMPTY_CHIPS: string[] = [];
-const AUTH_ACTIVITY_BASIS = 'Sign-in or token refresh';
+const AUTH_ACTIVITY_BASIS = 'Sign-in or ID token refresh';
 
 export function buildAdminDashboardUserKpiCards(
     stats: UserCountStats | null,

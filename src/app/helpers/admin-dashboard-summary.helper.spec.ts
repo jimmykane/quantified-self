@@ -67,12 +67,12 @@ describe('admin-dashboard-summary helper', () => {
         expect(cards.slice(0, 3).map(card => card.id)).toEqual(['active-24h', 'active-7d', 'active-30d']);
         expect(cards.find(card => card.id === 'active-24h')).toMatchObject({
             value: 12,
-            subtitle: 'Sign-in or token refresh',
+            subtitle: 'Sign-in or ID token refresh',
             severity: undefined,
         });
         expect(cards.find(card => card.id === 'active-7d')).toMatchObject({
             value: 40,
-            subtitle: 'Sign-in or token refresh · 80% of 30-day active',
+            subtitle: 'Sign-in or ID token refresh · 80% of 30-day active',
             severity: undefined,
         });
         expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
@@ -146,7 +146,7 @@ describe('admin-dashboard-summary helper', () => {
         const cards = buildAdminDashboardUserKpiCards(stats, null, null);
 
         expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or token refresh');
+        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or ID token refresh');
     });
 
     it('does not present unavailable connection counts as successful or zero', () => {

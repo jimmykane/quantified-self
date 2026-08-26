@@ -277,6 +277,7 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Active 30d');
         expect(text).toContain('70% of 30-day active');
         expect(text).toContain('enabled, non-admin accounts');
+        expect(text).toContain('sign-in or ID token refresh');
         expect(text).toContain('Total Users');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');

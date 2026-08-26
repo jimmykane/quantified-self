@@ -57,6 +57,9 @@ describe('getUserCount authentication activity', () => {
                             lastRefreshTime: beforeNow(8 * 24 * 60 * 60 * 1000),
                         },
                     }),
+                    user('exactly-7-days', {
+                        metadata: { lastRefreshTime: beforeNow(7 * 24 * 60 * 60 * 1000) },
+                    }),
                     user('admin-user', {
                         customClaims: { admin: true },
                         metadata: { lastRefreshTime: beforeNow(60 * 60 * 1000) },
@@ -69,6 +72,9 @@ describe('getUserCount authentication activity', () => {
                     user('active-30-days', {
                         metadata: { lastRefreshTime: beforeNow(20 * 24 * 60 * 60 * 1000) },
                     }),
+                    user('exactly-30-days', {
+                        metadata: { lastRefreshTime: beforeNow(30 * 24 * 60 * 60 * 1000) },
+                    }),
                     user('outside-30-days', {
                         metadata: { lastRefreshTime: beforeNow((30 * 24 * 60 * 60 * 1000) + 1) },
                     }),
@@ -80,7 +86,10 @@ describe('getUserCount authentication activity', () => {
                         metadata: { lastRefreshTime: 'not-a-date' },
                     }),
                     user('future-date', {
-                        metadata: { lastRefreshTime: afterNow(60 * 60 * 1000) },
+                        metadata: {
+                            lastSignInTime: beforeNow(2 * 24 * 60 * 60 * 1000),
+                            lastRefreshTime: afterNow(60 * 60 * 1000),
+                        },
                     }),
                 ],
                 pageToken: undefined,
@@ -99,8 +108,8 @@ describe('getUserCount authentication activity', () => {
 
         expect(result.authActivity).toEqual({
             last24Hours: 2,
-            last7Days: 3,
-            last30Days: 4,
+            last7Days: 5,
+            last30Days: 7,
             computedAt: now.toISOString(),
         });
         expect(mockListUsers).toHaveBeenNthCalledWith(1, 1000, undefined);

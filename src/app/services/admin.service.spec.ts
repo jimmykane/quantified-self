@@ -145,7 +145,7 @@ describe('AdminService', () => {
         expect(stats.authActivity).toBeUndefined();
     });
 
-    it('should normalize malformed authentication activity counts', async () => {
+    it('should mark malformed authentication activity counts as unavailable', async () => {
         functionsServiceMock.call.mockResolvedValue({
             data: {
                 count: 2,
@@ -162,10 +162,34 @@ describe('AdminService', () => {
         const stats = await firstValueFrom(service.getTotalUserCount());
 
         expect(stats.authActivity).toEqual({
-            last24Hours: 4,
-            last7Days: 0,
+            last24Hours: null,
+            last7Days: null,
             last30Days: null,
             computedAt: null,
+        });
+    });
+
+    it('should mark impossible authentication activity window ordering as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 20,
+                providers: {},
+                authActivity: {
+                    last24Hours: 12,
+                    last7Days: 8,
+                    last30Days: 10,
+                    computedAt: '2026-08-07T13:15:00.000Z',
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.authActivity).toEqual({
+            last24Hours: null,
+            last7Days: null,
+            last30Days: null,
+            computedAt: '2026-08-07T13:15:00.000Z',
         });
     });
 

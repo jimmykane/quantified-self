@@ -125,7 +125,7 @@ interface UserCountFunctionResponse {
     events?: Partial<EventCountStats>;
     routes?: Partial<RouteCountStats>;
     connections?: Partial<ConnectionCountStats>;
-    authActivity?: Partial<AuthActivityStats>;
+    authActivity?: unknown;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -266,6 +266,7 @@ export class AdminService {
             map(result => {
                 const events = this.mapCountStats(result.data.events);
                 const routes = this.mapCountStats(result.data.routes);
+                const authActivity = this.mapAuthActivityStats(result.data.authActivity);
 
                 return {
                     total: result.data.total ?? result.data.count, // Fallback for safety
@@ -284,8 +285,8 @@ export class AdminService {
                     ...(result.data.connections ? {
                         connections: this.mapConnectionCountStats(result.data.connections),
                     } : {}),
-                    ...(result.data.authActivity && typeof result.data.authActivity === 'object' ? {
-                        authActivity: this.mapAuthActivityStats(result.data.authActivity),
+                    ...(authActivity ? {
+                        authActivity,
                     } : {}),
                 };
             })
@@ -344,20 +345,34 @@ export class AdminService {
         return mapped;
     }
 
-    private mapAuthActivityStats(stats: Partial<AuthActivityStats>): AuthActivityStats {
+    private mapAuthActivityStats(stats: unknown): AuthActivityStats | undefined {
+        if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+            return undefined;
+        }
+
+        const rawStats = stats as Record<string, unknown>;
         const mapCount = (value: unknown): number | null => (
-            typeof value === 'number' && Number.isFinite(value)
-                ? Math.max(0, Math.floor(value))
+            typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+                ? value
                 : null
         );
-        const computedAt = typeof stats.computedAt === 'string' && !Number.isNaN(Date.parse(stats.computedAt))
-            ? stats.computedAt
+        const computedAt = typeof rawStats['computedAt'] === 'string'
+            && !Number.isNaN(Date.parse(rawStats['computedAt']))
+            ? rawStats['computedAt']
             : null;
+        const last24Hours = mapCount(rawStats['last24Hours']);
+        const last7Days = mapCount(rawStats['last7Days']);
+        const last30Days = mapCount(rawStats['last30Days']);
+        const hasInvalidWindowOrdering = (
+            (last24Hours !== null && last7Days !== null && last24Hours > last7Days)
+            || (last7Days !== null && last30Days !== null && last7Days > last30Days)
+            || (last24Hours !== null && last30Days !== null && last24Hours > last30Days)
+        );
 
         return {
-            last24Hours: mapCount(stats.last24Hours),
-            last7Days: mapCount(stats.last7Days),
-            last30Days: mapCount(stats.last30Days),
+            last24Hours: hasInvalidWindowOrdering ? null : last24Hours,
+            last7Days: hasInvalidWindowOrdering ? null : last7Days,
+            last30Days: hasInvalidWindowOrdering ? null : last30Days,
             computedAt,
         };
     }
