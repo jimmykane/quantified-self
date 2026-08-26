@@ -265,7 +265,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-08-24');
@@ -275,8 +275,8 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-08-07');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-05');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });

@@ -982,6 +982,14 @@ and aggregate vitals. Missing optional numeric measurements remain unavailable a
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
 requested bounded period, their units, and session coverage. It lets clients discover HRV before querying nightly or
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
+
+COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
+separate unified Health collections. Existing MCP tools do not query `healthSourceRecords` or `healthSampleChunks`, and
+this adapter does not widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
+through the same normalized Sleep allowlist described above. Negative fixtures include Health-shaped source metadata
+and sample payloads and prove they cannot enter Sleep tool output. No registered-app rescan or local plugin sync is
+required for this internal ingestion change.
+
 `get_sleep_trend` is the preferred one-call path for recent sleep or recovery-oriented questions. It returns the exact
 requested range, IANA timezone, grouping, recorded-vital coverage, and the same safe duration, score, stage, and
 aggregate-vital buckets as the lower-level summary path. The implementation performs one bounded projected read and

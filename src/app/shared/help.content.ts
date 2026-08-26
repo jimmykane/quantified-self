@@ -720,7 +720,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Garmin, Suunto, and COROS Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown. COROS can import the available last three months in 30-day windows with a 7-day cooldown; the COROS API does not expose sleep stages.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Garmin and Suunto Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown. COROS Pro users can select **Sleep & Health history**, then choose **Import Sleep & Health History** to import the available last three months in 30-day windows with a 7-day cooldown. The same daily COROS sync stores source-attributed steps, the provider calorie value, resting and sleep heart rate, overnight HRV, and available detailed HRV samples in the unified Health model. Aggregate sleep values stay on the Sleep session and are referenced rather than copied; missing values stay missing. The COROS API does not expose sleep stages.
 
 ## Suunto
 
@@ -794,8 +794,8 @@ COROS history import is limited to the last **3 months** because of API restrict
 COROS tools currently include:
 
 - connecting your account,
-- automatically importing daily sleep summaries from a rolling recent window (sleep timing plus available average sleep HR, resting HR, and overnight HRV; the COROS API does not expose sleep stages),
-- importing available COROS sleep history from the last three months in 30-day windows once every seven days,
+- automatically importing daily Health and sleep data from a rolling recent window (sleep timing, steps, the provider calorie value, resting and sleep HR, overnight HRV, and available detailed HRV samples; the COROS API does not expose sleep stages),
+- importing available COROS Sleep and Health history from the last three months in 30-day windows once every seven days,
 - importing history,
 - uploading FIT activities to COROS,
 - uploading selected GPX or FIT routes to COROS without saving them in Quantified Self,

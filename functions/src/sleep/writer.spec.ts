@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
 import { SLEEP_PROVIDERS, SLEEP_STAGES, SleepSession } from '../../../shared/sleep';
 
 const hoisted = vi.hoisted(() => ({
@@ -39,7 +40,18 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 vi.mock('firebase-admin', () => {
-    const collectionRef: any = {
+    interface MockDocumentReference {
+        id: string;
+        get: typeof hoisted.docGet;
+        set: typeof hoisted.docSet;
+        collection: () => MockCollectionReference;
+    }
+
+    interface MockCollectionReference {
+        doc: (id: string) => MockDocumentReference;
+    }
+
+    const collectionRef: MockCollectionReference = {
         doc: vi.fn((id: string) => {
             hoisted.docIds.push(id);
             return {
@@ -276,6 +288,49 @@ describe('sleep writer', () => {
         }), { merge: true });
     });
 
+    it('preserves recoverable legacy COROS Health fields until the guarded migration cleans them', async () => {
+        const incoming = buildMapperResult({
+            source: {
+                provider: SLEEP_PROVIDERS.COROSAPI,
+                providerUserId: 'coros-account',
+                sourceSessionKey: 'sleep-1',
+            },
+            providerFields: {
+                coros: {
+                    happenDay: '20260429',
+                    timezoneOffsetSeconds: 0,
+                },
+            },
+        });
+        const existing: SleepSession = {
+            ...incoming.session,
+            id: 'existing-session',
+            userID: 'user-1',
+            hrvSamples: [{ timestampMs: 1_777_000_000_000, value: 50 }],
+            providerFields: {
+                coros: {
+                    ...incoming.session.providerFields?.coros,
+                    step: 12_345,
+                    calorie: 2_000,
+                    rhr: 48,
+                    ppgHrv: 55,
+                    sleepAvgHr: 52,
+                },
+            },
+            createdAtMs: 1000,
+            updatedAtMs: 2000,
+        };
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => existing,
+        });
+
+        const result = await upsertSleepSessions('user-1', [incoming], 3000);
+
+        expect(result).toEqual({ written: 0, skipped: 1 });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
     it('does not recreate sleep sessions when user deletion is in progress', async () => {
         hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
             userExists: true,
@@ -320,6 +375,79 @@ describe('sleep writer', () => {
 
         expect(result.written).toBe(false);
         expect(hoisted.docGet).not.toHaveBeenCalled();
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('does not write a COROS Sleep session after its token lifecycle guard disappears', async () => {
+        const tokenRef = { id: 'private-provider-account' } as admin.firestore.DocumentReference;
+        hoisted.docGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+        const result = await upsertSleepSessions(
+            'user-1',
+            [buildMapperResult({
+                source: {
+                    provider: SLEEP_PROVIDERS.COROSAPI,
+                    providerUserId: 'private-provider-account',
+                    sourceSessionKey: 'sleep-1',
+                },
+            })],
+            3000,
+            { requiredExistingDocumentRef: tokenRef },
+        );
+
+        expect(result).toEqual({
+            written: 0,
+            skipped: 1,
+            lifecycleGuardSkipped: true,
+        });
+        expect(hoisted.docGet).toHaveBeenCalledWith(tokenRef);
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+    });
+
+    it('does not write a COROS Sleep session after its connection generation changes', async () => {
+        const tokenRef = { id: 'private-provider-account' } as admin.firestore.DocumentReference;
+        const serviceMetaRef = { id: 'corosAPI' } as admin.firestore.DocumentReference;
+        hoisted.docGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ openId: 'private-provider-account' }) })
+            .mockResolvedValueOnce({
+                exists: true,
+                data: () => ({
+                    providerUserId: 'replacement-account',
+                    connectionState: 'connected',
+                    connectionStateGeneration: 'new-generation',
+                }),
+            });
+
+        const result = await upsertSleepSessions(
+            'user-1',
+            [buildMapperResult({
+                source: {
+                    provider: SLEEP_PROVIDERS.COROSAPI,
+                    providerUserId: 'private-provider-account',
+                    sourceSessionKey: 'sleep-1',
+                },
+            })],
+            3000,
+            {
+                requiredExistingDocumentRef: tokenRef,
+                requiredDocumentFieldValues: {
+                    documentRef: serviceMetaRef,
+                    expectedFields: {
+                        providerUserId: 'private-provider-account',
+                        connectionState: 'connected',
+                        connectionStateGeneration: 'old-generation',
+                    },
+                },
+            },
+        );
+
+        expect(result).toEqual({
+            written: 0,
+            skipped: 1,
+            lifecycleGuardSkipped: true,
+        });
+        expect(hoisted.docGet).toHaveBeenCalledWith(tokenRef);
+        expect(hoisted.docGet).toHaveBeenCalledWith(serviceMetaRef);
         expect(hoisted.docSet).not.toHaveBeenCalled();
     });
 

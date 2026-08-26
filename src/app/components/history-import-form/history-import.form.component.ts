@@ -417,6 +417,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!provider || !this.canSubmitSleepBackfill) {
       return;
     }
+    const historyName = provider === SLEEP_PROVIDERS.COROSAPI
+      ? 'Sleep & Health history'
+      : 'sleep history';
 
     this.isSleepBackfillSubmitting.set(true);
     this.changeDetectorRef.detectChanges();
@@ -437,12 +440,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           ? await this.userService.backfillCorosSleepForCurrentUser()
           : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
-      this.snackBar.open(`${this.sleepBackfillProviderLabel} sleep history import started for ${result.queued} date ranges.`, undefined, {
+      this.snackBar.open(`${this.sleepBackfillProviderLabel} ${historyName} import started for ${result.queued} date ranges.`, undefined, {
         duration: 3000,
       });
     } catch (e: any) {
       this.logger.error(e);
-      this.snackBar.open(`Could not start the sleep history import: ${e.message}`, undefined, {
+      this.snackBar.open(`Could not start the ${historyName} import: ${e.message}`, undefined, {
         duration: 3000,
       });
     } finally {

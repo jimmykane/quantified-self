@@ -27,6 +27,8 @@ interface ActivitySyncRouteCleanupOptions {
   /** Ignore a stale disable after a newer connection transition wins. */
   expectedConnectionStateGeneration?: string;
   requiredConnectionState?: ServiceConnectionMetaFields['connectionState'];
+  /** Ignore a delayed token-root deletion after the provider has reconnected. */
+  requireServiceTokenRootMissing?: boolean;
 }
 
 interface ActivitySyncRouteRestoreOptions {
@@ -210,6 +212,15 @@ export async function disableActivitySyncRoutesForDisconnectedService(
         `[ActivitySyncRouteCleanup] Skipping route disable for ${disconnectedServiceName} user ${userID} because the user is missing or deletion is in progress.`,
       );
       return;
+    }
+
+    if (options.requireServiceTokenRootMissing) {
+      const tokenRootSnapshot = await transaction.get(
+        getServiceTokenRootDocumentRef(userID, disconnectedServiceName),
+      );
+      if (tokenRootSnapshot.exists) {
+        return;
+      }
     }
 
     if (options.expectedConnectionStateGeneration || options.requiredConnectionState) {

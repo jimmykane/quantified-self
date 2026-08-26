@@ -5,6 +5,7 @@ import {
     SleepProvider,
     SleepSession,
     SleepSyncStatus,
+    SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
     SLEEP_STAGES,
     SLEEP_SYNC_STATE_COLLECTION_ID,
@@ -38,6 +39,25 @@ function userSleepSyncStateRef(
 
 function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export interface SleepSessionWriterDependencies {
+    /** Skip the session write if this provider lifecycle document is absent. */
+    requiredExistingDocumentRef?: admin.firestore.DocumentReference;
+    /** Skip unless the lifecycle authority still has every expected flat field value. */
+    requiredDocumentFieldValues?: {
+        documentRef: admin.firestore.DocumentReference;
+        expectedFields: Readonly<Record<string, unknown>>;
+    };
+}
+
+export class SleepLifecycleGuardReadError extends Error {
+    public readonly name = 'SleepLifecycleGuardReadError';
+    public readonly code = 'sleep_lifecycle_guard_unavailable';
+
+    constructor() {
+        super('Sleep lifecycle guard could not be read.');
+    }
 }
 
 async function shouldSkipSleepUserWrite(userID: string, provider: SleepProvider, target: 'session' | 'state'): Promise<boolean> {
@@ -142,6 +162,28 @@ function comparableSleepSessionPayload(session: SleepSession | SleepMapperResult
         receivedAtMs: undefined,
     };
 
+    if (source.provider === SLEEP_PROVIDERS.COROSAPI) {
+        // Daily Health fields written by the legacy COROS mapper must remain
+        // recoverable until the explicit migration has persisted them. Ignore
+        // them for idempotence so their deliberate omission from new mapper
+        // output neither clears them through merge writes nor forces a write
+        // on every poll.
+        delete payload.hrvSamples;
+        const providerFields = payload.providerFields && typeof payload.providerFields === 'object'
+            ? { ...payload.providerFields as Record<string, unknown> }
+            : null;
+        const corosFields = providerFields?.coros && typeof providerFields.coros === 'object'
+            ? { ...providerFields.coros as Record<string, unknown> }
+            : null;
+        if (providerFields && corosFields) {
+            for (const field of ['step', 'calorie', 'rhr', 'ppgHrv', 'sleepAvgHr']) {
+                delete corosFields[field];
+            }
+            providerFields.coros = corosFields;
+            payload.providerFields = providerFields;
+        }
+    }
+
     return stableComparableValue(payload);
 }
 
@@ -158,7 +200,13 @@ export async function upsertSleepSession(
     userID: string,
     mapperResult: SleepMapperResult,
     nowMs = Date.now(),
-): Promise<{ id: string; session: SleepSession; written: boolean }> {
+    dependencies: SleepSessionWriterDependencies = {},
+): Promise<{
+    id: string;
+    session: SleepSession;
+    written: boolean;
+    lifecycleGuardSkipped?: true;
+}> {
     const provider = mapperResult.session.source.provider;
     const id = await buildSleepSessionDocumentId(
         userID,
@@ -178,6 +226,47 @@ export async function upsertSleepSession(
     return db.runTransaction(async (transaction) => {
         if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'session')) {
             return { id, session: skippedSession, written: false };
+        }
+        if (dependencies.requiredExistingDocumentRef) {
+            let lifecycleSnapshot;
+            try {
+                lifecycleSnapshot = await transaction.get(dependencies.requiredExistingDocumentRef);
+            } catch {
+                // Provider token document IDs can be raw account identifiers.
+                // Do not propagate datastore paths into queue errors or logs.
+                throw new SleepLifecycleGuardReadError();
+            }
+            if (!lifecycleSnapshot.exists) {
+                return {
+                    id,
+                    session: skippedSession,
+                    written: false,
+                    lifecycleGuardSkipped: true as const,
+                };
+            }
+        }
+        if (dependencies.requiredDocumentFieldValues) {
+            let lifecycleSnapshot;
+            try {
+                lifecycleSnapshot = await transaction.get(
+                    dependencies.requiredDocumentFieldValues.documentRef,
+                );
+            } catch {
+                throw new SleepLifecycleGuardReadError();
+            }
+            const lifecycleData = lifecycleSnapshot.exists
+                ? lifecycleSnapshot.data() as Record<string, unknown> | undefined
+                : undefined;
+            if (!lifecycleData || Object.entries(
+                dependencies.requiredDocumentFieldValues.expectedFields,
+            ).some(([field, expectedValue]) => lifecycleData[field] !== expectedValue)) {
+                return {
+                    id,
+                    session: skippedSession,
+                    written: false,
+                    lifecycleGuardSkipped: true as const,
+                };
+            }
         }
 
         const existing = await transaction.get(docRef);
@@ -211,7 +300,8 @@ export async function upsertSleepSessions(
     userID: string,
     mapperResults: readonly SleepMapperResult[],
     nowMs = Date.now(),
-): Promise<{ written: number; skipped: number }> {
+    dependencies: SleepSessionWriterDependencies = {},
+): Promise<{ written: number; skipped: number; lifecycleGuardSkipped?: true }> {
     const provider = mapperResults.find((mapperResult) => mapperResult?.session?.source?.provider)?.session.source.provider;
     if (provider && await shouldSkipSleepUserWrite(userID, provider, 'session')) {
         return {
@@ -222,12 +312,20 @@ export async function upsertSleepSessions(
 
     let written = 0;
     let skipped = 0;
-    for (const mapperResult of mapperResults) {
+    for (let index = 0; index < mapperResults.length; index += 1) {
+        const mapperResult = mapperResults[index];
         if (!mapperResult?.sourceSessionKey) {
             skipped += 1;
             continue;
         }
-        const result = await upsertSleepSession(userID, mapperResult, nowMs);
+        const result = await upsertSleepSession(userID, mapperResult, nowMs, dependencies);
+        if (result.lifecycleGuardSkipped) {
+            return {
+                written,
+                skipped: skipped + (mapperResults.length - index),
+                lifecycleGuardSkipped: true,
+            };
+        }
         if (result.written) {
             written += 1;
         } else {

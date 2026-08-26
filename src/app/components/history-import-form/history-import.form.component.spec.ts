@@ -210,7 +210,7 @@ describe('HistoryImportFormComponent', () => {
         expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
     });
 
-    it('should render COROS sleep backfill for connected Pro users within the provider lookback', async () => {
+    it('should render COROS Sleep and Health backfill for connected Pro users within the provider lookback', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
@@ -220,8 +220,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep History');
-        expect(text).toContain('Imports available COROS sleep');
+        expect(text).toContain('Import Sleep & Health History');
+        expect(text).toContain('Imports available COROS sleep and daily Health metrics');
         expect(text).toContain('up to three months');
         expect(text).toContain('once every 7 days');
     });
@@ -268,7 +268,7 @@ describe('HistoryImportFormComponent', () => {
         expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
     });
 
-    it('should queue COROS sleep backfill from the separate action', async () => {
+    it('should queue COROS Sleep and Health backfill from the separate action', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
@@ -286,6 +286,11 @@ describe('HistoryImportFormComponent', () => {
             method: ServiceNames.COROSAPI,
             source: 'history_import',
         });
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'COROS Sleep & Health history import started for 4 date ranges.',
+            undefined,
+            { duration: 3000 },
+        );
         expect(component.pendingSleepBackfillResult()?.queued).toBe(4);
     });
 

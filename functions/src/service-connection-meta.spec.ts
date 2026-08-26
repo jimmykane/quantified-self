@@ -22,6 +22,7 @@ const hoisted = vi.hoisted(() => ({
   tokenRootRef: { path: 'wahooAPIAccessTokens/user-1' },
   tokenRootGet: vi.fn(),
   metaData: {} as Record<string, unknown>,
+  updateHealthSyncState: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -59,6 +60,10 @@ vi.mock('./queue/pending-disconnect-release', () => ({
 
 vi.mock('./queue/sync-route-eligibility', () => ({
   releaseQueueItemsDeferredForRouteRestore: hoisted.releaseQueueItemsDeferredForRouteRestore,
+}));
+
+vi.mock('./health/writer', () => ({
+  updateHealthSyncState: hoisted.updateHealthSyncState,
 }));
 
 vi.mock('./service-token-store', () => ({
@@ -214,6 +219,65 @@ describe('service-connection-meta', () => {
         requiredConnectionState: 'reconnect_required',
       }),
     );
+  });
+
+  it('mirrors COROS terminal auth and reconnect transitions to Health state', async () => {
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({
+        requiredDocumentFieldValues: expect.objectContaining({
+          expectedFields: {
+            connectionState: 'reconnect_required',
+            connectionStateGeneration: expect.any(String),
+          },
+        }),
+      }),
+    );
+
+    hoisted.updateHealthSyncState.mockClear();
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'coros-account',
+    )).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      {
+        status: 'ready',
+        lastErrorCode: null,
+      },
+      expect.any(Number),
+      expect.objectContaining({
+        requiredDocumentFieldValues: expect.objectContaining({
+          expectedFields: {
+            connectionState: 'connected',
+            connectionStateGeneration: expect.any(String),
+          },
+        }),
+      }),
+    );
+  });
+
+  it('does not create Health lifecycle state for providers outside this integration', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
   it('pins the retained provider account while marking reconnect-required', async () => {

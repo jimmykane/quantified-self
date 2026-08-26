@@ -12,6 +12,9 @@ const {
   mockGetUserDeletionGuardStateInTransaction,
   mockRunTransaction,
   mockFieldValueDelete,
+  mockUpdateHealthSyncState,
+  mockTokenRootGet,
+  mockTokenRootRef,
 } = vi.hoisted(() => {
   const mockOnDocumentDeleted = vi.fn((_options: unknown, handler: unknown) => handler);
   const mockMetaGet = vi.fn();
@@ -23,6 +26,8 @@ const {
     shouldSkip: false,
   });
   const mockRunTransaction = vi.fn();
+  const mockTokenRootGet = vi.fn();
+  const mockTokenRootRef = { __mockType: 'tokenRoot' };
 
   const mockCollection = vi.fn((collectionName: string) => {
     if (collectionName !== 'users') {
@@ -73,6 +78,9 @@ const {
     mockGetUserDeletionGuardStateInTransaction,
     mockRunTransaction,
     mockFieldValueDelete: vi.fn(() => 'DELETE_SENTINEL'),
+    mockUpdateHealthSyncState: vi.fn().mockResolvedValue(true),
+    mockTokenRootGet,
+    mockTokenRootRef,
   };
 });
 
@@ -110,6 +118,14 @@ vi.mock('../shared/user-deletion-guard', () => ({
   },
 }));
 
+vi.mock('../health/writer', () => ({
+  updateHealthSyncState: mockUpdateHealthSyncState,
+}));
+
+vi.mock('../service-token-store', () => ({
+  getServiceTokenRootDocumentRef: vi.fn(() => mockTokenRootRef),
+}));
+
 import {
   disableActivitySyncRoutesOnCOROSTokenRootDelete,
   disableActivitySyncRoutesOnGarminTokenRootDelete,
@@ -129,9 +145,11 @@ describe('activity-sync/disconnect-routes', () => {
       set: typeof mockSettingsSet;
     }) => unknown) => runner({
       get: vi.fn((ref: { __mockType?: string; serviceName?: string }) => (
-        ref?.__mockType === 'meta'
-          ? mockMetaGet(ref.serviceName)
-          : mockSettingsGet(ref)
+        ref?.__mockType === 'tokenRoot'
+          ? mockTokenRootGet()
+          : ref?.__mockType === 'meta'
+            ? mockMetaGet(ref.serviceName)
+            : mockSettingsGet(ref)
       )),
       set: mockSettingsSet,
     }));
@@ -139,7 +157,12 @@ describe('activity-sync/disconnect-routes', () => {
       data: () => ({}),
     });
     mockMetaGet.mockResolvedValue({
+      exists: false,
       data: () => ({}),
+    });
+    mockTokenRootGet.mockResolvedValue({
+      exists: false,
+      data: () => undefined,
     });
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
@@ -217,6 +240,7 @@ describe('activity-sync/disconnect-routes', () => {
   it('disables every COROS activity-sync route when COROS token root is deleted', async () => {
     await (disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
       params: { uid: 'user-1' },
+      time: '2026-04-28T12:34:56.789Z',
     });
 
     expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
@@ -245,6 +269,87 @@ describe('activity-sync/disconnect-routes', () => {
         },
       },
     }, { merge: true });
+    expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      { status: 'disconnected', lastErrorCode: null },
+      Date.parse('2026-04-28T12:34:56.789Z'),
+      {
+        requiredMissingDocumentRef: mockTokenRootRef,
+        updateWhenDocumentFieldEquals: {
+          documentRef: expect.objectContaining({
+            __mockType: 'meta',
+            serviceName: ServiceNames.COROSAPI,
+          }),
+          field: 'connectionState',
+          expectedValue: 'reconnect_required',
+          updateValue: {
+            status: 'reconnect_required',
+            lastErrorCode: 'provider_auth_reconnect_required',
+          },
+        },
+      },
+    );
+  });
+
+  it('preserves reconnect-required Health state after terminal auth deletes the COROS token root', async () => {
+    await (disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
+      params: { uid: 'user-1' },
+      time: '2026-04-28T12:34:56.789Z',
+    });
+
+    expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      { status: 'disconnected', lastErrorCode: null },
+      Date.parse('2026-04-28T12:34:56.789Z'),
+      {
+        requiredMissingDocumentRef: mockTokenRootRef,
+        updateWhenDocumentFieldEquals: {
+          documentRef: expect.objectContaining({
+            __mockType: 'meta',
+            serviceName: ServiceNames.COROSAPI,
+          }),
+          field: 'connectionState',
+          expectedValue: 'reconnect_required',
+          updateValue: {
+            status: 'reconnect_required',
+            lastErrorCode: 'provider_auth_reconnect_required',
+          },
+        },
+      },
+    );
+  });
+
+  it('ignores a delayed COROS token-root delete after the provider reconnects', async () => {
+    mockTokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ reconnected: true }),
+    });
+
+    await (disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
+      params: { uid: 'user-1' },
+    });
+
+    expect(mockSettingsSet).not.toHaveBeenCalled();
+    expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      { status: 'disconnected', lastErrorCode: null },
+      expect.any(Number),
+      {
+        requiredMissingDocumentRef: mockTokenRootRef,
+        updateWhenDocumentFieldEquals: {
+          documentRef: expect.any(Object),
+          field: 'connectionState',
+          expectedValue: 'reconnect_required',
+          updateValue: {
+            status: 'reconnect_required',
+            lastErrorCode: 'provider_auth_reconnect_required',
+          },
+        },
+      },
+    );
   });
 
   it('disables every Wahoo activity-sync route when Wahoo token root is deleted', async () => {

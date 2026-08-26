@@ -4,6 +4,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  HEALTH_PROVIDERS,
+  HEALTH_SYNC_STATUSES,
+  HealthSyncStatus,
+} from '../../shared/health';
+import {
   isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
   ServiceConnectionMetaFields,
@@ -39,6 +44,7 @@ import {
   isServiceDisconnectPendingData,
   type ServiceDisconnectLifecycleGuard,
 } from './service-disconnect-pending-state';
+import { updateHealthSyncState } from './health/writer';
 
 export const WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD = 3;
 const WAHOO_OPAQUE_REFRESH_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -52,6 +58,38 @@ export interface WahooOpaqueRefreshFailureOutcome {
   retryAt: number | null;
   reconnectRequired: boolean;
   stale: boolean;
+}
+
+async function updateCOROSHealthLifecycleState(
+  userID: string,
+  status: HealthSyncStatus,
+  lastErrorCode: string | null,
+  transitionAtMs: number,
+  connectionState: ServiceConnectionMetaFields['connectionState'],
+  connectionStateGeneration: string,
+): Promise<void> {
+  try {
+    await updateHealthSyncState(userID, HEALTH_PROVIDERS.COROSAPI, {
+      status,
+      lastErrorCode,
+    }, transitionAtMs, {
+      requiredDocumentFieldValues: {
+        documentRef: serviceMetaRef(admin.firestore(), userID, ServiceNames.COROSAPI),
+        expectedFields: {
+          connectionState,
+          connectionStateGeneration,
+        },
+      },
+    });
+  } catch (error) {
+    // Service connection state remains authoritative and must not be rolled
+    // back after a successful guarded transition. The next COROS poll also
+    // repairs Health state, while this log keeps partial lifecycle writes visible.
+    logger.error(
+      `[ServiceConnectionMeta] Failed to update COROS Health lifecycle state for user ${userID}.`,
+      error,
+    );
+  }
 }
 
 /** The current refresh owner proves an opaque response still applies to this account. */
@@ -753,6 +791,17 @@ export async function markServiceReconnectRequired(
     return false;
   }
 
+  if (serviceName === ServiceNames.COROSAPI) {
+    await updateCOROSHealthLifecycleState(
+      userID,
+      HEALTH_SYNC_STATUSES.ReconnectRequired,
+      'provider_auth_reconnect_required',
+      nowMs,
+      SERVICE_CONNECTION_STATES.ReconnectRequired,
+      connectionStateGeneration,
+    );
+  }
+
   try {
     await disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
       trackPendingDisconnectRestore: true,
@@ -949,6 +998,17 @@ export async function markServiceConnected(
   }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration);
   if (!didWrite) {
     return didWrite;
+  }
+
+  if (serviceName === ServiceNames.COROSAPI) {
+    await updateCOROSHealthLifecycleState(
+      userID,
+      HEALTH_SYNC_STATUSES.Ready,
+      null,
+      nowMs,
+      SERVICE_CONNECTION_STATES.Connected,
+      connectionStateGeneration,
+    );
   }
 
   if (serviceName === ServiceNames.WahooAPI) {

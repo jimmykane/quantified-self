@@ -650,12 +650,12 @@ export const backfillCorosAPISleep = onCall({
 
     const userID = request.auth.uid;
     if (!(await hasProAccess(userID))) {
-        logger.warn(`[SleepBackfill] Blocking COROS sleep backfill for non-pro user ${userID}`);
+        logger.warn(`[SleepBackfill] Blocking COROS Sleep and Health backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }
 
     if (!isSleepProviderEnabled(SLEEP_PROVIDERS.COROSAPI)) {
-        throw new HttpsError('failed-precondition', 'COROS sleep sync is disabled.');
+        throw new HttpsError('failed-precondition', 'COROS Sleep and Health sync is disabled.');
     }
 
     if (!isSleepSyncUserAllowed(userID)) {
@@ -663,7 +663,7 @@ export const backfillCorosAPISleep = onCall({
     }
 
     if (await isServiceUnavailableForSyncForUser(userID, ServiceNames.COROSAPI)) {
-        throw new HttpsError('failed-precondition', 'COROS is unavailable for sleep sync. Reconnect COROS and try again.');
+        throw new HttpsError('failed-precondition', 'COROS is unavailable for Sleep and Health sync. Reconnect COROS and try again.');
     }
 
     const nowMs = Date.now();
@@ -695,7 +695,7 @@ export const backfillCorosAPISleep = onCall({
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : `${error}`;
-        logger.error(`[SleepBackfill] Failed after queueing ${queued} COROS sleep windows for ${userID}`, error);
+        logger.error(`[SleepBackfill] Failed after queueing ${queued} COROS Sleep and Health windows for ${userID}`, error);
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueuedAtMs: null,
@@ -703,7 +703,7 @@ export const backfillCorosAPISleep = onCall({
             nextBackfillAllowedAtMs: null,
             lastError: message,
         }, Date.now());
-        throw new HttpsError('internal', 'Could not queue COROS sleep backfill.');
+        throw new HttpsError('internal', 'Could not queue COROS Sleep and Health backfill.');
     }
 
     await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
@@ -716,7 +716,7 @@ export const backfillCorosAPISleep = onCall({
         lastError: null,
     }, nowMs);
 
-    logger.info(`[SleepBackfill] Queued ${queued} COROS sleep windows for ${userID}`);
+    logger.info(`[SleepBackfill] Queued ${queued} COROS Sleep and Health windows for ${userID}`);
 
     return {
         queued,

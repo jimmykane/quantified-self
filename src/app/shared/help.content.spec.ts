@@ -834,8 +834,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, Suunto, or Wahoo turns off related automatic activity or route delivery');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
-    expect(serviceConnectionsSection?.content).toContain('automatically importing daily sleep summaries from a rolling recent window');
-    expect(serviceConnectionsSection?.content).toContain('importing available COROS sleep history from the last three months');
+    expect(serviceConnectionsSection?.content).toContain('automatically importing daily Health and sleep data from a rolling recent window');
+    expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
     expect(serviceConnectionsSection?.content).toContain('the COROS API does not expose sleep stages');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
@@ -844,9 +844,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
     expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
-    expect(serviceConnectionsSection?.content).toContain('select **Sleep history** in Connections');
+    expect(serviceConnectionsSection?.content).toContain('select **Sleep & Health history**');
     expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
-    expect(serviceConnectionsSection?.content).toContain('COROS can import the available last three months');
+    expect(serviceConnectionsSection?.content).toContain('Import Sleep & Health History');
+    expect(serviceConnectionsSection?.content).toContain('available detailed HRV samples in the unified Health model');
+    expect(serviceConnectionsSection?.content).toContain('import the available last three months');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');

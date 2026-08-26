@@ -1,8 +1,8 @@
 # Unified Health Data Foundation
 
-This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics.
+This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path on this foundation.
 
-Provider-specific mapping remains in issues #611–#613. The Health Hub product surface remains in #614. This foundation does not start provider ingestion, backfill existing data, or change the current Sleep, Training, MCP, or activity pipelines by itself.
+Garmin and Suunto provider mapping remains in issues #612–#613. The Health Hub product surface remains in #614. COROS ingestion does not make provider-specific Health records part of the existing MCP, Training, or activity contracts; aggregate COROS sleep values continue through normalized Sleep.
 
 ## Goals
 
@@ -16,7 +16,7 @@ Provider-specific mapping remains in issues #611–#613. The Health Hub product 
 
 ## Non-goals
 
-- No Garmin, Suunto, COROS, or Wahoo health adapter is wired in this issue.
+- No Garmin, Suunto, or Wahoo health adapter is wired yet; the current provider adapter is COROS daily data only.
 - No cross-provider deduplication, ranking, or source-preference policy is applied.
 - No medical interpretation or diagnosis is produced.
 - No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
@@ -26,7 +26,7 @@ Provider-specific mapping remains in issues #611–#613. The Health Hub product 
 ## Architecture
 
 ```text
-provider adapter (#611–#613)
+provider adapter (#611–#613; COROS active)
         │
         ├─ exact provider/native semantics
         ├─ canonical conversion only when defensible
@@ -61,6 +61,27 @@ The shared implementation is split intentionally:
 - `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
 - `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
 - `src/app/services/app.health.service.ts` provides the default direct listener and explicit callable alternative.
+
+## Current provider coverage
+
+COROS daily data uses the existing `coros_poll` Sleep queue, token resolution, rolling seven-day scheduler, and three-month history replay. There is no COROS daily webhook. A successful queue item writes its lifecycle-guarded normalized Sleep sessions first, then guarded Health replacements, then both sync-state documents; it is not acknowledged until every required write completes. Each Sleep/Health write and the final Health ready transition requires the same token document and the captured provider account, connection state, and connection generation to remain current. Retries remain idempotent because the provider calendar date is the daily source identity and recognized content is hashed into the revision token.
+
+| COROS field | Unified Health representation | Normalization decision |
+| --- | --- | --- |
+| `step` | `steps`, daily total | Canonical count |
+| `calorie` | `total_energy`, daily total | Native-only `calorie`; no kcal conversion is asserted |
+| `rhr` | `resting_heart_rate`, daily resting value | Canonical bpm; references the compatibility value on normalized Sleep when that session exists |
+| `ppgHrv` | `heart_rate_variability`, overnight average | Canonical ms; references the normalized Sleep aggregate when that session exists |
+| `sleepAvgHr` | `heart_rate`, sleep average | Canonical bpm; references the normalized Sleep aggregate when that session exists |
+| valid sleep interval | `sleep_duration` | Typed reference to `sleepSessions.durationSeconds` |
+| `hrvList[].hrv` | detailed `heart_rate_variability` sample series | Canonical ms, semantic variant `overnight_interval` |
+| optional `hrvList[].hr` | detailed `heart_rate` sample series | Canonical bpm, semantic variant `hrv_interval_mean` |
+
+New COROS responses do not duplicate detailed HRV in `sleepSessions.hrvSamples`; recoverable legacy copies remain until the guarded migration safely moves and cleans them. Sleep retains aggregate vitals needed by existing Sleep views and readiness. Missing fields stay absent, daily and series coverage remains `unknown` because the API does not state completeness, and conflicting provider observations remain source-aware.
+
+The adapter bounds the decoded response to 4 MiB, accepts at most 30 daily rows per provider request, and accepts at most 1,440 detailed HRV points per daily row before shared validation and chunking. The source interval covers the provider wake date plus at most the preceding 24 hours needed by bounded overnight samples. Persisted account IDs, source keys, and revision tokens remain opaque through the shared writer.
+
+COROS connect and terminal-auth transitions mirror safe `ready` or `reconnect_required` Health sync state only while the exact service-connection generation remains current. Token-root deletion updates Health only while that root remains absent and atomically preserves `reconnect_required` when current service metadata owns that state. Imported Health and Sleep history is retained. Recursive account deletion removes the user-owned source records, sample chunks, sync state, Sleep sessions, and operational queues.
 
 ## Stable metric catalog
 

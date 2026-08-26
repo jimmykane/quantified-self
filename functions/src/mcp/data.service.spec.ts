@@ -6165,7 +6165,10 @@ describe('MCP data service', () => {
 
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
-      sleepDocument(),
+      sleepDocument({
+        healthSourceRecords: [{ source: { accountKey: 'private-health-account' } }],
+        healthSampleChunks: [{ nativeMetric: 'hrvList.hrv', nativeValues: [123] }],
+      }),
     ]);
 
     const result = await createMcpDataService(dependencies).listSleepSessions({
@@ -6201,6 +6204,9 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('spo2Samples');
     expect(JSON.stringify(result)).not.toContain('respirationSamples');
     expect(JSON.stringify(result)).not.toContain('stages');
+    expect(JSON.stringify(result)).not.toContain('healthSourceRecords');
+    expect(JSON.stringify(result)).not.toContain('healthSampleChunks');
+    expect(JSON.stringify(result)).not.toContain('hrvList.hrv');
   });
 
   it('discovers only recorded aggregate sleep vitals without source or sample data', async () => {
