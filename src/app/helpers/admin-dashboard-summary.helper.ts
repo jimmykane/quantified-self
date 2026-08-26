@@ -89,6 +89,7 @@ interface QueueRowBase {
 }
 
 const EMPTY_CHIPS: string[] = [];
+const AUTH_ACTIVITY_BASIS = 'Sign-in or token refresh';
 
 export function buildAdminDashboardUserKpiCards(
     stats: UserCountStats | null,
@@ -111,8 +112,24 @@ export function buildAdminDashboardUserKpiCards(
     const anyConnectionUsers = connectionStats
         ? distinctConnectedUserCount(connectionStats.serviceUsers, connectionStats.mcpUsers, connectionStats.both)
         : null;
+    const authActivityStats = stats.authActivity;
+    const active24Hours = normalizeOptionalCount(authActivityStats?.last24Hours);
+    const active7Days = normalizeOptionalCount(authActivityStats?.last7Days);
+    const active30Days = normalizeOptionalCount(authActivityStats?.last30Days);
 
     return [
+        ...(authActivityStats ? [
+            numberCard('active-24h', 'Active 24h', 'schedule', active24Hours, undefined, AUTH_ACTIVITY_BASIS),
+            numberCard(
+                'active-7d',
+                'Active 7d',
+                'date_range',
+                active7Days,
+                undefined,
+                authActivity7DaySubtitle(active7Days, active30Days)
+            ),
+            numberCard('active-30d', 'Active 30d', 'calendar_view_month', active30Days, undefined, AUTH_ACTIVITY_BASIS),
+        ] : []),
         numberCard('total-users', 'Total Users', 'people', stats.total),
         numberCard('pro-users', 'Pro Users', 'verified', stats.pro, 'ok'),
         numberCard('basic-users', 'Basic Users', 'person_outline', stats.basic),
@@ -496,6 +513,15 @@ function connectedUserShareSubtitle(
 
     const share = Math.round((connectedUsers / normalizedTotalUsers) * 100);
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
+}
+
+function authActivity7DaySubtitle(active7Days: number | null, active30Days: number | null): string {
+    if (active7Days === null || active30Days === null || active30Days <= 0) {
+        return AUTH_ACTIVITY_BASIS;
+    }
+
+    const share = Math.min(100, Math.max(0, Math.round((active7Days / active30Days) * 100)));
+    return `${AUTH_ACTIVITY_BASIS} · ${share}% of 30-day active`;
 }
 
 function distinctConnectedUserCount(

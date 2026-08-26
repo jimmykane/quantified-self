@@ -32,6 +32,12 @@ describe('admin-dashboard-summary helper', () => {
                 both: 9,
                 providers: { Garmin: 30, Suunto: 12, COROS: 8, Wahoo: 5 },
             },
+            authActivity: {
+                last24Hours: 12,
+                last7Days: 40,
+                last30Days: 50,
+                computedAt: '2026-06-01T10:05:00.000Z',
+            },
         };
 
         const cards = buildAdminDashboardUserKpiCards(
@@ -58,6 +64,18 @@ describe('admin-dashboard-summary helper', () => {
             }
         );
 
+        expect(cards.slice(0, 3).map(card => card.id)).toEqual(['active-24h', 'active-7d', 'active-30d']);
+        expect(cards.find(card => card.id === 'active-24h')).toMatchObject({
+            value: 12,
+            subtitle: 'Sign-in or token refresh',
+            severity: undefined,
+        });
+        expect(cards.find(card => card.id === 'active-7d')).toMatchObject({
+            value: 40,
+            subtitle: 'Sign-in or token refresh · 80% of 30-day active',
+            severity: undefined,
+        });
+        expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
         expect(cards.find(card => card.id === 'total-users')?.value).toBe(120);
         expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
         expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
@@ -99,6 +117,36 @@ describe('admin-dashboard-summary helper', () => {
 
         expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
+        expect(cards.some(card => card.id.startsWith('active-'))).toBe(false);
+    });
+
+    it('omits the activity ratio when the 30-day denominator is zero', () => {
+        const stats: UserCountStats = {
+            total: 1,
+            pro: 0,
+            basic: 0,
+            free: 1,
+            monthlyPaid: 0,
+            yearlyPaid: 0,
+            everPaid: 0,
+            canceled: 0,
+            cancelScheduled: 0,
+            onboardingCompleted: 1,
+            providers: {},
+            events: { total: 0 },
+            routes: { total: 0 },
+            authActivity: {
+                last24Hours: null,
+                last7Days: 0,
+                last30Days: 0,
+                computedAt: null,
+            },
+        };
+
+        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+
+        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or token refresh');
     });
 
     it('does not present unavailable connection counts as successful or zero', () => {

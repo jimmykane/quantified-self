@@ -69,6 +69,12 @@ describe('AdminDashboardComponent', () => {
             both: 12,
             providers: { Garmin: 35, Suunto: 15, COROS: 10, Wahoo: 5 },
         },
+        authActivity: {
+            last24Hours: 14,
+            last7Days: 42,
+            last30Days: 60,
+            computedAt: '2026-06-01T10:05:00.000Z',
+        },
     };
 
     const mockGrowthTrend: UserGrowthTrendResponse = {
@@ -266,6 +272,11 @@ describe('AdminDashboardComponent', () => {
         createComponent();
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
+        expect(text).toContain('Active 24h');
+        expect(text).toContain('Active 7d');
+        expect(text).toContain('Active 30d');
+        expect(text).toContain('70% of 30-day active');
+        expect(text).toContain('enabled, non-admin accounts');
         expect(text).toContain('Total Users');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');

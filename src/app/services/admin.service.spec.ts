@@ -113,6 +113,12 @@ describe('AdminService', () => {
                 computedAt: '2026-08-07T13:00:00.000Z',
                 expireAt: '2026-08-07T14:00:00.000Z',
             },
+            authActivity: {
+                last24Hours: 14,
+                last7Days: 42,
+                last30Days: 60,
+                computedAt: '2026-08-07T13:15:00.000Z',
+            },
             providers: {}
         };
         functionsServiceMock.call.mockResolvedValue({ data: mockData });
@@ -136,6 +142,31 @@ describe('AdminService', () => {
 
         expect(stats.events).toEqual({ total: null });
         expect(stats.routes).toEqual({ total: null });
+        expect(stats.authActivity).toBeUndefined();
+    });
+
+    it('should normalize malformed authentication activity counts', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                providers: {},
+                authActivity: {
+                    last24Hours: 4.9,
+                    last7Days: -2,
+                    last30Days: Number.NaN,
+                    computedAt: 'not-a-date',
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.authActivity).toEqual({
+            last24Hours: 4,
+            last7Days: 0,
+            last30Days: null,
+            computedAt: null,
+        });
     });
 
     it('should request a forced event count refresh when asked', async () => {

@@ -35,6 +35,13 @@ export interface ConnectionCountStats {
     expireAt?: string | null;
 }
 
+export interface AuthActivityStats {
+    last24Hours: number;
+    last7Days: number;
+    last30Days: number;
+    computedAt: string;
+}
+
 export interface UserCountRequest {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -100,6 +107,7 @@ export interface UserCountResponse {
     events: EventCountStats;
     routes: RouteCountStats;
     connections: ConnectionCountStats;
+    authActivity: AuthActivityStats;
     providers: Record<string, number>;
 }
 

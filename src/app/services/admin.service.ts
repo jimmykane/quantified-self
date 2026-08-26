@@ -30,6 +30,13 @@ export interface ConnectionCountStats {
     expireAt?: string | null;
 }
 
+export interface AuthActivityStats {
+    last24Hours: number | null;
+    last7Days: number | null;
+    last30Days: number | null;
+    computedAt: string | null;
+}
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -99,6 +106,7 @@ export interface UserCountStats {
     events: EventCountStats;
     routes: RouteCountStats;
     connections?: ConnectionCountStats;
+    authActivity?: AuthActivityStats;
 }
 
 interface UserCountFunctionResponse {
@@ -117,6 +125,7 @@ interface UserCountFunctionResponse {
     events?: Partial<EventCountStats>;
     routes?: Partial<RouteCountStats>;
     connections?: Partial<ConnectionCountStats>;
+    authActivity?: Partial<AuthActivityStats>;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -275,6 +284,9 @@ export class AdminService {
                     ...(result.data.connections ? {
                         connections: this.mapConnectionCountStats(result.data.connections),
                     } : {}),
+                    ...(result.data.authActivity && typeof result.data.authActivity === 'object' ? {
+                        authActivity: this.mapAuthActivityStats(result.data.authActivity),
+                    } : {}),
                 };
             })
         );
@@ -330,6 +342,24 @@ export class AdminService {
             mapped.expireAt = stats.expireAt ?? null;
         }
         return mapped;
+    }
+
+    private mapAuthActivityStats(stats: Partial<AuthActivityStats>): AuthActivityStats {
+        const mapCount = (value: unknown): number | null => (
+            typeof value === 'number' && Number.isFinite(value)
+                ? Math.max(0, Math.floor(value))
+                : null
+        );
+        const computedAt = typeof stats.computedAt === 'string' && !Number.isNaN(Date.parse(stats.computedAt))
+            ? stats.computedAt
+            : null;
+
+        return {
+            last24Hours: mapCount(stats.last24Hours),
+            last7Days: mapCount(stats.last7Days),
+            last30Days: mapCount(stats.last30Days),
+            computedAt,
+        };
     }
 
     getSubscriptionHistoryTrend(months = 12): Observable<SubscriptionHistoryTrendResponse> {

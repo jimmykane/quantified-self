@@ -24,6 +24,7 @@ import {
     type McpConnection,
 } from '../../mcp/oauth.service';
 import {
+    AuthActivityStats,
     BasicUser,
     ConnectionCountStats,
     CountStats,
@@ -38,6 +39,11 @@ const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
 const ADMIN_ROUTE_COUNTS_DOC = 'routeCounts';
 const ADMIN_CONNECTION_COUNTS_DOC = 'connectionCounts';
 const GLOBAL_COLLECTION_COUNT_CACHE_TTL_MS = 60 * 60 * 1000;
+const AUTH_ACTIVITY_WINDOW_MS = {
+    last24Hours: 24 * 60 * 60 * 1000,
+    last7Days: 7 * 24 * 60 * 60 * 1000,
+    last30Days: 30 * 24 * 60 * 60 * 1000,
+} as const;
 const PAID_LIFECYCLE_SUBSCRIPTION_STATUSES = [...ACTIVE_SUBSCRIPTION_STATUSES, 'canceled', 'unpaid'] as const;
 const PAID_LIFECYCLE_SUBSCRIPTION_STATUS_SET = new Set<string>(PAID_LIFECYCLE_SUBSCRIPTION_STATUSES);
 const PAID_SUBSCRIPTION_ROLE_SET = new Set<string>([SUBSCRIPTION_ROLE_PRO, SUBSCRIPTION_ROLE_BASIC]);
@@ -64,6 +70,15 @@ interface ActiveMcpConnectionCandidate {
     clientId: string;
     supersedesLegacy: boolean;
     active: boolean;
+}
+
+interface AuthActivityUserRecord {
+    disabled?: boolean;
+    customClaims?: Record<string, unknown>;
+    metadata?: {
+        lastSignInTime?: unknown;
+        lastRefreshTime?: unknown;
+    };
 }
 
 interface SubscriptionOwnerDocSnapshot {
@@ -113,6 +128,35 @@ function normalizeCount(value: unknown): number {
     }
 
     return Math.max(0, Math.floor(value));
+}
+
+function recordAuthActivity(
+    stats: AuthActivityStats,
+    userRecord: AuthActivityUserRecord,
+    computedAtMs: number,
+): void {
+    if (userRecord.disabled === true || userRecord.customClaims?.admin === true) {
+        return;
+    }
+
+    const activityTimes = [
+        toEpochMillis(userRecord.metadata?.lastSignInTime),
+        toEpochMillis(userRecord.metadata?.lastRefreshTime),
+    ].filter((value): value is number => value !== null && value <= computedAtMs);
+    if (activityTimes.length === 0) {
+        return;
+    }
+
+    const latestActivityMs = Math.max(...activityTimes);
+    if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last24Hours) {
+        stats.last24Hours += 1;
+    }
+    if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last7Days) {
+        stats.last7Days += 1;
+    }
+    if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last30Days) {
+        stats.last30Days += 1;
+    }
 }
 
 function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | null {
@@ -873,13 +917,22 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             });
         }
 
-        // 2. Get provider breakdown from Firebase Auth
+        // 2. Get provider and recent authentication activity breakdowns from Firebase Auth.
         const providerCounts: Record<string, number> = {};
+        const authActivityComputedAt = new Date();
+        const authActivityComputedAtMs = authActivityComputedAt.getTime();
+        const authActivity: AuthActivityStats = {
+            last24Hours: 0,
+            last7Days: 0,
+            last30Days: 0,
+            computedAt: authActivityComputedAt.toISOString(),
+        };
         let nextPageToken: string | undefined;
 
         do {
             const listResult = await admin.auth().listUsers(1000, nextPageToken);
             listResult.users.forEach(userRecord => {
+                recordAuthActivity(authActivity, userRecord, authActivityComputedAtMs);
                 const providers = userRecord.providerData.map(p => p.providerId);
                 if (providers.length === 0) {
                     providerCounts['password'] = (providerCounts['password'] || 0) + 1;
@@ -907,6 +960,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             events: eventStats,
             routes: routeStats,
             connections: connectionStats,
+            authActivity,
             providers: providerCounts
         };
     } catch (error: unknown) {
