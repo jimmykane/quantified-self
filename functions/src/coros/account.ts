@@ -11,6 +11,7 @@ import { getServiceConnectionMeta, pinServiceConnectionProviderUserIdIfUnset } f
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { containsASCIIControlCharacter } from './input-validation';
+import { doesOAuthCredentialGenerationAuthorizeToken } from '../token-refresh-coordinator';
 
 type COROSTokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 const MAX_COROS_OPEN_ID_LENGTH = 200;
@@ -59,6 +60,18 @@ function snapshotMatchesOpenId(snapshot: COROSTokenSnapshot, openId: string): bo
   return snapshot.id === openId && (!hasTokenOpenId || tokenOpenId === openId);
 }
 
+function tokenMatchesRootCredentialGeneration(
+  tokenRootSnapshot: admin.firestore.DocumentSnapshot,
+  tokenSnapshot: COROSTokenSnapshot,
+): boolean {
+  return tokenSnapshot.exists && doesOAuthCredentialGenerationAuthorizeToken(
+    tokenRootSnapshot.exists
+      ? tokenRootSnapshot.data() as Record<string, unknown> | undefined
+      : null,
+    tokenSnapshot.data()?.tokenCredentialGeneration,
+  );
+}
+
 /**
  * Revalidates the pinned COROS account in the same transaction that persists
  * downstream work. This prevents a reconnect or disconnect from racing a
@@ -75,13 +88,14 @@ export async function assertActiveCOROSAccountInTransaction(
   }
 
   const db = admin.firestore();
+  const tokenRootRef = db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(userID);
   const connectionMetaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.COROSAPI);
-  const tokenRef = db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
+  const tokenRef = tokenRootRef
     .collection('tokens')
     .doc(expectedOpenId);
-  const [connectionMetaSnapshot, tokenSnapshot] = await Promise.all([
+  const [connectionMetaSnapshot, tokenRootSnapshot, tokenSnapshot] = await Promise.all([
     transaction.get(connectionMetaRef),
+    transaction.get(tokenRootRef),
     transaction.get(tokenRef),
   ]);
   const connectionMeta = connectionMetaSnapshot.data() as Record<string, unknown> | undefined;
@@ -89,6 +103,7 @@ export async function assertActiveCOROSAccountInTransaction(
   if (isServiceUnavailableForSyncConnection(connectionMeta)
     || pinnedOpenId !== expectedOpenId
     || !tokenSnapshot.exists
+    || !tokenMatchesRootCredentialGeneration(tokenRootSnapshot, tokenSnapshot)
     || !snapshotMatchesOpenId(tokenSnapshot, expectedOpenId)) {
     throw new HttpsError('unauthenticated', 'The selected COROS account changed before data could be saved.');
   }
@@ -102,11 +117,17 @@ export async function getActiveCOROSTokenSnapshot(
   userID: string,
   expectedProviderUserId?: string,
 ): Promise<COROSTokenSnapshot> {
-  const tokenCollection = admin.firestore()
+  const tokenRootRef = admin.firestore()
     .collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens');
-  const connectionMeta = await getServiceConnectionMeta(userID, ServiceNames.COROSAPI);
+    .doc(userID);
+  const tokenCollection = tokenRootRef.collection('tokens');
+  const [connectionMeta, tokenRootSnapshot] = await Promise.all([
+    getServiceConnectionMeta(userID, ServiceNames.COROSAPI),
+    tokenRootRef.get(),
+  ]);
+  if (!tokenRootSnapshot.exists) {
+    throw new HttpsError('unauthenticated', 'Connect COROS before sending data.');
+  }
   if (isDisconnectPendingServiceConnection(connectionMeta)) {
     throw new ProviderPendingDisconnectError(userID, ServiceNames.COROSAPI, 'active_account_lookup');
   }
@@ -132,7 +153,9 @@ export async function getActiveCOROSTokenSnapshot(
 
   if (pinnedOpenId) {
     const pinnedSnapshot = await tokenCollection.doc(pinnedOpenId).get();
-    if (!pinnedSnapshot.exists || !snapshotMatchesOpenId(pinnedSnapshot, pinnedOpenId)) {
+    if (!pinnedSnapshot.exists
+      || !snapshotMatchesOpenId(pinnedSnapshot, pinnedOpenId)
+      || !tokenMatchesRootCredentialGeneration(tokenRootSnapshot, pinnedSnapshot)) {
       throw new HttpsError('unauthenticated', 'Reconnect COROS before sending data.');
     }
     return assertExpectedAccount(pinnedSnapshot);
@@ -152,6 +175,9 @@ export async function getActiveCOROSTokenSnapshot(
     throw new HttpsError('unauthenticated', 'Reconnect COROS before sending data.');
   }
   const expectedSnapshot = assertExpectedAccount(selectedSnapshot);
+  if (!tokenMatchesRootCredentialGeneration(tokenRootSnapshot, expectedSnapshot)) {
+    throw new HttpsError('unauthenticated', 'Reconnect COROS before sending data.');
+  }
 
   const pinResult = await pinServiceConnectionProviderUserIdIfUnset(userID, ServiceNames.COROSAPI, selectedOpenId);
   if (pinResult === 'conflict') {

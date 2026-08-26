@@ -39,6 +39,7 @@ function isDeleteTransform(value: unknown): boolean {
 function createInMemoryCoordinator(initialToken: StoredToken) {
   let storedToken = initialToken ? { ...initialToken } : null;
   let tokenRootData: Record<string, unknown> = {};
+  let tokenRootExists = false;
   let deletionInProgress = false;
   const companionWrites: Array<{
     ref: admin.firestore.DocumentReference;
@@ -75,8 +76,8 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
           }
           if (requestedRef === tokenRootRef) {
             return {
-              exists: Object.keys(tokenRootData).length > 0,
-              data: () => ({ ...tokenRootData }),
+              exists: tokenRootExists,
+              data: () => tokenRootExists ? { ...tokenRootData } : undefined,
             };
           }
           return {
@@ -113,6 +114,7 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
       storedToken = nextToken ? { ...nextToken } : null;
     },
     beginExplicitDisconnect: (generation: string, leaseExpiresAt = Date.now() + 60_000) => {
+      tokenRootExists = true;
       tokenRootData = {
         ...tokenRootData,
         disconnectOperationGeneration: generation,
@@ -121,6 +123,10 @@ function createInMemoryCoordinator(initialToken: StoredToken) {
     },
     beginDeletion: () => {
       deletionInProgress = true;
+    },
+    setTokenRoot: (data: Record<string, unknown> | null) => {
+      tokenRootExists = data !== null;
+      tokenRootData = data ? { ...data } : {};
     },
     getCompanionWrites: () => [...companionWrites],
   };
@@ -167,6 +173,54 @@ describe('token refresh coordinator', () => {
     await expect(store.coordinator.claim(store.ref, credential, 1_000))
       .resolves.toEqual({ kind: 'skipped_service_disconnect' });
     expect(store.getStoredToken()).not.toHaveProperty('tokenRefreshLeaseOwner');
+  });
+
+  it('requires an existing COROS token root that authorizes the credential generation', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+
+    await expect(store.coordinator.claim(store.ref, credential, 1_000, {
+      requireActiveOAuthCredentialGeneration: true,
+    })).resolves.toEqual({ kind: 'skipped_service_disconnect' });
+
+    store.setTokenRoot({ activeOAuthCredentialGeneration: 'generation-1' });
+    await expect(store.coordinator.claim(store.ref, credential, 1_000, {
+      requireActiveOAuthCredentialGeneration: true,
+    })).resolves.toMatchObject({ kind: 'owner' });
+  });
+
+  it('permits a legacy generationless child only while its existing root is also generationless', async () => {
+    const store = createInMemoryCoordinator(token({ tokenCredentialGeneration: undefined }));
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    store.setTokenRoot({ serviceName: 'corosAPI' });
+
+    await expect(store.coordinator.claim(store.ref, credential, 1_000, {
+      requireActiveOAuthCredentialGeneration: true,
+    })).resolves.toMatchObject({ kind: 'owner' });
+  });
+
+  it('rejects a COROS refresh result when reconnect advances the root generation', async () => {
+    const store = createInMemoryCoordinator(token());
+    const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
+    store.setTokenRoot({ activeOAuthCredentialGeneration: 'generation-1' });
+    const claim = await store.coordinator.claim(store.ref, credential, Date.now(), {
+      requireActiveOAuthCredentialGeneration: true,
+    });
+    expect(claim.kind).toBe('owner');
+    if (claim.kind !== 'owner') return;
+
+    store.setTokenRoot({ activeOAuthCredentialGeneration: 'generation-2' });
+    await expect(store.coordinator.persist(
+      store.ref,
+      claim.leaseOwner,
+      claim.credential,
+      { accessToken: 'stale-refresh-result' },
+      { requireActiveOAuthCredentialGeneration: true },
+    )).resolves.toMatchObject({ kind: 'superseded' });
+    expect(store.getStoredToken()).toEqual(expect.objectContaining({
+      accessToken: 'access-1',
+      tokenCredentialGeneration: 'generation-1',
+    }));
   });
 
   it('allows only the matching explicit-disconnect owner to claim the fenced token', async () => {

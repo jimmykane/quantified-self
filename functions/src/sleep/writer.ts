@@ -17,6 +17,11 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../utils';
+import {
+    areTokenCredentialSnapshotsEqual,
+    getTokenCredentialSnapshot,
+    type TokenCredentialSnapshot,
+} from '../token-refresh-coordinator';
 
 function userSleepSessionsRef(db: admin.firestore.Firestore, userID: string): admin.firestore.CollectionReference {
     return db
@@ -41,14 +46,21 @@ function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
-export interface SleepSessionWriterDependencies {
-    /** Skip the session write if this provider lifecycle document is absent. */
+export interface SleepLifecycleWriterDependencies {
+    /** Skip the Sleep write if this provider lifecycle document is absent. */
     requiredExistingDocumentRef?: admin.firestore.DocumentReference;
+    /** Require the same in-memory OAuth credential revision at commit time. */
+    requiredExistingTokenCredential?: TokenCredentialSnapshot;
     /** Skip unless the lifecycle authority still has every expected flat field value. */
     requiredDocumentFieldValues?: {
         documentRef: admin.firestore.DocumentReference;
         expectedFields: Readonly<Record<string, unknown>>;
     };
+    /** Additional lifecycle authorities that must still have every expected flat field value. */
+    additionalRequiredDocumentFieldValues?: ReadonlyArray<{
+        documentRef: admin.firestore.DocumentReference;
+        expectedFields: Readonly<Record<string, unknown>>;
+    }>;
 }
 
 export class SleepLifecycleGuardReadError extends Error {
@@ -58,6 +70,79 @@ export class SleepLifecycleGuardReadError extends Error {
     constructor() {
         super('Sleep lifecycle guard could not be read.');
     }
+}
+
+export class SleepLifecycleGuardConfigurationError extends Error {
+    public readonly name = 'SleepLifecycleGuardConfigurationError';
+    public readonly code = 'sleep_lifecycle_guard_invalid';
+
+    constructor() {
+        super('A Sleep token-credential guard requires a document reference.');
+    }
+}
+
+function validateSleepLifecycleWriterDependencies(
+    dependencies: SleepLifecycleWriterDependencies,
+): void {
+    if (dependencies.requiredExistingTokenCredential
+        && !dependencies.requiredExistingDocumentRef) {
+        throw new SleepLifecycleGuardConfigurationError();
+    }
+}
+
+async function getSleepLifecycleGuardSnapshot(
+    transaction: admin.firestore.Transaction,
+    documentRef: admin.firestore.DocumentReference,
+): Promise<admin.firestore.DocumentSnapshot> {
+    try {
+        return await transaction.get(documentRef);
+    } catch {
+        // Provider token document IDs can be raw account identifiers. Do not
+        // propagate datastore paths into queue errors, sync state, or logs.
+        throw new SleepLifecycleGuardReadError();
+    }
+}
+
+async function sleepLifecycleFieldsMatch(
+    transaction: admin.firestore.Transaction,
+    guard: NonNullable<SleepLifecycleWriterDependencies['requiredDocumentFieldValues']>,
+): Promise<boolean> {
+    const snapshot = await getSleepLifecycleGuardSnapshot(transaction, guard.documentRef);
+    const data = snapshot.exists
+        ? snapshot.data() as Record<string, unknown> | undefined
+        : undefined;
+    return Boolean(data) && !Object.entries(guard.expectedFields)
+        .some(([field, expectedValue]) => data?.[field] !== expectedValue);
+}
+
+async function allSleepLifecycleFieldsMatch(
+    transaction: admin.firestore.Transaction,
+    dependencies: SleepLifecycleWriterDependencies,
+): Promise<boolean> {
+    const guards = [
+        ...(dependencies.requiredDocumentFieldValues
+            ? [dependencies.requiredDocumentFieldValues]
+            : []),
+        ...(dependencies.additionalRequiredDocumentFieldValues || []),
+    ];
+    for (const guard of guards) {
+        if (!(await sleepLifecycleFieldsMatch(transaction, guard))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function sleepLifecycleSnapshotMatchesCredential(
+    snapshot: admin.firestore.DocumentSnapshot,
+    expectedCredential: TokenCredentialSnapshot | undefined,
+): boolean {
+    if (!snapshot.exists) return false;
+    if (!expectedCredential) return true;
+    return areTokenCredentialSnapshotsEqual(
+        getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined),
+        expectedCredential,
+    );
 }
 
 async function shouldSkipSleepUserWrite(userID: string, provider: SleepProvider, target: 'session' | 'state'): Promise<boolean> {
@@ -200,13 +285,14 @@ export async function upsertSleepSession(
     userID: string,
     mapperResult: SleepMapperResult,
     nowMs = Date.now(),
-    dependencies: SleepSessionWriterDependencies = {},
+    dependencies: SleepLifecycleWriterDependencies = {},
 ): Promise<{
     id: string;
     session: SleepSession;
     written: boolean;
     lifecycleGuardSkipped?: true;
 }> {
+    validateSleepLifecycleWriterDependencies(dependencies);
     const provider = mapperResult.session.source.provider;
     const id = await buildSleepSessionDocumentId(
         userID,
@@ -228,15 +314,14 @@ export async function upsertSleepSession(
             return { id, session: skippedSession, written: false };
         }
         if (dependencies.requiredExistingDocumentRef) {
-            let lifecycleSnapshot;
-            try {
-                lifecycleSnapshot = await transaction.get(dependencies.requiredExistingDocumentRef);
-            } catch {
-                // Provider token document IDs can be raw account identifiers.
-                // Do not propagate datastore paths into queue errors or logs.
-                throw new SleepLifecycleGuardReadError();
-            }
-            if (!lifecycleSnapshot.exists) {
+            const lifecycleSnapshot = await getSleepLifecycleGuardSnapshot(
+                transaction,
+                dependencies.requiredExistingDocumentRef,
+            );
+            if (!sleepLifecycleSnapshotMatchesCredential(
+                lifecycleSnapshot,
+                dependencies.requiredExistingTokenCredential,
+            )) {
                 return {
                     id,
                     session: skippedSession,
@@ -245,28 +330,13 @@ export async function upsertSleepSession(
                 };
             }
         }
-        if (dependencies.requiredDocumentFieldValues) {
-            let lifecycleSnapshot;
-            try {
-                lifecycleSnapshot = await transaction.get(
-                    dependencies.requiredDocumentFieldValues.documentRef,
-                );
-            } catch {
-                throw new SleepLifecycleGuardReadError();
-            }
-            const lifecycleData = lifecycleSnapshot.exists
-                ? lifecycleSnapshot.data() as Record<string, unknown> | undefined
-                : undefined;
-            if (!lifecycleData || Object.entries(
-                dependencies.requiredDocumentFieldValues.expectedFields,
-            ).some(([field, expectedValue]) => lifecycleData[field] !== expectedValue)) {
-                return {
-                    id,
-                    session: skippedSession,
-                    written: false,
-                    lifecycleGuardSkipped: true as const,
-                };
-            }
+        if (!(await allSleepLifecycleFieldsMatch(transaction, dependencies))) {
+            return {
+                id,
+                session: skippedSession,
+                written: false,
+                lifecycleGuardSkipped: true as const,
+            };
         }
 
         const existing = await transaction.get(docRef);
@@ -300,8 +370,9 @@ export async function upsertSleepSessions(
     userID: string,
     mapperResults: readonly SleepMapperResult[],
     nowMs = Date.now(),
-    dependencies: SleepSessionWriterDependencies = {},
+    dependencies: SleepLifecycleWriterDependencies = {},
 ): Promise<{ written: number; skipped: number; lifecycleGuardSkipped?: true }> {
+    validateSleepLifecycleWriterDependencies(dependencies);
     const provider = mapperResults.find((mapperResult) => mapperResult?.session?.source?.provider)?.session.source.provider;
     if (provider && await shouldSkipSleepUserWrite(userID, provider, 'session')) {
         return {
@@ -354,12 +425,29 @@ export async function updateSleepSyncState(
         lastError: string | null;
     }>,
     nowMs = Date.now(),
-): Promise<void> {
+    dependencies: SleepLifecycleWriterDependencies = {},
+): Promise<boolean> {
+    validateSleepLifecycleWriterDependencies(dependencies);
     const db = admin.firestore();
     const stateRef = userSleepSyncStateRef(db, userID, provider);
-    await db.runTransaction(async (transaction) => {
+    return db.runTransaction(async (transaction) => {
         if (await shouldSkipSleepUserWriteInTransaction(db, transaction, userID, provider, 'state')) {
-            return;
+            return false;
+        }
+        if (dependencies.requiredExistingDocumentRef) {
+            const lifecycleSnapshot = await getSleepLifecycleGuardSnapshot(
+                transaction,
+                dependencies.requiredExistingDocumentRef,
+            );
+            if (!sleepLifecycleSnapshotMatchesCredential(
+                lifecycleSnapshot,
+                dependencies.requiredExistingTokenCredential,
+            )) {
+                return false;
+            }
+        }
+        if (!(await allSleepLifecycleFieldsMatch(transaction, dependencies))) {
+            return false;
         }
         transaction.set(stateRef, cleanUndefined({
             provider,
@@ -367,6 +455,7 @@ export async function updateSleepSyncState(
             ...update,
             updatedAtMs: nowMs,
         }), { merge: true });
+        return true;
     });
 }
 
@@ -375,10 +464,11 @@ export async function markSleepSyncError(
     provider: SleepProvider,
     error: unknown,
     nowMs = Date.now(),
-): Promise<void> {
+    dependencies: SleepLifecycleWriterDependencies = {},
+): Promise<boolean> {
     const message = error instanceof Error ? error.message : `${error}`;
-    await updateSleepSyncState(userID, provider, {
+    return updateSleepSyncState(userID, provider, {
         status: SLEEP_SYNC_STATUSES.Failed,
         lastError: message,
-    }, nowMs);
+    }, nowMs, dependencies);
 }

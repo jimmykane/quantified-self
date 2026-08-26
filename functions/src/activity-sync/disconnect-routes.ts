@@ -11,6 +11,7 @@ import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { disableActivitySyncRoutesForDisconnectedService } from './route-cleanup';
 import { updateHealthSyncState } from '../health/writer';
 import { getServiceTokenRootDocumentRef } from '../service-token-store';
+import { supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete } from '../service-connection-meta';
 
 const REGION = 'europe-west2';
 
@@ -25,6 +26,7 @@ async function updateCOROSHealthStateAfterTokenRootDelete(
   userID: string,
   transitionAtMs: number,
 ): Promise<boolean> {
+  await supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(userID);
   const db = admin.firestore();
   const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.COROSAPI);
   return updateHealthSyncState(userID, HEALTH_PROVIDERS.COROSAPI, {
@@ -32,6 +34,7 @@ async function updateCOROSHealthStateAfterTokenRootDelete(
     lastErrorCode: null,
   }, transitionAtMs, {
     requiredMissingDocumentRef: getServiceTokenRootDocumentRef(userID, ServiceNames.COROSAPI),
+    authoritativeLifecycleTransition: true,
     updateWhenDocumentFieldEquals: {
       documentRef: serviceMetaRef,
       field: 'connectionState',
@@ -89,6 +92,7 @@ export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted({
   document: `${COROSAPI_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,

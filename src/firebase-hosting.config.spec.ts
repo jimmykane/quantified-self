@@ -277,7 +277,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-08-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });
 

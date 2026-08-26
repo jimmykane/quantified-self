@@ -21,6 +21,7 @@ const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 const mockRunTransaction = vi.fn();
 let mockTransactionDocumentData: Record<string, unknown> | undefined;
+let mockTransactionDocumentExists = true;
 const { mockFieldValueDelete } = vi.hoisted(() => ({
     mockFieldValueDelete: vi.fn().mockReturnValue('delete-sentinel'),
 }));
@@ -81,7 +82,7 @@ function installDefaultRunTransactionMock() {
             get: vi.fn(async (target: any) => {
                 if (target === mockDocInstance) {
                     return {
-                        exists: true,
+                        exists: mockTransactionDocumentExists,
                         data: () => mockTransactionDocumentData || {},
                     };
                 }
@@ -120,6 +121,7 @@ function installDefaultRunTransactionMock() {
                     else nextData[key] = value;
                 }
                 mockTransactionDocumentData = nextData;
+                mockTransactionDocumentExists = true;
             }
             if (pendingSet.target && typeof pendingSet.target.set === 'function') {
                 await pendingSet.target.set(pendingSet.data, pendingSet.options);
@@ -313,6 +315,7 @@ vi.mock('simple-oauth2', () => ({
 import {
     getServiceConfig,
     convertAccessTokenResponseToServiceToken,
+    deauthorizeServiceForSubscriptionEnforcement,
     deauthorizeServiceForUser,
     getAndSetServiceOAuth2AccessTokenForUser,
     deleteLocalServiceToken,
@@ -328,6 +331,7 @@ import { clearServiceConnectionState } from './service-connection-meta';
 describe('OAuth2', () => {
     beforeEach(() => {
         mockTransactionDocumentData = undefined;
+        mockTransactionDocumentExists = true;
         mockDelete.mockReset().mockResolvedValue({});
         mockGet.mockReset().mockResolvedValue({
             data: () => ({}),
@@ -680,6 +684,24 @@ describe('OAuth2', () => {
             expect(requestPromise.post).toHaveBeenCalledWith(expect.objectContaining({
                 url: expect.stringContaining('https://open.coros.com/oauth2/deauthorize?token=mock-access')
             }));
+        });
+
+        it('subscription enforcement revokes an inactive COROS child through the guarded stored-token fallback', async () => {
+            const inactiveCredential = new Error('inactive credential') as Error & { reason: string };
+            inactiveCredential.name = 'TokenUseSkippedForPendingDisconnectError';
+            inactiveCredential.reason = 'inactive_oauth_credential';
+            (getTokenData as Mock).mockRejectedValueOnce(inactiveCredential);
+
+            const outcome = await deauthorizeServiceForSubscriptionEnforcement(
+                userID,
+                ServiceNames.COROSAPI,
+            );
+
+            expect(requestPromise.post).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('https://open.coros.com/oauth2/deauthorize?token=mock-access'),
+            }));
+            expect(outcome.partnerDeauthorizeAttempted).toBe(1);
+            expect(outcome.preservedTokenCount).toBe(0);
         });
 
         it('should NOT delete local records if getTokenData fails with 500', async () => {
@@ -1205,6 +1227,23 @@ describe('OAuth2', () => {
 
             expect(result).toContain('https://mock-auth-url.com');
             expect(mockCollection).toHaveBeenCalledWith('COROSAPIAccessTokens');
+        });
+
+        it('fences a legacy COROS token child when OAuth recreates a missing root', async () => {
+            mockTransactionDocumentExists = false;
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.COROSAPI,
+                redirectUri,
+            )).resolves.toContain('https://');
+
+            expect(mockTransactionDocumentData).toEqual(expect.objectContaining({
+                oauthFlowGeneration: expect.any(String),
+                activeOAuthCredentialGeneration: expect.any(String),
+            }));
+            expect(mockTransactionDocumentData?.activeOAuthCredentialGeneration)
+                .toBe(mockTransactionDocumentData?.oauthFlowGeneration);
         });
 
         it('should include PKCE codeVerifier for GarminAPI', async () => {

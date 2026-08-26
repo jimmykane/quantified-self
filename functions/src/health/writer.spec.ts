@@ -146,6 +146,17 @@ function sourceRecordPath(id: string): string {
     return `users/user-1/healthSourceRecords/${id}`;
 }
 
+function tokenCredential(accessToken: string, credentialGeneration: string | null = null) {
+    return {
+        accessToken,
+        refreshToken: '',
+        expiresAt: 0,
+        dateCreated: 0,
+        dateRefreshed: 0,
+        credentialGeneration,
+    };
+}
+
 describe('health writer', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -556,6 +567,78 @@ describe('health writer', () => {
         });
     });
 
+    it('applies an authoritative guarded lifecycle state without regressing sync timestamps', async () => {
+        const fake = fakeDatabase();
+        const serviceMetaRef = fake.db.collection('users')
+            .doc('user-1')
+            .collection('meta')
+            .doc('corosAPI');
+        fake.stored.set(serviceMetaRef.path, {
+            connectionState: 'connected',
+            connectionStateGeneration: 'current-generation',
+        });
+        fake.stored.set('users/user-1/healthSyncState/COROSAPI', {
+            provider: HEALTH_PROVIDERS.COROSAPI,
+            status: HEALTH_SYNC_STATUSES.Failed,
+            lastPollAtMs: 12_000,
+            lastObservedAtMs: 11_000,
+            lastErrorCode: 'stale_failure',
+            updatedAtMs: 13_000,
+        });
+
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+            lastPollAtMs: 10_000,
+            lastErrorCode: null,
+        }, 10_000, {
+            db: fake.db as never,
+            requiredDocumentFieldValues: {
+                documentRef: serviceMetaRef as never,
+                expectedFields: {
+                    connectionState: 'connected',
+                    connectionStateGeneration: 'current-generation',
+                },
+            },
+            authoritativeLifecycleTransition: true,
+        })).resolves.toBe(true);
+
+        expect(fake.sets).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            status: HEALTH_SYNC_STATUSES.Ready,
+            lastErrorCode: null,
+            updatedAtMs: 13_000,
+        }), { merge: true });
+        expect(fake.sets.mock.calls[0][1]).not.toHaveProperty('lastPollAtMs');
+    });
+
+    it('rejects authoritative lifecycle state without a skip-capable guard', async () => {
+        const fake = fakeDatabase();
+
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+            lastErrorCode: null,
+        }, 10_000, {
+            db: fake.db as never,
+            authoritativeLifecycleTransition: true,
+        })).rejects.toThrow('requires a lifecycle guard');
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
+    it('rejects token-credential guards without a document reference', async () => {
+        const fake = fakeDatabase();
+
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+        }, 10_000, {
+            db: fake.db as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token'),
+        })).rejects.toThrow('requires a document reference');
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
     it('retains imported source records when a provider is disconnected', async () => {
         const fake = fakeDatabase();
         const written = await markHealthProviderDisconnected(
@@ -670,6 +753,29 @@ describe('health writer', () => {
         expect(fake.sets).not.toHaveBeenCalled();
     });
 
+    it('skips a source replacement after the provider token credential changes', async () => {
+        const fake = fakeDatabase();
+        const tokenRef = fake.db.collection('corosAPIAccessTokens')
+            .doc('user-1')
+            .collection('tokens')
+            .doc('account-1');
+        fake.stored.set(tokenRef.path, {
+            openId: 'account-1',
+            accessToken: 'replacement-token',
+        });
+
+        const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token'),
+        });
+
+        expect(result.status).toBe('skipped_lifecycle_guard');
+        expect(fake.transaction.get).toHaveBeenCalledWith(tokenRef);
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
     it('skips a source replacement after the COROS connection generation changes', async () => {
         const fake = fakeDatabase();
         const tokenRef = fake.db.collection('corosAPIAccessTokens')
@@ -704,6 +810,50 @@ describe('health writer', () => {
         expect(result.status).toBe('skipped_lifecycle_guard');
         expect(fake.transaction.get).toHaveBeenCalledWith(tokenRef);
         expect(fake.transaction.get).toHaveBeenCalledWith(serviceMetaRef);
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
+    it('skips a source replacement after the COROS token root is deleted', async () => {
+        const fake = fakeDatabase();
+        const tokenRootRef = fake.db.collection('corosAPIAccessTokens').doc('user-1');
+        const tokenRef = tokenRootRef.collection('tokens').doc('account-1');
+        const serviceMetaRef = fake.db.collection('users')
+            .doc('user-1')
+            .collection('meta')
+            .doc('corosAPI');
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            tokenCredentialGeneration: 'captured-generation',
+        });
+        fake.stored.set(serviceMetaRef.path, {
+            providerUserId: 'account-1',
+            connectionState: 'connected',
+            connectionStateGeneration: 'connection-generation-1',
+        });
+
+        const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
+            requiredDocumentFieldValues: {
+                documentRef: serviceMetaRef as never,
+                expectedFields: {
+                    providerUserId: 'account-1',
+                    connectionState: 'connected',
+                    connectionStateGeneration: 'connection-generation-1',
+                },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: tokenRootRef as never,
+                expectedFields: {
+                    activeOAuthCredentialGeneration: 'captured-generation',
+                },
+            }],
+        });
+
+        expect(result.status).toBe('skipped_lifecycle_guard');
+        expect(fake.transaction.get).toHaveBeenCalledWith(tokenRootRef);
         expect(fake.sets).not.toHaveBeenCalled();
     });
 
@@ -743,16 +893,60 @@ describe('health writer', () => {
         })).resolves.toBe(false);
         expect(fake.sets).not.toHaveBeenCalled();
 
-        fake.stored.set(tokenRef.path, { connected: true });
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            tokenCredentialGeneration: 'replacement-generation',
+        });
         await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
             status: HEALTH_SYNC_STATUSES.Ready,
         }, 11_000, {
             db: fake.db as never,
             requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
+        })).resolves.toBe(false);
+        expect(fake.sets).not.toHaveBeenCalled();
+
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            tokenCredentialGeneration: 'captured-generation',
+        });
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+        }, 12_000, {
+            db: fake.db as never,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
         })).resolves.toBe(true);
         expect(fake.sets).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
             status: HEALTH_SYNC_STATUSES.Ready,
         }), { merge: true });
+    });
+
+    it('does not write ready state after the COROS token root is deleted', async () => {
+        const fake = fakeDatabase();
+        const tokenRootRef = fake.db.collection('corosAPIAccessTokens').doc('user-1');
+        const tokenRef = tokenRootRef.collection('tokens').doc('account-1');
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            tokenCredentialGeneration: 'captured-generation',
+        });
+
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+        }, 10_000, {
+            db: fake.db as never,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: tokenRootRef as never,
+                expectedFields: {
+                    activeOAuthCredentialGeneration: 'captured-generation',
+                },
+            }],
+        })).resolves.toBe(false);
+
+        expect(fake.transaction.get).toHaveBeenCalledWith(tokenRootRef);
+        expect(fake.sets).not.toHaveBeenCalled();
     });
 
     it('writes lifecycle state only for the exact current connection generation', async () => {

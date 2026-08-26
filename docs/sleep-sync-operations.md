@@ -77,6 +77,22 @@ enabled again, new webhooks and scheduled polling runs are expected to create fr
 COROS and Suunto polling use a rolling recent window, so recent data can be picked up on
 the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in v1.
 
+## Queue Revision and Recovery Safety
+
+Every newly written Sleep queue item has an opaque `queueRevision`. The Cloud Task name and
+payload both bind to that exact revision; the date-only payload remains accepted solely for
+legacy queue rows that do not have a revision. Dispatch marking, worker claim, retry, completion,
+skip, DLQ movement, and cleanup tombstones all recheck the live revision transactionally. A stale
+task may acknowledge its own delivery, but it cannot update or delete a newer replacement.
+
+If a newer revision arrives while the prior worker owns an active processing lease, the queue
+replacement preserves that lease and remains undispatched until the older worker releases it.
+The release makes the replacement eligible for its own task. If a worker crashes and leaves an
+expired lease behind, the scheduled dispatcher treats that retained lease as recovery work and
+uses a revision-bound recovery task name. A reserved task name is considered dispatched only
+while the corresponding Cloud Task still exists, so a deleted or expired task cannot leave the
+queue row permanently stuck.
+
 ## Routine Verification
 
 1. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
@@ -157,11 +173,13 @@ page maximum. Use `--limit` and the reported `nextStartAfter` with `--start-afte
 npm --prefix functions run migrate-coros-sleep-to-health -- --execute --confirm-all-users --limit 250
 ```
 
-The migration writes the Health replacement first. Only after a successful, unchanged, or newer Health result
-does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS daily fields from that
-Sleep document. Aggregate Sleep vitals and timing remain. A concurrent Sleep change fails the cleanup closed,
-and rerunning is idempotent. Malformed, out-of-window, or inconsistent legacy samples/vitals remain untouched
-and are counted as invalid so an operator can review them without data loss.
+The migration writes the Health replacement first. Only after the exact content is successfully written or is
+already present unchanged does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS
+daily fields from that Sleep document. A stale result proves only that a newer Health record exists, not that it
+contains every legacy value, so the source fields remain for operator review. Aggregate Sleep vitals and timing
+remain. A concurrent Sleep change fails the cleanup closed, and rerunning is idempotent. Malformed,
+out-of-window, or inconsistent legacy samples/vitals also remain untouched and are counted as invalid so an
+operator can review them without data loss.
 
 ## Temporarily Disable A Provider
 

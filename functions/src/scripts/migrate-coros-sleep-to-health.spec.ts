@@ -3,6 +3,7 @@ import { HEALTH_METRIC_IDS, HEALTH_SLEEP_REFERENCE_FIELDS } from '../../../share
 import { validateHealthSourceRecordInput } from '../health/validation';
 import {
   buildCOROSLegacyHealthMigrationCandidate,
+  canCleanCOROSLegacySleepFieldsAfterHealthWrite,
   parseCOROSSleepToHealthMigrationOptions,
 } from './migrate-coros-sleep-to-health';
 
@@ -47,6 +48,14 @@ function legacySleepSession(): Record<string, unknown> {
 }
 
 describe('COROS legacy Sleep to Health migration', () => {
+  it('cleans legacy fields only after the exact Health content is durable', () => {
+    expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('written')).toBe(true);
+    expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('unchanged')).toBe(true);
+    expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('stale')).toBe(false);
+    expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('skipped_deleted_user')).toBe(false);
+    expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('skipped_lifecycle_guard')).toBe(false);
+  });
+
   it('defaults to dry-run and gates an unscoped execution', () => {
     expect(parseCOROSSleepToHealthMigrationOptions([])).toMatchObject({
       execute: false,

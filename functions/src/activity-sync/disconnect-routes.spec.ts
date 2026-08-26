@@ -5,6 +5,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sy
 
 const {
   mockOnDocumentDeleted,
+  capturedOnDocumentDeletedOptions,
   mockCollection,
   mockMetaGet,
   mockSettingsGet,
@@ -13,10 +14,15 @@ const {
   mockRunTransaction,
   mockFieldValueDelete,
   mockUpdateHealthSyncState,
+  mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
   mockTokenRootGet,
   mockTokenRootRef,
 } = vi.hoisted(() => {
-  const mockOnDocumentDeleted = vi.fn((_options: unknown, handler: unknown) => handler);
+  const capturedOnDocumentDeletedOptions: unknown[] = [];
+  const mockOnDocumentDeleted = vi.fn((options: unknown, handler: unknown) => {
+    capturedOnDocumentDeletedOptions.push(options);
+    return handler;
+  });
   const mockMetaGet = vi.fn();
   const mockSettingsGet = vi.fn();
   const mockSettingsSet = vi.fn().mockResolvedValue(undefined);
@@ -71,6 +77,7 @@ const {
 
   return {
     mockOnDocumentDeleted,
+    capturedOnDocumentDeletedOptions,
     mockCollection,
     mockMetaGet,
     mockSettingsGet,
@@ -79,6 +86,7 @@ const {
     mockRunTransaction,
     mockFieldValueDelete: vi.fn(() => 'DELETE_SENTINEL'),
     mockUpdateHealthSyncState: vi.fn().mockResolvedValue(true),
+    mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete: vi.fn().mockResolvedValue(true),
     mockTokenRootGet,
     mockTokenRootRef,
   };
@@ -120,6 +128,11 @@ vi.mock('../shared/user-deletion-guard', () => ({
 
 vi.mock('../health/writer', () => ({
   updateHealthSyncState: mockUpdateHealthSyncState,
+}));
+
+vi.mock('../service-connection-meta', () => ({
+  supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete:
+    mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
 }));
 
 vi.mock('../service-token-store', () => ({
@@ -275,6 +288,7 @@ describe('activity-sync/disconnect-routes', () => {
       { status: 'disconnected', lastErrorCode: null },
       Date.parse('2026-04-28T12:34:56.789Z'),
       {
+        authoritativeLifecycleTransition: true,
         requiredMissingDocumentRef: mockTokenRootRef,
         updateWhenDocumentFieldEquals: {
           documentRef: expect.objectContaining({
@@ -290,35 +304,29 @@ describe('activity-sync/disconnect-routes', () => {
         },
       },
     );
+    expect(mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete)
+      .toHaveBeenCalledWith('user-1');
+    expect(capturedOnDocumentDeletedOptions).toContainEqual(expect.objectContaining({
+      document: 'COROSAPIAccessTokens/{uid}',
+      region: 'europe-west2',
+      retry: true,
+    }));
   });
 
-  it('preserves reconnect-required Health state after terminal auth deletes the COROS token root', async () => {
-    await (disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
+  it('rejects a transient COROS Health projection failure so the delete event is retried', async () => {
+    mockUpdateHealthSyncState.mockRejectedValueOnce(new Error('transient Health projection failure'));
+
+    await expect((disableActivitySyncRoutesOnCOROSTokenRootDelete as unknown as (
+      event: unknown,
+    ) => Promise<void>)({
       params: { uid: 'user-1' },
       time: '2026-04-28T12:34:56.789Z',
-    });
+    })).rejects.toThrow('transient Health projection failure');
 
-    expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
-      'user-1',
-      'COROSAPI',
-      { status: 'disconnected', lastErrorCode: null },
-      Date.parse('2026-04-28T12:34:56.789Z'),
-      {
-        requiredMissingDocumentRef: mockTokenRootRef,
-        updateWhenDocumentFieldEquals: {
-          documentRef: expect.objectContaining({
-            __mockType: 'meta',
-            serviceName: ServiceNames.COROSAPI,
-          }),
-          field: 'connectionState',
-          expectedValue: 'reconnect_required',
-          updateValue: {
-            status: 'reconnect_required',
-            lastErrorCode: 'provider_auth_reconnect_required',
-          },
-        },
-      },
-    );
+    expect(capturedOnDocumentDeletedOptions).toContainEqual(expect.objectContaining({
+      document: 'COROSAPIAccessTokens/{uid}',
+      retry: true,
+    }));
   });
 
   it('ignores a delayed COROS token-root delete after the provider reconnects', async () => {
@@ -338,6 +346,7 @@ describe('activity-sync/disconnect-routes', () => {
       { status: 'disconnected', lastErrorCode: null },
       expect.any(Number),
       {
+        authoritativeLifecycleTransition: true,
         requiredMissingDocumentRef: mockTokenRootRef,
         updateWhenDocumentFieldEquals: {
           documentRef: expect.any(Object),

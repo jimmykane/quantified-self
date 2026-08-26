@@ -83,6 +83,7 @@ describe('COROS connected-service policy', () => {
     expect(content).toContain('daily Health metrics');
     expect(content).toContain('detailed HRV samples with an interval mean heart rate');
     expect(content).toContain('referenced from Health instead of copied');
+    expect(content).toContain('recoverable legacy Sleep copies can remain until the guarded migration completes');
     expect(content).toContain('calorie field remains provider-native');
     expect(content).toContain('Disconnecting COROS stops future daily Health and sleep imports');
     expect(content).toContain('Deleting your Quantified Self account recursively removes');

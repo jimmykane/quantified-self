@@ -10,7 +10,10 @@ import {
     normalizeCOROSHappenDay,
     parseCOROSDailyRecord,
 } from '../coros/daily';
-import { replaceHealthSourceRecord } from '../health/writer';
+import {
+    replaceHealthSourceRecord,
+    type HealthSourceRecordWriteStatus,
+} from '../health/writer';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 
 const LOG_PREFIX = '[migrate-coros-sleep-to-health]';
@@ -65,6 +68,16 @@ export interface COROSLegacyHealthMigrationCandidate {
 }
 
 type CleanupResult = 'cleaned' | 'skipped_user_deletion' | 'concurrent_change';
+
+export function canCleanCOROSLegacySleepFieldsAfterHealthWrite(
+    status: HealthSourceRecordWriteStatus,
+): boolean {
+    // A stale candidate proves only that a newer record exists; it does not
+    // prove that record retained every legacy sample or aggregate being moved.
+    // Delete the source fields only after this exact content was committed or
+    // was already committed unchanged.
+    return status === 'written' || status === 'unchanged';
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -525,6 +538,10 @@ export async function runCOROSSleepToHealthMigration(
             if (healthWrite.status === 'written') summary.healthRecordsWritten += 1;
             if (healthWrite.status === 'unchanged') summary.healthRecordsUnchanged += 1;
             if (healthWrite.status === 'stale') summary.healthRecordsStale += 1;
+
+            if (!canCleanCOROSLegacySleepFieldsAfterHealthWrite(healthWrite.status)) {
+                continue;
+            }
 
             const cleanup = await cleanLegacySleepFields(document.ref, candidate);
             if (cleanup === 'cleaned') summary.sleepSessionsCleaned += 1;

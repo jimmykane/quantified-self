@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
 
 // Hoisted Firestore mocks
@@ -138,6 +138,43 @@ describe('queue-utils', () => {
                 dispatchedToCloudTask: null,
                 providerOperationStartedAt: nowMs,
             }, nowMs)).toBe(false);
+        });
+    });
+
+    describe('Sleep queue transition identity', () => {
+        const currentRevision = {
+            queueRevision: 'revision-2',
+            dateCreated: 200,
+            processed: false,
+            processingOwner: 'active-worker',
+            processingRevision: 'revision:revision-2',
+            processingLeaseExpiresAt: Number.MAX_SAFE_INTEGER,
+        };
+
+        it('rejects an unclaimed transition while the matching revision has an active lease', () => {
+            expect(isCurrentSleepQueueTransition(currentRevision, {
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+            } as any)).toBe(false);
+        });
+
+        it('allows the matching lease owner to transition the matching revision', () => {
+            expect(isCurrentSleepQueueTransition(currentRevision, {
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+                processingOwner: 'active-worker',
+                processingRevision: 'revision:revision-2',
+            } as any)).toBe(true);
+        });
+
+        it('allows recovery after the matching revision lease expires', () => {
+            expect(isCurrentSleepQueueTransition({
+                ...currentRevision,
+                processingLeaseExpiresAt: Date.now() - 1,
+            }, {
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+            } as any)).toBe(true);
         });
     });
 
@@ -481,6 +518,59 @@ describe('queue-utils', () => {
     });
 
     describe('increaseRetryCountForQueueItem', () => {
+        it('does not let an older Sleep queue revision reset retry state on its replacement', async () => {
+            const queueItem: any = {
+                id: 'sleep-retry',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-retry' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                dateCreated: 100,
+                retryCount: 2,
+                dispatchedToCloudTask: 123,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                    retryCount: 0,
+                    dispatchedToCloudTask: null,
+                }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('stale failure')))
+                .resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+            expect(hoisted.transaction.set).not.toHaveBeenCalled();
+            expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+        });
+
+        it('does not let a legacy Sleep task reset a revisioned replacement with the same date', async () => {
+            const queueItem: any = {
+                id: 'legacy-sleep-retry',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'legacy-sleep-retry' },
+                userID: 'user-1',
+                dateCreated: 100,
+                retryCount: 2,
+                dispatchedToCloudTask: 123,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 100,
+                    processed: false,
+                    retryCount: 0,
+                }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('legacy stale failure')))
+                .resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+
         it('does not let a legacy COROS task reset a newly revisioned replacement', async () => {
             const queueItem: any = {
                 id: 'legacy-coros-retry',
@@ -559,6 +649,160 @@ describe('queue-utils', () => {
     });
 
     describe('updateToProcessed', () => {
+        it('does not let an older Sleep queue revision mark its replacement processed', async () => {
+            const queueItem: any = {
+                id: 'sleep-completion',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-completion' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                dateCreated: 100,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+
+        it('marks only the matching unprocessed Sleep queue revision complete', async () => {
+            const queueItem: any = {
+                id: 'sleep-completion',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-completion' },
+                userID: 'user-1',
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem, undefined, { resultStatus: 'success' }))
+                .resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: true,
+                resultStatus: 'success',
+            }));
+        });
+
+        it('uses the authoritative Sleep userID for deletion guards when generic metadata conflicts', async () => {
+            const queueItem: any = {
+                id: 'sleep-owner-guard',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-owner-guard' },
+                userID: 'sleep-owner',
+                firebaseUserID: 'unrelated-generic-owner',
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+
+            expect(hoisted.getUserDeletionGuardStateInTransaction).toHaveBeenCalledWith(
+                expect.anything(),
+                hoisted.transaction,
+                'sleep-owner',
+            );
+            expect(hoisted.getUserDeletionGuardStateInTransaction).not.toHaveBeenCalledWith(
+                expect.anything(),
+                hoisted.transaction,
+                'unrelated-generic-owner',
+            );
+        });
+
+        it('does not let an unclaimed Sleep task complete a revision with an active lease', async () => {
+            const queueItem: any = {
+                id: 'sleep-completion',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-completion' },
+                userID: 'user-1',
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                    processingOwner: 'active-worker',
+                    processingRevision: 'revision:revision-2',
+                    processingLeaseExpiresAt: Date.now() + 60_000,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        });
+
+        it('lets the claimed Sleep lease owner complete its matching revision', async () => {
+            const queueItem: any = {
+                id: 'sleep-completion',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'sleep-completion' },
+                userID: 'user-1',
+                queueRevision: 'revision-2',
+                dateCreated: 200,
+                processingOwner: 'active-worker',
+                processingRevision: 'revision:revision-2',
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    queueRevision: 'revision-2',
+                    dateCreated: 200,
+                    processed: false,
+                    processingOwner: 'active-worker',
+                    processingRevision: 'revision:revision-2',
+                    processingLeaseExpiresAt: Date.now() + 60_000,
+                }),
+            });
+
+            await expect(updateToProcessed(queueItem)).resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: true,
+            }));
+        });
+
+        it('guards a uid-less legacy Sleep completion with identity and cleanup tombstone reads', async () => {
+            const queueItem: any = {
+                id: 'legacy-sleep-completion',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'legacy-sleep-completion' },
+                dateCreated: 200,
+            };
+            hoisted.transaction.get
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        dateCreated: 200,
+                        processed: false,
+                    }),
+                })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+            await expect(updateToProcessed(queueItem, undefined, { resultStatus: 'provider_disabled' }))
+                .resolves.toBe(QueueResult.Processed);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                processed: true,
+                resultStatus: 'provider_disabled',
+            }));
+        });
+
         it('does not let a legacy COROS task complete a newly revisioned replacement', async () => {
             const queueItem: any = {
                 id: 'legacy-coros-completion',

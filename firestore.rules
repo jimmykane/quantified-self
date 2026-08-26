@@ -435,13 +435,11 @@ service cloud.firestore {
 
     match /COROSAPIAccessTokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
-      allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetBackendFields();
-      allow update: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchBackendFields();
-      allow delete: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect();
+      // COROS OAuth state, credentials, and deauthorization are server-owned.
+      // Keeping every root mutation behind callables prevents an owner from
+      // deleting only the parent or reviving a legacy orphaned token child by
+      // recreating an empty root.
+      allow create, update, delete: if false;
        match /tokens/{document=**} {
           allow read: if isNonAnonymousOwner(userID);
           // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.

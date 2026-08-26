@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
@@ -39,8 +40,12 @@ import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
 import {
     deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
+    isCurrentSleepQueueTransition,
     markQueueItemSkipped,
-    moveToDeadLetterQueue,
+    moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned,
+    moveToDeadLetterQueueIfCurrentUserActive,
+    PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+    ProviderOperationStillInFlightError,
     QUEUE_SKIPPED_REASONS,
     QueueResult,
     updateToProcessed,
@@ -48,7 +53,11 @@ import {
 import { isSleepProviderEnabled, isSleepSyncUserAllowed, SLEEP_SYNC_DISABLED_PROVIDERS } from './provider-flags';
 import { assertTrustedGarminCallbackURL, InvalidGarminCallbackUrlError } from './garmin-callback-url';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
-import { getUserDeletionGuardState, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import {
+    getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 import {
     ProviderQueueUserDeletedOrDeletingError,
     ProviderQueueUserNotConnectedError,
@@ -71,15 +80,34 @@ import { formatCOROSCalendarDate, parseCOROSCalendarDate } from '../coros/date-r
 import { COROSDailyValidationError, parseCOROSDailyRecord } from '../coros/daily';
 import { COROSDailyHealthResult, mapCOROSDailyHealth } from '../coros/daily-health';
 import { getServiceConnectionMeta } from '../service-connection-meta';
+import {
+    ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+    areTokenCredentialSnapshotsEqual,
+    getTokenCredentialSnapshot,
+    TokenCredentialSnapshot,
+} from '../token-refresh-coordinator';
+import { getServiceTokenRootDocumentRef } from '../service-token-store';
+import {
+    claimSleepQueueRevision,
+    getSleepQueueRevisionIdentity,
+    isCurrentSleepQueueRevision,
+    releaseSleepQueueRevision,
+} from './queue-revision';
+import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
 interface COROSWriteLifecycleGuards {
     requiredExistingDocumentRef: admin.firestore.DocumentReference;
+    requiredExistingTokenCredential: TokenCredentialSnapshot;
     requiredDocumentFieldValues: {
         documentRef: admin.firestore.DocumentReference;
         expectedFields: Readonly<Record<string, unknown>>;
     };
+    additionalRequiredDocumentFieldValues: ReadonlyArray<{
+        documentRef: admin.firestore.DocumentReference;
+        expectedFields: Readonly<Record<string, unknown>>;
+    }>;
 }
 
 interface AddSleepSyncQueueItemInput {
@@ -194,6 +222,34 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
+function moveSleepQueueItemToDeadLetterQueue(
+    queueItem: SleepSyncQueueItemInterface,
+    error: Error,
+    context: string,
+    resolvedUserID?: string | null,
+): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    const userID = `${resolvedUserID || queueItem.userID || ''}`.trim();
+    if (!userID) {
+        return moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned({
+            queueItem,
+            error,
+            context,
+            collectionName: SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+            logPrefix: 'SleepSyncLegacy',
+            isCurrent: currentQueueItem => isCurrentSleepQueueTransition(currentQueueItem, queueItem),
+        });
+    }
+    return moveToDeadLetterQueueIfCurrentUserActive({
+        queueItem,
+        error,
+        context,
+        userID,
+        phase: `sleep_sync_dlq:${context}`,
+        logPrefix: 'SleepSync',
+        isCurrent: currentQueueItem => isCurrentSleepQueueTransition(currentQueueItem, queueItem),
+    });
+}
+
 function firebaseUserIdFromSleepTokenSnapshotOrNull(tokenSnapshot: TokenSnapshot | null): string | null {
     return tokenSnapshot?.ref.parent.parent?.id || null;
 }
@@ -266,6 +322,91 @@ async function deleteSleepQueueDocAfterDeletionGuard(
     }
 }
 
+interface SleepQueueWriteResult {
+    queueRevision: string;
+    dateCreated: number;
+    shouldDispatchImmediately: boolean;
+}
+
+async function writeSleepQueueItemIfUserActive(
+    docRef: admin.firestore.DocumentReference,
+    queueId: string,
+    queuePayload: Partial<SleepSyncQueueItemInterface>,
+    input: AddSleepSyncQueueItemInput,
+    userID: string,
+    nowMs: number,
+): Promise<SleepQueueWriteResult> {
+    const db = admin.firestore();
+    const proposedQueueRevision = crypto.randomUUID();
+    return db.runTransaction(async transaction => {
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(
+                db,
+                transaction,
+                userID,
+                nowMs,
+            );
+        } catch (error) {
+            throw new UserDeletionGuardReadError(userID, `sleep_sync_queue_write:${input.provider}`, error);
+        }
+        if (deletionGuard.shouldSkip) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+                serviceNameForProvider(input.provider),
+                userID,
+                input.providerUserId,
+                queueId,
+            );
+        }
+
+        const snapshot = await transaction.get(docRef);
+        const current = snapshot.exists
+            ? snapshot.data() as Partial<SleepSyncQueueItemInterface>
+            : null;
+        const activeLease = current && (
+            !current.userID || current.userID === userID
+        ) ? getActiveRevisionProcessingLease(current, nowMs) : null;
+
+        // Concurrent exact webhook deliveries share the already-created live
+        // revision instead of replacing its Cloud Task identity.
+        if (input.dispatchImmediately
+            && current
+            && (current as { processed?: boolean }).processed !== true
+            && current.dispatchedToCloudTask == null
+            && !activeLease
+            && isSameQueuePayload(current, queuePayload)) {
+            const currentRevision = typeof current.queueRevision === 'string'
+                ? current.queueRevision.trim()
+                : '';
+            return {
+                queueRevision: currentRevision,
+                dateCreated: Number(current.dateCreated),
+                shouldDispatchImmediately: true,
+            };
+        }
+
+        transaction.set(docRef, {
+            id: queueId,
+            dateCreated: nowMs,
+            queueRevision: proposedQueueRevision,
+            retryCount: 0,
+            processed: false,
+            dispatchedToCloudTask: activeLease
+                ? Number(current?.dispatchedToCloudTask)
+                    || PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
+                : null,
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+            ...queuePayload,
+            ...(activeLease || {}),
+        }, { merge: false });
+        return {
+            queueRevision: proposedQueueRevision,
+            dateCreated: nowMs,
+            shouldDispatchImmediately: !activeLease,
+        };
+    });
+}
+
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
     const nowMs = Date.now();
     let queueId = await generateIDFromParts([
@@ -311,15 +452,14 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         }
     }
 
-    await docRef.set({
-        id: queueId,
-        dateCreated: nowMs,
-        retryCount: 0,
-        processed: false,
-        dispatchedToCloudTask: null,
-        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-        ...queuePayload,
-    }, { merge: false });
+    const writeResult = await writeSleepQueueItemIfUserActive(
+        docRef,
+        queueId,
+        queuePayload,
+        input,
+        userID,
+        nowMs,
+    );
 
     try {
         await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_after_write:${input.provider}`);
@@ -330,10 +470,19 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         throw error;
     }
 
-    if (input.dispatchImmediately) {
-        const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, nowMs);
+    if (input.dispatchImmediately && writeResult.shouldDispatchImmediately) {
+        const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, writeResult.dateCreated, undefined, {
+            queueRevision: writeResult.queueRevision,
+            queueDateCreated: writeResult.dateCreated,
+        });
         if (wasTaskEnqueued) {
-            const didMarkDispatched = await markSleepQueueItemDispatched(docRef, queueId, userID, nowMs);
+            const didMarkDispatched = await markSleepQueueItemDispatched(
+                docRef,
+                queueId,
+                userID,
+                nowMs,
+                writeResult,
+            );
             if (!didMarkDispatched) {
                 throw new ProviderQueueUserDeletedOrDeletingError(
                     serviceNameForProvider(input.provider),
@@ -363,6 +512,7 @@ async function markSleepQueueItemDispatched(
     queueItemId: string,
     userID: string,
     dispatchedAtMs: number,
+    identity: Pick<SleepSyncQueueItemInterface, 'queueRevision' | 'dateCreated'>,
 ): Promise<boolean> {
     try {
         const result = await markQueueItemDispatchedIfUserActive({
@@ -372,8 +522,9 @@ async function markSleepQueueItemDispatched(
             phase: 'sleep_sync_queue_dispatch_marker',
             dispatchedAtMs,
             logPrefix: 'SleepSync',
+            isCurrent: currentQueueItem => isCurrentSleepQueueRevision(currentQueueItem, identity),
         });
-        return result === QueueDispatchMarkerResult.Marked;
+        return result !== QueueDispatchMarkerResult.SkippedDeletedUser;
     } catch (error) {
         if (!isFirestoreNotFoundError(error)) {
             throw error;
@@ -564,8 +715,10 @@ class MissingSleepProviderTokenError extends Error {
 class COROSDailyRequestError extends Error {
     readonly name = 'COROSDailyRequestError';
 
-    constructor() {
-        super('COROS daily data request failed.');
+    constructor(resultCode?: string) {
+        super(resultCode
+            ? `COROS daily data request failed with result ${resultCode}.`
+            : 'COROS daily data request failed.');
     }
 }
 
@@ -577,10 +730,44 @@ class COROSDailyAccountValidationError extends Error {
     }
 }
 
+class COROSDailyProcessingError extends Error {
+    readonly name = 'COROSDailyProcessingError';
+
+    constructor() {
+        super('COROS daily synchronization failed.');
+    }
+}
+
+class COROSDailyReconnectRequiredError extends Error {
+    readonly name = 'COROSDailyReconnectRequiredError';
+
+    constructor() {
+        super('COROS connection requires reconnect.');
+    }
+}
+
+/**
+ * Only errors created from already-bounded COROS response validation are safe
+ * for durable telemetry. Token refresh and datastore errors can contain the
+ * raw token document ID, access-token-bearing URLs, or provider response data.
+ */
+function sanitizeCOROSDailyErrorForTelemetry(error: unknown): Error {
+    if (error instanceof TerminalServiceAuthError) {
+        return new COROSDailyReconnectRequiredError();
+    }
+    if (error instanceof COROSDailyRequestError
+        || error instanceof COROSDailyAccountValidationError
+        || error instanceof COROSDailyValidationError) {
+        return error;
+    }
+    return new COROSDailyProcessingError();
+}
+
 async function captureCOROSWriteLifecycleGuards(
     firebaseUserID: string,
     providerUserId: string,
     tokenRef: admin.firestore.DocumentReference,
+    expectedCredential: TokenCredentialSnapshot,
 ): Promise<COROSWriteLifecycleGuards> {
     let serviceMeta;
     try {
@@ -592,13 +779,15 @@ async function captureCOROSWriteLifecycleGuards(
         ? serviceMeta.providerUserId.trim()
         : '';
     const expectedProviderUserId = providerUserId.trim();
-    if (!serviceMeta
+    if (!expectedCredential.accessToken
+        || !serviceMeta
         || isServiceUnavailableForSyncConnection(serviceMeta)
         || pinnedProviderUserId !== expectedProviderUserId) {
         throw new COROSDailyAccountValidationError();
     }
     return {
         requiredExistingDocumentRef: tokenRef,
+        requiredExistingTokenCredential: expectedCredential,
         requiredDocumentFieldValues: {
             documentRef: admin.firestore().collection('users')
                 .doc(firebaseUserID)
@@ -610,7 +799,37 @@ async function captureCOROSWriteLifecycleGuards(
                 connectionStateGeneration: serviceMeta.connectionStateGeneration,
             },
         },
+        additionalRequiredDocumentFieldValues: [{
+            documentRef: getServiceTokenRootDocumentRef(firebaseUserID, ServiceNames.COROSAPI),
+            expectedFields: {
+                [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: expectedCredential.credentialGeneration
+                    || undefined,
+            },
+        }],
     };
+}
+
+function assertCOROSLifecycleContinuity(
+    initialGuards: COROSWriteLifecycleGuards,
+    currentGuards: COROSWriteLifecycleGuards,
+): void {
+    const initialGeneration = initialGuards.requiredDocumentFieldValues
+        .expectedFields.connectionStateGeneration;
+    const currentGeneration = currentGuards.requiredDocumentFieldValues
+        .expectedFields.connectionStateGeneration;
+    if (initialGeneration !== currentGeneration) {
+        throw new COROSDailyAccountValidationError();
+    }
+}
+
+function corosCredentialFromSnapshot(tokenSnapshot: TokenSnapshot): TokenCredentialSnapshot {
+    const credential = getTokenCredentialSnapshot(
+        tokenSnapshot.data() as Record<string, unknown> | undefined,
+    );
+    if (!credential.accessToken) {
+        throw new COROSDailyAccountValidationError();
+    }
+    return credential;
 }
 
 function isTokenUseSkippedForPendingDisconnectError(error: unknown): error is Error & {
@@ -704,9 +923,11 @@ function isValidCOROSDailyMessage(value: unknown): boolean {
 async function assertActiveCOROSQueueAccount(
     firebaseUserID: string,
     providerUserId: string,
+    expectedCredential: TokenCredentialSnapshot,
 ): Promise<void> {
+    let activeTokenSnapshot: TokenSnapshot;
     try {
-        await getActiveCOROSTokenSnapshot(firebaseUserID, providerUserId);
+        activeTokenSnapshot = await getActiveCOROSTokenSnapshot(firebaseUserID, providerUserId);
     } catch (error) {
         if (isTokenUseSkippedForPendingDisconnectError(error)) throw error;
         const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
@@ -716,6 +937,12 @@ async function assertActiveCOROSQueueAccount(
         // Firestore and lifecycle errors may contain the token-document path,
         // whose document ID is the provider account ID. Keep retry telemetry
         // opaque while preserving the retryable failure class.
+        throw new COROSDailyAccountValidationError();
+    }
+    if (!areTokenCredentialSnapshotsEqual(
+        corosCredentialFromSnapshot(activeTokenSnapshot),
+        expectedCredential,
+    )) {
         throw new COROSDailyAccountValidationError();
     }
 }
@@ -739,12 +966,19 @@ async function processCorosQueueItem(
     queueItem: SleepSyncQueueItemInterface,
     tokenSnapshot: TokenSnapshot,
     firebaseUserID: string,
-): Promise<{ sleepResults: SleepMapperResult[]; healthResults: COROSDailyHealthResult[] }> {
+    initialLifecycleGuards: COROSWriteLifecycleGuards,
+    onTokenCredentialResolved?: (credential: TokenCredentialSnapshot) => void,
+    onLifecycleGuardsCaptured?: (guards: COROSWriteLifecycleGuards) => void,
+): Promise<{
+    sleepResults: SleepMapperResult[];
+    healthResults: COROSDailyHealthResult[];
+    lifecycleGuards: COROSWriteLifecycleGuards;
+}> {
     if (!Number.isSafeInteger(queueItem.rangeStartMs)
         || !Number.isSafeInteger(queueItem.rangeEndMs)
         || Number(queueItem.rangeStartMs) < 0
         || Number(queueItem.rangeEndMs) < 0) {
-        throw new Error(`COROS poll queue item ${queueItem.id} has invalid range`);
+        throw new COROSDailyValidationError('COROS daily poll range is invalid.');
     }
     const rangeStartDate = parseCOROSCalendarDate(queueItem.rangeStartMs);
     const rangeEndDate = parseCOROSCalendarDate(queueItem.rangeEndMs);
@@ -755,9 +989,31 @@ async function processCorosQueueItem(
         || !rangeEndDate
         || inclusiveRangeDays < 1
         || inclusiveRangeDays > COROS_DAILY_MAX_RECORDS) {
-        throw new Error(`COROS poll queue item ${queueItem.id} exceeds the bounded daily range`);
+        throw new COROSDailyValidationError('COROS daily poll range exceeds the bounded daily range.');
     }
     const tokenData = await getTokenData(tokenSnapshot, ServiceNames.COROSAPI);
+    const tokenCredential = getTokenCredentialSnapshot(
+        tokenData as unknown as Record<string, unknown>,
+    );
+    if (tokenCredential.credentialGeneration
+        !== initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration) {
+        throw new COROSDailyAccountValidationError();
+    }
+    // Token refresh can change the exact credential fence before the service
+    // metadata read below. Publish that narrower update first so a transient
+    // metadata-read failure remains retryable under the refreshed credential.
+    onTokenCredentialResolved?.(tokenCredential);
+    const lifecycleGuards = await captureCOROSWriteLifecycleGuards(
+        firebaseUserID,
+        queueItem.providerUserId,
+        tokenSnapshot.ref,
+        tokenCredential,
+    );
+    assertCOROSLifecycleContinuity(initialLifecycleGuards, lifecycleGuards);
+    // Publish refreshed credentials immediately. If later provider I/O or
+    // validation fails, queue error-state writes must use the refreshed fence
+    // instead of mistaking our own refresh for an account reconnect.
+    onLifecycleGuardsCaptured?.(lifecycleGuards);
     if (await shouldSkipQueueWorkForDeletedUser(
         firebaseUserID,
         ServiceNames.COROSAPI,
@@ -771,7 +1027,11 @@ async function processCorosQueueItem(
             'before_return',
         );
     }
-    await assertActiveCOROSQueueAccount(firebaseUserID, queueItem.providerUserId);
+    await assertActiveCOROSQueueAccount(
+        firebaseUserID,
+        queueItem.providerUserId,
+        tokenCredential,
+    );
     const startDate = formatCOROSCalendarDate(queueItem.rangeStartMs || 0);
     const endDate = formatCOROSCalendarDate(queueItem.rangeEndMs || 0);
     let payload: unknown;
@@ -791,14 +1051,14 @@ async function processCorosQueueItem(
     const resultCode = normalizeCOROSDailyResultCode(
         (payload as { result?: unknown } | null)?.result,
     );
-    if ((resultCode && !/^0+$/.test(resultCode)) || !isValidCOROSDailyMessage(
+    if (!/^0+$/.test(resultCode) || !isValidCOROSDailyMessage(
         (payload as { message?: unknown } | null)?.message,
     )) {
-        throw new Error(`COROS daily data request failed with result ${resultCode || 'unknown'}.`);
+        throw new COROSDailyRequestError(resultCode || 'unknown');
     }
     const dailyList = extractCOROSDailyList(payload);
     if (dailyList.length > COROS_DAILY_MAX_RECORDS) {
-        throw new Error('COROS daily response exceeds the bounded record count.');
+        throw new COROSDailyValidationError('COROS daily response exceeds the bounded record count.');
     }
 
     const firstRequestedDay = formatCOROSCalendarDate(rangeStartDate);
@@ -845,8 +1105,12 @@ async function processCorosQueueItem(
     healthResults.sort((left, right) => left.input.calendarDate.localeCompare(right.input.calendarDate));
     // Token refresh and the provider request can race a disconnect. Recheck the
     // pinned account after decoding but before either normalized domain writes.
-    await assertActiveCOROSQueueAccount(firebaseUserID, queueItem.providerUserId);
-    return { sleepResults, healthResults };
+    await assertActiveCOROSQueueAccount(
+        firebaseUserID,
+        queueItem.providerUserId,
+        tokenCredential,
+    );
+    return { sleepResults, healthResults, lifecycleGuards };
 }
 
 function assertNeverQueueItemType(type: never): never {
@@ -883,7 +1147,18 @@ function isWebhookQueueItemType(type: SleepSyncQueueItemType): boolean {
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
+    // Lease fields read from Firestore belong to whichever invocation claimed
+    // them. Never let a duplicate task reuse those values as proof of ownership
+    // for an early completion, retry, or DLQ transition.
+    delete queueItem.processingOwner;
+    delete queueItem.processingRevision;
+    delete queueItem.processingLeaseExpiresAt;
     let corosLifecycleGuards: COROSWriteLifecycleGuards | null = null;
+    let resolvedFirebaseUserID = typeof queueItem.userID === 'string'
+        ? queueItem.userID.trim() || null
+        : null;
+    let processingOwner: string | null = null;
+    let processingUserID: string | null = null;
 
     try {
         const providerForDeletionGuard = isValidSleepProvider(queueItem.provider) ? queueItem.provider : null;
@@ -904,7 +1179,12 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (malformedReason) {
             const error = new Error(`Malformed sleep sync queue item ${queueItem.id}: ${malformedReason}`);
             logger.warn(`[SleepSync] Queue item ${queueItem.id} is malformed (${malformedReason}); moving to DLQ`);
-            return moveToDeadLetterQueue(queueItem, error, undefined, 'INVALID_SLEEP_QUEUE_ITEM');
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                error,
+                'INVALID_SLEEP_QUEUE_ITEM',
+                resolvedFirebaseUserID,
+            );
         }
 
         if (!isSleepProviderEnabled(queueItem.provider)) {
@@ -935,6 +1215,11 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
 
         const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
+        resolvedFirebaseUserID = firebaseUserID;
+        // Legacy provider-only rows gain the resolved uid in memory so every
+        // subsequent completion/retry/DLQ transition uses the shared user and
+        // revision guard without rewriting the provider payload first.
+        queueItem.userID = firebaseUserID;
         if (!isSleepSyncUserAllowed(firebaseUserID)) {
             logger.info(`[SleepSync] Resolved user ${firebaseUserID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
             return updateToProcessed(queueItem, undefined, {
@@ -949,6 +1234,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 firebaseUserID,
                 queueItem.providerUserId,
                 tokenSnapshot.ref,
+                corosCredentialFromSnapshot(tokenSnapshot),
             );
         }
         if (await shouldSkipQueueWorkForDeletedUser(
@@ -964,6 +1250,23 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             });
         }
 
+        processingOwner = crypto.randomUUID();
+        const claimResult = await claimSleepQueueRevision(queueItem, firebaseUserID, processingOwner);
+        if (claimResult === 'deleted_user') {
+            return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                skippedContext: 'USER_DELETION_GUARD',
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+            });
+        }
+        if (claimResult === 'superseded') return QueueResult.Processed;
+        if (claimResult === 'busy') {
+            throw new ProviderOperationStillInFlightError(queueItem.id, Date.now());
+        }
+        queueItem.processingOwner = processingOwner;
+        queueItem.processingRevision = getSleepQueueRevisionIdentity(queueItem) || undefined;
+        processingUserID = firebaseUserID;
+
         let mapperResults: SleepMapperResult[] = [];
         let healthResults: COROSDailyHealthResult[] = [];
         switch (queueItem.provider) {
@@ -974,11 +1277,32 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 mapperResults = await processSuuntoQueueItem(queueItem, tokenSnapshot);
                 break;
             case SLEEP_PROVIDERS.COROSAPI:
-                ({ sleepResults: mapperResults, healthResults } = await processCorosQueueItem(
-                    queueItem,
-                    tokenSnapshot,
-                    firebaseUserID,
-                ));
+                {
+                    const initialCorosLifecycleGuards = corosLifecycleGuards;
+                    if (!initialCorosLifecycleGuards) {
+                        throw new COROSDailyAccountValidationError();
+                    }
+                    const corosResult = await processCorosQueueItem(
+                        queueItem,
+                        tokenSnapshot,
+                        firebaseUserID,
+                        initialCorosLifecycleGuards,
+                        credential => {
+                            if (corosLifecycleGuards) {
+                                corosLifecycleGuards = {
+                                    ...corosLifecycleGuards,
+                                    requiredExistingTokenCredential: credential,
+                                };
+                            }
+                        },
+                        guards => {
+                            corosLifecycleGuards = guards;
+                        },
+                    );
+                    mapperResults = corosResult.sleepResults;
+                    healthResults = corosResult.healthResults;
+                    corosLifecycleGuards = corosResult.lifecycleGuards;
+                }
                 break;
             default:
                 throw new Error(`Unsupported sleep provider ${queueItem.provider}`);
@@ -1061,13 +1385,32 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 });
             }
         }
-        await updateSleepSyncState(firebaseUserID, queueItem.provider, {
+        const sleepStateUpdate = {
             status: SLEEP_SYNC_STATUSES.Ready,
             lastSyncedAtMs: stateUpdateMs,
             lastPollAtMs: isPollQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
             lastWebhookAtMs: isWebhookQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
             lastError: null,
-        });
+        };
+        const sleepStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+            ? await updateSleepSyncState(
+                firebaseUserID,
+                queueItem.provider,
+                sleepStateUpdate,
+                stateUpdateMs,
+                corosLifecycleGuards || {},
+            )
+            : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && sleepStateWritten === false) {
+            return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
+                skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                sessionsWritten: result.written,
+                sessionsSkipped: result.skipped,
+                healthRecordsWritten,
+                healthRecordsUnchanged,
+                healthRecordsStale,
+            });
+        }
         logger.info(`[SleepSync] Queue item ${queueItem.id} wrote ${result.written} sessions and skipped ${result.skipped}`);
         return updateToProcessed(queueItem, undefined, {
             resultStatus: 'success',
@@ -1078,40 +1421,90 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             healthRecordsStale,
         });
     } catch (error) {
+        if (error instanceof ProviderOperationStillInFlightError) throw error;
         if (error instanceof InvalidGarminCallbackUrlError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has untrusted Garmin callback URL; moving to DLQ`);
-            return moveToDeadLetterQueue(queueItem, error, undefined, 'INVALID_GARMIN_CALLBACK_URL');
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                error,
+                'INVALID_GARMIN_CALLBACK_URL',
+                resolvedFirebaseUserID,
+            );
         }
         if (error instanceof GarminSleepPermissionError) {
             await updateSleepSyncState(error.userID, SLEEP_PROVIDERS.GarminAPI, {
                 status: SLEEP_SYNC_STATUSES.PermissionMissing,
                 lastError: error.message,
             });
-            return moveToDeadLetterQueue(queueItem, error, undefined, 'PERMISSION_MISSING');
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                error,
+                'PERMISSION_MISSING',
+                error.userID,
+            );
         }
         if (error instanceof UnsupportedGarminPushPayloadError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has unsupported Garmin push payload; moving to DLQ`);
-            return moveToDeadLetterQueue(queueItem, error, undefined, 'UNSUPPORTED_GARMIN_PUSH_PAYLOAD');
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                error,
+                'UNSUPPORTED_GARMIN_PUSH_PAYLOAD',
+                resolvedFirebaseUserID,
+            );
         }
         if (error instanceof MissingSleepProviderTokenError) {
-            if (queueItem.userID) {
-                await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            if (queueItem.userID
+                && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
+                if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
+                    await markSleepSyncError(
+                        queueItem.userID,
+                        queueItem.provider,
+                        error,
+                        Date.now(),
+                        corosLifecycleGuards || {},
+                    );
+                } else {
+                    await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+                }
             }
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token; moving to DLQ`);
-            return moveToDeadLetterQueue(queueItem, error, undefined, 'NO_TOKEN_FOUND');
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                error,
+                'NO_TOKEN_FOUND',
+                resolvedFirebaseUserID,
+            );
         }
         if (error instanceof TerminalServiceAuthError) {
-            if (error.firebaseUserID) {
-                await markSleepSyncError(error.firebaseUserID, queueItem.provider, error);
-            } else if (queueItem.userID) {
-                await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            const errorUserID = error.firebaseUserID || queueItem.userID;
+            const telemetryError = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                ? sanitizeCOROSDailyErrorForTelemetry(error)
+                : error;
+            if (errorUserID
+                && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
+                if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
+                    await markSleepSyncError(
+                        errorUserID,
+                        queueItem.provider,
+                        telemetryError,
+                        Date.now(),
+                        corosLifecycleGuards || {},
+                    );
+                } else {
+                    await markSleepSyncError(errorUserID, queueItem.provider, telemetryError);
+                }
             }
             // Terminal token cleanup owns the guarded reconnect-required
             // transition for both service metadata and COROS Health state.
             // A second queue-local write could race a newer reconnect or
             // explicit disconnect and must not overwrite that lifecycle.
             logger.warn(`[SleepSync] Queue item ${queueItem.id} hit terminal auth failure for ${queueItem.provider}; moving to DLQ with ${error.dlqContext}`);
-            return moveToDeadLetterQueue(queueItem, error, undefined, error.dlqContext);
+            return moveSleepQueueItemToDeadLetterQueue(
+                queueItem,
+                telemetryError,
+                error.dlqContext,
+                errorUserID,
+            );
         }
         if (error instanceof TokenRefreshSkippedForDeletedUserError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} skipped token refresh because user ${error.firebaseUserID} is missing or deletion is in progress.`);
@@ -1131,8 +1524,35 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 serviceName: error.serviceName,
             });
         }
+        const telemetryError = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+            ? sanitizeCOROSDailyErrorForTelemetry(error)
+            : error;
         if (queueItem.userID) {
-            await markSleepSyncError(queueItem.userID, queueItem.provider, error);
+            const sleepErrorStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                ? corosLifecycleGuards
+                    ? await markSleepSyncError(
+                        queueItem.userID,
+                        queueItem.provider,
+                        telemetryError,
+                        Date.now(),
+                        corosLifecycleGuards,
+                    )
+                    : undefined
+                : await markSleepSyncError(queueItem.userID, queueItem.provider, telemetryError);
+            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                && corosLifecycleGuards
+                && sleepErrorStateWritten === false) {
+                return markQueueItemSkipped(
+                    queueItem,
+                    undefined,
+                    'user_or_provider_lifecycle_changed',
+                    {
+                        skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                        sessionsWritten: 0,
+                        sessionsSkipped: 0,
+                    },
+                );
+            }
             if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && corosLifecycleGuards) {
                 try {
                     const healthStateWritten = await updateHealthSyncState(
@@ -1166,8 +1586,21 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 }
             }
         }
-        logger.error(`[SleepSync] Queue item ${queueItem.id} failed`, error);
-        return increaseRetryCountForQueueItem(queueItem, error instanceof Error ? error : new Error(`${error}`));
+        logger.error(`[SleepSync] Queue item ${queueItem.id} failed`, telemetryError);
+        return increaseRetryCountForQueueItem(
+            queueItem,
+            telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
+        );
+    } finally {
+        if (processingOwner && processingUserID) {
+            try {
+                await releaseSleepQueueRevision(queueItem, processingUserID, processingOwner);
+            } catch (releaseError) {
+                logger.warn(`[SleepSync] Failed to release processing lease for queue item ${queueItem.id}.`, {
+                    errorName: releaseError instanceof Error ? releaseError.name : 'UnknownError',
+                });
+            }
+        }
     }
 }
 

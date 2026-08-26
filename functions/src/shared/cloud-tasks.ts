@@ -566,6 +566,11 @@ export async function enqueueSleepSyncTask(
     queueItemId: string,
     dateCreated: number,
     scheduleDelaySeconds?: number,
+    identity?: {
+        queueRevision?: string;
+        queueDateCreated?: number;
+        recoveryTaskKey?: string | number;
+    },
 ): Promise<boolean> {
     const { projectId, location, sleepSyncQueue } = config.cloudtasks;
 
@@ -575,10 +580,20 @@ export async function enqueueSleepSyncTask(
 
     const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskId = `sleep-sync-${safeQueueItemId}-${safeDateCreated}`;
-    const payload = { queueItemId };
+    const queueRevision = normalizeQueueRevision(identity?.queueRevision);
+    const safeQueueRevision = queueRevision
+        ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
+        : '';
+    const taskId = `sleep-sync-${safeQueueItemId}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
+    const taskName = getCloudTaskName(projectId, location, sleepSyncQueue, taskId);
+    const queueDateCreated = Number(identity?.queueDateCreated);
+    const payload = {
+        queueItemId,
+        ...(queueRevision ? { queueRevision } : {}),
+        ...(Number.isFinite(queueDateCreated) ? { queueDateCreated } : {}),
+    };
 
-    return enqueueTaskWithRetry({
+    const taskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
         functionName: sleepSyncQueue,
@@ -588,6 +603,40 @@ export async function enqueueSleepSyncTask(
         alreadyExistsLogMessage: `[SleepSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue sleep sync task for ${queueItemId}:`,
     });
+    if (taskCreated) {
+        return true;
+    }
+
+    if (await cloudTaskExists(taskName)) {
+        logger.info(`[SleepSyncDispatcher] Existing task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
+        return true;
+    }
+
+    const recoveryTaskKey = sanitizeTaskNamePart(`${identity?.recoveryTaskKey ?? safeDateCreated}`).slice(0, 80);
+    const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
+    const recoveryTaskName = getCloudTaskName(projectId, location, sleepSyncQueue, recoveryTaskId);
+    logger.warn(`[SleepSyncDispatcher] Task name for queue item ${queueItemId} is reserved but no live task was found; enqueueing a revision-bound recovery task.`);
+    const recoveryTaskCreated = await enqueueTaskWithRetry({
+        projectId,
+        location,
+        functionName: sleepSyncQueue,
+        taskId: recoveryTaskId,
+        payload,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[SleepSyncDispatcher] Recovery task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue recovery sleep sync task for ${queueItemId}:`,
+    });
+    if (recoveryTaskCreated) {
+        return true;
+    }
+
+    if (await cloudTaskExists(recoveryTaskName)) {
+        logger.info(`[SleepSyncDispatcher] Existing recovery task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
+        return true;
+    }
+
+    logger.warn(`[SleepSyncDispatcher] Recovery task name for queue item ${queueItemId} is reserved but no live task was found; leaving its dispatch marker unchanged.`);
+    return false;
 }
 
 /**
