@@ -15,6 +15,7 @@ const hoisted = vi.hoisted(() => ({
     metaDocGet: vi.fn(),
     mockGetUserDeletionGuardState: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
+    ensureSuuntoHealthWebhookAccountBindingForActiveToken: vi.fn(),
     installedTokenDocs: [] as MockTokenDocument[],
 }));
 
@@ -47,6 +48,11 @@ vi.mock('../coros/account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
 }));
 
+vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
+    ensureSuuntoHealthWebhookAccountBindingForActiveToken:
+        (...args: unknown[]) => hoisted.ensureSuuntoHealthWebhookAccountBindingForActiveToken(...args),
+}));
+
 import { sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
 import * as logger from 'firebase-functions/logger';
@@ -66,6 +72,7 @@ describe('sleep polling', () => {
             if (!token) throw new Error('No active COROS token');
             return token;
         });
+        hoisted.ensureSuuntoHealthWebhookAccountBindingForActiveToken.mockResolvedValue('current');
     });
 
     function createTokenDoc(userID: string, data: Record<string, unknown>) {
@@ -292,6 +299,12 @@ describe('sleep polling', () => {
             healthTrigger: 'poll',
             dedupeKey: `suunto-health-poll:${userID}:private-suunto-account:${nowMs - (7 * 24 * 60 * 60 * 1000)}:${nowMs}`,
         });
+        expect(hoisted.ensureSuuntoHealthWebhookAccountBindingForActiveToken).toHaveBeenCalledWith(
+            expect.anything(),
+            userID,
+            'private-suunto-account',
+            nowMs,
+        );
     });
 
     it('skips users marked reconnect_required in service meta', async () => {

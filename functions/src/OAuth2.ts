@@ -46,6 +46,12 @@ import {
 } from './token-refresh-coordinator';
 import { assertWahooOAuthAccountCompatible } from './wahoo/account';
 import {
+  buildSuuntoHealthWebhookAccountBinding,
+  doesSuuntoHealthWebhookBindingMatch,
+  getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding,
+} from './suunto/health-webhook-binding';
+import {
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
   type ServiceDisconnectRetryBlocker,
@@ -459,6 +465,14 @@ async function setOAuthTokenIfUserActive(
     ...tokenData,
     tokenCredentialGeneration: crypto.randomUUID(),
   };
+  const suuntoProviderUserId = serviceName === ServiceNames.SuuntoApp
+    && typeof tokenData.userName === 'string'
+    && tokenData.userName.trim().length > 0
+    ? tokenData.userName.trim()
+    : null;
+  const suuntoBindingRef = suuntoProviderUserId
+    ? getSuuntoHealthWebhookAccountBindingRef(db, suuntoProviderUserId)
+    : null;
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -484,6 +498,15 @@ async function setOAuthTokenIfUserActive(
       [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
     }, { merge: true });
     transaction.set(tokenDocRef, persistedTokenData);
+    if (suuntoBindingRef) {
+      transaction.set(
+        suuntoBindingRef,
+        buildSuuntoHealthWebhookAccountBinding(
+          userID,
+          persistedTokenData.tokenCredentialGeneration,
+        ),
+      );
+    }
   });
   return {
     rootGenerationGuard: {
@@ -532,9 +555,15 @@ async function deleteSupersededOAuthCredentialIfCurrent(
       return false;
     }
 
-    const [tokenRootSnapshot, tokenSnapshot] = await Promise.all([
+    const suuntoBindingRef = serviceName === ServiceNames.SuuntoApp
+      && typeof guard.tokenRef.id === 'string'
+      && guard.tokenRef.id.trim().length > 0
+      ? getSuuntoHealthWebhookAccountBindingRef(db, guard.tokenRef.id.trim())
+      : null;
+    const [tokenRootSnapshot, tokenSnapshot, suuntoBindingSnapshot] = await Promise.all([
       transaction.get(guard.rootGenerationGuard.documentRef),
       transaction.get(guard.tokenRef),
+      suuntoBindingRef ? transaction.get(suuntoBindingRef) : Promise.resolve(null),
     ]);
     if (
       getActiveServiceDisconnectOperationGeneration(
@@ -547,6 +576,15 @@ async function deleteSupersededOAuthCredentialIfCurrent(
     }
 
     transaction.delete(guard.tokenRef);
+    if (suuntoBindingRef
+      && suuntoBindingSnapshot
+      && doesSuuntoHealthWebhookBindingMatch(
+        parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot.data()),
+        userID,
+        guard.tokenCredentialGeneration,
+      )) {
+      transaction.delete(suuntoBindingRef);
+    }
     return true;
   });
 }

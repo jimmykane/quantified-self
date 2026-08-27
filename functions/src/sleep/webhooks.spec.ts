@@ -555,6 +555,30 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
+    it('acknowledges a signed Health notification discarded before ingress persistence', async () => {
+        hoisted.persistSuuntoHealthWebhookIngress.mockResolvedValueOnce('permanent_skip');
+        const body = {
+            type: 'SUUNTO_247_ACTIVITY_CREATED',
+            username: 'suunto-user-1',
+            samples: [{ timestamp: '2026-08-27T12:00:00Z' }],
+        };
+        const rawBody = Buffer.from(JSON.stringify(body));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body,
+            get: vi.fn(() => signature),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.persistSuuntoHealthWebhookIngress).toHaveBeenCalledOnce();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
     it('does not fill unnotified gaps between sparse webhook days', () => {
         const windows = suuntoWebhookTestInternals.buildSuuntoHealthWebhookWindows([
             { timestamp: '2026-01-01T12:00:00Z' },
@@ -585,7 +609,7 @@ describe('sleep webhooks', () => {
         ])).toThrow('webhook time');
     });
 
-    it('rejects malformed and oversized signed Health notifications without queueing', async () => {
+    it('acknowledges and drops malformed and oversized signed Health notifications', async () => {
         const malformedBody = {
             type: 'SUUNTO_247_ACTIVITY_CREATED',
             username: 'suunto-user-1',
@@ -603,7 +627,7 @@ describe('sleep webhooks', () => {
             get: vi.fn(() => malformedSignature),
         } as any, malformedResponse as any);
 
-        expect(malformedResponse.status).toHaveBeenCalledWith(400);
+        expect(malformedResponse.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
 
@@ -624,7 +648,7 @@ describe('sleep webhooks', () => {
             get: vi.fn(() => invalidAccountSignature),
         } as any, invalidAccountResponse as any);
 
-        expect(invalidAccountResponse.status).toHaveBeenCalledWith(400);
+        expect(invalidAccountResponse.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
 
@@ -643,7 +667,7 @@ describe('sleep webhooks', () => {
             get: vi.fn(() => oversizedSignature),
         } as any, oversizedResponse as any);
 
-        expect(oversizedResponse.status).toHaveBeenCalledWith(413);
+        expect(oversizedResponse.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
         expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
     });

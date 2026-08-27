@@ -517,6 +517,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // One-way-keyed reverse index used only by signed Suunto Health ingress.
+    match /suuntoHealthWebhookAccountBindings/{bindingID} {
+      allow read, write: if false;
+    }
+
 
     match /failed_jobs/{document=**} {
       allow read: if isAdmin();

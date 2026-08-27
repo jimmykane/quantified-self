@@ -208,6 +208,7 @@ import {
     ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
 } from './cleanup';
 import { SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME } from '../sleep/constants';
+import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 
 const testEnv = functionsTest();
 const registeredCleanupRuntimeOptions = runWithMock.mock.calls[0]?.[0];
@@ -970,8 +971,18 @@ describe('cleanupUserAccounts', () => {
             ref: { path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/provider-keyed-ingress` },
             data: () => ({ providerUserId: 'suunto-provider-from-ingress' }),
         };
+        const accountBinding = {
+            id: 'binding-digest',
+            ref: { path: `${SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME}/binding-digest` },
+            data: () => ({ userID: 'testUser123' }),
+        };
         const restoreCollectionMock = mockCollectionWhereResultsByName(
             (collectionName, field, _operator, value) => {
+                if (collectionName === SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME
+                    && field === 'userID'
+                    && value === 'testUser123') {
+                    return { docs: [accountBinding] };
+                }
                 if (collectionName !== SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME) return null;
                 if (field === 'userID' && value === 'testUser123') {
                     return { docs: [uidKeyedIngress] };
@@ -994,6 +1005,9 @@ describe('cleanupUserAccounts', () => {
         }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
             path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/provider-keyed-ingress`,
+        }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: `${SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME}/binding-digest`,
         }));
         expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
             SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,

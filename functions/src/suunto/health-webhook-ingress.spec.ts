@@ -1,39 +1,90 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => {
-  const create = vi.fn();
-  const doc = vi.fn(() => ({ create }));
-  const collection = vi.fn(() => ({ doc }));
-  const db = { collection };
+  const state: Record<string, Record<string, unknown> | undefined> = {};
+  const bindingRef = { path: 'suuntoHealthWebhookAccountBindings/digest' };
+  const ingressRef = { path: `suuntoHealthWebhookIngress/${'a'.repeat(64)}` };
+  const tokenRef = { path: 'suuntoAppAccessTokens/firebase-user-1/tokens/suunto-account-1' };
+  const tokenRootRef: any = {
+    path: 'suuntoAppAccessTokens/firebase-user-1',
+    collection: vi.fn(() => ({ doc: vi.fn(() => tokenRef) })),
+  };
+  const serviceMetaRef = { path: 'users/firebase-user-1/meta/SuuntoApp' };
+  const userRef = {
+    collection: vi.fn(() => ({ doc: vi.fn(() => serviceMetaRef) })),
+  };
+  const collectionGroup = vi.fn(() => {
+    throw new Error('Webhook binding must not use collection-group token lookup.');
+  });
+  const collection = vi.fn((name: string) => ({
+    doc: vi.fn(() => {
+      if (name === 'suuntoHealthWebhookAccountBindings') return bindingRef;
+      if (name === 'suuntoHealthWebhookIngress') return ingressRef;
+      if (name === 'suuntoAppAccessTokens') return tokenRootRef;
+      if (name === 'users') return userRef;
+      throw new Error(`Unexpected collection ${name}`);
+    }),
+  }));
+  const transactionGet = vi.fn(async (ref: unknown) => {
+    const key = ref === bindingRef
+      ? 'binding'
+      : ref === tokenRef
+        ? 'token'
+        : ref === tokenRootRef
+          ? 'tokenRoot'
+          : ref === serviceMetaRef
+            ? 'serviceMeta'
+            : ref === ingressRef
+              ? 'ingress'
+              : null;
+    if (!key) throw new Error('Unexpected transaction read.');
+    const data = state[key];
+    return { exists: data !== undefined, data: () => data };
+  });
+  const transactionCreate = vi.fn();
+  const transaction = { get: transactionGet, create: transactionCreate };
+  const runTransaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(transaction));
+  const recursiveDelete = vi.fn();
+  const db = { collection, collectionGroup, recursiveDelete, runTransaction };
   let registeredTriggerOptions: unknown;
   return {
-    create,
-    doc,
-    collection,
-    db,
     addQueueItem: vi.fn(),
+    bindingRef,
+    collectionGroup,
+    db,
+    getDeletionGuardInTransaction: vi.fn(),
     getRegisteredTriggerOptions: () => registeredTriggerOptions,
+    ingressRef,
+    isQueueSkip: vi.fn(() => false),
     onDocumentCreated: vi.fn((options: unknown, handler: unknown) => {
       registeredTriggerOptions = options;
       return handler;
     }),
+    recursiveDelete,
+    runTransaction,
+    serviceMetaRef,
+    state,
+    tokenRef,
+    tokenRootRef,
+    transactionCreate,
   };
 });
 
-vi.mock('firebase-admin', () => ({
-  firestore: vi.fn(() => hoisted.db),
-}));
+vi.mock('firebase-admin', () => ({ firestore: vi.fn(() => hoisted.db) }));
 vi.mock('firebase-functions/logger', () => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
+  info: vi.fn(), warn: vi.fn(), error: vi.fn(),
 }));
 vi.mock('firebase-functions/v2/firestore', () => ({
   onDocumentCreated: hoisted.onDocumentCreated,
 }));
-vi.mock('../sleep/queue', () => ({
-  addSleepSyncQueueItem: hoisted.addQueueItem,
+vi.mock('../queue/provider-queue-errors', () => ({
+  isProviderQueueSkippedWithoutRetryError: hoisted.isQueueSkip,
+}));
+vi.mock('../sleep/queue', () => ({ addSleepSyncQueueItem: hoisted.addQueueItem }));
+vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardStateInTransaction: hoisted.getDeletionGuardInTransaction,
 }));
 vi.mock('../shared/ttl-config', () => ({
   getExpireAtTimestamp: vi.fn(() => 'EXPIRE_AT'),
@@ -49,12 +100,22 @@ import {
 const INGRESS_ID = 'a'.repeat(64);
 const RECEIVED_AT_MS = 1_777_777_777_000;
 const PROCESSED_AT_MS = RECEIVED_AT_MS + 1_000;
+const TOKEN_GENERATION = 'credential-generation-1';
+const CONNECTION_GENERATION = 'connection-generation-1';
+
+function snapshot(data?: Record<string, unknown>, exists = true) {
+  return { exists, data: () => data };
+}
 
 function ingressData(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
+    userID: 'firebase-user-1',
     notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
     providerUserId: 'suunto-account-1',
+    tokenCredentialGeneration: TOKEN_GENERATION,
+    connectionState: 'connected',
+    connectionStateGeneration: CONNECTION_GENERATION,
     windows: [
       { startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 },
       { startMs: 1_700_086_400_000, endMs: 1_700_172_800_000 },
@@ -66,44 +127,58 @@ function ingressData(overrides: Record<string, unknown> = {}) {
 }
 
 function ingressSnapshot(data = ingressData(), id = INGRESS_ID) {
-  const update = vi.fn().mockResolvedValue(undefined);
-  const get = vi.fn().mockResolvedValue({
-    exists: true,
-    data: () => data,
-  });
-  return {
-    snapshot: {
-      id,
-      data: () => data,
-      ref: { get, update },
-    } as any,
-    get,
-    update,
+  const ref = {
+    get: vi.fn().mockResolvedValue(snapshot(data)),
+    update: vi.fn().mockResolvedValue(undefined),
   };
+  return { snapshot: { id, data: () => data, ref } as any, ref };
 }
 
 function activeDependencies(overrides: Record<string, unknown> = {}) {
   return {
     addQueueItem: hoisted.addQueueItem,
     db: hoisted.db as any,
-    getDeletionGuard: vi.fn().mockResolvedValue({
-      userExists: true,
-      deletionInProgress: false,
-      shouldSkip: false,
-    }),
     isHealthEnabled: vi.fn(() => true),
     isUserAllowed: vi.fn(() => true),
     nowMs: vi.fn(() => PROCESSED_AT_MS),
-    resolveUserID: vi.fn().mockResolvedValue('firebase-user-1'),
     ...overrides,
+  };
+}
+
+function persistInput() {
+  return {
+    notificationDigest: INGRESS_ID,
+    notificationType: 'SUUNTO_247_ACTIVITY_CREATED' as const,
+    providerUserId: 'suunto-account-1',
+    windows: [{ startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 }],
+    receivedAtMs: RECEIVED_AT_MS,
   };
 }
 
 describe('Suunto Health webhook ingress', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hoisted.create.mockResolvedValue(undefined);
+    hoisted.state.binding = {
+      schemaVersion: 1,
+      userID: 'firebase-user-1',
+      tokenCredentialGeneration: TOKEN_GENERATION,
+    };
+    hoisted.state.token = {
+      serviceName: ServiceNames.SuuntoApp,
+      userName: 'suunto-account-1',
+      tokenCredentialGeneration: TOKEN_GENERATION,
+    };
+    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: TOKEN_GENERATION };
+    hoisted.state.serviceMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: CONNECTION_GENERATION,
+    };
+    hoisted.state.ingress = undefined;
     hoisted.addQueueItem.mockResolvedValue({ id: 'queue-item' });
+    hoisted.getDeletionGuardInTransaction.mockResolvedValue({
+      userExists: true, deletionInProgress: false, shouldSkip: false,
+    });
+    hoisted.recursiveDelete.mockResolvedValue(undefined);
   });
 
   it('registers a retry-enabled asynchronous Firestore fan-out trigger', () => {
@@ -115,45 +190,91 @@ describe('Suunto Health webhook ingress', () => {
     }));
   });
 
-  it('persists one compact create-only ingress record and treats exact retries as durable duplicates', async () => {
-    await expect(persistSuuntoHealthWebhookIngress({
-      notificationDigest: INGRESS_ID,
-      notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
-      providerUserId: 'suunto-account-1',
-      windows: [{ startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 }],
-      receivedAtMs: RECEIVED_AT_MS,
+  it('binds an active staged user before atomically creating schema-v3 ingress', async () => {
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
     })).resolves.toBe('created');
 
-    expect(hoisted.collection).toHaveBeenCalledWith('suuntoHealthWebhookIngress');
-    expect(hoisted.doc).toHaveBeenCalledWith(INGRESS_ID);
-    expect(hoisted.create).toHaveBeenCalledWith({
-      schemaVersion: 1,
+    expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+    expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
+    expect(hoisted.transactionCreate).toHaveBeenCalledWith(hoisted.ingressRef, {
+      schemaVersion: 3,
+      userID: 'firebase-user-1',
       notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
       providerUserId: 'suunto-account-1',
+      tokenCredentialGeneration: TOKEN_GENERATION,
+      connectionState: 'connected',
+      connectionStateGeneration: CONNECTION_GENERATION,
       windows: [{ startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 }],
       receivedAtMs: RECEIVED_AT_MS,
       processed: false,
       expireAt: 'EXPIRE_AT',
     });
-    expect(hoisted.create.mock.calls[0]?.[0]).not.toHaveProperty('samples');
-
-    hoisted.create.mockRejectedValueOnce({ code: 6 });
-    await expect(persistSuuntoHealthWebhookIngress({
-      notificationDigest: INGRESS_ID,
-      notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
-      providerUserId: 'suunto-account-1',
-      windows: [{ startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 }],
-      receivedAtMs: RECEIVED_AT_MS,
-    })).resolves.toBe('duplicate');
   });
 
-  it('fans out every bounded window only after the durable ingress trigger runs', async () => {
-    const { snapshot, update } = ingressSnapshot();
+  it('treats an existing bound ingress as a durable duplicate', async () => {
+    hoisted.state.ingress = { processed: false };
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('duplicate');
+    expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+  });
 
-    await processSuuntoHealthWebhookIngressDocument(snapshot, activeDependencies() as any);
+  it('does not persist ingress for unknown or non-rollout bindings', async () => {
+    hoisted.state.binding = undefined;
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('permanent_skip');
+
+    hoisted.state.binding = {
+      schemaVersion: 1,
+      userID: 'firebase-user-1',
+      tokenCredentialGeneration: TOKEN_GENERATION,
+    };
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => false,
+    })).resolves.toBe('permanent_skip');
+    expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not persist ingress when deletion, disconnect, or reconnect-required wins', async () => {
+    hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('permanent_skip');
+
+    hoisted.state.tokenRoot = {
+      activeOAuthCredentialGeneration: TOKEN_GENERATION,
+      disconnectState: 'disconnect_pending',
+    };
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('permanent_skip');
+
+    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: TOKEN_GENERATION };
+    hoisted.state.serviceMeta = {
+      connectionState: 'reconnect_required',
+      connectionStateGeneration: 'replacement-generation',
+    };
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('permanent_skip');
+    expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+  });
+
+  it('cannot be poisoned by similarly named client-writable token documents', async () => {
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      isUserAllowed: () => true,
+    })).resolves.toBe('created');
+    expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+  });
+
+  it('fans out every bounded window with binding and connection write fences', async () => {
+    const { snapshot: eventSnapshot, ref } = ingressSnapshot();
+    await processSuuntoHealthWebhookIngressDocument(eventSnapshot, activeDependencies() as any);
 
     expect(hoisted.addQueueItem).toHaveBeenCalledTimes(2);
-    expect(hoisted.addQueueItem).toHaveBeenNthCalledWith(1, {
+    expect(hoisted.addQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
       type: 'suunto_health_poll',
       provider: 'SuuntoApp',
       userID: 'firebase-user-1',
@@ -161,73 +282,77 @@ describe('Suunto Health webhook ingress', () => {
       rangeStartMs: 1_700_000_000_000,
       rangeEndMs: 1_700_086_400_000,
       healthTrigger: 'webhook',
-      dedupeKey: `suunto-health-webhook:firebase-user-1:suunto-account-1:1700000000000:1700086400000:${INGRESS_ID}`,
       dispatchImmediately: true,
-    });
-    expect(update).toHaveBeenCalledWith({
+      suuntoHealthTokenCredentialGeneration: TOKEN_GENERATION,
+      suuntoHealthConnectionStateGeneration: CONNECTION_GENERATION,
+      requiredDocumentFieldValues: expect.arrayContaining([
+        expect.objectContaining({ documentRef: hoisted.bindingRef }),
+        expect.objectContaining({ documentRef: hoisted.tokenRef }),
+        expect.objectContaining({ documentRef: hoisted.tokenRootRef }),
+        expect.objectContaining({ documentRef: hoisted.serviceMetaRef }),
+      ]),
+    }));
+    expect(ref.update).toHaveBeenCalledWith({
       processed: true,
       processedAtMs: PROCESSED_AT_MS,
       resultStatus: 'queued',
       windowsQueued: 2,
-      userID: 'firebase-user-1',
     });
+    expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
   });
 
-  it('uses the live document state to suppress duplicate trigger deliveries after completion', async () => {
-    const { snapshot, update } = ingressSnapshot(ingressData({ processed: true }));
+  it('recursively deletes malformed, disabled, stale, and deleting ingress', async () => {
+    const malformed = ingressSnapshot(ingressData({ schemaVersion: 2 }));
+    await processSuuntoHealthWebhookIngressDocument(malformed.snapshot, activeDependencies() as any);
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(malformed.ref);
 
-    await processSuuntoHealthWebhookIngressDocument(snapshot, activeDependencies() as any);
-
-    expect(hoisted.addQueueItem).not.toHaveBeenCalled();
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it('marks rollback and account-deletion skips without queueing work', async () => {
     const disabled = ingressSnapshot();
     await processSuuntoHealthWebhookIngressDocument(disabled.snapshot, activeDependencies({
       isHealthEnabled: vi.fn(() => false),
     }) as any);
-    expect(disabled.update).toHaveBeenCalledWith(expect.objectContaining({
-      resultStatus: 'provider_disabled',
-      processed: true,
-    }));
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(disabled.ref);
 
-    const deleted = ingressSnapshot();
-    await processSuuntoHealthWebhookIngressDocument(deleted.snapshot, activeDependencies({
-      getDeletionGuard: vi.fn().mockResolvedValue({
-        userExists: true,
-        deletionInProgress: true,
-        shouldSkip: true,
-      }),
-    }) as any);
-    expect(deleted.update).toHaveBeenCalledWith(expect.objectContaining({
-      resultStatus: 'user_deleted_or_deleting',
+    const stale = ingressSnapshot();
+    hoisted.state.binding = undefined;
+    await processSuuntoHealthWebhookIngressDocument(stale.snapshot, activeDependencies() as any);
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(stale.ref);
+
+    hoisted.state.binding = {
+      schemaVersion: 1,
       userID: 'firebase-user-1',
-    }));
+      tokenCredentialGeneration: TOKEN_GENERATION,
+    };
+    hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+    const deleting = ingressSnapshot();
+    await processSuuntoHealthWebhookIngressDocument(deleting.snapshot, activeDependencies() as any);
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(deleting.ref);
     expect(hoisted.addQueueItem).not.toHaveBeenCalled();
   });
 
-  it('propagates transient fan-out failures so Eventarc retries the idempotent ingress', async () => {
-    const { snapshot, update } = ingressSnapshot();
-    hoisted.addQueueItem.mockRejectedValueOnce(new Error('Cloud Tasks unavailable'));
+  it('recursively deletes lifecycle queue skips instead of retaining metadata', async () => {
+    const { snapshot: eventSnapshot, ref } = ingressSnapshot();
+    hoisted.addQueueItem.mockRejectedValueOnce(new Error('deleting'));
+    hoisted.isQueueSkip.mockReturnValueOnce(true);
 
+    await processSuuntoHealthWebhookIngressDocument(eventSnapshot, activeDependencies() as any);
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(ref);
+    expect(ref.update).not.toHaveBeenCalled();
+  });
+
+  it('propagates transient fan-out and recursive-delete failures for Eventarc retry', async () => {
+    const transient = ingressSnapshot();
+    hoisted.addQueueItem.mockRejectedValueOnce(new Error('Cloud Tasks unavailable'));
     await expect(processSuuntoHealthWebhookIngressDocument(
-      snapshot,
+      transient.snapshot,
       activeDependencies() as any,
     )).rejects.toThrow('Cloud Tasks unavailable');
+    expect(transient.ref.update).not.toHaveBeenCalled();
 
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it('fails closed on malformed ingress without entering a retry loop', async () => {
-    const { snapshot, update } = ingressSnapshot(ingressData({ windows: [] }));
-
-    await processSuuntoHealthWebhookIngressDocument(snapshot, activeDependencies() as any);
-
-    expect(hoisted.addQueueItem).not.toHaveBeenCalled();
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({
-      processed: true,
-      resultStatus: 'invalid_ingress',
-    }));
+    const malformed = ingressSnapshot(ingressData({ windows: [] }));
+    hoisted.recursiveDelete.mockRejectedValueOnce(new Error('Firestore unavailable'));
+    await expect(processSuuntoHealthWebhookIngressDocument(
+      malformed.snapshot,
+      activeDependencies() as any,
+    )).rejects.toThrow('Firestore unavailable');
   });
 });

@@ -30,6 +30,11 @@ import {
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 import {
+  doesSuuntoHealthWebhookBindingMatch,
+  getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding,
+} from './suunto/health-webhook-binding';
+import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
@@ -766,8 +771,28 @@ async function deleteCurrentTerminalAuthToken(
     const connectionStateGeneration = typeof serviceMetaSnapshot.data()?.connectionStateGeneration === 'string'
       ? `${serviceMetaSnapshot.data()?.connectionStateGeneration}`
       : null;
+    const currentTokenData = currentTokenSnapshot.data() as Record<string, unknown> | undefined;
+    const suuntoProviderUserId = serviceName === ServiceNames.SuuntoApp
+      ? `${currentTokenData?.userName || tokenSnapshot.id}`.trim()
+      : '';
+    const suuntoBindingRef = suuntoProviderUserId
+      ? getSuuntoHealthWebhookAccountBindingRef(admin.firestore(), suuntoProviderUserId)
+      : null;
+    const suuntoBindingSnapshot = suuntoBindingRef
+      ? await transaction.get(suuntoBindingRef)
+      : null;
 
     transaction.delete(tokenSnapshot.ref);
+    if (suuntoBindingRef
+      && doesSuuntoHealthWebhookBindingMatch(
+        parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data()),
+        userID,
+        typeof currentTokenData?.tokenCredentialGeneration === 'string'
+          ? currentTokenData.tokenCredentialGeneration
+          : null,
+      )) {
+      transaction.delete(suuntoBindingRef);
+    }
     if (remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow) {
       // Service token roots only store fields on the root document plus the `tokens` subcollection.
       // If no reconnect flow is in progress, deleting the final token doc leaves no descendant data to preserve.

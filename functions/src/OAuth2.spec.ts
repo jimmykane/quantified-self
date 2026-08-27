@@ -1113,6 +1113,36 @@ describe('OAuth2', () => {
             expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
             expect(clearServiceConnectionState).not.toHaveBeenCalled();
         });
+
+        it('deletes the current Suunto webhook account binding with the local token', async () => {
+            mockRunTransaction.mockImplementation(async (callback: any) => callback({
+                get: vi.fn(async (target: unknown) => {
+                    if (target === userDocRef) {
+                        return { exists: true, data: () => ({}) };
+                    }
+                    if (target === tokenCollectionRef) {
+                        return { docs: [{ id: tokenID }] };
+                    }
+                    if (target === mockDocInstance) {
+                        return {
+                            exists: true,
+                            data: () => ({
+                                schemaVersion: 1,
+                                userID,
+                                tokenCredentialGeneration: 'credential-generation-1',
+                            }),
+                        };
+                    }
+                    throw new Error('Unexpected transaction get target');
+                }),
+                delete: transactionDeleteSpy,
+            }));
+
+            await deleteLocalServiceToken(userID, ServiceNames.SuuntoApp, tokenID);
+
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(mockDocInstance);
+        });
     });
 
     describe('getServiceOAuth2CodeRedirectAndSaveStateToUser', () => {
@@ -1761,6 +1791,11 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
+            expect(mockDocInstance.set).toHaveBeenCalledWith({
+                schemaVersion: 1,
+                userID,
+                tokenCredentialGeneration: expect.any(String),
+            }, undefined);
         });
 
         it('deletes only the stale token document when a newer OAuth callback wins', async () => {

@@ -317,8 +317,8 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
         return;
     }
     if (isHealthNotification && req.rawBody.length > SUUNTO_HEALTH_WEBHOOK_MAX_BYTES) {
-        logger.warn('[HealthSync][Suunto] Rejected oversized webhook payload');
-        res.status(413).send();
+        logger.warn('[HealthSync][Suunto] Dropped oversized signed webhook payload');
+        res.status(200).send();
         return;
     }
     if (!isHealthNotification && !isSleepProviderEnabled(SLEEP_PROVIDERS.SuuntoApp)) {
@@ -335,8 +335,8 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
         return;
     }
     if (isHealthNotification && providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
-        logger.warn('[HealthSync][Suunto] Rejected invalid provider account identifier');
-        res.status(400).send();
+        logger.warn('[HealthSync][Suunto] Dropped signed webhook with invalid provider account identifier');
+        res.status(200).send();
         return;
     }
 
@@ -350,8 +350,8 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             try {
                 windows = buildSuuntoHealthWebhookWindows(samples);
             } catch {
-                logger.warn('[HealthSync][Suunto] Rejected malformed Health webhook range');
-                res.status(400).send();
+                logger.warn('[HealthSync][Suunto] Dropped signed webhook with malformed Health range');
+                res.status(200).send();
                 return;
             }
             // The authenticated raw bytes provide an exact-retry identity
@@ -365,10 +365,14 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
                 providerUserId,
                 windows,
             });
-            logger.info('[HealthSync][Suunto] Durably accepted webhook ingress', {
-                ingressResult,
-                windows: windows.length,
-            });
+            if (ingressResult === 'permanent_skip') {
+                logger.info('[HealthSync][Suunto] Dropped signed webhook without an active staged binding.');
+            } else {
+                logger.info('[HealthSync][Suunto] Durably accepted webhook ingress', {
+                    ingressResult,
+                    windows: windows.length,
+                });
+            }
             res.status(200).send();
             return;
         }

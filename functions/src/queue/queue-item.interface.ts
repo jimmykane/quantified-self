@@ -169,6 +169,10 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
+  /** Webhook-only fence captured from the server-owned Suunto account binding. */
+  suuntoHealthTokenCredentialGeneration?: string | null;
+  /** Webhook-only fence captured from the authoritative service connection metadata. */
+  suuntoHealthConnectionStateGeneration?: string | null;
 }
 
 export interface QueueItemError {

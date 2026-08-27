@@ -28,6 +28,7 @@ import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
     SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from '../suunto/health';
+import { ensureSuuntoHealthWebhookAccountBindingForActiveToken } from '../suunto/health-webhook-binding-lifecycle';
 
 interface PollWindow {
     startMs: number;
@@ -281,6 +282,20 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
             unavailableForSyncCache.set(userID, pendingUnavailableForSync);
         }
         if (await pendingUnavailableForSync) continue;
+
+        const bindingStatus = await ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+            admin.firestore(),
+            userID,
+            providerUserId,
+            nowMs,
+        );
+        if (bindingStatus === 'conflict' || bindingStatus === 'inactive') {
+            logger.warn('[HealthSync][Suunto] Skipping Health polling because the webhook account binding is not active.', {
+                userID,
+                bindingStatus,
+            });
+            continue;
+        }
 
         for (const window of windows) {
             try {

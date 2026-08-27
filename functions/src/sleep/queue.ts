@@ -137,6 +137,13 @@ interface AddSleepSyncQueueItemInput {
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
     dedupeKey?: string;
     dispatchImmediately?: boolean;
+    suuntoHealthTokenCredentialGeneration?: string | null;
+    suuntoHealthConnectionStateGeneration?: string | null;
+    /** Server-only write fences. These references are never persisted in the queue payload. */
+    requiredDocumentFieldValues?: ReadonlyArray<{
+        documentRef: admin.firestore.DocumentReference;
+        expectedFields: Readonly<Record<string, unknown>>;
+    }>;
 }
 
 function queueCollection(): admin.firestore.CollectionReference {
@@ -165,6 +172,20 @@ const SLEEP_SYNC_QUEUE_ITEM_TYPES = new Set<SleepSyncQueueItemType>([
     'coros_poll',
 ]);
 const SUUNTO_HEALTH_QUEUE_TRIGGERS = new Set(['poll', 'webhook', 'backfill']);
+const MAX_LIFECYCLE_GENERATION_LENGTH = 128;
+
+function normalizeLifecycleGeneration(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function isValidOptionalLifecycleGeneration(value: unknown): boolean {
+    return value === undefined
+        || value === null
+        || (typeof value === 'string'
+            && value.trim() === value
+            && value.length > 0
+            && value.length <= MAX_LIFECYCLE_GENERATION_LENGTH);
+}
 
 function isValidSleepProvider(value: unknown): value is SleepProvider {
     return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
@@ -197,6 +218,16 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     if (queueItem.type !== 'suunto_health_poll' && queueItem.healthTrigger !== undefined) {
         return 'sleep queue item unexpectedly contains a Health trigger';
     }
+    if (queueItem.type !== 'suunto_health_poll'
+        && (queueItem.suuntoHealthTokenCredentialGeneration !== undefined
+            || queueItem.suuntoHealthConnectionStateGeneration !== undefined)) {
+        return 'sleep queue item unexpectedly contains Suunto Health lifecycle fences';
+    }
+    if (queueItem.type === 'suunto_health_poll'
+        && (!isValidOptionalLifecycleGeneration(queueItem.suuntoHealthTokenCredentialGeneration)
+            || !isValidOptionalLifecycleGeneration(queueItem.suuntoHealthConnectionStateGeneration))) {
+        return 'Suunto Health queue item has invalid lifecycle fences';
+    }
     if (typeof queueItem.providerUserId !== 'string' || queueItem.providerUserId.trim().length === 0) {
         return 'missing providerUserId';
     }
@@ -218,6 +249,8 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
+        suuntoHealthTokenCredentialGeneration: input.suuntoHealthTokenCredentialGeneration,
+        suuntoHealthConnectionStateGeneration: input.suuntoHealthConnectionStateGeneration,
     };
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
 }
@@ -252,6 +285,8 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
         healthTrigger: payload.healthTrigger,
+        suuntoHealthTokenCredentialGeneration: payload.suuntoHealthTokenCredentialGeneration,
+        suuntoHealthConnectionStateGeneration: payload.suuntoHealthConnectionStateGeneration,
     });
 }
 
@@ -372,6 +407,16 @@ interface SleepQueueWriteResult {
     shouldDispatchImmediately: boolean;
 }
 
+function documentMatchesExpectedFields(
+    snapshot: admin.firestore.DocumentSnapshot,
+    expectedFields: Readonly<Record<string, unknown>>,
+): boolean {
+    if (!snapshot.exists) return false;
+    const data = snapshot.data() as Record<string, unknown> | undefined;
+    return Boolean(data) && Object.entries(expectedFields)
+        .every(([field, expected]) => data?.[field] === expected);
+}
+
 async function writeSleepQueueItemIfUserActive(
     docRef: admin.firestore.DocumentReference,
     queueId: string,
@@ -398,6 +443,21 @@ async function writeSleepQueueItemIfUserActive(
             throw new ProviderQueueUserDeletedOrDeletingError(
                 serviceNameForProvider(input.provider),
                 userID,
+                input.providerUserId,
+                queueId,
+            );
+        }
+
+        const requiredDocumentFieldValues = input.requiredDocumentFieldValues || [];
+        const requiredSnapshots = await Promise.all(requiredDocumentFieldValues.map(guard =>
+            transaction.get(guard.documentRef)
+        ));
+        if (requiredSnapshots.some((snapshot, index) => !documentMatchesExpectedFields(
+            snapshot,
+            requiredDocumentFieldValues[index].expectedFields,
+        ))) {
+            throw new ProviderQueueUserNotConnectedError(
+                serviceNameForProvider(input.provider),
                 input.providerUserId,
                 queueId,
             );
@@ -452,6 +512,13 @@ async function writeSleepQueueItemIfUserActive(
 }
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
+    if ((input.type !== 'suunto_health_poll'
+            && (input.suuntoHealthTokenCredentialGeneration !== undefined
+                || input.suuntoHealthConnectionStateGeneration !== undefined))
+        || !isValidOptionalLifecycleGeneration(input.suuntoHealthTokenCredentialGeneration)
+        || !isValidOptionalLifecycleGeneration(input.suuntoHealthConnectionStateGeneration)) {
+        throw new Error('Invalid Suunto Health queue lifecycle fences.');
+    }
     const nowMs = Date.now();
     let queueId = await generateIDFromParts([
         input.provider,
@@ -1312,6 +1379,31 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 tokenSnapshot.ref,
                 suuntoCredentialFromSnapshot(tokenSnapshot),
             );
+            const capturedTokenGeneration = suuntoHealthLifecycleGuards
+                .requiredExistingTokenCredential.credentialGeneration || null;
+            const capturedConnectionGeneration = normalizeLifecycleGeneration(
+                suuntoHealthLifecycleGuards.requiredDocumentFieldValues
+                    .expectedFields.connectionStateGeneration,
+            );
+            if ((queueItem.suuntoHealthTokenCredentialGeneration !== undefined
+                    && queueItem.suuntoHealthTokenCredentialGeneration !== capturedTokenGeneration)
+                || (queueItem.suuntoHealthConnectionStateGeneration !== undefined
+                    && queueItem.suuntoHealthConnectionStateGeneration !== capturedConnectionGeneration)) {
+                logger.info('[HealthSync][Suunto] Skipping webhook work from a superseded account lifecycle.');
+                return markQueueItemSkipped(
+                    queueItem,
+                    undefined,
+                    'user_or_provider_lifecycle_changed',
+                    {
+                        skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                        sessionsWritten: 0,
+                        sessionsSkipped: 0,
+                        healthRecordsWritten: 0,
+                        healthRecordsUnchanged: 0,
+                        healthRecordsStale: 0,
+                    },
+                );
+            }
         }
         if (await shouldSkipQueueWorkForDeletedUser(
             firebaseUserID,

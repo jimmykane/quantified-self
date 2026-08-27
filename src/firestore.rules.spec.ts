@@ -1895,6 +1895,25 @@ describe('Firestore Security Rules', () => {
             await assertFails(adminDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
             await assertFails(adminDb.doc('suuntoHealthWebhookIngress/forged').set({ processed: false }));
         });
+
+        it('should deny all browser access to Suunto Health webhook account bindings', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookAccountBindings/binding-1').set({
+                    schemaVersion: 1,
+                    userID: 'regular-user',
+                    tokenCredentialGeneration: 'credential-generation-1',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/forged').set({
+                schemaVersion: 1,
+                userID: 'admin-user',
+            }));
+        });
     });
 
     describe('Changelogs Collection', () => {

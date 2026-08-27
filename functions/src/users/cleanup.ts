@@ -14,6 +14,7 @@ import {
     SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
 } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
@@ -895,6 +896,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook account binding', SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'providerUserId', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));

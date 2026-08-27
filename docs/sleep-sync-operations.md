@@ -30,8 +30,10 @@ Account deletion recursively removes both because they remain below `users/{uid}
 
 Suunto Activity, daily-statistics, and Recovery values are separate Health source records. They do not
 modify `sleepSessions`, workout events, FIT activity metrics, readiness, Training, or MCP output. Signed
-Suunto Activity/Recovery notifications enqueue compact bounded refetches; the raw notification samples are
-not persisted. See [Suunto 24/7 Health integration](suunto-integration.md).
+Suunto Activity/Recovery notifications bind to one active staged UID before compact ingress persistence and
+enqueue bounded refetches asynchronously; the raw notification samples are not persisted. Signed permanent
+rejects are acknowledged without retained ingress, and later non-retryable ingress is recursively deleted.
+See [Suunto 24/7 Health integration](suunto-integration.md).
 
 ## Provider Kill Switch
 

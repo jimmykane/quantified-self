@@ -1,7 +1,9 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import {
   SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
 } from '../sleep/constants';
@@ -9,24 +11,36 @@ import { addSleepSyncQueueItem } from '../sleep/queue';
 import {
   isProviderQueueSkippedWithoutRetryError,
 } from '../queue/provider-queue-errors';
-import {
-  getUserDeletionGuardState,
-  UserDeletionGuardState,
-} from '../shared/user-deletion-guard';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
+import {
+  doesServiceDisconnectOperationPermitTokenUse,
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
+} from '../service-token-store';
+import {
+  ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+  doesOAuthCredentialGenerationAuthorizeToken,
+} from '../token-refresh-coordinator';
 import {
   SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
   SUUNTO_HEALTH_MAX_SUPPORTED_TIMESTAMP_MS,
   SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from './health';
 import { isSuuntoHealthSyncEnabled } from './health-flags';
+import { isSuuntoHealthSyncUserAllowed } from './health-rollout';
+import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import {
-  isSuuntoHealthSyncUserAllowed,
-  SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
-} from './health-rollout';
+  doesSuuntoHealthWebhookBindingMatch,
+  getSuuntoHealthWebhookAccountBindingRef,
+  normalizeSuuntoTokenCredentialGeneration,
+  parseSuuntoHealthWebhookAccountBinding,
+  type SuuntoHealthWebhookAccountBinding,
+} from './health-webhook-binding';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 1;
+const FIREBASE_UID_MAX_LENGTH = 128;
+const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 3;
 export const SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS = 16;
 
 export type SuuntoHealthWebhookNotificationType =
@@ -48,35 +62,36 @@ export interface PersistSuuntoHealthWebhookIngressInput {
 
 interface SuuntoHealthWebhookIngressRecord {
   schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION;
+  userID: string;
   notificationType: SuuntoHealthWebhookNotificationType;
   providerUserId: string;
+  tokenCredentialGeneration: string | null;
+  connectionState: string | null;
+  connectionStateGeneration: string | null;
   windows: SuuntoHealthWebhookWindow[];
   receivedAtMs: number;
   processed: boolean;
 }
 
-type IngressResultStatus =
+type IngressDiscardReason =
   | 'invalid_ingress'
   | 'provider_disabled'
   | 'user_not_allowed_or_disconnected'
   | 'user_deleted_or_deleting'
-  | 'queue_skipped'
-  | 'queued';
+  | 'queue_skipped';
+
+export interface PersistSuuntoHealthWebhookIngressDependencies {
+  db?: admin.firestore.Firestore;
+  isUserAllowed?: (uid: string) => boolean;
+  nowMs?: () => number;
+}
 
 export interface SuuntoHealthWebhookIngressDependencies {
   addQueueItem?: typeof addSleepSyncQueueItem;
   db?: admin.firestore.Firestore;
-  getDeletionGuard?: (
-    db: admin.firestore.Firestore,
-    uid: string,
-  ) => Promise<UserDeletionGuardState>;
   isHealthEnabled?: () => boolean;
   isUserAllowed?: (uid: string) => boolean;
   nowMs?: () => number;
-  resolveUserID?: (
-    db: admin.firestore.Firestore,
-    providerUserId: string,
-  ) => Promise<string | null>;
 }
 
 function isNotificationType(value: unknown): value is SuuntoHealthWebhookNotificationType {
@@ -127,6 +142,28 @@ function validateProviderUserId(value: unknown): string {
   return providerUserId;
 }
 
+function validateFirebaseUserID(value: unknown): string {
+  const userID = typeof value === 'string' ? value.trim() : '';
+  if (!userID || userID !== value || userID.length > FIREBASE_UID_MAX_LENGTH) {
+    throw new Error('Invalid Suunto Health webhook ingress user.');
+  }
+  return userID;
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized.length > 0 ? normalized : null;
+}
+
+function validateOptionalLifecycleString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!normalized || normalized !== value || normalized.length > 128) {
+    throw new Error('Invalid Suunto Health webhook ingress lifecycle fence.');
+  }
+  return normalized;
+}
+
 function parseIngressRecord(value: unknown): SuuntoHealthWebhookIngressRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Invalid Suunto Health webhook ingress record.');
@@ -141,19 +178,18 @@ function parseIngressRecord(value: unknown): SuuntoHealthWebhookIngressRecord {
   }
   return {
     schemaVersion: SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION,
+    userID: validateFirebaseUserID(record.userID),
     notificationType: record.notificationType,
     providerUserId: validateProviderUserId(record.providerUserId),
+    tokenCredentialGeneration: validateOptionalLifecycleString(
+      record.tokenCredentialGeneration,
+    ),
+    connectionState: validateOptionalLifecycleString(record.connectionState),
+    connectionStateGeneration: validateOptionalLifecycleString(record.connectionStateGeneration),
     windows: validateWindows(record.windows),
     receivedAtMs: Number(record.receivedAtMs),
     processed: false,
   };
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  const code = error && typeof error === 'object'
-    ? (error as { code?: unknown }).code
-    : undefined;
-  return code === 6 || code === 'already-exists' || code === 'ALREADY_EXISTS';
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -163,10 +199,123 @@ function isNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND';
 }
 
+function tokenAndRootStillAuthorizeBinding(
+  tokenSnapshot: admin.firestore.DocumentSnapshot,
+  tokenRootSnapshot: admin.firestore.DocumentSnapshot,
+  providerUserId: string,
+  binding: SuuntoHealthWebhookAccountBinding,
+  nowMs: number,
+): boolean {
+  if (!tokenSnapshot.exists || !tokenRootSnapshot.exists) return false;
+  const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
+  const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
+  return tokenData?.userName === providerUserId
+    && (!tokenData.serviceName || tokenData.serviceName === ServiceNames.SuuntoApp)
+    && doesSuuntoHealthWebhookBindingMatch(
+      binding,
+      binding.userID,
+      normalizeSuuntoTokenCredentialGeneration(tokenData?.tokenCredentialGeneration),
+    )
+    && doesOAuthCredentialGenerationAuthorizeToken(
+      tokenRootData,
+      tokenData?.tokenCredentialGeneration,
+    )
+    && !isServiceDisconnectPendingData(tokenRootData)
+    && doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs);
+}
+
+interface ActiveIngressBinding {
+  binding: SuuntoHealthWebhookAccountBinding;
+  bindingRef: admin.firestore.DocumentReference;
+  tokenRef: admin.firestore.DocumentReference;
+  tokenRootRef: admin.firestore.DocumentReference;
+  serviceMetaRef: admin.firestore.DocumentReference;
+  connectionState: string | null;
+  connectionStateGeneration: string | null;
+  bindingExpectedFields: Readonly<Record<string, unknown>>;
+  tokenExpectedFields: Readonly<Record<string, unknown>>;
+  tokenRootExpectedFields: Readonly<Record<string, unknown>>;
+  serviceMetaExpectedFields: Readonly<Record<string, unknown>>;
+}
+
+async function getActiveIngressBindingInTransaction(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  providerUserId: string,
+  isUserAllowed: (uid: string) => boolean,
+  nowMs: number,
+): Promise<ActiveIngressBinding | null> {
+  const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId);
+  const bindingSnapshot = await transaction.get(bindingRef);
+  const binding = parseSuuntoHealthWebhookAccountBinding(bindingSnapshot.data());
+  if (!binding || !isUserAllowed(binding.userID)) return null;
+
+  const tokenRootRef = db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(binding.userID);
+  const tokenRef = tokenRootRef.collection('tokens').doc(providerUserId);
+  const serviceMetaRef = db.collection('users').doc(binding.userID)
+    .collection('meta').doc(ServiceNames.SuuntoApp);
+  const [tokenSnapshot, tokenRootSnapshot, serviceMetaSnapshot, deletionGuard] =
+    await Promise.all([
+      transaction.get(tokenRef),
+      transaction.get(tokenRootRef),
+      transaction.get(serviceMetaRef),
+      getUserDeletionGuardStateInTransaction(db, transaction, binding.userID, nowMs),
+    ]);
+  const serviceMeta = serviceMetaSnapshot.data() as Record<string, unknown> | undefined;
+  if (deletionGuard.shouldSkip
+    || !serviceMetaSnapshot.exists
+    || isServiceUnavailableForSyncConnection(serviceMeta)
+    || !tokenAndRootStillAuthorizeBinding(
+      tokenSnapshot,
+      tokenRootSnapshot,
+      providerUserId,
+      binding,
+      nowMs,
+    )) {
+    return null;
+  }
+
+  const tokenData = tokenSnapshot.data() as Record<string, unknown>;
+  const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown>;
+  const connectionState = normalizeOptionalString(serviceMeta?.connectionState);
+  const connectionStateGeneration = normalizeOptionalString(
+    serviceMeta?.connectionStateGeneration,
+  );
+  return {
+    binding,
+    bindingRef,
+    tokenRef,
+    tokenRootRef,
+    serviceMetaRef,
+    connectionState,
+    connectionStateGeneration,
+    bindingExpectedFields: {
+      schemaVersion: binding.schemaVersion,
+      userID: binding.userID,
+      tokenCredentialGeneration: binding.tokenCredentialGeneration,
+    },
+    tokenExpectedFields: {
+      userName: providerUserId,
+      serviceName: tokenData.serviceName,
+      tokenCredentialGeneration: tokenData.tokenCredentialGeneration,
+    },
+    tokenRootExpectedFields: {
+      [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]:
+        tokenRootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+      [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]:
+        tokenRootData[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD],
+    },
+    serviceMetaExpectedFields: {
+      connectionState: serviceMeta?.connectionState,
+      connectionStateGeneration: serviceMeta?.connectionStateGeneration,
+    },
+  };
+}
+
 export async function persistSuuntoHealthWebhookIngress(
   input: PersistSuuntoHealthWebhookIngressInput,
-  db: admin.firestore.Firestore = admin.firestore(),
-): Promise<'created' | 'duplicate'> {
+  dependencies: PersistSuuntoHealthWebhookIngressDependencies = {},
+): Promise<'created' | 'duplicate' | 'permanent_skip'> {
   if (!/^[a-f0-9]{64}$/.test(input.notificationDigest)) {
     throw new Error('Invalid Suunto Health webhook notification digest.');
   }
@@ -175,63 +324,58 @@ export async function persistSuuntoHealthWebhookIngress(
   if (!isNotificationType(input.notificationType)) {
     throw new Error('Invalid Suunto Health webhook notification type.');
   }
-  const receivedAtMs = input.receivedAtMs ?? Date.now();
+  const nowMs = (dependencies.nowMs || Date.now)();
+  const receivedAtMs = input.receivedAtMs ?? nowMs;
   if (!Number.isSafeInteger(receivedAtMs) || receivedAtMs < 0) {
     throw new Error('Invalid Suunto Health webhook receive time.');
   }
 
+  const db = dependencies.db || admin.firestore();
+  const isUserAllowed = dependencies.isUserAllowed || isSuuntoHealthSyncUserAllowed;
   const ref = db
     .collection(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME)
     .doc(input.notificationDigest);
-  try {
-    await ref.create({
+  const expireAt = getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS);
+  return db.runTransaction(async transaction => {
+    const activeBinding = await getActiveIngressBindingInTransaction(
+      db,
+      transaction,
+      providerUserId,
+      isUserAllowed,
+      nowMs,
+    );
+    if (!activeBinding) return 'permanent_skip';
+    const currentIngressSnapshot = await transaction.get(ref);
+    if (currentIngressSnapshot.exists) return 'duplicate';
+
+    transaction.create(ref, {
       schemaVersion: SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION,
+      userID: activeBinding.binding.userID,
       notificationType: input.notificationType,
       providerUserId,
+      tokenCredentialGeneration: activeBinding.binding.tokenCredentialGeneration,
+      connectionState: activeBinding.connectionState,
+      connectionStateGeneration: activeBinding.connectionStateGeneration,
       windows,
       receivedAtMs,
       processed: false,
-      expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+      expireAt,
     });
     return 'created';
-  } catch (error) {
-    if (isAlreadyExistsError(error)) return 'duplicate';
-    throw error;
-  }
-}
-
-async function resolveSuuntoHealthWebhookUserID(
-  db: admin.firestore.Firestore,
-  providerUserId: string,
-): Promise<string | null> {
-  for (const userID of SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS) {
-    if (!isSuuntoHealthSyncUserAllowed(userID)) continue;
-    const snapshot = await db
-      .collection('suuntoAppAccessTokens')
-      .doc(userID)
-      .collection('tokens')
-      .where('userName', '==', providerUserId)
-      .limit(1)
-      .get();
-    if (!snapshot.empty) return userID;
-  }
-  return null;
+  });
 }
 
 async function markIngressProcessed(
   ref: admin.firestore.DocumentReference,
-  resultStatus: IngressResultStatus,
   nowMs: number,
-  userID?: string,
-  windowsQueued = 0,
+  windowsQueued: number,
 ): Promise<void> {
   try {
     await ref.update({
       processed: true,
       processedAtMs: nowMs,
-      resultStatus,
+      resultStatus: 'queued',
       windowsQueued,
-      ...(userID ? { userID } : {}),
     });
   } catch (error) {
     // Account/service cleanup may recursively delete the short-lived ingress
@@ -240,10 +384,20 @@ async function markIngressProcessed(
   }
 }
 
+async function recursivelyDiscardIngress(
+  db: admin.firestore.Firestore,
+  ref: admin.firestore.DocumentReference,
+  reason: IngressDiscardReason,
+): Promise<void> {
+  await db.recursiveDelete(ref);
+  logger.info('[HealthSync][Suunto] Discarded non-retryable webhook ingress.', { reason });
+}
+
 export async function processSuuntoHealthWebhookIngressDocument(
   eventSnapshot: admin.firestore.QueryDocumentSnapshot,
   dependencies: SuuntoHealthWebhookIngressDependencies = {},
 ): Promise<void> {
+  const db = dependencies.db || admin.firestore();
   const nowMs = (dependencies.nowMs || Date.now)();
   const currentSnapshot = await eventSnapshot.ref.get();
   if (!currentSnapshot.exists) return;
@@ -258,33 +412,34 @@ export async function processSuuntoHealthWebhookIngressDocument(
     ingress = parseIngressRecord(currentData);
   } catch {
     logger.warn('[HealthSync][Suunto] Ignoring malformed webhook ingress.');
-    await markIngressProcessed(eventSnapshot.ref, 'invalid_ingress', nowMs);
+    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'invalid_ingress');
     return;
   }
 
   const isHealthEnabled = dependencies.isHealthEnabled || isSuuntoHealthSyncEnabled;
   if (!isHealthEnabled()) {
-    await markIngressProcessed(eventSnapshot.ref, 'provider_disabled', nowMs);
+    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'provider_disabled');
     return;
   }
 
-  const db = dependencies.db || admin.firestore();
-  const resolveUserID = dependencies.resolveUserID || resolveSuuntoHealthWebhookUserID;
-  const userID = await resolveUserID(db, ingress.providerUserId);
   const isUserAllowed = dependencies.isUserAllowed || isSuuntoHealthSyncUserAllowed;
-  if (!userID || !isUserAllowed(userID)) {
-    await markIngressProcessed(eventSnapshot.ref, 'user_not_allowed_or_disconnected', nowMs);
-    return;
-  }
-
-  const getDeletionGuard = dependencies.getDeletionGuard || getUserDeletionGuardState;
-  const deletionGuard = await getDeletionGuard(db, userID);
-  if (deletionGuard.shouldSkip) {
-    await markIngressProcessed(
-      eventSnapshot.ref,
-      'user_deleted_or_deleting',
+  const activeBinding = await db.runTransaction(transaction =>
+    getActiveIngressBindingInTransaction(
+      db,
+      transaction,
+      ingress.providerUserId,
+      isUserAllowed,
       nowMs,
-      userID,
+    ));
+  if (!activeBinding
+    || activeBinding.binding.userID !== ingress.userID
+    || activeBinding.binding.tokenCredentialGeneration !== ingress.tokenCredentialGeneration
+    || activeBinding.connectionState !== ingress.connectionState
+    || activeBinding.connectionStateGeneration !== ingress.connectionStateGeneration) {
+    await recursivelyDiscardIngress(
+      db,
+      eventSnapshot.ref,
+      'user_not_allowed_or_disconnected',
     );
     return;
   }
@@ -294,28 +449,42 @@ export async function processSuuntoHealthWebhookIngressDocument(
     await Promise.all(ingress.windows.map(window => addQueueItem({
       type: 'suunto_health_poll',
       provider: SLEEP_PROVIDERS.SuuntoApp,
-      userID,
+      userID: ingress.userID,
       providerUserId: ingress.providerUserId,
       rangeStartMs: window.startMs,
       rangeEndMs: window.endMs,
       healthTrigger: 'webhook',
-      dedupeKey: `suunto-health-webhook:${userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${eventSnapshot.id}`,
+      dedupeKey: `suunto-health-webhook:${ingress.userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${eventSnapshot.id}`,
       dispatchImmediately: true,
+      suuntoHealthTokenCredentialGeneration: ingress.tokenCredentialGeneration,
+      suuntoHealthConnectionStateGeneration: ingress.connectionStateGeneration,
+      requiredDocumentFieldValues: [
+        {
+          documentRef: activeBinding.bindingRef,
+          expectedFields: activeBinding.bindingExpectedFields,
+        },
+        {
+          documentRef: activeBinding.tokenRef,
+          expectedFields: activeBinding.tokenExpectedFields,
+        },
+        {
+          documentRef: activeBinding.tokenRootRef,
+          expectedFields: activeBinding.tokenRootExpectedFields,
+        },
+        {
+          documentRef: activeBinding.serviceMetaRef,
+          expectedFields: activeBinding.serviceMetaExpectedFields,
+        },
+      ],
     })));
   } catch (error) {
     if (!isProviderQueueSkippedWithoutRetryError(error)) throw error;
     logger.info('[HealthSync][Suunto] Webhook ingress fan-out skipped by account lifecycle.');
-    await markIngressProcessed(eventSnapshot.ref, 'queue_skipped', nowMs, userID);
+    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'queue_skipped');
     return;
   }
 
-  await markIngressProcessed(
-    eventSnapshot.ref,
-    'queued',
-    nowMs,
-    userID,
-    ingress.windows.length,
-  );
+  await markIngressProcessed(eventSnapshot.ref, nowMs, ingress.windows.length);
   logger.info('[HealthSync][Suunto] Fanned out durable webhook ingress.', {
     windows: ingress.windows.length,
   });
