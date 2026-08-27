@@ -8,6 +8,8 @@ export const FUNCTIONS_MANIFEST = {
     listUsers: { name: 'listUsers', region: 'europe-west2' },
     getQueueStats: { name: 'getQueueStats', region: 'europe-west2' },
     getUserCount: { name: 'getUserCount', region: 'europe-west2' },
+    getAdminDashboardHistory: { name: 'getAdminDashboardHistory', region: 'europe-west2' },
+    scheduleAdminDashboardSnapshot: { name: 'scheduleAdminDashboardSnapshot', region: 'europe-west2' },
     getSubscriptionHistoryTrend: { name: 'getSubscriptionHistoryTrend', region: 'europe-west2' },
     getUserGrowthTrend: { name: 'getUserGrowthTrend', region: 'europe-west2' },
     setMaintenanceMode: { name: 'setMaintenanceMode', region: 'europe-west2' },

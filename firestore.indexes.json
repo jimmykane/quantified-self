@@ -1562,6 +1562,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "adminDashboardSnapshots",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "mcpOAuthAuthorizationRequests",
       "fieldPath": "expireAt",
       "ttl": true,

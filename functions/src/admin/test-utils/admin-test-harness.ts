@@ -226,6 +226,10 @@ vi.mock('firebase-functions/v2/https', () => ({
     },
 }));
 
+vi.mock('firebase-functions/v2/scheduler', () => ({
+    onSchedule: vi.fn((_options: unknown, handler: unknown) => handler),
+}));
+
 vi.mock('../../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*'],
     getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth,
@@ -290,6 +294,8 @@ export const {
     getQueueStats,
     retrySportsLibReparseHeavyJob,
     getUserCount,
+    getAdminDashboardHistory,
+    scheduleAdminDashboardSnapshot,
     getSubscriptionHistoryTrend,
     getUserGrowthTrend,
     getMaintenanceStatus,

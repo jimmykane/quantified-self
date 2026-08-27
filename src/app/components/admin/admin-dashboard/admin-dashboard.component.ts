@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import {
+    AdminDashboardHistoryResponse,
     AdminService,
     FinancialStats,
     MaintenanceStatus,
@@ -32,6 +33,7 @@ import {
     buildAdminDashboardUserKpiCards
 } from '../../../helpers/admin-dashboard-summary.helper';
 import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
+import { AdminUserHistoryComponent } from './admin-user-history.component';
 
 interface AdminDashboardOverview {
     value: string;
@@ -54,6 +56,7 @@ interface AdminDashboardOverview {
         MatTooltipModule,
         RouterModule,
         AdminFinancialsComponent,
+        AdminUserHistoryComponent,
         CompactCountPipe
     ]
 })
@@ -71,6 +74,9 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
     readonly isLoadingUsers = signal(true);
     readonly userError = signal<string | null>(null);
+    readonly userHistory = signal<AdminDashboardHistoryResponse | null>(null);
+    readonly isLoadingUserHistory = signal(true);
+    readonly userHistoryError = signal<string | null>(null);
 
     readonly queueStats = signal<QueueStats | null>(null);
     readonly isLoadingQueues = signal(true);
@@ -195,6 +201,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     }
 
     fetchUserOverview(): void {
+        this.fetchUserHistory();
         this.isLoadingUsers.set(true);
         this.userError.set(null);
         forkJoin({
@@ -222,6 +229,22 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
                 this.logger.error('Failed to load admin user overview:', err);
                 this.userError.set('User KPIs are unavailable.');
                 this.isLoadingUsers.set(false);
+            }
+        });
+    }
+
+    fetchUserHistory(): void {
+        this.isLoadingUserHistory.set(true);
+        this.userHistoryError.set(null);
+        this.adminService.getAdminDashboardHistory(365).pipe(takeUntil(this.destroy$)).subscribe({
+            next: (history) => {
+                this.userHistory.set(history);
+                this.isLoadingUserHistory.set(false);
+            },
+            error: (err) => {
+                this.logger.error('Failed to load admin user history:', err);
+                this.userHistoryError.set('Daily user history is unavailable. Live user KPIs are unaffected.');
+                this.isLoadingUserHistory.set(false);
             }
         });
     }

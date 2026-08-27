@@ -201,6 +201,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
+| `adminDashboardSnapshots` | 730 days | `expireAt` | Aggregate-only daily user, authentication-activity, plan, and subscription-cadence history for the Admin Dashboard |
 | `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Deletion guards with TTL fallback cleanup |
 | `mcpOAuthAuthorizationRequests` / `mcpOAuthAuthorizationCodes` | 10 / 5 minutes | `expireAt` | MCP OAuth consent and single-use codes |
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
@@ -216,6 +217,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)

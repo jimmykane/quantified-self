@@ -27,14 +27,17 @@ describe('getUserCount subscription cadence', () => {
     it('splits monthly, yearly, and unknown active subscriptions by paid tier', async () => {
         const countSnapshot = (count: number) => ({ data: () => ({ count }) });
         const countGet = (count: number) => vi.fn().mockResolvedValue(countSnapshot(count));
-        const subscriptionDoc = (data: Record<string, unknown>) => ({ data: () => data });
+        const subscriptionDoc = (uid: string, subscriptionId: string, data: Record<string, unknown>) => ({
+            ref: { path: `customers/${uid}/subscriptions/${subscriptionId}` },
+            data: () => data,
+        });
         const activeSubscriptionDocs = [
-            subscriptionDoc({ role: 'pro', items: [{ plan: { interval: 'month' } }] }),
-            subscriptionDoc({ role: 'pro', items: [{ price: { recurring: { interval: 'year' } } }] }),
-            subscriptionDoc({ role: 'pro', items: [{ plan: { interval: 'week' } }] }),
-            subscriptionDoc({ role: 'basic', items: [{ plan: { interval: 'month' } }] }),
-            subscriptionDoc({ role: 'basic', items: [{ price: { recurring: { interval: 'month' } } }] }),
-            subscriptionDoc({ role: 'basic', items: [{ plan: { interval: 'year' } }] }),
+            subscriptionDoc('pro-monthly', 'sub-1', { role: 'pro', created: 1_700_000_001, items: [{ plan: { interval: 'month' } }] }),
+            subscriptionDoc('pro-yearly', 'sub-2', { role: 'pro', created: 1_700_000_002, items: [{ price: { recurring: { interval: 'year' } } }] }),
+            subscriptionDoc('pro-unknown', 'sub-3', { role: 'pro', created: 1_700_000_003, items: [{ plan: { interval: 'week' } }] }),
+            subscriptionDoc('basic-monthly-1', 'sub-4', { role: 'basic', created: 1_700_000_004, items: [{ plan: { interval: 'month' } }] }),
+            subscriptionDoc('basic-monthly-2', 'sub-5', { role: 'basic', created: 1_700_000_005, items: [{ price: { recurring: { interval: 'month' } } }] }),
+            subscriptionDoc('basic-yearly', 'sub-6', { role: 'basic', created: 1_700_000_006, items: [{ plan: { interval: 'year' } }] }),
         ];
         const emptyCacheDoc = {
             get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
@@ -52,23 +55,13 @@ describe('getUserCount subscription cadence', () => {
             }
 
             if (path === 'subscriptions') {
-                const conditions: { field: string; value: unknown }[] = [];
-                const where = vi.fn((field: string, _operator: string, value: unknown) => {
-                    conditions.push({ field, value });
-                    return query;
-                });
-                const count = vi.fn().mockReturnValue({
-                    get: vi.fn().mockImplementation(() => {
-                        const role = conditions.find(condition => condition.field === 'role')?.value;
-                        return Promise.resolve(countSnapshot(role === 'pro' || role === 'basic' ? 3 : 0));
-                    }),
-                });
+                const where = vi.fn(() => query);
                 const select = vi.fn().mockImplementation((...fields: string[]) => ({
                     get: vi.fn().mockResolvedValue({
                         docs: fields.includes('items') ? activeSubscriptionDocs : [],
                     }),
                 }));
-                const query = { where, count, select };
+                const query = { where, select };
                 return query;
             }
 

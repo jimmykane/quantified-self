@@ -1,0 +1,141 @@
+:host {
+    display: block;
+    margin-top: 1.5rem;
+}
+
+.history-header,
+.history-status,
+.history-state,
+.chart-heading {
+    display: flex;
+    align-items: center;
+}
+
+.history-header {
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.history-header h3,
+.chart-heading h4,
+.history-header p,
+.chart-heading p {
+    margin: 0;
+}
+
+.history-header h3 {
+    color: var(--mat-sys-on-surface);
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+.history-header p,
+.chart-heading p,
+.history-collecting span {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.82rem;
+}
+
+.history-header p {
+    margin-top: 0.25rem;
+}
+
+.history-state {
+    justify-content: center;
+    gap: 0.75rem;
+    min-height: 112px;
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.history-error {
+    justify-content: flex-start;
+    min-height: auto;
+    padding: 1rem;
+    color: var(--mat-sys-error);
+}
+
+.history-collecting {
+    justify-content: flex-start;
+    padding: 1rem;
+}
+
+.history-collecting div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.history-status {
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    color: var(--mat-sys-primary);
+    font-size: 0.78rem;
+}
+
+.history-status mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+}
+
+.history-stale {
+    color: var(--mat-sys-tertiary);
+}
+
+.history-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.history-chart-wide {
+    grid-column: 1 / -1;
+}
+
+.history-chart-card {
+    min-width: 0;
+    padding: 1rem;
+}
+
+.chart-heading {
+    min-height: 48px;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.chart-heading h4 {
+    color: var(--mat-sys-on-surface);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.chart-heading p {
+    margin-top: 0.2rem;
+}
+
+.history-chart {
+    width: 100%;
+    height: 300px;
+    min-height: 300px;
+}
+
+@media (max-width: 760px) {
+    .history-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .history-chart-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .history-chart-wide {
+        grid-column: auto;
+    }
+
+    .history-chart {
+        height: 280px;
+        min-height: 280px;
+    }
+}

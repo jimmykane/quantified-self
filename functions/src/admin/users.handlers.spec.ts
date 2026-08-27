@@ -909,7 +909,7 @@ describe('listUsers Cloud Function', () => {
                 set: vi.fn().mockResolvedValue(undefined),
             };
             const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
-                ref: { parent: { parent: { id: uid } } },
+                ref: { path: `customers/${uid}/subscriptions/sub-${uid}` },
                 data: () => data,
             });
             const paidHistoryDocs = [
@@ -926,12 +926,20 @@ describe('listUsers Cloud Function', () => {
                 `paid-${index}`,
                 { role: index % 2 === 0 ? 'pro' : 'basic', status }
             ));
-            const activeSubscriptionDocs = [
-                subscriptionDoc('paid-0', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
-                subscriptionDoc('paid-1', { status: 'active', role: 'basic', items: [{ price: { recurring: { interval: 'year' } } }], cancel_at_period_end: true }),
-                subscriptionDoc('paid-2', { status: 'active', role: 'pro', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
-                subscriptionDoc('legacy-active', { status: 'active', role: 'legacy', items: [{ plan: { interval: 'month' } }], cancel_at_period_end: true }),
-            ];
+            const activeSubscriptionDocs = Array.from({ length: 55 }, (_, index) => subscriptionDoc(
+                `paid-${index}`,
+                {
+                    status: 'active',
+                    role: index < 30 ? 'pro' : 'basic',
+                    created: 1_700_000_000 + index,
+                    items: index === 0 || index === 2
+                        ? [{ plan: { interval: 'month' } }]
+                        : index === 30
+                            ? [{ price: { recurring: { interval: 'year' } } }]
+                            : [],
+                    cancel_at_period_end: index < 4,
+                },
+            ));
             const subscriptionWhereCalls: { field: string; value: unknown }[] = [];
 
             mockCollection.mockImplementation((path: string) => {
@@ -1030,7 +1038,7 @@ describe('listUsers Cloud Function', () => {
                 set: vi.fn().mockResolvedValue(undefined),
             };
             const subscriptionDoc = (uid: string, data: Record<string, unknown>) => ({
-                ref: { parent: { parent: { id: uid } } },
+                ref: { path: `customers/${uid}/subscriptions/sub-${uid}` },
                 data: () => data,
             });
             const paidHistoryDocs = [

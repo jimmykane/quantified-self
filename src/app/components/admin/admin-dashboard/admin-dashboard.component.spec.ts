@@ -4,9 +4,11 @@ import { provideRouter } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 import { AdminDashboardComponent } from './admin-dashboard.component';
 import {
+    AdminDashboardHistoryResponse,
     AdminService,
     FinancialStats,
     MaintenanceStatus,
@@ -17,6 +19,8 @@ import {
 } from '../../../services/admin.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-new.service';
+import { AppThemeService } from '../../../services/app.theme.service';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 describe('AdminDashboardComponent', () => {
     let fixture: ComponentFixture<AdminDashboardComponent>;
@@ -26,6 +30,7 @@ describe('AdminDashboardComponent', () => {
         getTotalUserCount: ReturnType<typeof vi.fn>;
         getUserGrowthTrend: ReturnType<typeof vi.fn>;
         getSubscriptionHistoryTrend: ReturnType<typeof vi.fn>;
+        getAdminDashboardHistory: ReturnType<typeof vi.fn>;
         getQueueStats: ReturnType<typeof vi.fn>;
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
     };
@@ -101,6 +106,13 @@ describe('AdminDashboardComponent', () => {
             proPlannedCancellations: 3,
             proNet: 3,
         },
+    };
+
+    const mockUserHistory: AdminDashboardHistoryResponse = {
+        days: 365,
+        startDate: '2025-08-28',
+        endDate: '2026-08-27',
+        snapshots: [],
     };
 
     const mockQueueStats: QueueStats = {
@@ -218,6 +230,7 @@ describe('AdminDashboardComponent', () => {
             getTotalUserCount: vi.fn().mockReturnValue(of(mockUserStats)),
             getUserGrowthTrend: vi.fn().mockReturnValue(of(mockGrowthTrend)),
             getSubscriptionHistoryTrend: vi.fn().mockReturnValue(of(mockSubscriptionTrend)),
+            getAdminDashboardHistory: vi.fn().mockReturnValue(of(mockUserHistory)),
             getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
             getMaintenanceStatus: vi.fn().mockReturnValue(of(mockMaintenanceStatus)),
         };
@@ -239,6 +252,18 @@ describe('AdminDashboardComponent', () => {
                 { provide: AdminService, useValue: adminServiceSpy },
                 { provide: AppWhatsNewService, useValue: whatsNewServiceSpy },
                 { provide: LoggerService, useValue: loggerSpy },
+                { provide: AppThemeService, useValue: { getAppTheme: () => of(AppThemes.Normal) } },
+                {
+                    provide: EChartsLoaderService,
+                    useValue: {
+                        init: vi.fn(),
+                        setOption: vi.fn(),
+                        resize: vi.fn(),
+                        dispose: vi.fn(),
+                        subscribeToViewportResize: vi.fn(() => () => { }),
+                        attachMobileSeriesTapFeedback: vi.fn(() => () => { }),
+                    },
+                },
             ]
         }).compileComponents();
     });
@@ -264,10 +289,12 @@ describe('AdminDashboardComponent', () => {
         expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalled();
         expect(adminServiceSpy.getUserGrowthTrend).toHaveBeenCalledWith(12);
         expect(adminServiceSpy.getSubscriptionHistoryTrend).toHaveBeenCalledWith(12);
+        expect(adminServiceSpy.getAdminDashboardHistory).toHaveBeenCalledWith(365);
         expect(adminServiceSpy.getQueueStats).toHaveBeenCalledWith(true);
         expect(adminServiceSpy.getMaintenanceStatus).toHaveBeenCalled();
         expect(component.financialStats()).toEqual(mockFinancialStats);
         expect(component.userStats()).toEqual(mockUserStats);
+        expect(component.userHistory()).toEqual(mockUserHistory);
         expect(component.queueRows()).toHaveLength(8);
         expect(component.maintenanceCards()).toHaveLength(3);
     });
@@ -285,6 +312,8 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Monthly 18 · Yearly 11 · Unknown 1');
         expect(text).toContain('Monthly 22 · Yearly 3');
         expect(text).toContain('Pro and Basic totals show active monthly and yearly subscription cadence');
+        expect(text).toContain('aggregate snapshots without user identifiers');
+        expect(text).toContain('Collecting daily history');
         expect(text).toContain('Total Users');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');
@@ -350,6 +379,17 @@ describe('AdminDashboardComponent', () => {
         expect(text).not.toContain('User KPIs are unavailable.');
         expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin user growth trend:', expect.any(Error));
         expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin subscription history trend:', expect.any(Error));
+    });
+
+    it('should isolate daily history failures from live user KPIs', () => {
+        adminServiceSpy.getAdminDashboardHistory.mockReturnValue(throwError(() => new Error('history failed')));
+        createComponent();
+
+        const text = (fixture.nativeElement as HTMLElement).textContent || '';
+        expect(text).toContain('Total Users');
+        expect(text).toContain('Daily user history is unavailable. Live user KPIs are unaffected.');
+        expect(text).not.toContain('User KPIs are unavailable.');
+        expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin user history:', expect.any(Error));
     });
 
     it('should show top-level unavailable state when financial stats fail', () => {

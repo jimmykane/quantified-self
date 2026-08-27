@@ -33,6 +33,17 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps aggregate admin dashboard history on the documented TTL without an expireAt index', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'adminDashboardSnapshots',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
     it('keeps outbound activity echo fingerprints short-lived and unindexed', () => {
         const config = loadFirestoreIndexes();
 

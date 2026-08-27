@@ -123,6 +123,38 @@ export interface UserCountResponse {
     providers: Record<string, number>;
 }
 
+export type AdminDashboardHistoryDays = 30 | 90 | 365;
+
+export interface GetAdminDashboardHistoryRequest {
+    days?: AdminDashboardHistoryDays;
+}
+
+export interface AdminDashboardHistoryPoint {
+    date: string;
+    computedAt: string;
+    users: {
+        total: number;
+        free: number;
+        basic: number;
+        pro: number;
+        onboardingCompleted: number;
+    };
+    authActivity: {
+        eligibleAccounts: number;
+        last24Hours: number;
+        last7Days: number;
+        last30Days: number;
+    };
+    subscriptionCadence: SubscriptionCadenceStats;
+}
+
+export interface AdminDashboardHistoryResponse {
+    days: AdminDashboardHistoryDays;
+    startDate: string;
+    endDate: string;
+    snapshots: AdminDashboardHistoryPoint[];
+}
+
 export interface GetSubscriptionHistoryTrendRequest {
     months?: number;
 }

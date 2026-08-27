@@ -315,4 +315,82 @@ describe('AdminService', () => {
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserGrowthTrend', { months: 24 });
         expect(result).toEqual(mockTrend);
     });
+
+    it('should request and map 365 days of aggregate dashboard history by default', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 365,
+                startDate: '2025-08-28',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: '2026-08-27T00:12:00.000Z',
+                        users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        const history = await firstValueFrom(service.getAdminDashboardHistory());
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('getAdminDashboardHistory', { days: 365 });
+        expect(history.snapshots).toHaveLength(1);
+        expect(history.snapshots[0].authActivity.last30Days).toBe(8);
+    });
+
+    it('should reject malformed dashboard history instead of charting inconsistent totals', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: '2026-08-27T00:12:00.000Z',
+                        users: { total: 10, free: 6, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('inconsistent user totals');
+    });
+
+    it('should reject non-canonical history timestamps', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: 'August 27, 2026 00:12 UTC',
+                        users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('must be an ISO timestamp');
+    });
 });

@@ -190,7 +190,7 @@ export {
   listMcpConnections,
   revokeMcpConnection,
 } from './mcp/callables';
-export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
+export { listUsers, getQueueStats, getUserCount, getAdminDashboardHistory, scheduleAdminDashboardSnapshot, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

@@ -48,6 +48,34 @@ export interface SubscriptionCadenceStats {
     basic: SubscriptionCadenceTierStats;
 }
 
+export type AdminDashboardHistoryDays = 30 | 90 | 365;
+
+export interface AdminDashboardHistoryPoint {
+    date: string;
+    computedAt: string;
+    users: {
+        total: number;
+        free: number;
+        basic: number;
+        pro: number;
+        onboardingCompleted: number;
+    };
+    authActivity: {
+        eligibleAccounts: number;
+        last24Hours: number;
+        last7Days: number;
+        last30Days: number;
+    };
+    subscriptionCadence: SubscriptionCadenceStats;
+}
+
+export interface AdminDashboardHistoryResponse {
+    days: AdminDashboardHistoryDays;
+    startDate: string;
+    endDate: string;
+    snapshots: AdminDashboardHistoryPoint[];
+}
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -310,6 +338,15 @@ export class AdminService {
         );
     }
 
+    getAdminDashboardHistory(days: AdminDashboardHistoryDays = 365): Observable<AdminDashboardHistoryResponse> {
+        return from(this.functionsService.call<{ days: AdminDashboardHistoryDays }, unknown>(
+            'getAdminDashboardHistory',
+            { days }
+        )).pipe(
+            map(result => this.mapAdminDashboardHistoryResponse(result.data, days))
+        );
+    }
+
     private mapCountStats(stats: Partial<CountStats> | undefined): CountStats {
         const mapped: CountStats = {
             total: typeof stats?.total === 'number'
@@ -423,6 +460,109 @@ export class AdminService {
         };
     }
 
+    private mapAdminDashboardHistoryResponse(
+        value: unknown,
+        expectedDays: AdminDashboardHistoryDays
+    ): AdminDashboardHistoryResponse {
+        const response = requireRecord(value, 'response');
+        const days = requireHistoryDays(response['days']);
+        if (days !== expectedDays) {
+            throw new Error('Admin dashboard history range does not match the request.');
+        }
+
+        const startDate = requireUtcDateKey(response['startDate'], 'startDate');
+        const endDate = requireUtcDateKey(response['endDate'], 'endDate');
+        if (startDate > endDate) {
+            throw new Error('Admin dashboard history has an invalid date range.');
+        }
+
+        if (!Array.isArray(response['snapshots'])) {
+            throw new Error('Admin dashboard history snapshots must be an array.');
+        }
+
+        const seenDates = new Set<string>();
+        const snapshots = response['snapshots'].map((snapshot, index) => {
+            const point = this.mapAdminDashboardHistoryPoint(snapshot, index);
+            if (point.date < startDate || point.date > endDate) {
+                throw new Error(`Admin dashboard history snapshot ${index} is outside the requested range.`);
+            }
+            if (seenDates.has(point.date)) {
+                throw new Error(`Admin dashboard history contains duplicate date ${point.date}.`);
+            }
+            seenDates.add(point.date);
+            return point;
+        }).sort((left, right) => left.date.localeCompare(right.date));
+
+        return { days, startDate, endDate, snapshots };
+    }
+
+    private mapAdminDashboardHistoryPoint(value: unknown, index: number): AdminDashboardHistoryPoint {
+        const point = requireRecord(value, `snapshots[${index}]`);
+        const users = requireRecord(point['users'], `snapshots[${index}].users`);
+        const authActivity = requireRecord(point['authActivity'], `snapshots[${index}].authActivity`);
+        const subscriptionCadence = requireRecord(
+            point['subscriptionCadence'],
+            `snapshots[${index}].subscriptionCadence`
+        );
+        const pro = requireCadenceTier(subscriptionCadence['pro'], `snapshots[${index}].subscriptionCadence.pro`);
+        const basic = requireCadenceTier(subscriptionCadence['basic'], `snapshots[${index}].subscriptionCadence.basic`);
+        const mapped: AdminDashboardHistoryPoint = {
+            date: requireUtcDateKey(point['date'], `snapshots[${index}].date`),
+            computedAt: requireIsoTimestamp(point['computedAt'], `snapshots[${index}].computedAt`),
+            users: {
+                total: requireCount(users['total'], `snapshots[${index}].users.total`),
+                free: requireCount(users['free'], `snapshots[${index}].users.free`),
+                basic: requireCount(users['basic'], `snapshots[${index}].users.basic`),
+                pro: requireCount(users['pro'], `snapshots[${index}].users.pro`),
+                onboardingCompleted: requireCount(
+                    users['onboardingCompleted'],
+                    `snapshots[${index}].users.onboardingCompleted`
+                ),
+            },
+            authActivity: {
+                eligibleAccounts: requireCount(
+                    authActivity['eligibleAccounts'],
+                    `snapshots[${index}].authActivity.eligibleAccounts`
+                ),
+                last24Hours: requireCount(
+                    authActivity['last24Hours'],
+                    `snapshots[${index}].authActivity.last24Hours`
+                ),
+                last7Days: requireCount(
+                    authActivity['last7Days'],
+                    `snapshots[${index}].authActivity.last7Days`
+                ),
+                last30Days: requireCount(
+                    authActivity['last30Days'],
+                    `snapshots[${index}].authActivity.last30Days`
+                ),
+            },
+            subscriptionCadence: { pro, basic },
+        };
+
+        if (
+            mapped.users.free + mapped.users.basic + mapped.users.pro !== mapped.users.total
+            || mapped.users.onboardingCompleted > mapped.users.total
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent user totals.`);
+        }
+        if (
+            mapped.authActivity.last24Hours > mapped.authActivity.last7Days
+            || mapped.authActivity.last7Days > mapped.authActivity.last30Days
+            || mapped.authActivity.last30Days > mapped.authActivity.eligibleAccounts
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent activity totals.`);
+        }
+        if (
+            cadenceTierTotal(pro) !== mapped.users.pro
+            || cadenceTierTotal(basic) !== mapped.users.basic
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent subscription cadence totals.`);
+        }
+
+        return mapped;
+    }
+
     getSubscriptionHistoryTrend(months = 12): Observable<SubscriptionHistoryTrendResponse> {
         const parsedMonths = Number(months);
         const boundedMonths = Number.isFinite(parsedMonths)
@@ -475,4 +615,61 @@ export class AdminService {
             map(result => result.data)
         );
     }
+}
+
+function requireRecord(value: unknown, field: string): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Admin dashboard history ${field} must be an object.`);
+    }
+    return value as Record<string, unknown>;
+}
+
+function requireCount(value: unknown, field: string): number {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`Admin dashboard history ${field} must be a non-negative integer.`);
+    }
+    return value;
+}
+
+function requireHistoryDays(value: unknown): AdminDashboardHistoryDays {
+    if (value !== 30 && value !== 90 && value !== 365) {
+        throw new Error('Admin dashboard history days must be 30, 90, or 365.');
+    }
+    return value;
+}
+
+function requireUtcDateKey(value: unknown, field: string): string {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new Error(`Admin dashboard history ${field} must be a UTC date.`);
+    }
+    const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+    if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== value) {
+        throw new Error(`Admin dashboard history ${field} must be a valid UTC date.`);
+    }
+    return value;
+}
+
+function requireIsoTimestamp(value: unknown, field: string): string {
+    const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+    if (
+        typeof value !== 'string'
+        || !Number.isFinite(parsed)
+        || new Date(parsed).toISOString() !== value
+    ) {
+        throw new Error(`Admin dashboard history ${field} must be an ISO timestamp.`);
+    }
+    return value;
+}
+
+function requireCadenceTier(value: unknown, field: string): SubscriptionCadenceTierStats {
+    const tier = requireRecord(value, field);
+    return {
+        monthly: requireCount(tier['monthly'], `${field}.monthly`),
+        yearly: requireCount(tier['yearly'], `${field}.yearly`),
+        unknown: requireCount(tier['unknown'], `${field}.unknown`),
+    };
+}
+
+function cadenceTierTotal(value: SubscriptionCadenceTierStats): number {
+    return value.monthly + value.yearly + value.unknown;
 }

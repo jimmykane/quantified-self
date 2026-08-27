@@ -420,7 +420,7 @@ service cloud.firestore {
         && serviceRootUpdateDoesNotTouchBackendFields();
       allow delete: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect();
-       match /tokens/{document=**} {
+       match /tokens/{tokenId} {
           allow read: if isNonAnonymousOwner(userID);
           allow write: if isNonAnonymousOwner(userID)
             && (
@@ -458,7 +458,7 @@ service cloud.firestore {
         && serviceRootUpdateDoesNotTouchBackendFields();
       allow delete: if isNonAnonymousOwner(userID)
         && serviceRootIsNotPendingDisconnect();
-       match /tokens/{document=**} {
+       match /tokens/{tokenId} {
           allow read: if isNonAnonymousOwner(userID);
           allow write: if isNonAnonymousOwner(userID)
             && (
@@ -516,6 +516,12 @@ service cloud.firestore {
     match /failed_jobs/{document=**} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    // Daily admin dashboard snapshots are exposed only through the
+    // authenticated, App Check-protected admin callable.
+    match /adminDashboardSnapshots/{snapshotDate} {
+      allow read, write: if false;
     }
     
     match /changelogs/{docId} {

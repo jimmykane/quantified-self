@@ -127,6 +127,24 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
+        it('allows direct legacy token documents but denies arbitrary nested descendants', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+
+            for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
+                const tokenRef = db.doc(`${collectionName}/${userId}/tokens/token-1`);
+                await assertSucceeds(tokenRef.set({ accessToken: 'legacy-client-token' }));
+                await assertSucceeds(tokenRef.update({ accessToken: 'updated-client-token' }));
+
+                await assertFails(db.doc(
+                    `${collectionName}/${userId}/tokens/token-1/subscriptions/forged`,
+                ).set({
+                    status: 'active',
+                    role: 'pro',
+                    items: [{ plan: { interval: 'month' } }],
+                }));
+            }
+        });
+
         it('denies client writes to backend-owned disconnect fields', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
 
@@ -1879,6 +1897,37 @@ describe('Firestore Security Rules', () => {
                 processed: false,
                 provider: 'COROSAPI'
             }));
+        });
+    });
+
+    describe('Admin Dashboard Snapshots', () => {
+        const snapshotPath = 'adminDashboardSnapshots/2026-08-27';
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(snapshotPath).set({
+                    schemaVersion: 1,
+                    snapshotDate: '2026-08-27',
+                });
+            });
+        });
+
+        it('denies direct reads to unauthenticated, regular, and admin clients', async () => {
+            const unauthenticatedDb = testEnv.unauthenticatedContext().firestore();
+            const regularDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+
+            await assertFails(unauthenticatedDb.doc(snapshotPath).get());
+            await assertFails(regularDb.doc(snapshotPath).get());
+            await assertFails(adminDb.doc(snapshotPath).get());
+        });
+
+        it('denies direct creates, updates, and deletes even to admin clients', async () => {
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+
+            await assertFails(adminDb.doc('adminDashboardSnapshots/2026-08-28').set({ schemaVersion: 1 }));
+            await assertFails(adminDb.doc(snapshotPath).update({ schemaVersion: 2 }));
+            await assertFails(adminDb.doc(snapshotPath).delete());
         });
     });
 
