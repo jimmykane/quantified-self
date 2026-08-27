@@ -7,6 +7,7 @@ import {
   DataAirPower,
   DataAltitude,
   ChartCursorBehaviours,
+  DataDepth,
   DataDistance,
   DataHeartRate,
   DataPotentialStamina,
@@ -531,6 +532,24 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
     expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
+  });
+
+  it('supports filling an inverse depth chart toward the surface', async () => {
+    component.panel = buildTestPanel(DataDepth.type, [0, 5, 10], {
+      displayName: 'Depth',
+      unit: 'm',
+    });
+    component.fillOpacity = 1;
+    component.areaFillOrigin = 'start';
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.yAxis?.inverse).toBe(true);
+    expect(option?.series?.[0]?.areaStyle).toEqual(expect.objectContaining({
+      opacity: 1,
+      origin: 'start',
+    }));
   });
 
   it('shares one y-axis for stamina and potential stamina overlays', async () => {

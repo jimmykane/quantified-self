@@ -219,6 +219,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
+  @Input() areaFillOrigin: 'auto' | 'start' | 'end' = 'auto';
   @Input() colorAltitudeByGrade = true;
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
@@ -515,6 +516,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.emitAxisPointerCursor
       || changes.strokeWidth
       || changes.fillOpacity
+      || changes.areaFillOrigin
       || changes.colorAltitudeByGrade
       || changes.waterMark
       || changes.zoomBarOverviewData
@@ -706,7 +708,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
-    const primaryAreaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
+    const primaryAreaFillOrigin: 'start' | 'end' = this.areaFillOrigin === 'auto'
+      ? (yAxisConfig.inverse ? 'end' : 'start')
+      : this.areaFillOrigin;
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
