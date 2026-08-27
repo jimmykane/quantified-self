@@ -20,9 +20,13 @@ import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
-    SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
-    isSuuntoHealthSyncUserAllowed,
-} from '../suunto/health-rollout';
+    persistSuuntoHealthWebhookIngress,
+    SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS,
+} from '../suunto/health-webhook-ingress';
+import type {
+    SuuntoHealthWebhookNotificationType,
+    SuuntoHealthWebhookWindow,
+} from '../suunto/health-webhook-ingress';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
@@ -33,13 +37,7 @@ import {
 type ExternalRecord = Record<string, unknown>;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_HEALTH_WEBHOOK_MAX_BYTES = 1024 * 1024;
-const SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS = 16;
 const SUUNTO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/;
-
-interface SuuntoHealthWebhookWindow {
-    startMs: number;
-    endMs: number;
-}
 
 function asRecord(value: unknown): ExternalRecord {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -146,21 +144,6 @@ async function resolveScopedSuuntoWebhookUserID(providerUserId: string): Promise
         }
     }
 
-    return null;
-}
-
-async function resolveSuuntoHealthWebhookUserID(providerUserId: string): Promise<string | null> {
-    for (const userID of SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS) {
-        if (!isSuuntoHealthSyncUserAllowed(userID)) continue;
-        const snapshot = await admin.firestore()
-            .collection('suuntoAppAccessTokens')
-            .doc(userID)
-            .collection('tokens')
-            .where('userName', '==', providerUserId)
-            .limit(1)
-            .get();
-        if (!snapshot.empty) return userID;
-    }
     return null;
 }
 
@@ -363,12 +346,6 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
                 res.status(200).send();
                 return;
             }
-            const userID = await resolveSuuntoHealthWebhookUserID(providerUserId);
-            if (!userID) {
-                logger.info('[HealthSync][Suunto] Ignoring webhook outside the staged rollout');
-                res.status(200).send();
-                return;
-            }
             let windows: SuuntoHealthWebhookWindow[];
             try {
                 windows = buildSuuntoHealthWebhookWindows(samples);
@@ -381,20 +358,17 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             // without recursively walking provider-controlled nested values.
             const notificationDigest = crypto.createHash('sha256')
                 .update(req.rawBody)
-                .digest('hex')
-                .slice(0, 32);
-            await Promise.all(windows.map(window => addSleepSyncQueueItem({
-                type: 'suunto_health_poll',
-                provider: SLEEP_PROVIDERS.SuuntoApp,
-                userID,
+                .digest('hex');
+            const ingressResult = await persistSuuntoHealthWebhookIngress({
+                notificationDigest,
+                notificationType: notificationType as SuuntoHealthWebhookNotificationType,
                 providerUserId,
-                rangeStartMs: window.startMs,
-                rangeEndMs: window.endMs,
-                healthTrigger: 'webhook',
-                dedupeKey: `suunto-health-webhook:${userID}:${providerUserId}:${window.startMs}:${window.endMs}:${notificationDigest}`,
-                dispatchImmediately: true,
-            })));
-            logger.info('[HealthSync][Suunto] Queued webhook-triggered Health polls', { windows: windows.length });
+                windows,
+            });
+            logger.info('[HealthSync][Suunto] Durably accepted webhook ingress', {
+                ingressResult,
+                windows: windows.length,
+            });
             res.status(200).send();
             return;
         }
@@ -426,7 +400,7 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             return;
         }
         if (isHealthNotification) {
-            logger.error('[HealthSync][Suunto] Failed to queue Health refetch', {
+            logger.error('[HealthSync][Suunto] Failed to persist Health webhook ingress', {
                 errorName: error instanceof Error ? error.name : 'UnknownError',
             });
         } else {

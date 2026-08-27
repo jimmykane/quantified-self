@@ -148,10 +148,11 @@ For every new persistent write path:
 
 ### Webhooks
 
-- Verify the provider's documented authentication or shared secret before accepting work. Reject malformed, unrelated, unknown, disconnected, deletion-pending, and non-entitled payloads before queueing.
+- Verify the provider's documented authentication or shared secret before accepting work. Reject malformed and unrelated payloads before queueing. Reject unknown, disconnected, deletion-pending, and non-entitled identities before direct queueing; when a strict acknowledgement deadline requires asynchronous identity resolution, persist only a bounded server-owned ingress record and enforce those lifecycle checks in its retryable worker before fan-out.
 - Resolve provider identity through server-owned credentials or an optional server-owned mapping, never browser-visible metadata. Token-index lookup must validate the expected collection path and reject ambiguous matches.
 - Treat webhook delivery as at-least-once. Duplicate, delayed, and out-of-order deliveries must not create duplicate events.
 - Match the provider's acknowledgement contract exactly. Return success only after durable enqueue or a deliberate permanent skip; return the provider's non-success result (and retryable HTTP status where supported) when persistence or dispatch preparation fails so the provider retries. Keep health-check behavior separate from authenticated delivery handling.
+- For strict acknowledgement deadlines, make the synchronous path one bounded, idempotent durable write, acknowledge only after it succeeds, and move credential lookup plus queue or Cloud Tasks fan-out to a retryable datastore trigger. Deploy the consumer before the producer. Never rely on non-awaited work after returning the response.
 - If provider revisions exist, persist a revision timestamp or version. A newer revision should safely supersede an older queued one; an older delivery must not reopen or overwrite newer work.
 - Return quickly. Queue a compact, validated work reference rather than doing file download, parsing, or event persistence in the webhook handler.
 - Protect integer-shaped provider IDs before JSON parsing when the API can emit 64-bit numbers. Normalize them to bounded decimal strings and test values above JavaScript's safe-integer limit.

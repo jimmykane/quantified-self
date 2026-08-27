@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
     addSleepSyncQueueItem: vi.fn(),
+    persistSuuntoHealthWebhookIngress: vi.fn(),
     garminEnabled: false,
     suuntoEnabled: true,
     allowedUserIDs: ['test-user-uid'] as string[],
@@ -81,6 +83,11 @@ vi.mock('./queue', () => ({
     firebaseUserIdFromSleepTokenSnapshot: vi.fn((tokenSnapshot: any) => tokenSnapshot.ref.parent.parent.id),
 }));
 
+vi.mock('../suunto/health-webhook-ingress', () => ({
+    persistSuuntoHealthWebhookIngress: hoisted.persistSuuntoHealthWebhookIngress,
+    SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS: 16,
+}));
+
 vi.mock('./provider-flags', () => ({
     SLEEP_SYNC_DISABLED_PROVIDERS: ['GarminAPI', 'COROSAPI'],
     getAllowedSleepSyncUserIds: vi.fn(() => hoisted.allowedUserIDs),
@@ -118,6 +125,7 @@ describe('sleep webhooks', () => {
         hoisted.suuntoWebhookResolvedUserID = 'resolved-suunto-user-id';
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-id' });
+        hoisted.persistSuuntoHealthWebhookIngress.mockResolvedValue('created');
     });
 
     it('acknowledges disabled Garmin sleep webhooks without queueing', async () => {
@@ -457,7 +465,7 @@ describe('sleep webhooks', () => {
     it.each([
         'SUUNTO_247_ACTIVITY_CREATED',
         'SUUNTO_247_RECOVERY_CREATED',
-    ])('queues compact canonical refetches for signed %s notifications', async (type) => {
+    ])('durably accepts compact canonical ingress for signed %s notifications before fan-out', async (type) => {
         hoisted.suuntoEnabled = false;
         const body = {
             type,
@@ -482,20 +490,13 @@ describe('sleep webhooks', () => {
         const startMs = Date.parse('2026-08-26T21:00:00.000Z');
         const endMs = Date.parse('2026-08-27T21:00:00.000Z');
         expect(response.status).toHaveBeenCalledWith(200);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith({
-            type: 'suunto_health_poll',
-            provider: 'SuuntoApp',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+        expect(hoisted.persistSuuntoHealthWebhookIngress).toHaveBeenCalledWith({
+            notificationDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+            notificationType: type,
             providerUserId: 'suunto-user-1',
-            rangeStartMs: startMs,
-            rangeEndMs: endMs,
-            healthTrigger: 'webhook',
-            dedupeKey: expect.stringMatching(
-                new RegExp(`^suunto-health-webhook:xcsAolLDDTWTgtRN9eYF3lW2YKL2:suunto-user-1:${startMs}:${endMs}:[a-f0-9]{32}$`),
-            ),
-            dispatchImmediately: true,
+            windows: [{ startMs, endMs }],
         });
-        expect(hoisted.addSleepSyncQueueItem.mock.calls[0][0]).not.toHaveProperty('payload');
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
     it('deduplicates exact Health notification retries without suppressing later same-day revisions', async () => {
@@ -523,10 +524,35 @@ describe('sleep webhooks', () => {
         await deliver(60);
         await deliver(61);
 
-        const dedupeKeys = hoisted.addSleepSyncQueueItem.mock.calls
-            .map(([input]) => input.dedupeKey);
-        expect(dedupeKeys[0]).toBe(dedupeKeys[1]);
-        expect(dedupeKeys[2]).not.toBe(dedupeKeys[0]);
+        const notificationDigests = hoisted.persistSuuntoHealthWebhookIngress.mock.calls
+            .map(([input]) => input.notificationDigest);
+        expect(notificationDigests[0]).toBe(notificationDigests[1]);
+        expect(notificationDigests[2]).not.toBe(notificationDigests[0]);
+        expect(notificationDigests.every(digest => /^[a-f0-9]{64}$/.test(digest))).toBe(true);
+    });
+
+    it('returns a retryable response when the single durable Health ingress write fails', async () => {
+        hoisted.persistSuuntoHealthWebhookIngress.mockRejectedValueOnce(new Error('firestore unavailable'));
+        const body = {
+            type: 'SUUNTO_247_ACTIVITY_CREATED',
+            username: 'suunto-user-1',
+            samples: [{ timestamp: '2026-08-27T12:00:00Z' }],
+        };
+        const rawBody = Buffer.from(JSON.stringify(body));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body,
+            get: vi.fn(() => signature),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        expect(hoisted.persistSuuntoHealthWebhookIngress).toHaveBeenCalledOnce();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
     it('does not fill unnotified gaps between sparse webhook days', () => {
@@ -579,6 +605,7 @@ describe('sleep webhooks', () => {
 
         expect(malformedResponse.status).toHaveBeenCalledWith(400);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
 
         const invalidAccountBody = {
             type: 'SUUNTO_247_ACTIVITY_CREATED',
@@ -599,6 +626,7 @@ describe('sleep webhooks', () => {
 
         expect(invalidAccountResponse.status).toHaveBeenCalledWith(400);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
 
         const oversizedRawBody = Buffer.alloc(suuntoWebhookTestInternals.SUUNTO_HEALTH_WEBHOOK_MAX_BYTES + 1, 1);
         const oversizedSignature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
@@ -617,5 +645,6 @@ describe('sleep webhooks', () => {
 
         expect(oversizedResponse.status).toHaveBeenCalledWith(413);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.persistSuuntoHealthWebhookIngress).not.toHaveBeenCalled();
     });
 });

@@ -1880,6 +1880,21 @@ describe('Firestore Security Rules', () => {
                 provider: 'COROSAPI'
             }));
         });
+
+        it('should deny all browser access to Suunto Health webhook ingress', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookIngress/ingress-1').set({
+                    processed: false,
+                    providerUserId: 'private-provider-account',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/forged').set({ processed: false }));
+        });
     });
 
     describe('Changelogs Collection', () => {

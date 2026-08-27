@@ -512,6 +512,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Short-lived signed Suunto Health webhook envelopes are backend-only.
+    match /suuntoHealthWebhookIngress/{ingressID} {
+      allow read, write: if false;
+    }
+
 
     match /failed_jobs/{document=**} {
       allow read: if isAdmin();

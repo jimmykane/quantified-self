@@ -67,6 +67,7 @@ const {
 
     const collectionGroupLimitGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
     const collectionGroupLimitMock = vi.fn().mockReturnValue({ get: collectionGroupLimitGetMock });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const collectionGroupWhereMock: any = vi.fn(() => ({
         where: collectionGroupWhereMock,
         limit: collectionGroupLimitMock,
@@ -206,6 +207,7 @@ import {
     cleanupUserAccounts,
     ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
 } from './cleanup';
+import { SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME } from '../sleep/constants';
 
 const testEnv = functionsTest();
 const registeredCleanupRuntimeOptions = runWithMock.mock.calls[0]?.[0];
@@ -952,14 +954,64 @@ describe('cleanupUserAccounts', () => {
         );
     });
 
+    it('should recursively delete Suunto Health webhook ingress by uid and recovered provider identity', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const uidKeyedIngress = {
+            id: 'uid-keyed-ingress',
+            ref: { path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/uid-keyed-ingress` },
+            data: () => ({
+                userID: 'testUser123',
+                providerUserId: 'suunto-provider-from-ingress',
+            }),
+        };
+        const providerKeyedIngress = {
+            id: 'provider-keyed-ingress',
+            ref: { path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/provider-keyed-ingress` },
+            data: () => ({ providerUserId: 'suunto-provider-from-ingress' }),
+        };
+        const restoreCollectionMock = mockCollectionWhereResultsByName(
+            (collectionName, field, _operator, value) => {
+                if (collectionName !== SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME) return null;
+                if (field === 'userID' && value === 'testUser123') {
+                    return { docs: [uidKeyedIngress] };
+                }
+                if (field === 'providerUserId' && value === 'suunto-provider-from-ingress') {
+                    return { docs: [uidKeyedIngress, providerKeyedIngress] };
+                }
+                return null;
+            },
+        );
+
+        try {
+            await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        } finally {
+            restoreCollectionMock();
+        }
+
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/uid-keyed-ingress`,
+        }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/provider-keyed-ingress`,
+        }));
+        expect(markQueueItemDeletedForUserCleanupMock).not.toHaveBeenCalledWith(
+            SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+            expect.any(String),
+            expect.any(String),
+        );
+    });
+
     it('should preserve queue state when cleanup tombstone write fails during account deletion', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
         markQueueItemDeletedForUserCleanupMock.mockResolvedValue(false);
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
-            get: vi.fn().mockResolvedValue(
-                field === 'userID' && value === 'testUser123'
+        const restoreCollectionMock = mockCollectionWhereResultsByName(
+            (collectionName, field, _operator, value) => (
+                collectionName === 'activitySyncQueue'
+                && field === 'userID'
+                && value === 'testUser123'
                     ? {
                         docs: [{
                             id: 'activity-job-no-tombstone',
@@ -967,11 +1019,15 @@ describe('cleanupUserAccounts', () => {
                             data: () => ({ userID: 'testUser123' }),
                         }],
                     }
-                    : { docs: [] }
-            )
-        }));
+                    : null
+            ),
+        );
 
-        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        try {
+            await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        } finally {
+            restoreCollectionMock();
+        }
 
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'activitySyncQueue',

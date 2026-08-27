@@ -9,7 +9,10 @@ import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
-import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import {
+    SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+    SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+} from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import {
@@ -472,6 +475,8 @@ function providerQueueLookupFromCollectionData(
             const serviceName = serviceNameFromSleepProvider(data.provider);
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
         }
+        case SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME:
+            return providerLookupForService(ServiceNames.SuuntoApp, data.providerUserId);
         case ROUTE_SYNC_QUEUE_COLLECTION_NAME: {
             const serviceName = asNonEmptyString(data.sourceServiceName) as ServiceNames | null;
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
@@ -524,7 +529,8 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
     if (
         collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
         collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
-        collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+        collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
+        collectionName === SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME
     ) {
         return asNonEmptyString(data.userID);
     }
@@ -628,6 +634,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
         ROUTE_SYNC_QUEUE_COLLECTION_NAME,
         ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
         GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -780,6 +787,14 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
     await collectProviderIdentifiersFromQueueQuery(
         db,
         uid,
+        SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+        'userID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.providerUserId),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
         'userID',
         firebaseUIDValues,
@@ -879,6 +894,8 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'providerUserId', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

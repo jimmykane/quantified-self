@@ -33,6 +33,17 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('expires durable Suunto Health webhook ingress envelopes', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'suuntoHealthWebhookIngress',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
     it('keeps outbound activity echo fingerprints short-lived and unindexed', () => {
         const config = loadFirestoreIndexes();
 

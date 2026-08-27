@@ -114,6 +114,12 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
         providerUserId: 'suunto-user',
       }),
     ]);
+    setQueryDocs('suuntoHealthWebhookIngress', 'providerUserId', 'suunto-user', [
+      makeDoc('suuntoHealthWebhookIngress/ingress-1', {
+        providerUserId: 'suunto-user',
+        processed: false,
+      }),
+    ]);
     setQueryDocs('routeDeliverySyncQueue', 'sourceProviderUserId', 'suunto-user', [
       makeDoc('routeDeliverySyncQueue/route-delivery-1', {
         userID: 'firebase-user-123',
@@ -167,12 +173,13 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
 
     expect(result).toMatchObject({
       providerUserId: 'suunto-user',
-      deletedDocCount: 6,
+      deletedDocCount: 7,
       skippedForActiveConnection: false,
     });
-    expect(mockRecursiveDelete).toHaveBeenCalledTimes(6);
+    expect(mockRecursiveDelete).toHaveBeenCalledTimes(7);
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/workout-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/suunto-health-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoHealthWebhookIngress/ingress-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/route-delivery-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/workout-dlq-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/suunto-health-dlq-1' }));
@@ -198,6 +205,11 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       'sleepSyncQueue',
       'suunto-health-dlq-1',
       'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).not.toHaveBeenCalledWith(
+      'suuntoHealthWebhookIngress',
+      expect.any(String),
+      expect.any(String),
     );
   });
 
