@@ -14,9 +14,13 @@ import {
     QueueDispatchMarkerResult,
 } from '../queue/dispatch-marker';
 import {
-    markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import {
+    deleteSleepQueueRevisionWithTombstone,
+    isCurrentSleepQueueRevision,
+} from './queue-revision';
+import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
 
 const MAX_SLEEP_SYNC_QUEUE_SCAN = 500;
 const SLEEP_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
@@ -27,9 +31,12 @@ function toDispatchTimestamp(value: unknown): number | null {
     return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
 }
 
-function toDateCreatedTimestamp(value: unknown): number {
-    const timestamp = Number(value);
-    return Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : 0;
+function toDateCreatedTimestamp(value: unknown): number | null {
+    return typeof value === 'number'
+        && Number.isSafeInteger(value)
+        && value >= 0
+        ? value
+        : null;
 }
 
 function toNonEmptyString(value: unknown): string | null {
@@ -86,16 +93,18 @@ async function deleteSleepSyncCandidateBeforeDispatch(
     reason: string,
 ): Promise<void> {
     try {
-        const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
-            SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        const attempted = doc.data() as Partial<SleepSyncQueueItemInterface>;
+        const deleted = await deleteSleepQueueRevisionWithTombstone(
+            doc.ref,
             doc.id,
+            attempted,
+            SLEEP_SYNC_QUEUE_COLLECTION_NAME,
             QUEUE_CLEANUP_TOMBSTONE_REASONS.DispatcherCleanup,
         );
-        if (!tombstoneWritten) {
-            logger.error(`[SleepSyncDispatcher] Failed to write cleanup tombstone for ${doc.id}; leaving queue item in place to avoid missing-doc Cloud Task retries.`);
+        if (!deleted) {
+            logger.info(`[SleepSyncDispatcher] Skipped cleanup for stale queue revision ${doc.id}.`);
             return;
         }
-        await admin.firestore().recursiveDelete(doc.ref);
         logger.info(`[SleepSyncDispatcher] Deleted queue item ${doc.id} instead of dispatching: ${reason}.`);
     } catch (error) {
         logger.error(`[SleepSyncDispatcher] Failed to delete queue item ${doc.id} before dispatch after ${reason}`, error);
@@ -210,7 +219,18 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         .map((doc) => {
             const data = doc.data() as Partial<SleepSyncQueueItemInterface>;
             const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
-            const isUndispatched = dispatchedToCloudTask === null;
+            const hasRetainedProcessingLease = typeof data.processingOwner === 'string'
+                && data.processingOwner.trim().length > 0
+                && typeof data.processingRevision === 'string'
+                && data.processingRevision.trim().length > 0;
+            const needsLeaseRecovery = hasRetainedProcessingLease
+                && getActiveRevisionProcessingLease(data, nowMs) === null;
+            // A task may finish its durable transition and then fail to release
+            // the lease, or an older worker may crash after a replacement is
+            // installed. Once the 12-minute lease is no longer active, the
+            // current revision must be dispatchable even if it inherited the
+            // previous task's timestamp/sentinel marker.
+            const isUndispatched = dispatchedToCloudTask === null || needsLeaseRecovery;
             const isStale = !isUndispatched && (nowMs - dispatchedToCloudTask) >= SLEEP_SYNC_REDISPATCH_STALE_MS;
             return {
                 doc,
@@ -218,6 +238,8 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 isStale,
                 dispatchedToCloudTask,
                 dateCreated: toDateCreatedTimestamp(data.dateCreated),
+                queueRevision: toNonEmptyString(data.queueRevision),
+                needsLeaseRecovery,
                 userID: toNonEmptyString(data.userID),
                 provider: toSleepProvider(data.provider),
                 providerUserId: toNonEmptyString(data.providerUserId),
@@ -242,6 +264,15 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
             break;
         }
 
+        // Legacy task identity falls back to the exact dateCreated value. Do
+        // not normalize malformed values into a synthetic timestamp: the
+        // worker would reject that task as stale while leaving the bad row
+        // eligible for dispatch forever.
+        if (candidate.dateCreated === null) {
+            await deleteSleepSyncCandidateBeforeDispatch(candidate.doc, 'invalid dateCreated');
+            continue;
+        }
+
         if (!candidate.isUndispatched && !candidate.isStale) {
             skippedRecent += 1;
             continue;
@@ -257,7 +288,17 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 continue;
             }
 
-            const wasTaskEnqueued = await enqueueSleepSyncTask(candidate.doc.id, candidate.dateCreated);
+            const taskIdentity = {
+                queueRevision: candidate.queueRevision || undefined,
+                queueDateCreated: candidate.dateCreated,
+                recoveryTaskKey: `${candidate.needsLeaseRecovery ? 'lease' : 'dispatch'}-${nowMs}`,
+            };
+            const wasTaskEnqueued = await enqueueSleepSyncTask(
+                candidate.doc.id,
+                candidate.dateCreated,
+                undefined,
+                taskIdentity,
+            );
             if (!wasTaskEnqueued) {
                 logger.info(`[SleepSyncDispatcher] Task not enqueued for ${candidate.doc.id}; leaving dispatch marker unchanged.`);
                 continue;
@@ -278,6 +319,10 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 phase: 'sleep_sync_dispatch_marker',
                 dispatchedAtMs: nowMs,
                 logPrefix: 'SleepSyncDispatcher',
+                isCurrent: currentQueueItem => isCurrentSleepQueueRevision(currentQueueItem, {
+                    queueRevision: taskIdentity.queueRevision,
+                    dateCreated: taskIdentity.queueDateCreated,
+                }),
             });
             if (markerResult !== QueueDispatchMarkerResult.Marked) {
                 continue;

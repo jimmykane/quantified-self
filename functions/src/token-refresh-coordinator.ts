@@ -50,11 +50,20 @@ export interface PersistTokenRefreshOptions {
   companionWrites?: readonly TokenRefreshCompanionWrite[];
   /** Only explicit-disconnect cleanup may persist while its root fence is active. */
   expectedDisconnectOperationGeneration?: string;
+  /** Require the token root to exist and still authorize this OAuth credential. */
+  requireActiveOAuthCredentialGeneration?: boolean;
 }
 
 /** Only explicit-disconnect cleanup may refresh while its root fence is active. */
 export interface TokenRefreshClaimOptions {
   expectedDisconnectOperationGeneration?: string;
+  /** Require the token root to exist and still authorize this OAuth credential. */
+  requireActiveOAuthCredentialGeneration?: boolean;
+}
+
+export interface TokenRefreshReleaseOptions {
+  /** Require the token root to exist and still authorize this OAuth credential. */
+  requireActiveOAuthCredentialGeneration?: boolean;
 }
 
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
@@ -93,6 +102,24 @@ function normalizedString(value: unknown): string {
 function normalizedNumber(value: unknown): number {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function normalizedCredentialGeneration(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Proves that an OAuth token child still belongs to the active credential
+ * represented by its parent root. A missing root always fails closed, while
+ * an existing legacy root and child may both omit generations during rollout.
+ */
+export function doesOAuthCredentialGenerationAuthorizeToken(
+  rootData: Record<string, unknown> | null | undefined,
+  tokenCredentialGeneration: unknown,
+): boolean {
+  if (rootData === null || rootData === undefined) return false;
+  return normalizedCredentialGeneration(rootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD])
+    === normalizedCredentialGeneration(tokenCredentialGeneration);
 }
 
 function doesDisconnectOperationGenerationPermitRefresh(
@@ -198,6 +225,15 @@ export function createTokenRefreshCoordinator(
         transaction.get(ref) as Promise<TokenSnapshot>,
         transaction.get(tokenRootRef),
       ]);
+      if (options.requireActiveOAuthCredentialGeneration === true
+        && !doesOAuthCredentialGenerationAuthorizeToken(
+          tokenRootSnapshot.exists
+            ? tokenRootSnapshot.data() as Record<string, unknown> | undefined
+            : null,
+          expectedCredential.credentialGeneration,
+        )) {
+        return { kind: 'skipped_service_disconnect' };
+      }
       if (!doesDisconnectOperationGenerationPermitRefresh(
         tokenRootSnapshot.data() as Record<string, unknown> | undefined,
         options.expectedDisconnectOperationGeneration,
@@ -255,6 +291,15 @@ export function createTokenRefreshCoordinator(
         transaction.get(ref) as Promise<TokenSnapshot>,
         transaction.get(tokenRootRef),
       ]);
+      if (options.requireActiveOAuthCredentialGeneration === true
+        && !doesOAuthCredentialGenerationAuthorizeToken(
+          tokenRootSnapshot.exists
+            ? tokenRootSnapshot.data() as Record<string, unknown> | undefined
+            : null,
+          expectedCredential.credentialGeneration,
+        )) {
+        return { kind: 'superseded', snapshot: snapshot.exists ? snapshot : null };
+      }
       if (!doesDisconnectOperationGenerationPermitRefresh(
         tokenRootSnapshot.data() as Record<string, unknown> | undefined,
         options.expectedDisconnectOperationGeneration,
@@ -293,14 +338,28 @@ export function createTokenRefreshCoordinator(
     ref: TokenReference,
     leaseOwner: string,
     expectedCredential: TokenCredentialSnapshot,
+    options: TokenRefreshReleaseOptions = {},
   ): Promise<void> {
     await db.runTransaction(async (transaction) => {
       if (!(await isTokenRefreshWriteAllowed(db as admin.firestore.Firestore, transaction, ref))) {
         return;
       }
 
-      const snapshot = await transaction.get(ref) as TokenSnapshot;
+      const tokenRootRef = ref.parent?.parent;
+      if (!tokenRootRef) return;
+      const [snapshot, tokenRootSnapshot] = await Promise.all([
+        transaction.get(ref) as Promise<TokenSnapshot>,
+        transaction.get(tokenRootRef),
+      ]);
       if (!snapshot.exists) return;
+
+      if (options.requireActiveOAuthCredentialGeneration === true
+        && !doesOAuthCredentialGenerationAuthorizeToken(
+          tokenRootSnapshot.exists
+            ? tokenRootSnapshot.data() as Record<string, unknown> | undefined
+            : null,
+          expectedCredential.credentialGeneration,
+        )) return;
 
       const data = snapshot.data() as Record<string, unknown> | undefined;
       if (
@@ -342,6 +401,7 @@ export async function releaseTokenRefreshClaim(
   ref: TokenReference,
   leaseOwner: string,
   expectedCredential: TokenCredentialSnapshot,
+  options: TokenRefreshReleaseOptions = {},
 ): Promise<void> {
-  await createTokenRefreshCoordinator().release(ref, leaseOwner, expectedCredential);
+  await createTokenRefreshCoordinator().release(ref, leaseOwner, expectedCredential, options);
 }

@@ -35,7 +35,7 @@ import {
   getTokenCredentialSnapshot,
 } from './token-refresh-coordinator';
 
-type StoredServiceToken =
+export type StoredServiceToken =
   | Auth2ServiceTokenInterface
   | GarminAPIAuth2ServiceTokenInterface
   | WahooAPIAuth2ServiceTokenInterface;
@@ -453,7 +453,7 @@ export function extractRefreshFailureDetails(error: any): RefreshFailureDetails 
   };
 }
 
-function buildStoredServiceToken(
+export function buildStoredServiceToken(
   serviceName: ServiceNames,
   tokenData: Auth2ServiceTokenInterface,
 ): StoredServiceToken {

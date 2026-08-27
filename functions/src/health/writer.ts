@@ -25,6 +25,11 @@ import {
 } from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../shared/id-generator';
 import {
+    areTokenCredentialSnapshotsEqual,
+    getTokenCredentialSnapshot,
+    type TokenCredentialSnapshot,
+} from '../token-refresh-coordinator';
+import {
     HealthSourceRecordInput,
     HealthWriteSizeError,
     HealthWriteValidationError,
@@ -36,12 +41,57 @@ export { HealthWriteSizeError } from './validation';
 type HealthIdGenerator = (parts: string[]) => Promise<string>;
 const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
 
+export interface HealthLifecycleDocumentFieldGuard {
+    documentRef: admin.firestore.DocumentReference;
+    expectedFields: Readonly<Record<string, unknown>>;
+}
+
 export interface HealthWriterDependencies {
     db?: admin.firestore.Firestore;
     generateId?: HealthIdGenerator;
+    /** Skip the replacement if this lifecycle authority document is absent. */
+    requiredExistingDocumentRef?: admin.firestore.DocumentReference;
+    /** Require the same in-memory OAuth credential revision at commit time. */
+    requiredExistingTokenCredential?: TokenCredentialSnapshot;
+    /** Skip unless the lifecycle authority still has every expected flat field value. */
+    requiredDocumentFieldValues?: HealthLifecycleDocumentFieldGuard;
+    /** Additional lifecycle authorities that must still have every expected flat field value. */
+    additionalRequiredDocumentFieldValues?: readonly HealthLifecycleDocumentFieldGuard[];
 }
 
-export type HealthSourceRecordWriteStatus = 'written' | 'unchanged' | 'stale' | 'skipped_deleted_user';
+export interface HealthSyncStateWriterDependencies {
+    db?: admin.firestore.Firestore;
+    /** Skip the state transition if this lifecycle authority document exists. */
+    requiredMissingDocumentRef?: admin.firestore.DocumentReference;
+    /** Skip the state transition if this lifecycle authority document is absent. */
+    requiredExistingDocumentRef?: admin.firestore.DocumentReference;
+    /** Require the same in-memory OAuth credential revision at commit time. */
+    requiredExistingTokenCredential?: TokenCredentialSnapshot;
+    /** Skip unless the lifecycle authority still has every expected flat field value. */
+    requiredDocumentFieldValues?: HealthLifecycleDocumentFieldGuard;
+    /** Additional lifecycle authorities that must still have every expected flat field value. */
+    additionalRequiredDocumentFieldValues?: readonly HealthLifecycleDocumentFieldGuard[];
+    /** Atomically select an alternate validated update from a lifecycle field. */
+    updateWhenDocumentFieldEquals?: {
+        documentRef: admin.firestore.DocumentReference;
+        field: string;
+        expectedValue: string;
+        updateValue: unknown;
+    };
+    /**
+     * Apply status and error fields from an authoritative provider lifecycle
+     * transition even when its event timestamp predates newer sync telemetry.
+     * At least one skip-capable lifecycle guard is required.
+     */
+    authoritativeLifecycleTransition?: boolean;
+}
+
+export type HealthSourceRecordWriteStatus =
+    | 'written'
+    | 'unchanged'
+    | 'stale'
+    | 'skipped_deleted_user'
+    | 'skipped_lifecycle_guard';
 
 export interface HealthSourceRecordWriteResult {
     sourceRecordId: string;
@@ -57,6 +107,15 @@ export class HealthSourceRecordRevisionConflictError extends Error {
 
     constructor(public readonly sourceRecordId: string) {
         super(`Health source record ${sourceRecordId} has conflicting content for the same provider revision order.`);
+    }
+}
+
+export class HealthLifecycleGuardReadError extends Error {
+    public readonly name = 'HealthLifecycleGuardReadError';
+    public readonly code = 'health_lifecycle_guard_unavailable';
+
+    constructor() {
+        super('Health lifecycle guard could not be read.');
     }
 }
 
@@ -322,12 +381,86 @@ function userHealthCollection(
     return db.collection('users').doc(userID).collection(collectionId);
 }
 
+async function getHealthLifecycleGuardSnapshot(
+    transaction: admin.firestore.Transaction,
+    ref: admin.firestore.DocumentReference,
+): Promise<admin.firestore.DocumentSnapshot> {
+    try {
+        return await transaction.get(ref);
+    } catch {
+        // A datastore error can include the document path, and provider token
+        // document IDs are raw account IDs. Never propagate that detail into
+        // queue errors, sync state, or logs.
+        throw new HealthLifecycleGuardReadError();
+    }
+}
+
+async function healthLifecycleFieldsMatch(
+    transaction: admin.firestore.Transaction,
+    guard: HealthLifecycleDocumentFieldGuard,
+): Promise<boolean> {
+    const snapshot = await getHealthLifecycleGuardSnapshot(transaction, guard.documentRef);
+    const data = snapshot.exists
+        ? snapshot.data() as Record<string, unknown> | undefined
+        : undefined;
+    return Boolean(data) && !Object.entries(guard.expectedFields)
+        .some(([field, expectedValue]) => data?.[field] !== expectedValue);
+}
+
+async function allHealthLifecycleFieldsMatch(
+    transaction: admin.firestore.Transaction,
+    dependencies: Pick<
+        HealthWriterDependencies & HealthSyncStateWriterDependencies,
+        'requiredDocumentFieldValues' | 'additionalRequiredDocumentFieldValues'
+    >,
+): Promise<boolean> {
+    const guards = [
+        ...(dependencies.requiredDocumentFieldValues
+            ? [dependencies.requiredDocumentFieldValues]
+            : []),
+        ...(dependencies.additionalRequiredDocumentFieldValues || []),
+    ];
+    for (const guard of guards) {
+        if (!(await healthLifecycleFieldsMatch(transaction, guard))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function healthLifecycleSnapshotMatchesCredential(
+    snapshot: admin.firestore.DocumentSnapshot,
+    expectedCredential: TokenCredentialSnapshot | undefined,
+): boolean {
+    if (!snapshot.exists) return false;
+    if (!expectedCredential) return true;
+    return areTokenCredentialSnapshotsEqual(
+        getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined),
+        expectedCredential,
+    );
+}
+
+function validateRequiredExistingHealthLifecycleGuard(
+    dependencies: Pick<
+        HealthWriterDependencies & HealthSyncStateWriterDependencies,
+        'requiredExistingDocumentRef' | 'requiredExistingTokenCredential'
+    >,
+): void {
+    if (dependencies.requiredExistingTokenCredential
+        && !dependencies.requiredExistingDocumentRef) {
+        throw new HealthWriteValidationError(
+            'An existing Health token-credential guard requires a document reference.',
+        );
+    }
+}
+
 export async function replaceHealthSourceRecord(
     userID: string,
     value: unknown,
     nowMs = Date.now(),
     dependencies: HealthWriterDependencies = {},
 ): Promise<HealthSourceRecordWriteResult> {
+    validateRequiredExistingHealthLifecycleGuard(dependencies);
     const db = dependencies.db || admin.firestore();
     const built = await buildHealthSourceRecordWrite(
         userID,
@@ -353,6 +486,33 @@ export async function replaceHealthSourceRecord(
             return {
                 sourceRecordId: built.sourceRecord.id,
                 status: 'skipped_deleted_user' as const,
+                sourceRecord: null,
+                chunksWritten: 0,
+                chunksDeleted: 0,
+            };
+        }
+        if (dependencies.requiredExistingDocumentRef) {
+            const requiredExistingSnapshot = await getHealthLifecycleGuardSnapshot(
+                transaction,
+                dependencies.requiredExistingDocumentRef,
+            );
+            if (!healthLifecycleSnapshotMatchesCredential(
+                requiredExistingSnapshot,
+                dependencies.requiredExistingTokenCredential,
+            )) {
+                return {
+                    sourceRecordId: built.sourceRecord.id,
+                    status: 'skipped_lifecycle_guard' as const,
+                    sourceRecord: null,
+                    chunksWritten: 0,
+                    chunksDeleted: 0,
+                };
+            }
+        }
+        if (!(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
+            return {
+                sourceRecordId: built.sourceRecord.id,
+                status: 'skipped_lifecycle_guard' as const,
                 sourceRecord: null,
                 chunksWritten: 0,
                 chunksDeleted: 0,
@@ -509,10 +669,29 @@ export async function updateHealthSyncState(
     providerValue: unknown,
     updateValue: unknown,
     nowMs = Date.now(),
-    dependencies: Pick<HealthWriterDependencies, 'db'> = {},
+    dependencies: HealthSyncStateWriterDependencies = {},
 ): Promise<boolean> {
     validateWriteContext(userID, nowMs);
+    validateRequiredExistingHealthLifecycleGuard(dependencies);
     const { provider, update } = validateSyncUpdate(providerValue, updateValue);
+    const conditionalUpdate = dependencies.updateWhenDocumentFieldEquals;
+    const hasLifecycleGuard = Boolean(
+        dependencies.requiredMissingDocumentRef
+        || dependencies.requiredExistingDocumentRef
+        || dependencies.requiredDocumentFieldValues
+        || dependencies.additionalRequiredDocumentFieldValues?.length,
+    );
+    if (dependencies.authoritativeLifecycleTransition && !hasLifecycleGuard) {
+        throw new HealthWriteValidationError(
+            'An authoritative Health lifecycle transition requires a lifecycle guard.',
+        );
+    }
+    if (conditionalUpdate && !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(conditionalUpdate.field)) {
+        throw new HealthWriteValidationError('Conditional Health lifecycle field is invalid.');
+    }
+    const alternateUpdate = conditionalUpdate
+        ? validateSyncUpdate(provider, conditionalUpdate.updateValue).update
+        : null;
     const db = dependencies.db || admin.firestore();
     const stateRef = userHealthCollection(db, userID, HEALTH_SYNC_STATE_COLLECTION_ID).doc(provider);
     const written = await db.runTransaction(async transaction => {
@@ -525,6 +704,43 @@ export async function updateHealthSyncState(
         if (deletionGuard.shouldSkip) {
             return false;
         }
+        if (dependencies.requiredMissingDocumentRef) {
+            const requiredMissingSnapshot = await getHealthLifecycleGuardSnapshot(
+                transaction,
+                dependencies.requiredMissingDocumentRef,
+            );
+            if (requiredMissingSnapshot.exists) {
+                return false;
+            }
+        }
+        if (dependencies.requiredExistingDocumentRef) {
+            const requiredExistingSnapshot = await getHealthLifecycleGuardSnapshot(
+                transaction,
+                dependencies.requiredExistingDocumentRef,
+            );
+            if (!healthLifecycleSnapshotMatchesCredential(
+                requiredExistingSnapshot,
+                dependencies.requiredExistingTokenCredential,
+            )) {
+                return false;
+            }
+        }
+        if (!(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
+            return false;
+        }
+        let effectiveUpdate = update;
+        if (conditionalUpdate && alternateUpdate) {
+            const conditionalSnapshot = await getHealthLifecycleGuardSnapshot(
+                transaction,
+                conditionalUpdate.documentRef,
+            );
+            const conditionalData = conditionalSnapshot.exists
+                ? conditionalSnapshot.data() as Record<string, unknown> | undefined
+                : undefined;
+            if (conditionalData?.[conditionalUpdate.field] === conditionalUpdate.expectedValue) {
+                effectiveUpdate = alternateUpdate;
+            }
+        }
         const snapshot = await transaction.get(stateRef);
         const existing = snapshot.exists
             ? snapshot.data() as Partial<HealthSyncState>
@@ -534,20 +750,21 @@ export async function updateHealthSyncState(
             ? existing.updatedAtMs
             : null;
         const staleUpdate = existingUpdatedAtMs !== null && existingUpdatedAtMs > nowMs;
+        const preserveNewerStatus = staleUpdate && !dependencies.authoritativeLifecycleTransition;
         const updatedAtMs = existingUpdatedAtMs === null
             ? nowMs
             : Math.max(existingUpdatedAtMs, nowMs);
         const state: Partial<HealthSyncState> & Pick<HealthSyncState, 'provider' | 'updatedAtMs'> = cleanUndefined({
             provider,
-            ...update,
-            status: staleUpdate
+            ...effectiveUpdate,
+            status: preserveNewerStatus
                 ? undefined
-                : update.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
-            lastWebhookAtMs: monotonicSyncTime(update.lastWebhookAtMs, existing?.lastWebhookAtMs, staleUpdate),
-            lastPollAtMs: monotonicSyncTime(update.lastPollAtMs, existing?.lastPollAtMs, staleUpdate),
-            lastSyncedAtMs: monotonicSyncTime(update.lastSyncedAtMs, existing?.lastSyncedAtMs, staleUpdate),
-            lastObservedAtMs: monotonicSyncTime(update.lastObservedAtMs, existing?.lastObservedAtMs, staleUpdate),
-            lastErrorCode: staleUpdate ? undefined : update.lastErrorCode,
+                : effectiveUpdate.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
+            lastWebhookAtMs: monotonicSyncTime(effectiveUpdate.lastWebhookAtMs, existing?.lastWebhookAtMs, staleUpdate),
+            lastPollAtMs: monotonicSyncTime(effectiveUpdate.lastPollAtMs, existing?.lastPollAtMs, staleUpdate),
+            lastSyncedAtMs: monotonicSyncTime(effectiveUpdate.lastSyncedAtMs, existing?.lastSyncedAtMs, staleUpdate),
+            lastObservedAtMs: monotonicSyncTime(effectiveUpdate.lastObservedAtMs, existing?.lastObservedAtMs, staleUpdate),
+            lastErrorCode: preserveNewerStatus ? undefined : effectiveUpdate.lastErrorCode,
             updatedAtMs,
         });
         transaction.set(stateRef, state, { merge: true });
@@ -562,7 +779,7 @@ export function markHealthProviderDisconnected(
     userID: string,
     provider: HealthProvider,
     nowMs = Date.now(),
-    dependencies: Pick<HealthWriterDependencies, 'db'> = {},
+    dependencies: HealthSyncStateWriterDependencies = {},
 ): Promise<boolean> {
     return updateHealthSyncState(userID, provider, {
         status: HEALTH_SYNC_STATUSES.Disconnected,

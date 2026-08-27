@@ -39,6 +39,19 @@ describe('backfill-coros-sleep', () => {
             .toBe(Date.UTC(2026, 1, 28, 12, 0, 0));
     });
 
+    it('accepts a single inclusive provider calendar date', () => {
+        const selectedDayMs = Date.UTC(2026, 6, 24);
+
+        expect(resolveCorosSleepBackfillRange({
+            startMs: selectedDayMs,
+            endMs: selectedDayMs,
+        }, Date.UTC(2026, 6, 24, 12))).toEqual({
+            startMs: selectedDayMs,
+            endMs: selectedDayMs,
+            clampedToProviderLookback: false,
+        });
+    });
+
     it('queues bulk backfill work for the deployed reconciliation dispatcher', () => {
         expect(createCorosSleepBackfillQueueInput(
             { userID: 'user-1', providerUserID: 'coros-user-1' },
@@ -50,7 +63,7 @@ describe('backfill-coros-sleep', () => {
             providerUserId: 'coros-user-1',
             rangeStartMs: 1_777_000_000_000,
             rangeEndMs: 1_777_086_400_000,
-            dedupeKey: 'coros-sleep-backfill-v1:user-1:coros-user-1:1777000000000:1777086400000',
+            dedupeKey: 'coros-daily-health-backfill-v1:user-1:coros-user-1:1777000000000:1777086400000',
         });
     });
 });

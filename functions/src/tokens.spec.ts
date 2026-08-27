@@ -182,6 +182,13 @@ vi.mock('./token-refresh-coordinator', () => ({
     claimTokenRefresh: hoisted.claimTokenRefresh,
     persistTokenRefresh: hoisted.persistTokenRefresh,
     releaseTokenRefreshClaim: hoisted.releaseTokenRefreshClaim,
+    doesOAuthCredentialGenerationAuthorizeToken: vi.fn((rootData: Record<string, unknown> | null | undefined, generation: unknown) => {
+        if (rootData === null || rootData === undefined) return false;
+        const normalize = (value: unknown) => typeof value === 'string' && value.trim().length > 0
+            ? value.trim()
+            : null;
+        return normalize(rootData.activeOAuthCredentialGeneration) === normalize(generation);
+    }),
     getTokenCredentialSnapshot: vi.fn((data: any) => ({
         accessToken: data?.accessToken || '',
         refreshToken: data?.refreshToken || '',
@@ -341,6 +348,111 @@ describe('tokens', () => {
             const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
 
             expect(result.accessToken).toBe('old-access');
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+        });
+
+        it('preserves the credential generation on a non-expired COROS token projection', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'coros-access',
+                refreshToken: 'coros-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                activeOAuthCredentialGeneration: 'credential-generation-1',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            const result = await getTokenData(mockDoc, ServiceNames.COROSAPI, false);
+
+            expect(result as COROSAPIAuth2ServiceTokenInterface & {
+                tokenCredentialGeneration?: string;
+            }).toEqual(expect.objectContaining({
+                accessToken: 'coros-access',
+                tokenCredentialGeneration: 'credential-generation-1',
+            }));
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+        });
+
+        it('does not use an orphaned COROS token when its parent root is missing', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'orphan-access',
+                refreshToken: 'orphan-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce(null);
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({
+                    name: 'TokenUseSkippedForPendingDisconnectError',
+                    phase: 'before_return',
+                });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.warn.mock.calls)).not.toContain(mockDoc.id);
+        });
+
+        it('does not refresh a COROS token replaced by another root credential generation', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'stale-access',
+                refreshToken: 'stale-refresh',
+                expiresAt: 1_000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-new',
+            });
+            mockToken.expired.mockReturnValue(true);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({
+                    name: 'TokenUseSkippedForPendingDisconnectError',
+                    phase: 'before_refresh',
+                });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
+        it('lets the exact disconnect owner use a generated COROS orphan for provider cleanup', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'orphan-access',
+                refreshToken: 'orphan-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            })).resolves.toEqual(expect.objectContaining({
+                accessToken: 'orphan-access',
+                tokenCredentialGeneration: 'credential-generation-old',
+            }));
+
             expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 

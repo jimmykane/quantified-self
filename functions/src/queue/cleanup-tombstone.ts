@@ -19,22 +19,39 @@ function tombstoneDocumentID(collectionName: string, queueItemId: string): strin
     return `${encodeURIComponent(collectionName)}__${encodeURIComponent(queueItemId)}`;
 }
 
+export function getQueueCleanupTombstoneDocumentRef(
+    db: admin.firestore.Firestore,
+    collectionName: string,
+    queueItemId: string,
+): admin.firestore.DocumentReference {
+    return db
+        .collection(QUEUE_CLEANUP_TOMBSTONES_COLLECTION_NAME)
+        .doc(tombstoneDocumentID(collectionName, queueItemId));
+}
+
+export function buildQueueCleanupTombstoneData(
+    collectionName: string,
+    queueItemId: string,
+    reason: QueueCleanupTombstoneReason,
+): Record<string, unknown> {
+    return {
+        originalCollection: collectionName,
+        queueItemId,
+        reason,
+        deletedAt: FieldValue.serverTimestamp(),
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+    };
+}
+
 export async function markQueueItemDeletedForUserCleanup(
     collectionName: string,
     queueItemId: string,
     reason: QueueCleanupTombstoneReason,
 ): Promise<boolean> {
     try {
-        await admin.firestore()
-            .collection(QUEUE_CLEANUP_TOMBSTONES_COLLECTION_NAME)
-            .doc(tombstoneDocumentID(collectionName, queueItemId))
-            .set({
-                originalCollection: collectionName,
-                queueItemId,
-                reason,
-                deletedAt: FieldValue.serverTimestamp(),
-                expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-            }, { merge: true });
+        const db = admin.firestore();
+        await getQueueCleanupTombstoneDocumentRef(db, collectionName, queueItemId)
+            .set(buildQueueCleanupTombstoneData(collectionName, queueItemId, reason), { merge: true });
         return true;
     } catch (error) {
         logger.error(
@@ -50,10 +67,8 @@ export async function isQueueItemDeletedForUserCleanup(
     queueItemId: string,
 ): Promise<boolean> {
     try {
-        const snapshot = await admin.firestore()
-            .collection(QUEUE_CLEANUP_TOMBSTONES_COLLECTION_NAME)
-            .doc(tombstoneDocumentID(collectionName, queueItemId))
-            .get();
+        const db = admin.firestore();
+        const snapshot = await getQueueCleanupTombstoneDocumentRef(db, collectionName, queueItemId).get();
         if (!snapshot.exists) {
             return false;
         }

@@ -15,6 +15,7 @@ import { markServiceConnected } from './service-connection-meta';
 import {
   cleanupServiceConnectionForUser,
   cleanupServiceTokenById,
+  buildStoredServiceToken,
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
@@ -194,6 +195,12 @@ async function beginOAuthFlowIfUserActive(
       state,
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: generation,
+      // A legacy child can outlive a root that was deleted before recursive
+      // cleanup completed. Recreating that COROS root must not make a
+      // generation-less orphan active while the user is still in OAuth.
+      ...(serviceName === ServiceNames.COROSAPI && !rootSnapshot.exists
+        ? { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: generation }
+        : {}),
       // A prior process may have died after claiming an explicit disconnect.
       // Starting a new OAuth episode is the safe recovery point for an
       // expired fence and invalidates that old owner.
@@ -909,10 +916,30 @@ export async function deauthorizeServiceForSubscriptionEnforcement(
     SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
     {
       missingTokensBehavior: 'ignore',
-      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
-        recoverTerminalAuthFailure: false,
-        allowDisconnectPendingTokenUse: options.allowDisconnectPendingTokenUse === true,
-      }),
+      tokenResolver: async (doc) => {
+        try {
+          return await getTokenData(doc, serviceName, false, {
+            recoverTerminalAuthFailure: false,
+            allowDisconnectPendingTokenUse: options.allowDisconnectPendingTokenUse === true,
+          });
+        } catch (error) {
+          // An inactive same-user COROS child is intentionally unavailable to
+          // every normal worker, but subscription enforcement must still try
+          // to revoke it. The cleanup coordinator revalidates both its token
+          // snapshot and captured root lifecycle before the provider call and
+          // conditional local delete, so this fallback cannot target a newer
+          // reconnect credential.
+          if (serviceName === ServiceNames.COROSAPI
+            && error instanceof Error
+            && (error as Error & { reason?: unknown }).reason === 'inactive_oauth_credential') {
+            return buildStoredServiceToken(
+              serviceName,
+              doc.data() as Auth2ServiceTokenInterface,
+            );
+          }
+          throw error;
+        }
+      },
     },
   );
 }

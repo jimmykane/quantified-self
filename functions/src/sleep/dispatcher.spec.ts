@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_PENDING_TASKS } from '../shared/queue-config';
+import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 
 const {
     mockLoggerError,
@@ -23,6 +24,8 @@ const {
     mockTokenLimit,
     mockTokenGet,
     mockMarkQueueItemDeletedForUserCleanup,
+    mockMarkQueueItemDispatchedIfUserActive,
+    mockDeleteSleepQueueRevisionWithTombstone,
 } = vi.hoisted(() => {
     const mockLoggerError = vi.fn();
     const mockLoggerInfo = vi.fn();
@@ -46,6 +49,8 @@ const {
     const mockTokenLimit = vi.fn();
     const mockTokenGet = vi.fn();
     const mockMarkQueueItemDeletedForUserCleanup = vi.fn();
+    const mockMarkQueueItemDispatchedIfUserActive = vi.fn();
+    const mockDeleteSleepQueueRevisionWithTombstone = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockQueueCollection,
         collectionGroup: mockTokenCollectionGroup,
@@ -75,6 +80,8 @@ const {
         mockTokenLimit,
         mockTokenGet,
         mockMarkQueueItemDeletedForUserCleanup,
+        mockMarkQueueItemDispatchedIfUserActive,
+        mockDeleteSleepQueueRevisionWithTombstone,
     };
 });
 
@@ -138,6 +145,30 @@ vi.mock('../queue/cleanup-tombstone', () => ({
     },
 }));
 
+vi.mock('../queue/dispatch-marker', () => ({
+    QueueDispatchMarkerResult: {
+        Marked: 'marked',
+        SkippedDeletedUser: 'skipped_deleted_user',
+        NotCurrent: 'not_current',
+    },
+    markQueueItemDispatchedIfUserActive: mockMarkQueueItemDispatchedIfUserActive,
+}));
+
+vi.mock('./queue-revision', () => ({
+    deleteSleepQueueRevisionWithTombstone: mockDeleteSleepQueueRevisionWithTombstone,
+    isCurrentSleepQueueRevision: (current: Record<string, unknown>, attempted: Record<string, unknown>) => {
+        const attemptedRevision = typeof attempted.queueRevision === 'string' && attempted.queueRevision.trim()
+            ? attempted.queueRevision.trim()
+            : null;
+        const currentRevision = typeof current.queueRevision === 'string' && current.queueRevision.trim()
+            ? current.queueRevision.trim()
+            : null;
+        return current.processed !== true && (attemptedRevision
+            ? currentRevision === attemptedRevision
+            : currentRevision === null && current.dateCreated === attempted.dateCreated);
+    },
+}));
+
 import { reconcileSleepSyncQueueDispatches } from './dispatcher';
 
 describe('sleep/dispatcher', () => {
@@ -147,6 +178,26 @@ describe('sleep/dispatcher', () => {
         mockEnqueueSleepSyncTask.mockResolvedValue(true);
         mockRecursiveDelete.mockResolvedValue(undefined);
         mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
+        mockDeleteSleepQueueRevisionWithTombstone.mockImplementation(async (ref, id, _attempted, collectionName, reason) => {
+            const tombstoneWritten = await mockMarkQueueItemDeletedForUserCleanup(collectionName, id, reason);
+            if (!tombstoneWritten) throw new Error('tombstone write failed');
+            await mockRecursiveDelete(ref);
+            return true;
+        });
+        mockMarkQueueItemDispatchedIfUserActive.mockImplementation(async (params) => {
+            const deletionGuard = await mockGetUserDeletionGuardStateInTransaction();
+            if (deletionGuard.shouldSkip) {
+                const tombstoneWritten = await mockMarkQueueItemDeletedForUserCleanup(
+                    'sleepSyncQueue',
+                    params.queueItemId,
+                    'dispatcher_cleanup',
+                );
+                if (tombstoneWritten) await mockRecursiveDelete(params.queueItemDocument);
+                return 'skipped_deleted_user';
+            }
+            await params.queueItemDocument.update?.({ dispatchedToCloudTask: params.dispatchedAtMs });
+            return 'marked';
+        });
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -249,11 +300,90 @@ describe('sleep/dispatcher', () => {
             dispatched: 2,
             skippedRecent: 1,
         });
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 101);
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('stale-item', 102);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 101, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 101,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('stale-item', 102, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 102,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(updateUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
         expect(updateStale).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
         expect(updateRecent).not.toHaveBeenCalled();
+    });
+
+    it('redispatches a current revision after its retained processing lease expires', async () => {
+        const nowMs = 1_700_000_000_000;
+        const update = vi.fn().mockResolvedValue(undefined);
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                id: 'lease-recovery-item',
+                data: () => ({
+                    processed: false,
+                    dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+                    dateCreated: 201,
+                    queueRevision: 'revision-2',
+                    processingOwner: 'crashed-worker-r1',
+                    processingRevision: 'revision:revision-1',
+                    processingLeaseExpiresAt: nowMs - 1,
+                    userID: 'firebase-user-1',
+                    provider: 'SuuntoApp',
+                    providerUserId: 'suunto-user-1',
+                }),
+                ref: { update },
+            }],
+        });
+
+        await expect(reconcileSleepSyncQueueDispatches(nowMs)).resolves.toEqual({
+            inspected: 1,
+            dispatched: 1,
+            skippedRecent: 0,
+        });
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith(
+            'lease-recovery-item',
+            201,
+            undefined,
+            {
+                queueRevision: 'revision-2',
+                queueDateCreated: 201,
+                recoveryTaskKey: `lease-${nowMs}`,
+            },
+        );
+        expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
+    });
+
+    it('does not redispatch while another worker still holds the processing lease', async () => {
+        const nowMs = 1_700_000_000_000;
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                id: 'active-lease-item',
+                data: () => ({
+                    processed: false,
+                    dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+                    dateCreated: 202,
+                    queueRevision: 'revision-2',
+                    processingOwner: 'worker-r1',
+                    processingRevision: 'revision:revision-1',
+                    processingLeaseExpiresAt: nowMs + 1,
+                    userID: 'firebase-user-1',
+                    provider: 'SuuntoApp',
+                    providerUserId: 'suunto-user-1',
+                }),
+                ref: { update: vi.fn() },
+            }],
+        });
+
+        await expect(reconcileSleepSyncQueueDispatches(nowMs)).resolves.toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 1,
+        });
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
     it('paginates past recently dispatched rows so new queue items still dispatch', async () => {
@@ -297,7 +427,11 @@ describe('sleep/dispatcher', () => {
         expect(mockQueueOrderBy).toHaveBeenCalledWith('dateCreated', 'asc');
         expect(mockQueueStartAfter).toHaveBeenCalled();
         expect(mockQueueGet).toHaveBeenCalledTimes(2);
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('older-undispatched-item', 999);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('older-undispatched-item', 999, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 999,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(updateUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     });
 
@@ -329,7 +463,11 @@ describe('sleep/dispatcher', () => {
             dispatched: 0,
             skippedRecent: 0,
         });
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 301,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(updateUndispatched).not.toHaveBeenCalled();
         expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('Task not enqueued'));
     });
@@ -374,7 +512,11 @@ describe('sleep/dispatcher', () => {
             dispatched: 0,
             skippedRecent: 0,
         });
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('undispatched-item', 301, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 301,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(mockRecursiveDelete).toHaveBeenCalledWith(itemRef);
         expect(updateUndispatched).not.toHaveBeenCalled();
     });
@@ -491,6 +633,45 @@ describe('sleep/dispatcher', () => {
         expect(updateMalformed).not.toHaveBeenCalled();
     });
 
+    it('deletes queue items with an invalid dateCreated instead of dispatching a permanently stale task', async () => {
+        const nowMs = 1_700_000_000_000;
+        const updateMalformed = vi.fn().mockResolvedValue(undefined);
+        const malformedRef = { update: updateMalformed, path: 'sleepSyncQueue/malformed-date-item' };
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [
+                {
+                    id: 'malformed-date-item',
+                    data: () => ({
+                        dispatchedToCloudTask: null,
+                        dateCreated: '601',
+                        userID: 'user-with-malformed-date',
+                        provider: 'SuuntoApp',
+                        providerUserId: 'suunto-user',
+                    }),
+                    ref: malformedRef,
+                },
+            ],
+        });
+
+        const result = await reconcileSleepSyncQueueDispatches(nowMs);
+
+        expect(result).toEqual({
+            inspected: 1,
+            dispatched: 0,
+            skippedRecent: 0,
+        });
+        expect(mockGetUserDeletionGuardState).not.toHaveBeenCalled();
+        expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+            'sleepSyncQueue',
+            'malformed-date-item',
+            'dispatcher_cleanup',
+        );
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(malformedRef);
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+        expect(updateMalformed).not.toHaveBeenCalled();
+    });
+
     it('resolves legacy provider-keyed queue items before dispatching', async () => {
         const nowMs = 1_700_000_000_000;
         const updateLegacy = vi.fn().mockResolvedValue(undefined);
@@ -539,7 +720,11 @@ describe('sleep/dispatcher', () => {
         expect(mockTokenWhere).toHaveBeenCalledWith('serviceName', '==', 'garminAPI');
         expect(mockTokenWhere).toHaveBeenCalledWith('userID', '==', 'garmin-provider-user');
         expect(mockGetUserDeletionGuardState).toHaveBeenCalledWith(expect.anything(), 'resolved-user-id');
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('legacy-provider-item', 601);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('legacy-provider-item', 601, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 601,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(updateLegacy).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     });
 
@@ -590,7 +775,11 @@ describe('sleep/dispatcher', () => {
             dispatched: 0,
             skippedRecent: 0,
         });
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('provider-disappeared-after-enqueue', 651);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('provider-disappeared-after-enqueue', 651, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 651,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'provider-disappeared-after-enqueue',
@@ -648,7 +837,11 @@ describe('sleep/dispatcher', () => {
             dispatched: 0,
             skippedRecent: 0,
         });
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('tombstone-write-failed', 652);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('tombstone-write-failed', 652, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 652,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
             'sleepSyncQueue',
             'tombstone-write-failed',
@@ -657,7 +850,8 @@ describe('sleep/dispatcher', () => {
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
         expect(updateLegacy).not.toHaveBeenCalled();
         expect(mockLoggerError).toHaveBeenCalledWith(
-            '[SleepSyncDispatcher] Failed to write cleanup tombstone for tombstone-write-failed; leaving queue item in place to avoid missing-doc Cloud Task retries.',
+            expect.stringContaining('Failed to delete queue item tombstone-write-failed'),
+            expect.any(Error),
         );
     });
 
@@ -748,7 +942,11 @@ describe('sleep/dispatcher', () => {
             skippedRecent: 0,
         });
         expect(mockEnqueueSleepSyncTask).toHaveBeenCalledTimes(1);
-        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('healthy-item', 802);
+        expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('healthy-item', 802, undefined, {
+            queueRevision: undefined,
+            queueDateCreated: 802,
+            recoveryTaskKey: `dispatch-${nowMs}`,
+        });
         expect(updateGuardFailure).not.toHaveBeenCalled();
         expect(updateHealthy).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
         expect(mockLoggerError).toHaveBeenCalledWith(

@@ -8,9 +8,12 @@ import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processSleepSyncQueueItem } from '../sleep/queue';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { isCurrentSleepQueueRevision } from '../sleep/queue-revision';
 
 interface SleepSyncTaskPayload {
     queueItemId: string;
+    queueRevision?: string;
+    queueDateCreated?: number;
 }
 
 export const processSleepSyncTask = onTaskDispatched({
@@ -20,7 +23,7 @@ export const processSleepSyncTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId } = request.data as SleepSyncTaskPayload;
+    const { queueItemId, queueRevision, queueDateCreated } = request.data as SleepSyncTaskPayload;
     logger.info(`[SleepSyncTaskWorker] Starting task for queue item ${queueItemId}`);
 
     const queueRef = admin.firestore().collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
@@ -40,6 +43,15 @@ export const processSleepSyncTask = onTaskDispatched({
     }
 
     const queueItem = queueDoc.data() as SleepSyncQueueItemInterface | undefined;
+    const hasBoundIdentity = typeof queueRevision === 'string' && queueRevision.trim().length > 0
+        || Number.isFinite(Number(queueDateCreated));
+    if (queueItem && hasBoundIdentity && !isCurrentSleepQueueRevision(queueItem, {
+        queueRevision,
+        dateCreated: Number(queueDateCreated),
+    })) {
+        logger.info(`[SleepSyncTaskWorker] Task identity for ${queueItemId} is stale; leaving the replacement revision queued.`);
+        return;
+    }
     if (queueItem?.processed) {
         logger.info(`[SleepSyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
         return;

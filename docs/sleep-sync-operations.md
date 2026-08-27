@@ -1,25 +1,29 @@
 # Sleep Sync Operations
 
 Sleep sync is controlled independently from activity sync. The v1 sleep pipeline supports
-Garmin, Suunto, and COROS. All three providers are enabled for every connected user.
+Garmin, Suunto, and COROS. All three providers are enabled for every connected user. COROS
+daily responses now also feed the unified Health writer; no separate COROS Health scheduler or
+webhook is required.
 
 COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
-times, average sleep heart rate, resting heart rate, overnight HRV, and optional HRV samples.
+times, average sleep heart rate, resting heart rate, overnight HRV, steps, a provider-native
+calorie value, and optional detailed HRV/interval-heart-rate samples.
 It does not provide sleep-stage intervals, so COROS sessions retain their duration as an
 unknown stage rather than inferred Light, Deep, REM, or Awake stages.
 
 ## Unified Health Compatibility Boundary
 
-The unified health foundation does not replace or migrate this pipeline. `users/{uid}/sleepSessions`
-remains the canonical normalized Sleep store, and existing dashboard, Training, and MCP Sleep reads
-continue to use it.
+The unified health foundation does not replace this pipeline. `users/{uid}/sleepSessions` remains
+the canonical normalized Sleep store, and existing dashboard, Training, and MCP Sleep reads continue
+to use it. The COROS worker now writes aggregate sleep first, then one source-aware daily Health record.
 
-Future provider health adapters may create typed references to an existing Sleep document and an
-allowlisted aggregate field (duration, score, aggregate HR/HRV, maximum SpO₂, or average respiration).
-They must not copy Sleep sessions, stages, provider fields, or respiration/SpO₂/HRV sample arrays into
-`healthSourceRecords` or `healthSampleChunks`. The reference validator requires the stable health metric ID
-to match the referenced Sleep field. See [Unified health data foundation](unified-health-data.md).
+COROS Health records create typed references to the existing Sleep duration, resting/sleep heart rate,
+and overnight HRV aggregates. They do not copy Sleep sessions or stages. Detailed COROS `hrvList` points
+from new responses live only in `healthSampleChunks`; existing legacy Sleep copies remain untouched until
+the guarded migration has safely written Health and can remove them.
+The reference validator requires the stable health metric ID to match the referenced Sleep field. See
+[Unified health data foundation](unified-health-data.md).
 
 Provider disconnect retains both normalized Sleep sessions and imported unified health history.
 Account deletion recursively removes both because they remain below `users/{uid}`.
@@ -73,15 +77,34 @@ enabled again, new webhooks and scheduled polling runs are expected to create fr
 COROS and Suunto polling use a rolling recent window, so recent data can be picked up on
 the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in v1.
 
+## Queue Revision and Recovery Safety
+
+Every newly written Sleep queue item has an opaque `queueRevision`. The Cloud Task name and
+payload both bind to that exact revision; the date-only payload remains accepted solely for
+legacy queue rows that do not have a revision. Dispatch marking, worker claim, retry, completion,
+skip, DLQ movement, and cleanup tombstones all recheck the live revision transactionally. A stale
+task may acknowledge its own delivery, but it cannot update or delete a newer replacement.
+
+If a newer revision arrives while the prior worker owns an active processing lease, the queue
+replacement preserves that lease and remains undispatched until the older worker releases it.
+The release makes the replacement eligible for its own task. If a worker crashes and leaves an
+expired lease behind, the scheduled dispatcher treats that retained lease as recovery work and
+uses a revision-bound recovery task name. A reserved task name is considered dispatched only
+while the corresponding Cloud Task still exists, so a deleted or expired task cannot leave the
+queue row permanently stuck.
+
 ## Routine Verification
 
 1. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
    function manually in the Firebase console.
-2. Verify new COROS queue items complete successfully and `users/{uid}/sleepSyncState/COROSAPI`
-   shows a recent `lastPollAtMs` and `lastSyncedAtMs`.
+2. Verify new COROS queue items complete successfully, `users/{uid}/sleepSyncState/COROSAPI`
+   shows a recent `lastPollAtMs` and `lastSyncedAtMs`, and `users/{uid}/healthSyncState/COROSAPI`
+   shows `ready` with matching poll/sync timestamps.
 3. Check `users/{uid}/sleepSessions` for sessions with the COROS source. The current endpoint
    does not provide sleep stages, scores, naps, or in-bed duration.
-4. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
+4. Check `users/{uid}/healthSourceRecords` for a `coros_daily` daily summary and its bounded
+   `healthSampleChunks`. Persisted source/account/revision identities must be opaque hashes.
+5. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
    Push sleep summaries are rejected in v1 because Garmin does not provide an authenticated
    push signature in the local docs; the worker only persists Garmin sleep data after pulling
    it from a Garmin-owned callback URL with the user's stored token.
@@ -93,16 +116,17 @@ gain the SpO₂ aggregate only when Garmin redelivers the session or the user ru
 **Import Sleep History** flow after the updated worker is deployed; deploying or rescanning an
 MCP client does not rewrite sleep documents.
 
-## One-Off COROS Backfill
+## One-Off COROS Sleep and Health Backfill
 
 COROS retains daily data for up to three months and permits a maximum 30-day range per request.
-Connected Pro users can choose **Import Sleep History** in COROS History Import. The user-requested
-backfill queues their available three-month window in 30-day ranges and is available once every
-seven days. It uses the same guarded sleep worker and normalized session writes as routine polling.
+Connected Pro users can choose **Import Sleep & Health History** in COROS History Import. The
+user-requested backfill queues their available three-month window in 30-day ranges and is available
+once every seven days. It uses the same guarded worker and ordered Sleep/Health writes as routine polling.
 
-The `backfill-coros-sleep` Functions script queues the current eligible COROS accounts through the
-normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself;
-the deployed sleep worker performs the guarded token use and session writes.
+The `backfill-coros-daily-health` Functions script queues the current eligible COROS accounts through
+the normal sleep queue in 30-day windows. The compatibility alias `backfill-coros-sleep` runs the same
+script. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
+guarded token use and Sleep/Health writes.
 
 Deploy the enabled scheduler and sleep worker before queueing a backfill:
 
@@ -113,18 +137,49 @@ npm --prefix functions run build && firebase deploy --only functions:scheduleCOR
 Inspect the account and queue-item count first:
 
 ```bash
-npm --prefix functions run backfill-coros-sleep
+npm --prefix functions run backfill-coros-daily-health
 ```
 
 Then explicitly queue the backfill for all eligible connected COROS accounts:
 
 ```bash
-npm --prefix functions run backfill-coros-sleep -- --execute --confirm-all-users
+npm --prefix functions run backfill-coros-daily-health -- --execute --confirm-all-users
 ```
 
 Use `--uid <Firebase UID>` to limit the run to one user, or `--start YYYY-MM-DD` and
 `--end YYYY-MM-DD` to narrow the window. The script clamps any earlier start date to COROS's
 three-month retention boundary and exits nonzero if queueing a window fails.
+
+## Legacy COROS Sleep Sample Migration
+
+Before the daily Health adapter, COROS daily extras and detailed HRV were stored inside normalized
+Sleep documents. Inspect the bounded migration plan first; dry-run is the default and performs no writes:
+
+```bash
+npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID>
+```
+
+Execute the reviewed single-user plan explicitly:
+
+```bash
+npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID> --execute
+```
+
+For a global execution, a prior dry-run is required operationally and the command requires the additional
+`--confirm-all-users` guard. The projected query defaults to 100 Sleep documents and has a hard 250-document
+page maximum. Use `--limit` and the reported `nextStartAfter` with `--start-after` to page:
+
+```bash
+npm --prefix functions run migrate-coros-sleep-to-health -- --execute --confirm-all-users --limit 250
+```
+
+The migration writes the Health replacement first. Only after the exact content is successfully written or is
+already present unchanged does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS
+daily fields from that Sleep document. A stale result proves only that a newer Health record exists, not that it
+contains every legacy value, so the source fields remain for operator review. Aggregate Sleep vitals and timing
+remain. A concurrent Sleep change fails the cleanup closed, and rerunning is idempotent. Malformed,
+out-of-window, or inconsistent legacy samples/vitals also remain untouched and are counted as invalid so an
+operator can review them without data loss.
 
 ## Temporarily Disable A Provider
 

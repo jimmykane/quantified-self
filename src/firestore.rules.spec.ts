@@ -274,6 +274,22 @@ describe('Firestore Security Rules', () => {
                 dateCreated: 2_000,
             }));
         });
+
+        it('requires server-owned callables for every COROS token-root mutation', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const rootRef = db.doc(`COROSAPIAccessTokens/${userId}`);
+
+            await assertFails(rootRef.set({ state: 'client-oauth-state' }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`COROSAPIAccessTokens/${userId}`).set({
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+            });
+
+            await assertFails(rootRef.update({ state: 'client-replacement-state' }));
+            await assertFails(rootRef.delete());
+        });
     });
 
     describe('Wahoo server-owned integration state', () => {

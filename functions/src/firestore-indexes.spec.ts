@@ -140,6 +140,14 @@ describe('firestore indexes', () => {
         });
         expect(config.fieldOverrides).toContainEqual({
             collectionGroup: 'meta',
+            fieldPath: 'healthLifecycleProjectionPending',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'meta',
             fieldPath: 'routeRestorePending',
             ttl: false,
             indexes: [

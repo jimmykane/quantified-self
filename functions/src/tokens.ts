@@ -32,6 +32,7 @@ import {
   persistTokenRefresh,
   releaseTokenRefreshClaim,
   areTokenCredentialSnapshotsEqual,
+  doesOAuthCredentialGenerationAuthorizeToken,
   TOKEN_REFRESH_REQUEST_TIMEOUT_MS,
 } from './token-refresh-coordinator';
 import {
@@ -67,6 +68,7 @@ export class TokenUseSkippedForPendingDisconnectError extends Error {
     public readonly serviceName: ServiceNames,
     public readonly tokenDocumentID: string,
     public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
+    public readonly reason: 'service_disconnect' | 'inactive_oauth_credential' = 'service_disconnect',
   ) {
     super(`Skipping ${serviceName} token use for ${tokenDocumentID} because service disconnect is pending for user ${firebaseUserID}.`);
   }
@@ -147,6 +149,16 @@ function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | Document
   return doc.ref.parent.parent?.id || null;
 }
 
+function shouldRequireActiveOAuthCredentialGeneration(
+  serviceName: ServiceNames,
+  options: Pick<GetTokenDataOptions, 'expectedDisconnectOperationGeneration'>,
+): boolean {
+  // The exact explicit-disconnect owner must still be able to deauthorize and
+  // delete a historical orphan. All ordinary COROS workers fail closed.
+  return serviceName === ServiceNames.COROSAPI
+    && !options.expectedDisconnectOperationGeneration;
+}
+
 async function assertTokenUseAllowedForUser(
   doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
@@ -168,6 +180,22 @@ async function assertTokenUseAllowedForUser(
   }
 
   const tokenRootData = await getServiceDisconnectPendingData(firebaseUserID, serviceName);
+  if (shouldRequireActiveOAuthCredentialGeneration(serviceName, options)
+    && !doesOAuthCredentialGenerationAuthorizeToken(
+      tokenRootData as Record<string, unknown> | null,
+      (doc.data() as Record<string, unknown> | undefined)?.tokenCredentialGeneration,
+    )) {
+    logger.warn(
+      `Skipping ${serviceName} token use during ${phase} because its active OAuth credential root is missing or changed.`,
+    );
+    throw new TokenUseSkippedForPendingDisconnectError(
+      firebaseUserID,
+      serviceName,
+      doc.id,
+      phase,
+      'inactive_oauth_credential',
+    );
+  }
   if (!doesServiceDisconnectOperationPermitTokenUse(
     tokenRootData,
     options.expectedDisconnectOperationGeneration,
@@ -231,7 +259,7 @@ export async function getTokenData(
       default:
         throw new Error('Not Implemented');
       case ServiceNames.COROSAPI:
-        return <COROSAPIAuth2ServiceTokenInterface>{
+        return <COROSAPIAuth2ServiceTokenInterface><unknown>{
           serviceName: serviceName,
           accessToken: serviceTokenData.accessToken,
           refreshToken: serviceTokenData.refreshToken,
@@ -241,6 +269,13 @@ export async function getTokenData(
           openId: serviceTokenData.openId,
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
+          // Internal callers use this server-owned value to fence work across
+          // same-account OAuth replacement. Keep it on every token projection,
+          // including the ordinary non-refresh path.
+          tokenCredentialGeneration: typeof (serviceTokenData as unknown as Record<string, unknown>)
+            .tokenCredentialGeneration === 'string'
+            ? (serviceTokenData as unknown as Record<string, string>).tokenCredentialGeneration
+            : undefined,
         };
       case ServiceNames.SuuntoApp:
         return <SuuntoAPIAuth2ServiceTokenInterface>{
@@ -294,8 +329,12 @@ export async function getTokenData(
   }
 
   const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
+  const requireActiveOAuthCredentialGeneration = shouldRequireActiveOAuthCredentialGeneration(serviceName, options);
   const claimResult = await claimTokenRefresh(doc.ref, initialCredential, {
     expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+    ...(requireActiveOAuthCredentialGeneration
+      ? { requireActiveOAuthCredentialGeneration: true }
+      : {}),
   });
   if (claimResult.kind === 'skipped_user_deletion') {
     const userID = getFirebaseUserIDForTokenDocument(doc);
@@ -346,7 +385,11 @@ export async function getTokenData(
       claimResult.credential,
     )
   ) {
-    await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
+    await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
+      ...(requireActiveOAuthCredentialGeneration
+        ? { requireActiveOAuthCredentialGeneration: true }
+        : {}),
+    });
     return retryWithLatestTokenSnapshot(refreshDoc.exists ? refreshDoc : null, serviceName, doc.id, options);
   }
   const refreshToken = serviceConfig.getOAuth2Client(true).createToken({
@@ -522,6 +565,9 @@ export async function getTokenData(
           }],
         } : {}),
         expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+        ...(requireActiveOAuthCredentialGeneration
+          ? { requireActiveOAuthCredentialGeneration: true }
+          : {}),
       },
     );
     if (persistResult.kind === 'persisted') {
@@ -545,7 +591,11 @@ export async function getTokenData(
   } finally {
     if (releaseClaim) {
       try {
-        await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
+        await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
+          ...(requireActiveOAuthCredentialGeneration
+            ? { requireActiveOAuthCredentialGeneration: true }
+            : {}),
+        });
       } catch (releaseError) {
         logger.warn(`Could not release ${serviceName} token refresh lease for ${doc.id}.`, {
           errorName: releaseError instanceof Error ? releaseError.name : 'UnknownError',

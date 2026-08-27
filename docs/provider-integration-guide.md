@@ -4,7 +4,7 @@ This document is the durable implementation guide for adding or materially chang
 
 Keep it current in the same change whenever a provider is added, removed, renamed, gains a capability, changes a lifecycle rule, or changes operational support. The root `AGENTS.md` makes that update mandatory.
 
-Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its asynchronous upload, route, single-account, echo-suppression, and entitlement decisions.
+Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions.
 
 ## 1. Define the product contract before writing code
 
@@ -26,7 +26,7 @@ The current providers are intentionally not identical:
 | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Garmin   | Activity/sleep import, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Connect receives a normalized Course Import payload; direct and saved GPX/FIT routes require Course Import permission. |
 | Suunto   | Activity/sleep/route import plus activity and saved-route source/destination workflows | Suunto receives GPX routes. Suunto activities can flow to Wahoo/COROS, while saved Suunto routes can flow to Garmin/Wahoo/COROS through shared queues. |
-| COROS    | Activity and daily sleep-summary import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Sleep retains the existing rolling/history limits. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
+| COROS    | Activity plus daily Health/Sleep import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Daily Health reuses the Sleep poll/history queue, preserves aggregate Sleep through references, and stores bounded detailed HRV in Health. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
 | Wahoo    | Pro activity import, FIT activity delivery, direct GPX/FIT course/route delivery, and opt-in Suunto saved-route delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained Wahoo FITs can sync to Suunto or COROS, while Wahoo accepts activity delivery from Garmin/COROS/Suunto. |
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
@@ -58,7 +58,7 @@ Provider webhook / polling / history work
         -> shared direct/callable query projection
 ```
 
-Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed.
+Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed. COROS is the reference implementation for sharing one provider response between Sleep aggregates and Health daily/sample records without duplicating detailed samples.
 
 Add a provider-specific architecture document under `docs/` when the integration has meaningful protocol, data-flow, rollout, or operational detail. Link it from the Architecture Documentation section of `README.md`; Wahoo is the reference example.
 
@@ -107,6 +107,8 @@ OAuth is a server-owned integration. The browser starts and completes the user e
 - Use the shared `getServiceAdapter()` factory and `ServiceAuthAdapter` lifecycle. Do not create a provider-specific token refresh path that bypasses shared deauthorization, cleanup, or safe metadata behavior.
 - Refresh access tokens only when a provider request needs one, persist rotation safely, and never log token values or signed authorization URLs. The shared `getTokenData()` path takes a transaction-backed lease on the token document before calling a provider refresh endpoint; bound that HTTP request below the lease duration. The lease owner may persist only if the credential snapshot and server-issued credential generation still match and the account-deletion guard remains active; a contender re-reads a winning refresh or retries later, and an expired lease is reclaimable after a crash. OAuth reconnect, disconnect, duplicate-account cleanup, and account deletion must replace, remove, or reject that snapshot atomically so an older worker cannot restore stale credentials.
 - Give every connected, reconnect-required, and disconnect-pending transition a new opaque connection-state generation. Terminal credential cleanup must prove the expected generation and absence of a replacement credential in the same transaction that writes reconnect-required state; any later route-disable write must require that same generation and state. This prevents a stale refresh failure from overwriting a successful OAuth callback or disabling routes after reconnection.
+- Keep a queue task's OAuth credential generation and connection-state generation immutable from its first lifecycle capture. Ordinary token refresh may update credential timestamps only inside that generation; never rebase old work onto a replacement OAuth snapshot. When token children can outlive a deleted parent document, require the original server-owned token-root generation in every downstream write transaction and deny direct browser creation, update, and deletion of that root.
+- When authoritative connection metadata is mirrored into a separate product status such as unified Health, commit a generation-keyed repair marker in the authoritative transition. Require the exact marker claim as part of the derived-write guard, retry it from a bounded scheduler, and clear only that claim after success. A disconnect must transactionally supersede any pending claim while proving the credential root remains absent so an in-flight or delayed connected projection cannot restore stale status; logging and swallowing a partial projection is not a recovery mechanism.
 - Keep any provider-specific refresh-failure exception narrow, centralized, and temporary. The current Suunto `400 invalid_grant` exception preserves credentials and retries because Suunto confirmed a provider outage; remove that exception and restore terminal-auth cleanup once Suunto confirms the incident is fixed.
 
 ### Security checklist
@@ -136,6 +138,7 @@ For every new persistent write path:
 - Use the shared Firestore write sanitizer for event/activity documents. Never persist `streams` or top-level `activities` in an event document.
 - Validate external payloads defensively. Treat every field as optional or untrusted until normalized.
 - Keep provider credentials and signed download URLs out of safe metadata, events, error text, analytics, logs, and admin responses.
+- Move user-scoped queue items to a DLQ only in a transaction that rechecks account deletion and the exact live queue revision; otherwise account cleanup or a newer queue payload can be resurrected by an in-flight worker.
 - Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
 - Use the shared health writer's deterministic opaque provider-account ID, source-record ID, account-scoped source-key hash, and hashed revision token. Never persist the raw provider account ID, raw provider record key or revision token, free-form provider error, or raw provider payload in the unified health collections.
