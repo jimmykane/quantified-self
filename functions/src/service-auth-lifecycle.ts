@@ -791,6 +791,7 @@ async function deleteCurrentTerminalAuthToken(
       && doesSuuntoHealthWebhookBindingMatch(
         parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data()),
         userID,
+        suuntoProviderUserId,
         typeof currentTokenData?.tokenCredentialGeneration === 'string'
           ? currentTokenData.tokenCredentialGeneration
           : null,

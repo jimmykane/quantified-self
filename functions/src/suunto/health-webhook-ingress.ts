@@ -222,6 +222,7 @@ function tokenAndRootStillAuthorizeBinding(
     && doesSuuntoHealthWebhookBindingMatch(
       binding,
       binding.userID,
+      providerUserId,
       normalizeSuuntoTokenCredentialGeneration(tokenData?.tokenCredentialGeneration),
     )
     && !isServiceDisconnectPendingData(tokenRootData)
@@ -303,6 +304,9 @@ async function getActiveIngressBindingInTransaction(
     bindingExpectedFields: {
       schemaVersion: binding.schemaVersion,
       userID: binding.userID,
+      ...(binding.providerAccountDigest
+        ? { providerAccountDigest: binding.providerAccountDigest }
+        : {}),
       tokenCredentialGeneration: binding.tokenCredentialGeneration,
     },
     tokenExpectedFields: {

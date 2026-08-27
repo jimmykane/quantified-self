@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { createHash } from 'node:crypto';
 
 const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
@@ -129,6 +130,7 @@ const INGRESS_ID = 'a'.repeat(64);
 const RECEIVED_AT_MS = 1_777_777_777_000;
 const PROCESSED_AT_MS = RECEIVED_AT_MS + 1_000;
 const TOKEN_GENERATION = 'credential-generation-1';
+const PROVIDER_ACCOUNT_DIGEST = createHash('sha256').update('suunto-account-1').digest('hex');
 const ROOT_GENERATION = 'root-credential-generation-2';
 const CONNECTION_GENERATION = 'connection-generation-1';
 
@@ -196,8 +198,9 @@ describe('Suunto Health webhook ingress', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.state.binding = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       userID: 'firebase-user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
     hoisted.state.token = {
@@ -267,8 +270,9 @@ describe('Suunto Health webhook ingress', () => {
 
   it('creates independent durable ingress for every active staged connection', async () => {
     hoisted.state.binding2 = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       userID: 'firebase-user-2',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: 'credential-generation-2',
     };
     hoisted.state.token2 = {
@@ -313,8 +317,9 @@ describe('Suunto Health webhook ingress', () => {
     )).resolves.toBe('permanent_skip');
 
     hoisted.state.binding = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       userID: 'firebase-user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
     await expect(persistSuuntoHealthWebhookIngress(
@@ -410,8 +415,9 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.recursiveDelete).toHaveBeenCalledWith(stale.ref);
 
     hoisted.state.binding = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       userID: 'firebase-user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
     hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });

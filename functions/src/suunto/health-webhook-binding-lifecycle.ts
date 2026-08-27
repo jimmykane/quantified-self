@@ -10,9 +10,11 @@ import { isServiceDisconnectPendingData } from '../service-disconnect-pending-st
 import {
   buildSuuntoHealthWebhookAccountBinding,
   doesSuuntoHealthWebhookBindingMatch,
+  findSuuntoWebhookAccountBindingUserIDs,
   getSuuntoHealthWebhookAccountBindingRef,
   normalizeSuuntoTokenCredentialGeneration,
   parseSuuntoHealthWebhookAccountBinding,
+  SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
 } from './health-webhook-binding';
 
 /**
@@ -20,12 +22,15 @@ import {
  * connection. Each Firebase user has an independent binding so the same
  * provider account can fan out to every active staged connection.
  */
-export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+type SuuntoWebhookBindingStatus = 'created' | 'current' | 'conflict' | 'inactive';
+
+async function evaluateSuuntoHealthWebhookAccountBinding(
   db: admin.firestore.Firestore,
   userID: string,
   providerUserId: string,
-  nowMs = Date.now(),
-): Promise<'created' | 'current' | 'conflict' | 'inactive'> {
+  nowMs: number,
+  createOrRefreshBinding: boolean,
+): Promise<SuuntoWebhookBindingStatus> {
   const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const tokenRootRef = getServiceTokenRootDocumentRef(userID, ServiceNames.SuuntoApp);
   const tokenRef = tokenRootRef.collection('tokens').doc(providerUserId);
@@ -62,13 +67,65 @@ export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
     const current = parseSuuntoHealthWebhookAccountBinding(bindingSnapshot.data());
     if (bindingSnapshot.exists && !current) return 'conflict';
     if (current && current.userID !== userID) return 'conflict';
-    if (doesSuuntoHealthWebhookBindingMatch(current, userID, tokenCredentialGeneration)) {
+    if (current?.schemaVersion === SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+      && doesSuuntoHealthWebhookBindingMatch(
+        current,
+        userID,
+        providerUserId,
+        tokenCredentialGeneration,
+      )) {
       return 'current';
     }
+    if (!createOrRefreshBinding) return 'inactive';
     transaction.set(
       bindingRef,
-      buildSuuntoHealthWebhookAccountBinding(userID, tokenCredentialGeneration),
+      buildSuuntoHealthWebhookAccountBinding(userID, providerUserId, tokenCredentialGeneration),
     );
     return 'created';
   });
+}
+
+export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+  db: admin.firestore.Firestore,
+  userID: string,
+  providerUserId: string,
+  nowMs = Date.now(),
+): Promise<SuuntoWebhookBindingStatus> {
+  return evaluateSuuntoHealthWebhookAccountBinding(
+    db,
+    userID,
+    providerUserId,
+    nowMs,
+    true,
+  );
+}
+
+/**
+ * Resolves every currently authorized owner without creating new authority
+ * from the client-readable token tree during webhook admission.
+ */
+export async function resolveActiveSuuntoWebhookUserIDs(
+  db: admin.firestore.Firestore,
+  providerUserId: string,
+  candidateUserIDs: readonly string[] = [],
+  nowMs = Date.now(),
+): Promise<string[]> {
+  const bindingUserIDs = await findSuuntoWebhookAccountBindingUserIDs(
+    db,
+    providerUserId,
+    candidateUserIDs,
+  );
+  const statuses = await Promise.all(bindingUserIDs.map(async userID => ({
+    userID,
+    status: await evaluateSuuntoHealthWebhookAccountBinding(
+      db,
+      userID,
+      providerUserId,
+      nowMs,
+      false,
+    ),
+  })));
+  return statuses
+    .filter(({ status }) => status === 'current')
+    .map(({ userID }) => userID);
 }

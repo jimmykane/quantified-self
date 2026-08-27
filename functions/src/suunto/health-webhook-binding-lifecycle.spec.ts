@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { createHash } from 'node:crypto';
+
+const PROVIDER_ACCOUNT_DIGEST = createHash('sha256').update('provider-1').digest('hex');
 
 const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
@@ -95,8 +98,32 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     expect(hoisted.transactionSet).toHaveBeenCalledWith(
       hoisted.bindingRef,
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         userID: 'user-1',
+        providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+        tokenCredentialGeneration: 'token-generation-1',
+      },
+    );
+  });
+
+  it('upgrades a generation-matched schema-v2 binding to the indexed schema', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 2,
+      userID: 'user-1',
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+
+    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+    )).resolves.toBe('created');
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      {
+        schemaVersion: 3,
+        userID: 'user-1',
+        providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
         tokenCredentialGeneration: 'token-generation-1',
       },
     );
@@ -104,8 +131,9 @@ describe('Suunto Health webhook account binding lifecycle', () => {
 
   it('does not overwrite a malformed per-user binding owned by another UID', async () => {
     hoisted.state.binding = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       userID: 'other-user',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: 'other-generation',
     };
 

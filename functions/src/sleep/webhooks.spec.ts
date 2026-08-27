@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => ({
     suuntoEnabled: true,
     allowedUserIDs: ['test-user-uid'] as string[],
     suuntoWebhookTokenMatches: true,
-    suuntoWebhookResolvedUserID: 'resolved-suunto-user-id',
+    suuntoWebhookResolvedUserIDs: ['test-user-uid'] as string[],
 }));
 
 vi.mock('firebase-functions/v1', () => ({
@@ -29,58 +29,16 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-    firestore: vi.fn(() => ({
-        collection: vi.fn(() => ({
-            doc: vi.fn(() => ({
-                collection: vi.fn(() => ({
-                    where: vi.fn().mockReturnThis(),
-                    limit: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({
-                        empty: !hoisted.suuntoWebhookTokenMatches,
-                        docs: hoisted.suuntoWebhookTokenMatches ? [{}] : [],
-                    }),
-                })),
-            })),
-        })),
-        collectionGroup: vi.fn(() => ({
-            where: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({
-                empty: !hoisted.suuntoWebhookTokenMatches,
-                docs: hoisted.suuntoWebhookTokenMatches ? [{
-                    id: 'suunto-token-1',
-                    data: () => ({
-                        userName: 'suunto-user-1',
-                    }),
-                    ref: {
-                        parent: {
-                            parent: {
-                                id: hoisted.suuntoWebhookResolvedUserID,
-                                parent: {
-                                    id: 'suuntoAppAccessTokens',
-                                },
-                            },
-                        },
-                    },
-                }] : [],
-            }),
-        })),
-    })),
+    firestore: vi.fn(() => ({})),
 }));
 
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
-    findSleepTokenByProviderUserId: vi.fn(async () => (hoisted.suuntoWebhookTokenMatches ? {
-        id: 'suunto-token-1',
-        ref: {
-            parent: {
-                parent: {
-                    id: hoisted.suuntoWebhookResolvedUserID,
-                },
-            },
-        },
-    } : null)),
-    firebaseUserIdFromSleepTokenSnapshot: vi.fn((tokenSnapshot: any) => tokenSnapshot.ref.parent.parent.id),
+}));
+
+vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
+    resolveActiveSuuntoWebhookUserIDs: vi.fn(async () =>
+        hoisted.suuntoWebhookTokenMatches ? hoisted.suuntoWebhookResolvedUserIDs : []),
 }));
 
 vi.mock('../suunto/health-webhook-ingress', () => ({
@@ -122,7 +80,7 @@ describe('sleep webhooks', () => {
         hoisted.suuntoEnabled = true;
         hoisted.allowedUserIDs = ['test-user-uid'];
         hoisted.suuntoWebhookTokenMatches = true;
-        hoisted.suuntoWebhookResolvedUserID = 'resolved-suunto-user-id';
+        hoisted.suuntoWebhookResolvedUserIDs = ['test-user-uid'];
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-id' });
         hoisted.persistSuuntoHealthWebhookIngress.mockResolvedValue('created');
@@ -293,7 +251,7 @@ describe('sleep webhooks', () => {
             userID: 'test-user-uid',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123, StartTime: 1760000000000 }] },
-            dedupeKey: 'suunto-user-1:123',
+            dedupeKey: 'test-user-uid:suunto-user-1:123',
         }));
     });
 
@@ -343,9 +301,9 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('resolves all-user Suunto sleep webhooks to a connected app user before queueing', async () => {
+    it('fans out all-user Suunto sleep webhooks to every connected app user', async () => {
         hoisted.allowedUserIDs = [];
-        hoisted.suuntoWebhookResolvedUserID = 'connected-user-id';
+        hoisted.suuntoWebhookResolvedUserIDs = ['connected-user-1', 'connected-user-2'];
         const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
         const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
             .update(rawBody)
@@ -363,14 +321,77 @@ describe('sleep webhooks', () => {
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(200);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
-            userID: 'connected-user-id',
+            userID: 'connected-user-1',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ SleepId: 123, StartTime: 1760000000000 }] },
-            dedupeKey: 'suunto-user-1:123',
+            dedupeKey: 'connected-user-1:suunto-user-1:123',
         }));
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            userID: 'connected-user-2',
+            dedupeKey: 'connected-user-2:suunto-user-1:123',
+        }));
+    });
+
+    it('keeps fan-out successful when one shared connection becomes non-retryable', async () => {
+        hoisted.allowedUserIDs = [];
+        hoisted.suuntoWebhookResolvedUserIDs = ['deleted-user', 'active-user'];
+        hoisted.addSleepSyncQueueItem
+            .mockRejectedValueOnce(Object.assign(new Error('deleted'), {
+                name: 'ProviderQueueUserDeletedOrDeletingError',
+            }))
+            .mockResolvedValueOnce({ id: 'active-queue-id' });
+        const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body: {
+                type: 'SUUNTO_247_SLEEP_CREATED',
+                username: 'suunto-user-1',
+                samples: [{ SleepId: 123 }],
+            },
+            get: vi.fn(() => signature),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenLastCalledWith(expect.objectContaining({
+            userID: 'active-user',
+            dedupeKey: 'active-user:suunto-user-1:123',
+        }));
+    });
+
+    it('returns a retryable response when any shared connection queue write fails transiently', async () => {
+        hoisted.allowedUserIDs = [];
+        hoisted.suuntoWebhookResolvedUserIDs = ['first-user', 'second-user'];
+        hoisted.addSleepSyncQueueItem
+            .mockResolvedValueOnce({ id: 'first-queue-id' })
+            .mockRejectedValueOnce(new Error('cloud tasks unavailable'));
+        const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body: {
+                type: 'SUUNTO_247_SLEEP_CREATED',
+                username: 'suunto-user-1',
+                samples: [{ SleepId: 123 }],
+            },
+            get: vi.fn(() => signature),
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
     });
 
     it('acknowledges all-user Suunto sleep webhooks without queueing when no connected token exists', async () => {
@@ -421,7 +442,7 @@ describe('sleep webhooks', () => {
             provider: 'SuuntoApp',
             providerUserId: 'suunto-user-1',
             payload: { samples: [{ entryData: { SleepId: 456, BedtimeStart: '2026-04-27T22:00:00Z' } }] },
-            dedupeKey: 'suunto-user-1:456',
+            dedupeKey: 'test-user-uid:suunto-user-1:456',
         }));
     });
 
@@ -446,7 +467,7 @@ describe('sleep webhooks', () => {
         } as any, response as any);
 
         const queuedPayload = hoisted.addSleepSyncQueueItem.mock.calls[0][0];
-        expect(queuedPayload.dedupeKey).toMatch(/^suunto-user-1:sample-[a-f0-9]{32}:sample-[a-f0-9]{32}$/);
+        expect(queuedPayload.dedupeKey).toMatch(/^test-user-uid:suunto-user-1:sample-[a-f0-9]{32}:sample-[a-f0-9]{32}$/);
     });
 
     it('rejects Suunto webhook payloads with invalid HMAC', async () => {

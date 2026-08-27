@@ -3,11 +3,17 @@ import * as crypto from 'crypto';
 
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME =
   'suuntoHealthWebhookAccountBindings';
-export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 2;
+export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 3;
+export const SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS = 32;
+
+const LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 2;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 export interface SuuntoHealthWebhookAccountBinding {
-  schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
+  schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+    | typeof LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
   userID: string;
+  providerAccountDigest: string | null;
   tokenCredentialGeneration: string | null;
 }
 
@@ -18,6 +24,14 @@ function normalizedRequiredString(value: unknown): string | null {
 
 export function normalizeSuuntoTokenCredentialGeneration(value: unknown): string | null {
   return normalizedRequiredString(value);
+}
+
+export function getSuuntoWebhookProviderAccountDigest(providerUserId: string): string {
+  const normalizedProviderUserId = normalizedRequiredString(providerUserId);
+  if (!normalizedProviderUserId || normalizedProviderUserId !== providerUserId) {
+    throw new Error('Invalid Suunto webhook provider account identifier.');
+  }
+  return crypto.createHash('sha256').update(providerUserId).digest('hex');
 }
 
 export function getSuuntoHealthWebhookAccountBindingRef(
@@ -38,11 +52,13 @@ export function getSuuntoHealthWebhookAccountBindingRef(
 
 export function buildSuuntoHealthWebhookAccountBinding(
   userID: string,
+  providerUserId: string,
   tokenCredentialGeneration: string | null,
 ): SuuntoHealthWebhookAccountBinding {
   return {
     schemaVersion: SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
     userID,
+    providerAccountDigest: getSuuntoWebhookProviderAccountDigest(providerUserId),
     tokenCredentialGeneration: normalizeSuuntoTokenCredentialGeneration(
       tokenCredentialGeneration,
     ),
@@ -55,13 +71,22 @@ export function parseSuuntoHealthWebhookAccountBinding(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const data = value as Record<string, unknown>;
   const userID = normalizedRequiredString(data.userID);
+  const providerAccountDigest = normalizedRequiredString(data.providerAccountDigest);
   const tokenCredentialGeneration = normalizeSuuntoTokenCredentialGeneration(
     data.tokenCredentialGeneration,
   );
-  if (data.schemaVersion !== SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+  const isLegacyBinding = data.schemaVersion
+    === LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
+  if ((!isLegacyBinding
+      && data.schemaVersion !== SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION)
     || !userID
     || userID !== data.userID
     || userID.length > 128
+    || (!isLegacyBinding && (
+      !providerAccountDigest
+      || providerAccountDigest !== data.providerAccountDigest
+      || !SHA256_HEX_PATTERN.test(providerAccountDigest)
+    ))
     || (data.tokenCredentialGeneration !== null
       && data.tokenCredentialGeneration !== undefined
       && (!tokenCredentialGeneration
@@ -69,18 +94,85 @@ export function parseSuuntoHealthWebhookAccountBinding(
         || tokenCredentialGeneration.length > 128))) {
     return null;
   }
-  return buildSuuntoHealthWebhookAccountBinding(
+  return {
+    schemaVersion: isLegacyBinding
+      ? LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+      : SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
     userID,
+    providerAccountDigest: isLegacyBinding ? null : providerAccountDigest,
     tokenCredentialGeneration,
-  );
+  };
 }
 
 export function doesSuuntoHealthWebhookBindingMatch(
   binding: SuuntoHealthWebhookAccountBinding | null,
   userID: string,
+  providerUserId: string,
   tokenCredentialGeneration: string | null,
 ): boolean {
   return binding?.userID === userID
+    && (binding.schemaVersion === LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+      ? binding.providerAccountDigest === null
+      : binding.providerAccountDigest === getSuuntoWebhookProviderAccountDigest(providerUserId))
     && binding.tokenCredentialGeneration
       === normalizeSuuntoTokenCredentialGeneration(tokenCredentialGeneration);
+}
+
+function normalizeCandidateUserIDs(values: readonly string[]): string[] {
+  const userIDs = new Set<string>();
+  for (const value of values) {
+    const userID = normalizedRequiredString(value);
+    if (userID && userID === value && userID.length <= 128) userIDs.add(userID);
+  }
+  return [...userIDs];
+}
+
+/**
+ * Resolves bounded candidate owners from the server-only binding index. A
+ * configured rollout list uses direct document reads; production-wide Sleep
+ * sync uses the indexed provider digest and never trusts client-writable token
+ * documents as the webhook identity authority.
+ */
+export async function findSuuntoWebhookAccountBindingUserIDs(
+  db: admin.firestore.Firestore,
+  providerUserId: string,
+  candidateUserIDs: readonly string[] = [],
+): Promise<string[]> {
+  const providerAccountDigest = getSuuntoWebhookProviderAccountDigest(providerUserId);
+  const normalizedCandidateUserIDs = normalizeCandidateUserIDs(candidateUserIDs);
+  let snapshots: admin.firestore.DocumentSnapshot[];
+  if (candidateUserIDs.length > 0) {
+    snapshots = await Promise.all(normalizedCandidateUserIDs.map(userID =>
+      getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID).get()
+    ));
+  } else {
+    const snapshot = await db
+      .collection(SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME)
+      .where('providerAccountDigest', '==', providerAccountDigest)
+      .limit(SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS + 1)
+      .get();
+    if (snapshot.docs.length > SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS) {
+      throw new Error('Suunto webhook account binding fan-out exceeds the configured maximum.');
+    }
+    snapshots = snapshot.docs;
+  }
+
+  const allowedCandidates = new Set(normalizedCandidateUserIDs);
+  const resolvedUserIDs = new Set<string>();
+  for (const snapshot of snapshots) {
+    const binding = parseSuuntoHealthWebhookAccountBinding(snapshot.data());
+    if (!binding
+      || binding.providerAccountDigest !== providerAccountDigest
+      || (allowedCandidates.size > 0 && !allowedCandidates.has(binding.userID))) {
+      continue;
+    }
+    const expectedRef = getSuuntoHealthWebhookAccountBindingRef(
+      db,
+      providerUserId,
+      binding.userID,
+    );
+    if (snapshot.id !== expectedRef.id) continue;
+    resolvedUserIDs.add(binding.userID);
+  }
+  return [...resolvedUserIDs].sort();
 }

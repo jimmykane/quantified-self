@@ -7,8 +7,6 @@ import {
 } from '../../../shared/sleep';
 import {
     addSleepSyncQueueItem,
-    findSleepTokenByProviderUserId,
-    firebaseUserIdFromSleepTokenSnapshot,
 } from './queue';
 import { verifySuuntoWebhookSignature } from '../suunto/webhook-signature';
 import {
@@ -33,6 +31,7 @@ import {
     SUUNTO_HEALTH_MAX_SAMPLES,
     SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from '../suunto/health';
+import { resolveActiveSuuntoWebhookUserIDs } from '../suunto/health-webhook-binding-lifecycle';
 
 type ExternalRecord = Record<string, unknown>;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -124,27 +123,12 @@ function hasNumberField(record: ExternalRecord, fieldName: string): boolean {
     return Number.isFinite(value);
 }
 
-async function resolveScopedSuuntoWebhookUserID(providerUserId: string): Promise<string | null | undefined> {
-    const allowedUserIDs = getAllowedSleepSyncUserIds();
-    if (allowedUserIDs.length === 0) {
-        const tokenSnapshot = await findSleepTokenByProviderUserId(SLEEP_PROVIDERS.SuuntoApp, providerUserId);
-        return tokenSnapshot ? firebaseUserIdFromSleepTokenSnapshot(tokenSnapshot) : null;
-    }
-
-    for (const userID of allowedUserIDs) {
-        const snapshot = await admin.firestore()
-            .collection('suuntoAppAccessTokens')
-            .doc(userID)
-            .collection('tokens')
-            .where('userName', '==', providerUserId)
-            .limit(1)
-            .get();
-        if (!snapshot.empty) {
-            return userID;
-        }
-    }
-
-    return null;
+async function resolveScopedSuuntoWebhookUserIDs(providerUserId: string): Promise<string[]> {
+    return resolveActiveSuuntoWebhookUserIDs(
+        admin.firestore(),
+        providerUserId,
+        getAllowedSleepSyncUserIds(),
+    );
 }
 
 function parseSuuntoWebhookLocalDayBounds(value: unknown): SuuntoHealthWebhookWindow {
@@ -334,8 +318,10 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
         res.status(200).send();
         return;
     }
-    if (isHealthNotification && providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
-        logger.warn('[HealthSync][Suunto] Dropped signed webhook with invalid provider account identifier');
+    if (providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+        logger.warn(isHealthNotification
+            ? '[HealthSync][Suunto] Dropped signed webhook with invalid provider account identifier'
+            : '[SleepSync][Suunto] Dropped signed webhook with invalid provider account identifier');
         res.status(200).send();
         return;
     }
@@ -377,23 +363,46 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
             return;
         }
 
-        const scopedUserID = await resolveScopedSuuntoWebhookUserID(providerUserId);
-        if (scopedUserID === null) {
+        const scopedUserIDs = await resolveScopedSuuntoWebhookUserIDs(providerUserId);
+        if (scopedUserIDs.length === 0) {
             logger.info('[SleepSync][Suunto] Ignoring webhook without a connected Suunto token or outside SLEEP_SYNC_ALLOWED_USER_IDS');
             res.status(200).send();
             return;
         }
 
-        await addSleepSyncQueueItem({
-            type: 'suunto_webhook',
-            provider: SLEEP_PROVIDERS.SuuntoApp,
-            userID: scopedUserID || undefined,
-            providerUserId,
-            payload: { samples },
-            dedupeKey: buildSuuntoSleepDedupeKey(providerUserId, samples),
-            dispatchImmediately: true,
+        const sleepDedupeKey = buildSuuntoSleepDedupeKey(providerUserId, samples);
+        const queueResults = await Promise.allSettled(scopedUserIDs.map(async userID => {
+            try {
+                await addSleepSyncQueueItem({
+                    type: 'suunto_webhook',
+                    provider: SLEEP_PROVIDERS.SuuntoApp,
+                    userID,
+                    providerUserId,
+                    payload: { samples },
+                    dedupeKey: `${userID}:${sleepDedupeKey}`,
+                    dispatchImmediately: true,
+                });
+                return 'queued' as const;
+            } catch (error) {
+                if (isProviderQueueSkippedWithoutRetryError(error)) {
+                    return 'skipped' as const;
+                }
+                throw error;
+            }
+        }));
+        const failedResult = queueResults.find(
+            (result): result is PromiseRejectedResult => result.status === 'rejected',
+        );
+        if (failedResult) throw failedResult.reason;
+        const queuedConnectionCount = queueResults.filter(
+            result => result.status === 'fulfilled' && result.value === 'queued',
+        ).length;
+        const skippedConnectionCount = queueResults.length - queuedConnectionCount;
+        logger.info('[SleepSync][Suunto] Queued signed Sleep webhook fan-out', {
+            samples: samples.length,
+            queuedConnectionCount,
+            skippedConnectionCount,
         });
-        logger.info(`[SleepSync][Suunto] Queued ${samples.length} sleep samples`);
         res.status(200).send();
     } catch (error) {
         if (isProviderQueueSkippedWithoutRetryError(error)) {

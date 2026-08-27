@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
+import { createHash } from 'node:crypto';
 
 // Define stable mocks first
 const mockDelete = vi.fn().mockResolvedValue({});
@@ -1127,8 +1128,9 @@ describe('OAuth2', () => {
                         return {
                             exists: true,
                             data: () => ({
-                                schemaVersion: 2,
+                                schemaVersion: 3,
                                 userID,
+                                providerAccountDigest: createHash('sha256').update(tokenID).digest('hex'),
                                 tokenCredentialGeneration: 'credential-generation-1',
                             }),
                         };
@@ -1792,8 +1794,9 @@ describe('OAuth2', () => {
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
             expect(mockDocInstance.set).toHaveBeenCalledWith({
-                schemaVersion: 2,
+                schemaVersion: 3,
                 userID,
+                providerAccountDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
                 tokenCredentialGeneration: expect.any(String),
             }, undefined);
             expect(mockWhere).not.toHaveBeenCalled();

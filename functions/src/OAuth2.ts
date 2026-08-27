@@ -498,11 +498,12 @@ async function setOAuthTokenIfUserActive(
       [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
     }, { merge: true });
     transaction.set(tokenDocRef, persistedTokenData);
-    if (suuntoBindingRef) {
+    if (suuntoBindingRef && suuntoProviderUserId) {
       transaction.set(
         suuntoBindingRef,
         buildSuuntoHealthWebhookAccountBinding(
           userID,
+          suuntoProviderUserId,
           persistedTokenData.tokenCredentialGeneration,
         ),
       );
@@ -581,6 +582,7 @@ async function deleteSupersededOAuthCredentialIfCurrent(
       && doesSuuntoHealthWebhookBindingMatch(
         parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot.data()),
         userID,
+        guard.tokenRef.id.trim(),
         guard.tokenCredentialGeneration,
       )) {
       transaction.delete(suuntoBindingRef);

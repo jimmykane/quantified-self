@@ -269,6 +269,12 @@ describe('sleep polling', () => {
             userID,
             providerUserId: 'suunto-user-1',
         }));
+        expect(hoisted.ensureSuuntoHealthWebhookAccountBindingForActiveToken).toHaveBeenCalledWith(
+            expect.anything(),
+            userID,
+            'suunto-user-1',
+            nowMs,
+        );
     });
 
     it('queues staged Suunto Health polls without changing production-wide Sleep polling', async () => {

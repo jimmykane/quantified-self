@@ -207,6 +207,20 @@ async function enqueueProviderPolls(
             logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is unavailable for sync`);
             continue;
         }
+        if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+            const bindingStatus = await ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+                admin.firestore(),
+                userID,
+                providerUserId,
+                nowMs,
+            );
+            if (bindingStatus === 'conflict' || bindingStatus === 'inactive') {
+                logger.warn('[SleepSync][Suunto] Could not seed an active signed-webhook binding; scheduled polling remains enabled.', {
+                    userID,
+                    bindingStatus,
+                });
+            }
+        }
         for (const window of windows) {
             try {
                 await addSleepSyncQueueItem({
