@@ -37,6 +37,17 @@ export interface AuthActivityStats {
     computedAt: string | null;
 }
 
+export interface SubscriptionCadenceTierStats {
+    monthly: number | null;
+    yearly: number | null;
+    unknown: number | null;
+}
+
+export interface SubscriptionCadenceStats {
+    pro: SubscriptionCadenceTierStats;
+    basic: SubscriptionCadenceTierStats;
+}
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -98,6 +109,7 @@ export interface UserCountStats {
     free: number;
     monthlyPaid: number;
     yearlyPaid: number;
+    subscriptionCadence?: SubscriptionCadenceStats;
     everPaid: number;
     canceled: number;
     cancelScheduled: number;
@@ -117,6 +129,7 @@ interface UserCountFunctionResponse {
     free: number;
     monthlyPaid?: number;
     yearlyPaid?: number;
+    subscriptionCadence?: unknown;
     everPaid?: number;
     canceled?: number;
     cancelScheduled?: number;
@@ -267,6 +280,7 @@ export class AdminService {
                 const events = this.mapCountStats(result.data.events);
                 const routes = this.mapCountStats(result.data.routes);
                 const authActivity = this.mapAuthActivityStats(result.data.authActivity);
+                const subscriptionCadence = this.mapSubscriptionCadenceStats(result.data.subscriptionCadence);
 
                 return {
                     total: result.data.total ?? result.data.count, // Fallback for safety
@@ -287,6 +301,9 @@ export class AdminService {
                     } : {}),
                     ...(authActivity ? {
                         authActivity,
+                    } : {}),
+                    ...(subscriptionCadence ? {
+                        subscriptionCadence,
                     } : {}),
                 };
             })
@@ -374,6 +391,35 @@ export class AdminService {
             last7Days: hasInvalidWindowOrdering ? null : last7Days,
             last30Days: hasInvalidWindowOrdering ? null : last30Days,
             computedAt,
+        };
+    }
+
+    private mapSubscriptionCadenceStats(stats: unknown): SubscriptionCadenceStats | undefined {
+        if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+            return undefined;
+        }
+
+        const rawStats = stats as Record<string, unknown>;
+        const mapTier = (value: unknown): SubscriptionCadenceTierStats => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                return { monthly: null, yearly: null, unknown: null };
+            }
+            const rawTier = value as Record<string, unknown>;
+            const mapCount = (count: unknown): number | null => (
+                typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+                    ? count
+                    : null
+            );
+            return {
+                monthly: mapCount(rawTier['monthly']),
+                yearly: mapCount(rawTier['yearly']),
+                unknown: mapCount(rawTier['unknown']),
+            };
+        };
+
+        return {
+            pro: mapTier(rawStats['pro']),
+            basic: mapTier(rawStats['basic']),
         };
     }
 

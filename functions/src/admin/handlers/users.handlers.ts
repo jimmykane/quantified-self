@@ -30,6 +30,7 @@ import {
     CountStats,
     ListUsersRequest,
     ListUsersResponse,
+    SubscriptionCadenceStats,
     UserCountRequest,
     UserCountResponse,
 } from '../shared/types';
@@ -884,6 +885,10 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         let monthlyPaid = 0;
         let yearlyPaid = 0;
         let cancelScheduled = 0;
+        const subscriptionCadence: SubscriptionCadenceStats = {
+            pro: { monthly: 0, yearly: 0, unknown: 0 },
+            basic: { monthly: 0, yearly: 0, unknown: 0 },
+        };
 
         const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
             .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
@@ -898,11 +903,18 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             if (subscription.role !== SUBSCRIPTION_ROLE_PRO && subscription.role !== SUBSCRIPTION_ROLE_BASIC) {
                 return;
             }
+            const tierCadence = subscription.role === SUBSCRIPTION_ROLE_PRO
+                ? subscriptionCadence.pro
+                : subscriptionCadence.basic;
             const interval = resolveSubscriptionInterval(subscription);
             if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
                 monthlyPaid += 1;
+                tierCadence.monthly += 1;
             } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
                 yearlyPaid += 1;
+                tierCadence.yearly += 1;
+            } else {
+                tierCadence.unknown += 1;
             }
         });
 
@@ -953,6 +965,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             free,
             monthlyPaid,
             yearlyPaid,
+            subscriptionCadence,
             everPaid,
             canceled,
             cancelScheduled,

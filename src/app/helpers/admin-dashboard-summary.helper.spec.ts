@@ -18,7 +18,11 @@ describe('admin-dashboard-summary helper', () => {
             basic: 25,
             free: 65,
             monthlyPaid: 40,
-            yearlyPaid: 15,
+            yearlyPaid: 14,
+            subscriptionCadence: {
+                pro: { monthly: 18, yearly: 11, unknown: 1 },
+                basic: { monthly: 22, yearly: 3, unknown: 0 },
+            },
             everPaid: 70,
             canceled: 15,
             cancelScheduled: 3,
@@ -77,6 +81,8 @@ describe('admin-dashboard-summary helper', () => {
         });
         expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
         expect(cards.find(card => card.id === 'total-users')?.value).toBe(120);
+        expect(cards.find(card => card.id === 'pro-users')?.subtitle).toBe('Monthly 18 · Yearly 11 · Unknown 1');
+        expect(cards.find(card => card.id === 'basic-users')?.subtitle).toBe('Monthly 22 · Yearly 3');
         expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
         expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBe(6);

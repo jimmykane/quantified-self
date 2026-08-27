@@ -94,6 +94,10 @@ describe('AdminService', () => {
             free: 0,
             monthlyPaid: 120,
             yearlyPaid: 60,
+            subscriptionCadence: {
+                pro: { monthly: 35, yearly: 15, unknown: 0 },
+                basic: { monthly: 85, yearly: 45, unknown: 0 },
+            },
             everPaid: 160,
             canceled: 20,
             cancelScheduled: 12,
@@ -143,6 +147,27 @@ describe('AdminService', () => {
         expect(stats.events).toEqual({ total: null });
         expect(stats.routes).toEqual({ total: null });
         expect(stats.authActivity).toBeUndefined();
+        expect(stats.subscriptionCadence).toBeUndefined();
+    });
+
+    it('should mark malformed subscription cadence counts as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 8,
+                providers: {},
+                subscriptionCadence: {
+                    pro: { monthly: 4.5, yearly: -1, unknown: Number.NaN },
+                    basic: { monthly: 3, yearly: 2, unknown: 0 },
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.subscriptionCadence).toEqual({
+            pro: { monthly: null, yearly: null, unknown: null },
+            basic: { monthly: 3, yearly: 2, unknown: 0 },
+        });
     });
 
     it('should mark malformed authentication activity counts as unavailable', async () => {

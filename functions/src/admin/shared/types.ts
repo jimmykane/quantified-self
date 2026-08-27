@@ -42,6 +42,17 @@ export interface AuthActivityStats {
     computedAt: string;
 }
 
+export interface SubscriptionCadenceTierStats {
+    monthly: number;
+    yearly: number;
+    unknown: number;
+}
+
+export interface SubscriptionCadenceStats {
+    pro: SubscriptionCadenceTierStats;
+    basic: SubscriptionCadenceTierStats;
+}
+
 export interface UserCountRequest {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -100,6 +111,7 @@ export interface UserCountResponse {
     free: number;
     monthlyPaid: number;
     yearlyPaid: number;
+    subscriptionCadence: SubscriptionCadenceStats;
     everPaid: number;
     canceled: number;
     cancelScheduled: number;

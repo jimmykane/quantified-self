@@ -2,6 +2,7 @@ import type {
     FinancialStats,
     MaintenanceStatus,
     QueueStats,
+    SubscriptionCadenceTierStats,
     SubscriptionHistoryTrendResponse,
     UserCountStats,
     UserGrowthTrendResponse
@@ -131,8 +132,22 @@ export function buildAdminDashboardUserKpiCards(
             numberCard('active-30d', 'Active 30d', 'calendar_view_month', active30Days, undefined, AUTH_ACTIVITY_BASIS),
         ] : []),
         numberCard('total-users', 'Total Users', 'people', stats.total),
-        numberCard('pro-users', 'Pro Users', 'verified', stats.pro, 'ok'),
-        numberCard('basic-users', 'Basic Users', 'person_outline', stats.basic),
+        numberCard(
+            'pro-users',
+            'Pro Users',
+            'verified',
+            stats.pro,
+            'ok',
+            subscriptionCadenceSubtitle(stats.subscriptionCadence?.pro)
+        ),
+        numberCard(
+            'basic-users',
+            'Basic Users',
+            'person_outline',
+            stats.basic,
+            undefined,
+            subscriptionCadenceSubtitle(stats.subscriptionCadence?.basic)
+        ),
         numberCard('free-users', 'Free Users', 'money_off', stats.free),
         numberCard('monthly-paid', 'Monthly Paid', 'calendar_view_month', stats.monthlyPaid),
         numberCard('yearly-paid', 'Yearly Paid', 'calendar_today', stats.yearlyPaid),
@@ -522,6 +537,31 @@ function authActivity7DaySubtitle(active7Days: number | null, active30Days: numb
 
     const share = Math.min(100, Math.max(0, Math.round((active7Days / active30Days) * 100)));
     return `${AUTH_ACTIVITY_BASIS} · ${share}% of 30-day active`;
+}
+
+function subscriptionCadenceSubtitle(stats: SubscriptionCadenceTierStats | undefined): string | undefined {
+    if (!stats) {
+        return undefined;
+    }
+
+    const count = (value: unknown): number | null => (
+        typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+    );
+    const monthly = count(stats.monthly);
+    const yearly = count(stats.yearly);
+    const unknown = count(stats.unknown);
+    if (monthly === null && yearly === null) {
+        return 'Cadence unavailable';
+    }
+
+    const details = [
+        monthly === null ? 'Monthly unavailable' : `Monthly ${monthly}`,
+        yearly === null ? 'Yearly unavailable' : `Yearly ${yearly}`,
+    ];
+    if (unknown !== null && unknown > 0) {
+        details.push(`Unknown ${unknown}`);
+    }
+    return details.join(' · ');
 }
 
 function distinctConnectedUserCount(

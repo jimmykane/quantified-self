@@ -55,7 +55,11 @@ describe('AdminDashboardComponent', () => {
         basic: 25,
         free: 65,
         monthlyPaid: 40,
-        yearlyPaid: 15,
+        yearlyPaid: 14,
+        subscriptionCadence: {
+            pro: { monthly: 18, yearly: 11, unknown: 1 },
+            basic: { monthly: 22, yearly: 3, unknown: 0 },
+        },
         everPaid: 70,
         canceled: 15,
         cancelScheduled: 3,
@@ -278,6 +282,9 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('70% of 30-day active');
         expect(text).toContain('enabled, non-admin accounts');
         expect(text).toContain('sign-in or ID token refresh');
+        expect(text).toContain('Monthly 18 · Yearly 11 · Unknown 1');
+        expect(text).toContain('Monthly 22 · Yearly 3');
+        expect(text).toContain('Pro and Basic totals show active monthly and yearly subscription cadence');
         expect(text).toContain('Total Users');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');
