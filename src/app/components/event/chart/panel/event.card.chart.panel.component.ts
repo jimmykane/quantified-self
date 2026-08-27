@@ -220,6 +220,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
   @Input() areaFillOrigin: 'auto' | 'start' | 'end' = 'auto';
+  @Input() areaFillColor: string | null = null;
   @Input() colorAltitudeByGrade = true;
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
@@ -517,6 +518,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.strokeWidth
       || changes.fillOpacity
       || changes.areaFillOrigin
+      || changes.areaFillColor
       || changes.colorAltitudeByGrade
       || changes.waterMark
       || changes.zoomBarOverviewData
@@ -753,7 +755,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           },
         } : {}),
         areaStyle: {
-          ...(!useZoneColors ? { color: series.color } : {}),
+          ...(this.areaFillColor
+            ? { color: this.areaFillColor }
+            : (!useZoneColors ? { color: series.color } : {})),
           opacity: seriesFillOpacity,
           origin: primaryAreaFillOrigin,
         },
@@ -1049,7 +1053,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           color: group.color,
         },
         areaStyle: {
-          color: group.color,
+          color: this.areaFillColor || group.color,
           opacity: fillOpacity,
           origin: areaFillOrigin,
         },

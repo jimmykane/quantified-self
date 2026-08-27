@@ -541,12 +541,14 @@ describe('EventCardChartPanelComponent', () => {
     });
     component.fillOpacity = 1;
     component.areaFillOrigin = 'start';
+    component.areaFillColor = '#0277bd';
 
     await renderComponent();
 
     const option = getRenderedOption();
     expect(option?.yAxis?.inverse).toBe(true);
     expect(option?.series?.[0]?.areaStyle).toEqual(expect.objectContaining({
+      color: '#0277bd',
       opacity: 1,
       origin: 'start',
     }));
