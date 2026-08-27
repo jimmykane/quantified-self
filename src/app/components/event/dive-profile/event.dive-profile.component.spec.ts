@@ -134,6 +134,7 @@ describe('EventDiveProfileComponent', () => {
     expect(panel.xAxisType).toBe(XAxisTypes.Duration);
     expect(panel.xDomain).toEqual({ start: 0, end: 3 });
     expect(panel.strokeWidth).toBe(1.5);
+    expect(panel.fillOpacity).toBe(1);
     expect(panel.overlayOptions.map((option) => option.dataType)).toEqual([
       DataHeartRate.type,
       DataTemperature.type,
