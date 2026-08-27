@@ -81,6 +81,7 @@ import {
   RetryableSuuntoFITPayloadError,
   SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT,
 } from './suunto/fit-download';
+import { getServiceTokenRootDocumentRef } from './service-token-store';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -442,11 +443,20 @@ export const parseWahooAPIWorkoutQueue = functions.region('europe-west2').runWit
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
+export async function addToQueueForSuunto(queueItem: {
+  userName: string,
+  workoutID: string,
+  firebaseUserID?: string,
+}): Promise<admin.firestore.DocumentReference> {
   logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
-    id: await generateIDFromParts([queueItem.userName, queueItem.workoutID]),
+    id: await generateIDFromParts([
+      queueItem.userName,
+      queueItem.workoutID,
+      ...(queueItem.firebaseUserID ? [queueItem.firebaseUserID] : []),
+    ]),
     dateCreated: new Date().getTime(),
+    firebaseUserID: queueItem.firebaseUserID,
     userName: queueItem.userName,
     workoutID: queueItem.workoutID,
     retryCount: 0,
@@ -612,7 +622,12 @@ function getTokenQueryForWorkoutQueueItem(
         .where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId)
         .where('serviceName', '==', ServiceNames.COROSAPI);
     case ServiceNames.SuuntoApp:
-      return admin.firestore().collectionGroup('tokens')
+      return ((queueItem as SuuntoAppWorkoutQueueItemInterface).firebaseUserID
+        ? getServiceTokenRootDocumentRef(
+          (queueItem as SuuntoAppWorkoutQueueItemInterface).firebaseUserID!,
+          ServiceNames.SuuntoApp,
+        ).collection('tokens')
+        : admin.firestore().collectionGroup('tokens'))
         .where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName)
         .where('serviceName', '==', ServiceNames.SuuntoApp);
   }
@@ -755,7 +770,12 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
-  const userKey = `${serviceName}:${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || (queueItem as SuuntoAppWorkoutQueueItemInterface).userName}`;
+  const providerUserID = (queueItem as COROSAPIWorkoutQueueItemInterface).openId
+    || (queueItem as SuuntoAppWorkoutQueueItemInterface).userName;
+  const providerUserKey = `${serviceName}:${providerUserID}`;
+  const userKey = serviceName === ServiceNames.SuuntoApp
+    ? `${providerUserKey}:${queueItem.firebaseUserID || 'legacy'}`
+    : providerUserKey;
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
@@ -784,8 +804,15 @@ async function parseWorkoutQueueItemForServiceNameInternal(
 
   }
 
-  // If there is no token for the user, give them a few chances to reconnect
-  if (!tokenQuerySnapshots.size) {
+  const tokenQueryDocuments = serviceName === ServiceNames.SuuntoApp
+    && queueItem.firebaseUserID
+    ? tokenQuerySnapshots.docs.filter(tokenSnapshot =>
+      tokenSnapshot.ref.parent.parent?.id === queueItem.firebaseUserID
+    )
+    : tokenQuerySnapshots.docs;
+
+  // If there is no token for the bound user, give them a few chances to reconnect.
+  if (!tokenQueryDocuments.length) {
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
@@ -803,7 +830,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let sawInactiveProviderAccount = false;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
-  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
+  for (const tokenQueryDocumentSnapshot of tokenQueryDocuments) {
     let serviceToken;
     const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {
@@ -1375,7 +1402,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   // If we finished the loop without returning, it means every token attempt failed.
   const retryError = retryableSuuntoFITPayloadError || lastError;
   const effectiveRetryIncrement = retryableSuuntoFITPayloadError ? 1 : retryIncrement;
-  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${retryError.message}. Increasing retry count.`));
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQueryDocuments.length} bound tokens. Last error: ${retryError.message}. Increasing retry count.`));
   return increaseRetryCountForQueueItem(
     queueItem,
     retryError,

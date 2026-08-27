@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
   addToQueueForSuunto: vi.fn(),
+  resolvedUserIDs: ['firebase-user-1'] as string[],
 }));
 
 vi.mock('firebase-functions/v1', () => ({
@@ -23,6 +24,14 @@ vi.mock('firebase-functions/logger', () => ({
 
 vi.mock('../queue', () => ({
   addToQueueForSuunto: hoisted.addToQueueForSuunto,
+}));
+
+vi.mock('firebase-admin', () => ({
+  firestore: vi.fn(() => ({})),
+}));
+
+vi.mock('./health-webhook-binding-lifecycle', () => ({
+  resolveActiveSuuntoWebhookUserIDs: vi.fn(async () => hoisted.resolvedUserIDs),
 }));
 
 import * as logger from 'firebase-functions/logger';
@@ -83,6 +92,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
     process.env.SUUNTOAPP_CLIENT_ID = 'test-suunto-client-id';
     process.env.SUUNTOAPP_CLIENT_SECRET = 'test-suunto-client-secret';
     process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
+    hoisted.resolvedUserIDs = ['firebase-user-1'];
     hoisted.addToQueueForSuunto.mockResolvedValue({ id: 'queue-id' });
   });
 
@@ -106,7 +116,51 @@ describe('insertSuuntoAppActivityToQueue', () => {
     expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
       userName: 'johndoe123',
       workoutID: '67604889401b942184624cb8',
+      firebaseUserID: 'firebase-user-1',
     });
+  });
+
+  it('fans out shared-account workout notifications to every active owner', async () => {
+    hoisted.resolvedUserIDs = ['firebase-user-1', 'firebase-user-2'];
+    const response = createResponse();
+    const request = createSignedJsonRequest({
+      type: 'WORKOUT_CREATED',
+      username: 'shared-suunto-user',
+      workout: { workoutKey: 'shared-workout' },
+    });
+
+    await insertSuuntoAppActivityToQueue(request as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.addToQueueForSuunto).toHaveBeenCalledTimes(2);
+    expect(hoisted.addToQueueForSuunto).toHaveBeenNthCalledWith(1, {
+      userName: 'shared-suunto-user',
+      workoutID: 'shared-workout',
+      firebaseUserID: 'firebase-user-1',
+    });
+    expect(hoisted.addToQueueForSuunto).toHaveBeenNthCalledWith(2, {
+      userName: 'shared-suunto-user',
+      workoutID: 'shared-workout',
+      firebaseUserID: 'firebase-user-2',
+    });
+  });
+
+  it('returns a retryable response when any workout owner queue write fails transiently', async () => {
+    hoisted.resolvedUserIDs = ['firebase-user-1', 'firebase-user-2'];
+    hoisted.addToQueueForSuunto
+      .mockResolvedValueOnce({ id: 'queue-1' })
+      .mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = createResponse();
+    const request = createSignedJsonRequest({
+      type: 'WORKOUT_CREATED',
+      username: 'shared-suunto-user',
+      workout: { workoutKey: 'shared-workout' },
+    });
+
+    await insertSuuntoAppActivityToQueue(request as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(hoisted.addToQueueForSuunto).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -149,13 +203,13 @@ describe('insertSuuntoAppActivityToQueue', () => {
   it.each([
     ['username', { type: 'WORKOUT_CREATED', workout: { workoutKey: 'workout-1' } }],
     ['workout key', { type: 'WORKOUT_CREATED', username: 'johndoe123', workout: {} }],
-  ])('returns 400 for signed workout JSON missing %s', async (_fieldName, body) => {
+  ])('acknowledges signed workout JSON missing %s without retrying', async (_fieldName, body) => {
     const response = createResponse();
     const request = createSignedJsonRequest(body);
 
     await insertSuuntoAppActivityToQueue(request as any, response as any);
 
-    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.addToQueueForSuunto).not.toHaveBeenCalled();
   });
 
@@ -181,6 +235,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
     expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
       userName: 'legacy-user',
       workoutID: 'legacy-workout',
+      firebaseUserID: 'firebase-user-1',
     });
   });
 
@@ -204,6 +259,7 @@ describe('insertSuuntoAppActivityToQueue', () => {
     expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
       userName: 'legacy-user',
       workoutID: 'legacy-workout',
+      firebaseUserID: 'firebase-user-1',
     });
   });
 
