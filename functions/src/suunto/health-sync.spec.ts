@@ -10,9 +10,14 @@ const hoisted = vi.hoisted(() => ({
   getServiceConnectionMeta: vi.fn(),
   shouldSkipQueueWorkForDeletedUser: vi.fn(),
   tokenGet: vi.fn(),
+  tokenRootGet: vi.fn(),
   tokenData: {} as Record<string, unknown>,
+  tokenRootData: {} as Record<string, unknown>,
   metaRef: { path: 'users/staged-user/meta/suuntoApp' },
-  tokenRootRef: { path: 'suuntoAppAccessTokens/staged-user' },
+  tokenRootRef: {
+    path: 'suuntoAppAccessTokens/staged-user',
+    get: (...args: unknown[]) => hoisted.tokenRootGet(...args),
+  },
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -116,9 +121,16 @@ describe('Suunto Health provider sync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.tokenData = tokenProjection('initial-access-token');
+    hoisted.tokenRootData = {
+      activeOAuthCredentialGeneration: 'credential-generation-1',
+    };
     hoisted.tokenGet.mockImplementation(async () => ({
       exists: true,
       data: () => hoisted.tokenData,
+    }));
+    hoisted.tokenRootGet.mockImplementation(async () => ({
+      exists: true,
+      data: () => hoisted.tokenRootData,
     }));
     hoisted.getTokenData.mockImplementation(async () => ({ ...hoisted.tokenData }));
     hoisted.getServiceConnectionMeta.mockResolvedValue({
@@ -259,6 +271,7 @@ describe('Suunto Health provider sync', () => {
     expect(result.healthResults).toHaveLength(1);
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
+      requireActiveOAuthCredentialGeneration: true,
     });
     expect(hoisted.requestGet.mock.calls[1]?.[0]?.headers.Authorization)
       .toBe('Bearer refreshed-access-token');
@@ -338,6 +351,32 @@ describe('Suunto Health provider sync', () => {
         connectionState: 'connected',
         connectionStateGeneration: 'connection-generation-2',
       });
+      return [{
+        timestamp: '2026-08-26T12:00:00.000Z',
+        entryData: { HR: 60 },
+      }];
+    });
+    const snapshot = tokenSnapshot();
+    const initialGuards = await captureSuuntoHealthWriteLifecycleGuards(
+      'staged-user',
+      snapshot.ref,
+      getTokenCredentialSnapshot(hoisted.tokenData),
+    );
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      initialGuards,
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops before the next feed when the active OAuth credential generation changes', async () => {
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      hoisted.tokenRootData = {
+        activeOAuthCredentialGeneration: 'credential-generation-2',
+      };
       return [{
         timestamp: '2026-08-26T12:00:00.000Z',
         entryData: { HR: 60 },

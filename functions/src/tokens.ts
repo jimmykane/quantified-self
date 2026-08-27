@@ -143,6 +143,8 @@ interface GetTokenDataOptions {
   allowDisconnectPendingTokenUse?: boolean;
   /** Omits token/account identifiers and provider response detail from auth telemetry. */
   opaqueTelemetry?: boolean;
+  /** Fail closed unless the token still belongs to the root's active OAuth credential. */
+  requireActiveOAuthCredentialGeneration?: boolean;
   /** Only the explicit-disconnect owner may use a token while its fence is active. */
   expectedDisconnectOperationGeneration?: string;
 }
@@ -153,12 +155,17 @@ function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | Document
 
 function shouldRequireActiveOAuthCredentialGeneration(
   serviceName: ServiceNames,
-  options: Pick<GetTokenDataOptions, 'expectedDisconnectOperationGeneration'>,
+  options: Pick<
+    GetTokenDataOptions,
+    'expectedDisconnectOperationGeneration' | 'requireActiveOAuthCredentialGeneration'
+  >,
 ): boolean {
   // The exact explicit-disconnect owner must still be able to deauthorize and
-  // delete a historical orphan. All ordinary COROS workers fail closed.
-  return serviceName === ServiceNames.COROSAPI
-    && !options.expectedDisconnectOperationGeneration;
+  // delete a historical orphan. All ordinary COROS workers and explicitly
+  // fenced provider operations fail closed.
+  return !options.expectedDisconnectOperationGeneration
+    && (serviceName === ServiceNames.COROSAPI
+      || options.requireActiveOAuthCredentialGeneration === true);
 }
 
 async function assertTokenUseAllowedForUser(
@@ -167,7 +174,10 @@ async function assertTokenUseAllowedForUser(
   phase: 'before_return' | 'before_refresh' | 'before_persist',
   options: Pick<
     GetTokenDataOptions,
-    'allowDisconnectPendingTokenUse' | 'expectedDisconnectOperationGeneration' | 'opaqueTelemetry'
+    | 'allowDisconnectPendingTokenUse'
+    | 'expectedDisconnectOperationGeneration'
+    | 'opaqueTelemetry'
+    | 'requireActiveOAuthCredentialGeneration'
   > = {},
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);

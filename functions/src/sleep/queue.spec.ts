@@ -2143,22 +2143,24 @@ describe('sleep queue', () => {
             maxResponseBytes: 4 * 1024 * 1024,
             url: expect.stringContaining('openId=coros-user-1'),
         }));
-            expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+        expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
             'test-user-uid',
             'COROSAPI',
             expect.objectContaining({
                 status: 'ready',
+                lastPollAtMs: expect.any(Number),
+                lastWebhookAtMs: undefined,
                 lastErrorCode: null,
             }),
             expect.any(Number),
-                expect.objectContaining({
-                    requiredExistingDocumentRef: activeToken.ref,
-                    additionalRequiredDocumentFieldValues: [expect.objectContaining({
-                        expectedFields: {
-                            activeOAuthCredentialGeneration: 'credential-generation-1',
-                        },
-                    })],
-                    requiredDocumentFieldValues: expect.objectContaining({
+            expect.objectContaining({
+                requiredExistingDocumentRef: activeToken.ref,
+                additionalRequiredDocumentFieldValues: [expect.objectContaining({
+                    expectedFields: {
+                        activeOAuthCredentialGeneration: 'credential-generation-1',
+                    },
+                })],
+                requiredDocumentFieldValues: expect.objectContaining({
                     expectedFields: {
                         providerUserId: 'coros-user-1',
                         connectionState: 'connected',
@@ -3614,6 +3616,66 @@ describe('sleep queue', () => {
             resultStatus: 'success',
             sessionsWritten: 0,
             healthRecordsWritten: 1,
+        }));
+    });
+
+    it('skips stale Suunto Health work when its OAuth root generation is no longer active', async () => {
+        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: stagedUserID } },
+        };
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                accessToken: 'stale-suunto-access-token',
+                tokenCredentialGeneration: 'stale-suunto-credential-generation',
+            }),
+            ref: tokenRef,
+        };
+        const lifecycleGuards = {
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: { accessToken: 'stale-suunto-access-token' },
+            requiredDocumentFieldValues: {
+                expectedFields: { connectionStateGeneration: 'stale-suunto-generation' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const inactiveCredentialError = Object.assign(new Error('Inactive credential.'), {
+            name: 'TokenUseSkippedForPendingDisconnectError',
+            firebaseUserID: stagedUserID,
+            serviceName: ServiceNames.SuuntoApp,
+            reason: 'inactive_oauth_credential',
+        });
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureSuuntoHealthWriteLifecycleGuards.mockResolvedValue(lifecycleGuards);
+        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(inactiveCredentialError);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-stale-oauth-generation',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: stagedUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'poll',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+        expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+            skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
         }));
     });
 });

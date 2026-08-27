@@ -445,6 +445,33 @@ describe('tokens', () => {
             expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
         });
 
+        it('fails explicitly fenced Suunto token use after the root credential generation changes', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'stale-suunto-access',
+                refreshToken: 'stale-suunto-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-new',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                requireActiveOAuthCredentialGeneration: true,
+            })).rejects.toMatchObject({
+                name: 'TokenUseSkippedForPendingDisconnectError',
+                phase: 'before_return',
+            });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
         it('lets the exact disconnect owner use a generated COROS orphan for provider cleanup', async () => {
             mockDoc.data.mockReturnValue({
                 accessToken: 'orphan-access',

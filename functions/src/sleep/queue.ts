@@ -879,6 +879,7 @@ function corosCredentialFromSnapshot(tokenSnapshot: TokenSnapshot): TokenCredent
 function isTokenUseSkippedForPendingDisconnectError(error: unknown): error is Error & {
     firebaseUserID: string;
     serviceName: ServiceNames;
+    reason?: 'service_disconnect' | 'inactive_oauth_credential';
 } {
     return error instanceof Error
         && error.name === 'TokenUseSkippedForPendingDisconnectError'
@@ -1471,10 +1472,12 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             const healthProvider = isSuuntoHealthQueueItem(queueItem)
                 ? HEALTH_PROVIDERS.SuuntoApp
                 : HEALTH_PROVIDERS.COROSAPI;
+            const isHealthPoll = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                || queueItem.healthTrigger === 'poll';
             const healthStateWritten = await updateHealthSyncState(firebaseUserID, healthProvider, {
                 status: HEALTH_SYNC_STATUSES.Ready,
                 lastSyncedAtMs: stateUpdateMs,
-                lastPollAtMs: queueItem.healthTrigger === 'poll' ? stateUpdateMs : undefined,
+                lastPollAtMs: isHealthPoll ? stateUpdateMs : undefined,
                 lastWebhookAtMs: queueItem.healthTrigger === 'webhook' ? stateUpdateMs : undefined,
                 lastObservedAtMs: healthResults.length > 0
                     ? Math.max(...healthResults.map(item => item.observedAtMs))
@@ -1632,6 +1635,24 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 sessionsWritten: 0,
                 sessionsSkipped: 0,
             });
+        }
+        if (isSuuntoHealthQueueItem(queueItem)
+            && isTokenUseSkippedForPendingDisconnectError(error)
+            && error.reason === 'inactive_oauth_credential') {
+            logger.info('[HealthSync][Suunto] Skipping work from an inactive OAuth credential generation.');
+            return markQueueItemSkipped(
+                queueItem,
+                undefined,
+                'user_or_provider_lifecycle_changed',
+                {
+                    skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                    sessionsWritten: 0,
+                    sessionsSkipped: 0,
+                    healthRecordsWritten: 0,
+                    healthRecordsUnchanged: 0,
+                    healthRecordsStale: 0,
+                },
+            );
         }
         if (isTokenUseSkippedForPendingDisconnectError(error)) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} deferred token use because service disconnect is pending.`);
