@@ -129,6 +129,7 @@ const INGRESS_ID = 'a'.repeat(64);
 const RECEIVED_AT_MS = 1_777_777_777_000;
 const PROCESSED_AT_MS = RECEIVED_AT_MS + 1_000;
 const TOKEN_GENERATION = 'credential-generation-1';
+const ROOT_GENERATION = 'root-credential-generation-2';
 const CONNECTION_GENERATION = 'connection-generation-1';
 
 function snapshot(data?: Record<string, unknown>, exists = true) {
@@ -137,11 +138,12 @@ function snapshot(data?: Record<string, unknown>, exists = true) {
 
 function ingressData(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     userID: 'firebase-user-1',
     notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
     providerUserId: 'suunto-account-1',
     tokenCredentialGeneration: TOKEN_GENERATION,
+    rootOAuthCredentialGeneration: ROOT_GENERATION,
     connectionState: 'connected',
     connectionStateGeneration: CONNECTION_GENERATION,
     windows: [
@@ -203,7 +205,7 @@ describe('Suunto Health webhook ingress', () => {
       userName: 'suunto-account-1',
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
-    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: TOKEN_GENERATION };
+    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: ROOT_GENERATION };
     hoisted.state.serviceMeta = {
       connectionState: 'connected',
       connectionStateGeneration: CONNECTION_GENERATION,
@@ -230,7 +232,7 @@ describe('Suunto Health webhook ingress', () => {
     }));
   });
 
-  it('binds an active staged user before atomically creating schema-v4 ingress', async () => {
+  it('binds a retained staged account and captures schema-v5 root lifecycle state', async () => {
     await expect(persistSuuntoHealthWebhookIngress(
       persistInput(),
       persistDependencies(),
@@ -239,11 +241,12 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
     expect(hoisted.transactionCreate).toHaveBeenCalledWith(hoisted.ingressRef, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       userID: 'firebase-user-1',
       notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
       providerUserId: 'suunto-account-1',
       tokenCredentialGeneration: TOKEN_GENERATION,
+      rootOAuthCredentialGeneration: ROOT_GENERATION,
       connectionState: 'connected',
       connectionStateGeneration: CONNECTION_GENERATION,
       windows: [{ startMs: 1_700_000_000_000, endMs: 1_700_086_400_000 }],
@@ -274,7 +277,7 @@ describe('Suunto Health webhook ingress', () => {
       tokenCredentialGeneration: 'credential-generation-2',
     };
     hoisted.state.tokenRoot2 = {
-      activeOAuthCredentialGeneration: 'credential-generation-2',
+      activeOAuthCredentialGeneration: 'root-credential-generation-3',
     };
     hoisted.state.serviceMeta2 = {
       connectionState: 'connected',
@@ -296,6 +299,7 @@ describe('Suunto Health webhook ingress', () => {
       expect.objectContaining({
         userID: 'firebase-user-2',
         tokenCredentialGeneration: 'credential-generation-2',
+        rootOAuthCredentialGeneration: 'root-credential-generation-3',
         connectionStateGeneration: 'connection-generation-2',
       }),
     );
@@ -328,7 +332,7 @@ describe('Suunto Health webhook ingress', () => {
     )).resolves.toBe('permanent_skip');
 
     hoisted.state.tokenRoot = {
-      activeOAuthCredentialGeneration: TOKEN_GENERATION,
+      activeOAuthCredentialGeneration: ROOT_GENERATION,
       disconnectState: 'disconnect_pending',
     };
     await expect(persistSuuntoHealthWebhookIngress(
@@ -336,7 +340,7 @@ describe('Suunto Health webhook ingress', () => {
       persistDependencies(),
     )).resolves.toBe('permanent_skip');
 
-    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: TOKEN_GENERATION };
+    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: ROOT_GENERATION };
     hoisted.state.serviceMeta = {
       connectionState: 'reconnect_required',
       connectionStateGeneration: 'replacement-generation',
@@ -371,6 +375,7 @@ describe('Suunto Health webhook ingress', () => {
       healthTrigger: 'webhook',
       dispatchImmediately: true,
       suuntoHealthTokenCredentialGeneration: TOKEN_GENERATION,
+      suuntoHealthRootOAuthCredentialGeneration: ROOT_GENERATION,
       suuntoHealthConnectionStateGeneration: CONNECTION_GENERATION,
       requiredDocumentFieldValues: expect.arrayContaining([
         expect.objectContaining({ documentRef: hoisted.bindingRef }),
@@ -389,7 +394,7 @@ describe('Suunto Health webhook ingress', () => {
   });
 
   it('recursively deletes malformed, disabled, stale, and deleting ingress', async () => {
-    const malformed = ingressSnapshot(ingressData({ schemaVersion: 3 }));
+    const malformed = ingressSnapshot(ingressData({ schemaVersion: 4 }));
     await processSuuntoHealthWebhookIngressDocument(malformed.snapshot, activeDependencies() as any);
     expect(hoisted.recursiveDelete).toHaveBeenCalledWith(malformed.ref);
 
@@ -413,6 +418,21 @@ describe('Suunto Health webhook ingress', () => {
     const deleting = ingressSnapshot();
     await processSuuntoHealthWebhookIngressDocument(deleting.snapshot, activeDependencies() as any);
     expect(hoisted.recursiveDelete).toHaveBeenCalledWith(deleting.ref);
+    expect(hoisted.addQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('recursively deletes ingress when the captured token-root generation rotated', async () => {
+    const rotated = ingressSnapshot();
+    hoisted.state.tokenRoot = {
+      activeOAuthCredentialGeneration: 'root-credential-generation-3',
+    };
+
+    await processSuuntoHealthWebhookIngressDocument(
+      rotated.snapshot,
+      activeDependencies() as any,
+    );
+
+    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(rotated.ref);
     expect(hoisted.addQueueItem).not.toHaveBeenCalled();
   });
 

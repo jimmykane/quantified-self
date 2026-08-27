@@ -21,7 +21,6 @@ import {
 } from '../service-token-store';
 import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
-  doesOAuthCredentialGenerationAuthorizeToken,
 } from '../token-refresh-coordinator';
 import {
   SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
@@ -44,7 +43,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FIREBASE_UID_MAX_LENGTH = 128;
-const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 4;
+const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 5;
 export const SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS = 16;
 
 export type SuuntoHealthWebhookNotificationType =
@@ -70,6 +69,7 @@ interface SuuntoHealthWebhookIngressRecord {
   notificationType: SuuntoHealthWebhookNotificationType;
   providerUserId: string;
   tokenCredentialGeneration: string | null;
+  rootOAuthCredentialGeneration: string | null;
   connectionState: string | null;
   connectionStateGeneration: string | null;
   windows: SuuntoHealthWebhookWindow[];
@@ -189,6 +189,9 @@ function parseIngressRecord(value: unknown): SuuntoHealthWebhookIngressRecord {
     tokenCredentialGeneration: validateOptionalLifecycleString(
       record.tokenCredentialGeneration,
     ),
+    rootOAuthCredentialGeneration: validateOptionalLifecycleString(
+      record.rootOAuthCredentialGeneration,
+    ),
     connectionState: validateOptionalLifecycleString(record.connectionState),
     connectionStateGeneration: validateOptionalLifecycleString(record.connectionStateGeneration),
     windows: validateWindows(record.windows),
@@ -221,10 +224,6 @@ function tokenAndRootStillAuthorizeBinding(
       binding.userID,
       normalizeSuuntoTokenCredentialGeneration(tokenData?.tokenCredentialGeneration),
     )
-    && doesOAuthCredentialGenerationAuthorizeToken(
-      tokenRootData,
-      tokenData?.tokenCredentialGeneration,
-    )
     && !isServiceDisconnectPendingData(tokenRootData)
     && doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs);
 }
@@ -237,6 +236,7 @@ interface ActiveIngressBinding {
   serviceMetaRef: admin.firestore.DocumentReference;
   connectionState: string | null;
   connectionStateGeneration: string | null;
+  rootOAuthCredentialGeneration: string | null;
   bindingExpectedFields: Readonly<Record<string, unknown>>;
   tokenExpectedFields: Readonly<Record<string, unknown>>;
   tokenRootExpectedFields: Readonly<Record<string, unknown>>;
@@ -288,6 +288,9 @@ async function getActiveIngressBindingInTransaction(
   const connectionStateGeneration = normalizeOptionalString(
     serviceMeta?.connectionStateGeneration,
   );
+  const rootOAuthCredentialGeneration = normalizeOptionalString(
+    tokenRootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+  );
   return {
     binding,
     bindingRef,
@@ -296,6 +299,7 @@ async function getActiveIngressBindingInTransaction(
     serviceMetaRef,
     connectionState,
     connectionStateGeneration,
+    rootOAuthCredentialGeneration,
     bindingExpectedFields: {
       schemaVersion: binding.schemaVersion,
       userID: binding.userID,
@@ -403,6 +407,8 @@ export async function persistSuuntoHealthWebhookIngress(
         notificationType: input.notificationType,
         providerUserId,
         tokenCredentialGeneration: target.activeBinding.binding.tokenCredentialGeneration,
+        rootOAuthCredentialGeneration:
+          target.activeBinding.rootOAuthCredentialGeneration,
         connectionState: target.activeBinding.connectionState,
         connectionStateGeneration: target.activeBinding.connectionStateGeneration,
         windows,
@@ -486,6 +492,8 @@ export async function processSuuntoHealthWebhookIngressDocument(
   if (!activeBinding
     || activeBinding.binding.userID !== ingress.userID
     || activeBinding.binding.tokenCredentialGeneration !== ingress.tokenCredentialGeneration
+    || activeBinding.rootOAuthCredentialGeneration
+      !== ingress.rootOAuthCredentialGeneration
     || activeBinding.connectionState !== ingress.connectionState
     || activeBinding.connectionStateGeneration !== ingress.connectionStateGeneration) {
     await recursivelyDiscardIngress(
@@ -509,6 +517,8 @@ export async function processSuuntoHealthWebhookIngressDocument(
       dedupeKey: `suunto-health-webhook:${ingress.userID}:${ingress.providerUserId}:${window.startMs}:${window.endMs}:${eventSnapshot.id}`,
       dispatchImmediately: true,
       suuntoHealthTokenCredentialGeneration: ingress.tokenCredentialGeneration,
+      suuntoHealthRootOAuthCredentialGeneration:
+        ingress.rootOAuthCredentialGeneration,
       suuntoHealthConnectionStateGeneration: ingress.connectionStateGeneration,
       requiredDocumentFieldValues: [
         {

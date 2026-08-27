@@ -641,6 +641,11 @@ async function deauthorizeUnpersistedOAuthToken(
 
 
 export async function removeDuplicateConnections(currentUserID: string, serviceName: ServiceNames, externalUserId: string) {
+  // Suunto explicitly supports the same provider account being connected to
+  // more than one Firebase user. Each owner has an independent credential and
+  // webhook binding, so cross-user cleanup would silently break fan-out.
+  if (serviceName === ServiceNames.SuuntoApp) return;
+
   const adapter = getServiceAdapter(serviceName);
   const query: admin.firestore.Query = adapter.getDuplicateConnectionQuery(externalUserId);
 
@@ -886,8 +891,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     return;
   }
 
-  // Remove any OTHER users connected to this same external account
-  if (uniqueId) {
+  // Providers with single-owner semantics remove OTHER users connected to the
+  // same external account. Suunto preserves independent shared connections.
+  if (uniqueId && serviceName !== ServiceNames.SuuntoApp) {
     try {
       await removeDuplicateConnections(userID, serviceName, uniqueId);
     } catch (e) {

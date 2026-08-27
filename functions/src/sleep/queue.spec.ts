@@ -447,6 +447,7 @@ describe('sleep queue', () => {
             healthTrigger: 'webhook',
             dedupeKey: 'suunto-health-webhook:fenced',
             suuntoHealthTokenCredentialGeneration: 'token-generation-1',
+            suuntoHealthRootOAuthCredentialGeneration: 'root-generation-2',
             suuntoHealthConnectionStateGeneration: 'connection-generation-1',
             requiredDocumentFieldValues: [{
                 documentRef: bindingRef as unknown as admin.firestore.DocumentReference,
@@ -459,6 +460,7 @@ describe('sleep queue', () => {
 
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
             suuntoHealthTokenCredentialGeneration: 'token-generation-1',
+            suuntoHealthRootOAuthCredentialGeneration: 'root-generation-2',
             suuntoHealthConnectionStateGeneration: 'connection-generation-1',
         }), { merge: false });
     });
@@ -3743,6 +3745,66 @@ describe('sleep queue', () => {
             healthTrigger: 'webhook',
             suuntoHealthTokenCredentialGeneration: 'suunto-credential-generation-1',
             suuntoHealthConnectionStateGeneration: 'connection-generation-old',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.processSuuntoHealthQueueItem).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+        }));
+    });
+
+    it('skips webhook work before provider I/O when its captured token-root revision changed', async () => {
+        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: stagedUserID } },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'suunto-user-1',
+                data: () => ({
+                    userName: 'suunto-user-1',
+                    accessToken: 'suunto-access-token',
+                    tokenCredentialGeneration: 'suunto-credential-generation-1',
+                }),
+                ref: tokenRef,
+            }],
+            empty: false,
+        });
+        hoisted.captureSuuntoHealthWriteLifecycleGuards.mockResolvedValue({
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: {
+                accessToken: 'suunto-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                expectedFields: { connectionStateGeneration: 'connection-generation-1' },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                expectedFields: { activeOAuthCredentialGeneration: 'root-generation-new' },
+            }],
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-stale-root-generation',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: stagedUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'webhook',
+            suuntoHealthTokenCredentialGeneration: 'suunto-credential-generation-1',
+            suuntoHealthRootOAuthCredentialGeneration: 'root-generation-old',
+            suuntoHealthConnectionStateGeneration: 'connection-generation-1',
             rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
             rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
             ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,

@@ -7,7 +7,6 @@ import {
   getServiceTokenRootDocumentRef,
 } from '../service-token-store';
 import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
-import { doesOAuthCredentialGenerationAuthorizeToken } from '../token-refresh-coordinator';
 import {
   buildSuuntoHealthWebhookAccountBinding,
   doesSuuntoHealthWebhookBindingMatch,
@@ -56,11 +55,7 @@ export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
       || (tokenData.serviceName && tokenData.serviceName !== ServiceNames.SuuntoApp)
       || isServiceUnavailableForSyncConnection(serviceMeta)
       || isServiceDisconnectPendingData(tokenRootData)
-      || !doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs)
-      || !doesOAuthCredentialGenerationAuthorizeToken(
-        tokenRootData,
-        tokenData?.tokenCredentialGeneration,
-      )) {
+      || !doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs)) {
       return 'inactive';
     }
 

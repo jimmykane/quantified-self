@@ -1796,6 +1796,7 @@ describe('OAuth2', () => {
                 userID,
                 tokenCredentialGeneration: expect.any(String),
             }, undefined);
+            expect(mockWhere).not.toHaveBeenCalled();
         });
 
         it('deletes only the stale token document when a newer OAuth callback wins', async () => {
@@ -2544,7 +2545,7 @@ describe('OAuth2', () => {
                 .rejects.toThrow('Auth adapter not implemented for service: UnsupportedService');
         });
 
-        it('should query userName field for Suunto and delete duplicate via deleteLocalServiceToken', async () => {
+        it('preserves another users matching Suunto token for shared-account fan-out', async () => {
             const docWithOtherUser = {
                 id: 'token-id-other-user',
                 ref: {
@@ -2563,13 +2564,11 @@ describe('OAuth2', () => {
 
             await removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId);
 
-            expect(mockWhere).toHaveBeenCalledWith('userName', '==', externalUserId);
-            // Now uses deleteLocalServiceToken instead of batch delete
-            // The token delete and parent check happen via deleteLocalServiceToken
-            expect(mockDelete).toHaveBeenCalled();
+            expect(mockWhere).not.toHaveBeenCalled();
+            expect(mockDelete).not.toHaveBeenCalled();
         });
 
-        it('should propagate duplicate cleanup failure when local token deletion fails', async () => {
+        it('should propagate duplicate cleanup failure for a single-owner provider', async () => {
             const docWithOtherUser = {
                 id: 'token-id-other-user',
                 ref: {
@@ -2577,7 +2576,7 @@ describe('OAuth2', () => {
                         parent: { id: otherUserID },
                     },
                 },
-                data: () => ({ serviceName: ServiceNames.SuuntoApp }),
+                data: () => ({ serviceName: ServiceNames.COROSAPI }),
             };
 
             mockGet.mockResolvedValue({
@@ -2588,8 +2587,8 @@ describe('OAuth2', () => {
             mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
 
             await expect(
-                removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId),
-            ).rejects.toThrow('Failed to delete local suuntoApp token token-id-other-user for user other-user-id');
+                removeDuplicateConnections(currentUserID, ServiceNames.COROSAPI, externalUserId),
+            ).rejects.toThrow('Failed to delete local corosAPI token token-id-other-user for user other-user-id');
         });
 
         it('should query openId field for COROS', async () => {

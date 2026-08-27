@@ -138,6 +138,7 @@ interface AddSleepSyncQueueItemInput {
     dedupeKey?: string;
     dispatchImmediately?: boolean;
     suuntoHealthTokenCredentialGeneration?: string | null;
+    suuntoHealthRootOAuthCredentialGeneration?: string | null;
     suuntoHealthConnectionStateGeneration?: string | null;
     /** Server-only write fences. These references are never persisted in the queue payload. */
     requiredDocumentFieldValues?: ReadonlyArray<{
@@ -220,11 +221,15 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     }
     if (queueItem.type !== 'suunto_health_poll'
         && (queueItem.suuntoHealthTokenCredentialGeneration !== undefined
+            || queueItem.suuntoHealthRootOAuthCredentialGeneration !== undefined
             || queueItem.suuntoHealthConnectionStateGeneration !== undefined)) {
         return 'sleep queue item unexpectedly contains Suunto Health lifecycle fences';
     }
     if (queueItem.type === 'suunto_health_poll'
         && (!isValidOptionalLifecycleGeneration(queueItem.suuntoHealthTokenCredentialGeneration)
+            || !isValidOptionalLifecycleGeneration(
+                queueItem.suuntoHealthRootOAuthCredentialGeneration,
+            )
             || !isValidOptionalLifecycleGeneration(queueItem.suuntoHealthConnectionStateGeneration))) {
         return 'Suunto Health queue item has invalid lifecycle fences';
     }
@@ -250,6 +255,8 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
         suuntoHealthTokenCredentialGeneration: input.suuntoHealthTokenCredentialGeneration,
+        suuntoHealthRootOAuthCredentialGeneration:
+            input.suuntoHealthRootOAuthCredentialGeneration,
         suuntoHealthConnectionStateGeneration: input.suuntoHealthConnectionStateGeneration,
     };
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
@@ -286,6 +293,8 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         rangeEndMs: payload.rangeEndMs,
         healthTrigger: payload.healthTrigger,
         suuntoHealthTokenCredentialGeneration: payload.suuntoHealthTokenCredentialGeneration,
+        suuntoHealthRootOAuthCredentialGeneration:
+            payload.suuntoHealthRootOAuthCredentialGeneration,
         suuntoHealthConnectionStateGeneration: payload.suuntoHealthConnectionStateGeneration,
     });
 }
@@ -514,8 +523,10 @@ async function writeSleepQueueItemIfUserActive(
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
     if ((input.type !== 'suunto_health_poll'
             && (input.suuntoHealthTokenCredentialGeneration !== undefined
+                || input.suuntoHealthRootOAuthCredentialGeneration !== undefined
                 || input.suuntoHealthConnectionStateGeneration !== undefined))
         || !isValidOptionalLifecycleGeneration(input.suuntoHealthTokenCredentialGeneration)
+        || !isValidOptionalLifecycleGeneration(input.suuntoHealthRootOAuthCredentialGeneration)
         || !isValidOptionalLifecycleGeneration(input.suuntoHealthConnectionStateGeneration)) {
         throw new Error('Invalid Suunto Health queue lifecycle fences.');
     }
@@ -1381,12 +1392,19 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             );
             const capturedTokenGeneration = suuntoHealthLifecycleGuards
                 .requiredExistingTokenCredential.credentialGeneration || null;
+            const capturedRootOAuthGeneration = normalizeLifecycleGeneration(
+                suuntoHealthLifecycleGuards.additionalRequiredDocumentFieldValues[0]
+                    ?.expectedFields[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+            );
             const capturedConnectionGeneration = normalizeLifecycleGeneration(
                 suuntoHealthLifecycleGuards.requiredDocumentFieldValues
                     .expectedFields.connectionStateGeneration,
             );
             if ((queueItem.suuntoHealthTokenCredentialGeneration !== undefined
                     && queueItem.suuntoHealthTokenCredentialGeneration !== capturedTokenGeneration)
+                || (queueItem.suuntoHealthRootOAuthCredentialGeneration !== undefined
+                    && queueItem.suuntoHealthRootOAuthCredentialGeneration
+                        !== capturedRootOAuthGeneration)
                 || (queueItem.suuntoHealthConnectionStateGeneration !== undefined
                     && queueItem.suuntoHealthConnectionStateGeneration !== capturedConnectionGeneration)) {
                 logger.info('[HealthSync][Suunto] Skipping webhook work from a superseded account lifecycle.');

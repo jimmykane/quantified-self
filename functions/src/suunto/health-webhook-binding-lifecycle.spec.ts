@@ -65,11 +65,6 @@ vi.mock('../service-disconnect-pending-state', () => ({
   isServiceDisconnectPendingData: vi.fn((data: Record<string, unknown>) =>
     data.disconnectState === 'disconnect_pending'),
 }));
-vi.mock('../token-refresh-coordinator', () => ({
-  doesOAuthCredentialGenerationAuthorizeToken: vi.fn((data: Record<string, unknown>, generation: unknown) =>
-    (data.activeOAuthCredentialGeneration || null) === (generation || null)),
-}));
-
 import { ensureSuuntoHealthWebhookAccountBindingForActiveToken } from './health-webhook-binding-lifecycle';
 
 describe('Suunto Health webhook account binding lifecycle', () => {
@@ -81,7 +76,7 @@ describe('Suunto Health webhook account binding lifecycle', () => {
       userName: 'provider-1',
       tokenCredentialGeneration: 'token-generation-1',
     };
-    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: 'token-generation-1' };
+    hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: 'root-generation-2' };
     hoisted.state.serviceMeta = {
       connectionState: 'connected',
       connectionStateGeneration: 'connection-generation-1',
@@ -89,7 +84,7 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     hoisted.deletionGuard.mockResolvedValue({ shouldSkip: false });
   });
 
-  it('creates the one-way-keyed binding only for the active token owner', async () => {
+  it('creates a binding for a retained token whose generation predates the root revision', async () => {
     await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
       hoisted.db as never,
       'user-1',
