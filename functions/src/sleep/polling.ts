@@ -18,7 +18,11 @@ import {
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
-import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import {
+    getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import {
@@ -371,6 +375,7 @@ function shouldDeferSuuntoBindingVerification(
 }
 
 async function recordSuuntoBindingVerificationResult(
+    userID: string,
     tokenSnapshot: PollingTokenSnapshot,
     nowMs: number,
     succeeded: boolean,
@@ -379,8 +384,20 @@ async function recordSuuntoBindingVerificationResult(
     const expectedTokenCredentialGeneration = typeof tokenSnapshot.data()?.tokenCredentialGeneration === 'string'
         ? tokenSnapshot.data()?.tokenCredentialGeneration
         : null;
-    await admin.firestore().runTransaction(async transaction => {
-        const liveTokenSnapshot = await transaction.get(tokenSnapshot.ref);
+    const db = admin.firestore();
+    await db.runTransaction(async transaction => {
+        const [liveTokenSnapshot, deletionGuard] = await Promise.all([
+            transaction.get(tokenSnapshot.ref),
+            getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs)
+                .catch(error => {
+                    throw new UserDeletionGuardReadError(
+                        userID,
+                        'suunto_webhook_binding_verification_result',
+                        error,
+                    );
+                }),
+        ]);
+        if (deletionGuard.shouldSkip) return;
         const liveTokenData = liveTokenSnapshot.data() as Record<string, unknown> | undefined;
         const liveTokenCredentialGeneration = typeof liveTokenData?.tokenCredentialGeneration === 'string'
             ? liveTokenData.tokenCredentialGeneration
@@ -435,23 +452,17 @@ async function verifySuuntoWebhookBindingsBestEffort(
         ),
     );
     const results = await Promise.allSettled(eligibleCandidates.map(async candidate => {
+        let status;
         try {
-            const status = await ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+            status = await ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
                 admin.firestore(),
                 candidate.userID,
                 candidate.tokenSnapshot,
                 nowMs,
             );
-            const succeeded = status !== 'unverified';
-            await recordSuuntoBindingVerificationResult(
-                candidate.tokenSnapshot,
-                nowMs,
-                succeeded,
-                verificationEpoch,
-            );
-            return succeeded ? status : 'failed';
         } catch {
             await recordSuuntoBindingVerificationResult(
+                candidate.userID,
                 candidate.tokenSnapshot,
                 nowMs,
                 false,
@@ -459,6 +470,15 @@ async function verifySuuntoWebhookBindingsBestEffort(
             );
             return 'failed';
         }
+        const succeeded = status !== 'unverified';
+        await recordSuuntoBindingVerificationResult(
+            candidate.userID,
+            candidate.tokenSnapshot,
+            nowMs,
+            succeeded,
+            verificationEpoch,
+        );
+        return succeeded ? status : 'failed';
     }));
     const statusCounts = results.reduce<Record<string, number>>((counts, result) => {
         const status = result.status === 'fulfilled' ? result.value : 'failed';

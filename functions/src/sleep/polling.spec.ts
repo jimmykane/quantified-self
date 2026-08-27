@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
     collectionGroupGet: vi.fn(),
     metaDocGet: vi.fn(),
     mockGetUserDeletionGuardState: vi.fn(),
+    mockGetUserDeletionGuardStateInTransaction: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
     bindingCursorGet: vi.fn(),
@@ -73,6 +74,10 @@ vi.mock('./queue', () => ({
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: hoisted.mockGetUserDeletionGuardStateInTransaction,
+    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
+        public readonly name = 'UserDeletionGuardReadError';
+    },
 }));
 
 vi.mock('../coros/account', () => ({
@@ -93,6 +98,11 @@ describe('sleep polling', () => {
         vi.clearAllMocks();
         hoisted.metaDocGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.mockGetUserDeletionGuardState.mockResolvedValue({
+            userExists: true,
+            deletionInProgress: false,
+            shouldSkip: false,
+        });
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
             shouldSkip: false,
@@ -640,6 +650,75 @@ describe('sleep polling', () => {
         }), { merge: false });
     });
 
+    it('does not record successful verification after account deletion starts', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        const deletingToken = createTokenDoc('user-1', {
+            serviceName: ServiceNames.SuuntoApp,
+            userName: 'provider-1',
+            tokenCredentialGeneration: 'generation-1',
+        });
+        installCollectionGroupTokenMock([deletingToken]);
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
+
+        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken)
+            .toHaveBeenCalledOnce();
+        expect(deletingToken.ref.update).not.toHaveBeenCalled();
+        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
+            lastCompletedSweepAtMs: nowMs,
+        }), { merge: false });
+    });
+
+    it('does not record failed verification after account deletion starts', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        const deletingToken = createTokenDoc('user-1', {
+            serviceName: ServiceNames.SuuntoApp,
+            userName: 'provider-1',
+            tokenCredentialGeneration: 'generation-1',
+        });
+        installCollectionGroupTokenMock([deletingToken]);
+        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken
+            .mockRejectedValueOnce(new Error('provider unavailable'));
+        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+
+        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
+
+        expect(deletingToken.ref.update).not.toHaveBeenCalled();
+        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
+            lastCompletedSweepAtMs: nowMs,
+        }), { merge: false });
+    });
+
+    it('does not advance verification when the transactional deletion guard cannot be read', async () => {
+        const nowMs = Date.UTC(2026, 3, 28);
+        const token = createTokenDoc('user-1', {
+            serviceName: ServiceNames.SuuntoApp,
+            userName: 'provider-1',
+            tokenCredentialGeneration: 'generation-1',
+        });
+        installCollectionGroupTokenMock([token]);
+        hoisted.mockGetUserDeletionGuardStateInTransaction
+            .mockRejectedValue(new Error('deletion guard unavailable'));
+
+        await expect(sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs))
+            .rejects.toThrow('Suunto webhook-binding verification state was not persisted.');
+
+        expect(token.ref.update).not.toHaveBeenCalled();
+        expect(hoisted.bindingCursorSet).not.toHaveBeenCalledWith(
+            expect.objectContaining({ lastCompletedSweepAtMs: nowMs }),
+            { merge: false },
+        );
+    });
+
     it('queues staged Suunto Health polls without changing production-wide Sleep polling', async () => {
         const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
         const nowMs = Date.UTC(2026, 7, 27, 12);
@@ -866,7 +945,7 @@ describe('sleep polling', () => {
             .mockRejectedValueOnce(Object.assign(new Error('deleted mid-enqueue'), {
                 name: 'ProviderQueueUserDeletedOrDeletingError',
             }))
-            .mockResolvedValue({} as any);
+            .mockResolvedValue({} as Awaited<ReturnType<typeof addSleepSyncQueueItem>>);
 
         const queued = await sleepPollingTestInternals.enqueueProviderPolls(
             SLEEP_PROVIDERS.SuuntoApp,
