@@ -9,6 +9,10 @@ COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-da
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
 times, average sleep heart rate, resting heart rate, overnight HRV, steps, a provider-native
 calorie value, and optional detailed HRV/interval-heart-rate samples.
+The live endpoint may represent a successful range with no daily records as an exact empty
+`data` object. The worker accepts that provider-confirmed no-data response, completes both sync
+states without creating Sleep or Health records, and continues to reject any non-empty unknown
+response shape.
 It does not provide sleep-stage intervals, so COROS sessions retain their duration as an
 unknown stage rather than inferred Light, Deep, REM, or Awake stages.
 
@@ -148,7 +152,11 @@ npm --prefix functions run backfill-coros-daily-health -- --execute --confirm-al
 
 Use `--uid <Firebase UID>` to limit the run to one user, or `--start YYYY-MM-DD` and
 `--end YYYY-MM-DD` to narrow the window. The script clamps any earlier start date to COROS's
-three-month retention boundary and exits nonzero if queueing a window fails.
+three-month retention boundary and exits nonzero if queueing a window fails. Existing COROS
+connections whose token root and selected token both predate credential-generation metadata
+remain eligible when both fields are absent; no credential migration or reconnect is required
+solely for that legacy pair. A missing root, one-sided generation, or generation mismatch still
+fails closed.
 
 ## Legacy COROS Sleep Sample Migration
 

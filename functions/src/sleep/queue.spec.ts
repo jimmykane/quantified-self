@@ -2743,7 +2743,7 @@ describe('sleep queue', () => {
         }));
     });
 
-    it('rejects malformed COROS response data instead of recording an empty success', async () => {
+    it('accepts the live COROS empty success envelope without recording data', async () => {
         hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
         const activeToken = {
             id: 'coros-user-1',
@@ -2753,6 +2753,61 @@ describe('sleep queue', () => {
         hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(activeToken);
         hoisted.getTokenData.mockResolvedValue({ accessToken: 'coros-access-token' });
         hoisted.requestGet.mockResolvedValue({ result: '0000', message: 'OK', data: {} });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'coros-malformed-daily-shape',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'COROSAPI',
+            userID: 'test-user-uid',
+            providerUserId: 'coros-user-1',
+            retryCount: 0,
+            type: 'coros_poll',
+            rangeStartMs: Date.parse('2026-04-28T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-04-28T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith(
+            'test-user-uid',
+            [],
+            expect.any(Number),
+            expect.any(Object),
+        );
+        expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+        expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+            'test-user-uid',
+            'COROSAPI',
+            expect.objectContaining({
+                status: 'ready',
+                lastPollAtMs: expect.any(Number),
+                lastErrorCode: null,
+            }),
+            expect.any(Number),
+            expect.any(Object),
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+        }));
+    });
+
+    it('rejects a non-empty unrecognized COROS response data shape', async () => {
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+        const activeToken = {
+            id: 'coros-user-1',
+            data: () => ({ openId: 'coros-user-1', accessToken: 'coros-access-token' }),
+            ref: { parent: { parent: { id: 'test-user-uid' } } },
+        };
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(activeToken);
+        hoisted.getTokenData.mockResolvedValue({ accessToken: 'coros-access-token' });
+        hoisted.requestGet.mockResolvedValue({
+            result: '0000',
+            message: 'OK',
+            data: { unexpectedList: [] },
+        });
         const update = vi.fn().mockResolvedValue(undefined);
 
         const result = await processSleepSyncQueueItem({

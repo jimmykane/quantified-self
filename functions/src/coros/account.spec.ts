@@ -74,13 +74,40 @@ describe('COROS active account', () => {
     expect(normalizeCOROSOpenId({ openId: 'open-1' })).toBeNull();
   });
 
-  it('uses the pinned account and never falls back to another token', async () => {
+  it('uses a pinned legacy account when its existing root and child both omit generations', async () => {
     mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
     const pinned = token('open-pinned', { openId: 'open-pinned' });
     mocks.tokenDocumentGet.mockResolvedValue(pinned);
 
     await expect(getActiveCOROSTokenSnapshot('user-1')).resolves.toBe(pinned);
     expect(mocks.tokenCollectionGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when only the legacy token root gains credential-generation metadata', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'root-generation' }),
+    });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', { openId: 'open-pinned' }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending data.',
+    });
+  });
+
+  it('fails closed when only the legacy token child gains credential-generation metadata', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', {
+      openId: 'open-pinned',
+      tokenCredentialGeneration: 'token-generation',
+    }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending data.',
+    });
   });
 
   it('fails closed before token access when the connection requires reconnect', async () => {

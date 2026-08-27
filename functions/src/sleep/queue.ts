@@ -956,6 +956,14 @@ function extractCOROSDailyList(payload: unknown): unknown[] {
         throw new COROSDailyValidationError('COROS daily response data must be an object.');
     }
     const dailyList = (data as { dailyList?: unknown }).dailyList;
+    // The live COROS API returns an empty data object, rather than
+    // `dailyList: []`, when a successful range contains no daily records.
+    // Accept only that exact empty success envelope; any other unrecognized
+    // data shape still fails closed so an API contract change is not silently
+    // mistaken for a valid no-data response.
+    if (dailyList === undefined && Object.keys(data).length === 0) {
+        return [];
+    }
     if (!Array.isArray(dailyList)) {
         throw new COROSDailyValidationError('COROS daily response must contain a dailyList array.');
     }
