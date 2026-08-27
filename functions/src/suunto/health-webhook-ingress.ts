@@ -304,9 +304,7 @@ async function getActiveIngressBindingInTransaction(
     bindingExpectedFields: {
       schemaVersion: binding.schemaVersion,
       userID: binding.userID,
-      ...(binding.providerAccountDigest
-        ? { providerAccountDigest: binding.providerAccountDigest }
-        : {}),
+      providerAccountDigest: binding.providerAccountDigest,
       tokenCredentialGeneration: binding.tokenCredentialGeneration,
     },
     tokenExpectedFields: {

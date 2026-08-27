@@ -6,14 +6,12 @@ export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME =
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 3;
 export const SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS = 32;
 
-const LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 2;
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 export interface SuuntoHealthWebhookAccountBinding {
-  schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
-    | typeof LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
+  schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
   userID: string;
-  providerAccountDigest: string | null;
+  providerAccountDigest: string;
   tokenCredentialGeneration: string | null;
 }
 
@@ -75,18 +73,15 @@ export function parseSuuntoHealthWebhookAccountBinding(
   const tokenCredentialGeneration = normalizeSuuntoTokenCredentialGeneration(
     data.tokenCredentialGeneration,
   );
-  const isLegacyBinding = data.schemaVersion
-    === LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
-  if ((!isLegacyBinding
-      && data.schemaVersion !== SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION)
+  if (data.schemaVersion !== SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
     || !userID
     || userID !== data.userID
     || userID.length > 128
-    || (!isLegacyBinding && (
+    || (
       !providerAccountDigest
       || providerAccountDigest !== data.providerAccountDigest
       || !SHA256_HEX_PATTERN.test(providerAccountDigest)
-    ))
+    )
     || (data.tokenCredentialGeneration !== null
       && data.tokenCredentialGeneration !== undefined
       && (!tokenCredentialGeneration
@@ -95,11 +90,9 @@ export function parseSuuntoHealthWebhookAccountBinding(
     return null;
   }
   return {
-    schemaVersion: isLegacyBinding
-      ? LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
-      : SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
+    schemaVersion: SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
     userID,
-    providerAccountDigest: isLegacyBinding ? null : providerAccountDigest,
+    providerAccountDigest,
     tokenCredentialGeneration,
   };
 }
@@ -111,9 +104,7 @@ export function doesSuuntoHealthWebhookBindingMatch(
   tokenCredentialGeneration: string | null,
 ): boolean {
   return binding?.userID === userID
-    && (binding.schemaVersion === LEGACY_SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
-      ? binding.providerAccountDigest === null
-      : binding.providerAccountDigest === getSuuntoWebhookProviderAccountDigest(providerUserId))
+    && binding.providerAccountDigest === getSuuntoWebhookProviderAccountDigest(providerUserId)
     && binding.tokenCredentialGeneration
       === normalizeSuuntoTokenCredentialGeneration(tokenCredentialGeneration);
 }

@@ -106,29 +106,6 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     );
   });
 
-  it('upgrades a generation-matched schema-v2 binding to the indexed schema', async () => {
-    hoisted.state.binding = {
-      schemaVersion: 2,
-      userID: 'user-1',
-      tokenCredentialGeneration: 'token-generation-1',
-    };
-
-    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
-      hoisted.db as never,
-      'user-1',
-      'provider-1',
-    )).resolves.toBe('created');
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.bindingRef,
-      {
-        schemaVersion: 3,
-        userID: 'user-1',
-        providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
-        tokenCredentialGeneration: 'token-generation-1',
-      },
-    );
-  });
-
   it('does not overwrite a malformed per-user binding owned by another UID', async () => {
     hoisted.state.binding = {
       schemaVersion: 3,

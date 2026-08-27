@@ -7,6 +7,7 @@ import {
   findSuuntoWebhookAccountBindingUserIDs,
   getSuuntoHealthWebhookAccountBindingRef,
   getSuuntoWebhookProviderAccountDigest,
+  parseSuuntoHealthWebhookAccountBinding,
   SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME,
   SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS,
 } from './health-webhook-binding';
@@ -90,6 +91,14 @@ describe('Suunto webhook account bindings', () => {
       tokenCredentialGeneration: 'credential-generation-1',
     });
     expect(JSON.stringify(binding)).not.toContain('suunto-account-1');
+  });
+
+  it('rejects unsupported binding schemas', () => {
+    expect(parseSuuntoHealthWebhookAccountBinding({
+      schemaVersion: 99,
+      userID: 'firebase-user-1',
+      tokenCredentialGeneration: 'credential-generation-1',
+    })).toBeNull();
   });
 
   it('resolves every matching binding from the bounded server-owned digest index', async () => {
