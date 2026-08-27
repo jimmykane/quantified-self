@@ -50,6 +50,12 @@ export interface SubscriptionCadenceStats {
 
 export type AdminDashboardHistoryDays = 30 | 90 | 365;
 
+export interface AdminDashboardHistoryCadenceTierStats {
+    monthly: number;
+    yearly: number;
+    unknown: number;
+}
+
 export interface AdminDashboardHistoryPoint {
     date: string;
     computedAt: string;
@@ -66,7 +72,10 @@ export interface AdminDashboardHistoryPoint {
         last7Days: number;
         last30Days: number;
     };
-    subscriptionCadence: SubscriptionCadenceStats;
+    subscriptionCadence: {
+        pro: AdminDashboardHistoryCadenceTierStats;
+        basic: AdminDashboardHistoryCadenceTierStats;
+    };
 }
 
 export interface AdminDashboardHistoryResponse {
@@ -472,8 +481,11 @@ export class AdminService {
 
         const startDate = requireUtcDateKey(response['startDate'], 'startDate');
         const endDate = requireUtcDateKey(response['endDate'], 'endDate');
-        if (startDate > endDate) {
-            throw new Error('Admin dashboard history has an invalid date range.');
+        const actualRangeMs = Date.parse(`${endDate}T00:00:00.000Z`)
+            - Date.parse(`${startDate}T00:00:00.000Z`);
+        const expectedRangeMs = (days - 1) * 24 * 60 * 60 * 1000;
+        if (actualRangeMs !== expectedRangeMs) {
+            throw new Error('Admin dashboard history date range does not match the requested days.');
         }
 
         if (!Array.isArray(response['snapshots'])) {
@@ -661,7 +673,7 @@ function requireIsoTimestamp(value: unknown, field: string): string {
     return value;
 }
 
-function requireCadenceTier(value: unknown, field: string): SubscriptionCadenceTierStats {
+function requireCadenceTier(value: unknown, field: string): AdminDashboardHistoryCadenceTierStats {
     const tier = requireRecord(value, field);
     return {
         monthly: requireCount(tier['monthly'], `${field}.monthly`),
@@ -670,6 +682,6 @@ function requireCadenceTier(value: unknown, field: string): SubscriptionCadenceT
     };
 }
 
-function cadenceTierTotal(value: SubscriptionCadenceTierStats): number {
+function cadenceTierTotal(value: AdminDashboardHistoryCadenceTierStats): number {
     return value.monthly + value.yearly + value.unknown;
 }

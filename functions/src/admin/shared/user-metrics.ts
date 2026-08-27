@@ -154,6 +154,9 @@ export function summarizeActivePaidSubscriptions(
         if (data.cancel_at_period_end === true) {
             cancelScheduled += 1;
         }
+        if (data.role !== SUBSCRIPTION_ROLE_PRO && data.role !== SUBSCRIPTION_ROLE_BASIC) {
+            return;
+        }
 
         const candidate: CanonicalSubscriptionCandidate = {
             ...identity,
@@ -182,10 +185,6 @@ export function summarizeActivePaidSubscriptions(
     };
 
     latestSubscriptionByOwner.forEach(({ data }) => {
-        if (data.role !== SUBSCRIPTION_ROLE_PRO && data.role !== SUBSCRIPTION_ROLE_BASIC) {
-            return;
-        }
-
         const tierCadence = data.role === SUBSCRIPTION_ROLE_PRO
             ? subscriptionCadence.pro
             : subscriptionCadence.basic;

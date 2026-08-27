@@ -393,4 +393,18 @@ describe('AdminService', () => {
         await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
             .rejects.toThrow('must be an ISO timestamp');
     });
+
+    it('should reject history bounds that do not span the requested number of days', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-01',
+                endDate: '2026-08-27',
+                snapshots: [],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('date range does not match the requested days');
+    });
 });

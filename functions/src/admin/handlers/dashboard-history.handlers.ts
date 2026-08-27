@@ -64,7 +64,7 @@ function shiftUtcDate(date: Date, days: number): Date {
 }
 
 function resolveHistoryDays(value: unknown): AdminDashboardHistoryDays {
-    if (value === undefined || value === null) {
+    if (value === undefined) {
         return DEFAULT_HISTORY_DAYS;
     }
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || !ALLOWED_HISTORY_DAYS.has(value)) {
@@ -172,15 +172,26 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
             data['schemaVersion'] !== ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION
             || data['metricDefinitionVersion'] !== ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION
         ) {
-            return null;
+            throw new Error('Snapshot schema or metric-definition version is unsupported.');
         }
         if (data['snapshotDate'] !== document.id || !isUtcDateKey(document.id)) {
             throw new Error('Snapshot date does not match a valid UTC document ID.');
         }
 
+        const scheduledForMs = toEpochMillis(data['scheduledFor']);
         const computedAtMs = toEpochMillis(data['computedAt']);
-        if (computedAtMs === null) {
-            throw new Error('Snapshot computedAt is invalid.');
+        const expireAtMs = toEpochMillis(data['expireAt']);
+        if (scheduledForMs === null || computedAtMs === null || expireAtMs === null) {
+            throw new Error('Snapshot timestamps are invalid.');
+        }
+        if (toUtcDateKey(new Date(scheduledForMs)) !== document.id) {
+            throw new Error('Snapshot scheduledFor does not match its UTC date.');
+        }
+        if (
+            computedAtMs < scheduledForMs
+            || expireAtMs - computedAtMs !== ADMIN_DASHBOARD_SNAPSHOT_RETENTION_DAYS * MILLISECONDS_PER_DAY
+        ) {
+            throw new Error('Snapshot timestamp ordering or retention is invalid.');
         }
 
         const usersRecord = requireObject(data['users'], 'users');

@@ -111,4 +111,32 @@ describe('admin user metrics subscription provenance', () => {
         expect(summary.basic).toBe(1);
         expect(summary.subscriptionCadence.basic.yearly).toBe(1);
     });
+
+    it('does not let an unrecognized-role document mask a qualifying paid entitlement', () => {
+        const summary = summarizeActivePaidSubscriptions([
+            subscriptionDocument(
+                'customers/user-1/subscriptions/sub-pro',
+                {
+                    role: 'pro',
+                    created: 1_800_000_000,
+                    items: [{ plan: { interval: 'month' } }],
+                },
+            ),
+            subscriptionDocument(
+                'customers/user-1/subscriptions/sub-unclassified',
+                {
+                    role: 'supporter',
+                    created: 1_900_000_000,
+                    cancel_at_period_end: true,
+                    items: [{ plan: { interval: 'year' } }],
+                },
+            ),
+        ]);
+
+        expect(summary.pro).toBe(1);
+        expect(summary.basic).toBe(0);
+        expect(summary.subscriptionCadence.pro.monthly).toBe(1);
+        expect(summary.cancelScheduled).toBe(1);
+        expect(summary.duplicateCanonicalDocuments).toBe(0);
+    });
 });

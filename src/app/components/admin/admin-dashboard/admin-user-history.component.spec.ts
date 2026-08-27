@@ -117,10 +117,20 @@ describe('AdminUserHistoryComponent', () => {
         await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(6));
 
         cadenceOption = loader.setOption.mock.calls
-            .map(call => call[1] as { series?: Array<{ name?: string }> })
+            .map(call => call[1] as {
+                series?: Array<{ name?: string }>;
+                tooltip?: { formatter?: (params: unknown) => string };
+            })
             .filter(option => option.series?.some(series => series.name === 'Pro monthly'))
             .at(-1);
         expect(cadenceOption?.series?.map(series => series.name)).toContain('Pro unknown');
+        expect(cadenceOption?.series?.map(series => series.name)).not.toContain('Basic unknown');
+
+        const tooltip = cadenceOption?.tooltip?.formatter?.([{
+            axisValue: withUnknown.snapshots[3].date,
+        }]);
+        expect(tooltip).toContain('Pro unknown');
+        expect(tooltip).not.toContain('Basic unknown');
     });
 
     it('switches ranges locally without requesting new data', async () => {

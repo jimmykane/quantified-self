@@ -19,7 +19,7 @@ Authentication activity is an account-access signal, not foreground engagement a
 
 Cadence `unknown` is retained deliberately. A non-zero value means an active paid subscription could not be safely classified as monthly or yearly and should be investigated; it must not be silently forced into either cadence.
 
-Only documents whose full reference matches `customers/{uid}/subscriptions/{subscriptionId}` are eligible for plan metrics. The collector ignores same-named collection-group documents at every other path. If a customer has multiple qualifying active documents, it selects the newest `created` value, using the subscription document ID as a deterministic tie-breaker, so Basic and Pro remain mutually exclusive user classifications. Garmin and Suunto client rules also restrict legacy token writes to direct `tokens/{tokenId}` documents and deny arbitrary descendants.
+Only active Basic or Pro documents whose full reference matches `customers/{uid}/subscriptions/{subscriptionId}` are eligible for plan metrics. The collector ignores same-named collection-group documents at every other path, and an unrecognized-role document cannot mask a qualifying paid entitlement. If a customer has multiple qualifying active paid documents, it selects the newest `created` value, using the subscription document ID as a deterministic tie-breaker, so Basic and Pro remain mutually exclusive user classifications. Garmin and Suunto client rules also restrict legacy token writes to direct `tokens/{tokenId}` documents and deny arbitrary descendants.
 
 ## Capture and storage
 

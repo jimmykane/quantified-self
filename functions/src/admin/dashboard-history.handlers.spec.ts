@@ -97,13 +97,16 @@ function metrics(overrides: Partial<UserPlanActivityMetrics> = {}): UserPlanActi
 }
 
 function storedDocument(date: string, overrides: Record<string, unknown> = {}) {
+    const computedAt = new Date(`${date}T00:12:00.000Z`);
     return {
         id: date,
         data: () => ({
             schemaVersion: 1,
             metricDefinitionVersion: 1,
             snapshotDate: date,
-            computedAt: new Date(`${date}T00:12:00.000Z`),
+            scheduledFor: new Date(`${date}T00:10:00.000Z`),
+            computedAt,
+            expireAt: new Date(computedAt.getTime() + (730 * 24 * 60 * 60 * 1000)),
             users: {
                 total: 10,
                 free: 5,
@@ -247,7 +250,7 @@ describe('admin dashboard history', () => {
         );
     });
 
-    it('logs and skips malformed snapshot dates and timestamps', async () => {
+    it('logs and skips malformed, incomplete, and unsupported snapshots', async () => {
         const query = {
             orderBy: vi.fn().mockReturnThis(),
             startAt: vi.fn().mockReturnThis(),
@@ -257,13 +260,15 @@ describe('admin dashboard history', () => {
                 docs: [
                     storedDocument('2026-02-30'),
                     storedDocument('2026-08-27', { computedAt: 'not-a-time' }),
+                    storedDocument('2026-08-26', { expireAt: undefined }),
+                    storedDocument('2026-08-25', { schemaVersion: 2 }),
                 ],
             }),
         };
         mocks.collection.mockReturnValue(query);
 
         await expect(invokeHistory(historyRequest(365))).resolves.toMatchObject({ snapshots: [] });
-        expect(mocks.loggerWarn).toHaveBeenCalledTimes(2);
+        expect(mocks.loggerWarn).toHaveBeenCalledTimes(4);
     });
 
     it('defaults to 90 days and rejects unsupported ranges', async () => {
@@ -278,6 +283,8 @@ describe('admin dashboard history', () => {
 
         await expect(invokeHistory(historyRequest())).resolves.toMatchObject({ days: 90 });
         await expect(invokeHistory({ data: { days: 31 } } as CallableRequest<GetAdminDashboardHistoryRequest>))
+            .rejects.toMatchObject({ code: 'invalid-argument' });
+        await expect(invokeHistory({ data: { days: null } } as unknown as CallableRequest<GetAdminDashboardHistoryRequest>))
             .rejects.toMatchObject({ code: 'invalid-argument' });
         expect(query.get).toHaveBeenCalledTimes(1);
     });

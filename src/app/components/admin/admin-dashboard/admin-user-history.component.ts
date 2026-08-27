@@ -293,13 +293,19 @@ export class AdminUserHistoryComponent implements OnDestroy {
     private buildCadenceOption(): Record<string, unknown> {
         const view = this.historyView();
         const style = this.chartStyle(this.cadenceChartRef);
+        const hasProUnknownCadence = view.observed.some(
+            snapshot => snapshot.subscriptionCadence.pro.unknown > 0,
+        );
+        const hasBasicUnknownCadence = view.observed.some(
+            snapshot => snapshot.subscriptionCadence.basic.unknown > 0,
+        );
         const series: Record<string, unknown>[] = [
             this.areaSeries('Pro monthly', CHART_COLORS.proMonthly, view.timeline.map(item => item.snapshot?.subscriptionCadence.pro.monthly ?? null), 'cadence', 'solid', 1.1),
             this.areaSeries('Pro yearly', CHART_COLORS.proYearly, view.timeline.map(item => item.snapshot?.subscriptionCadence.pro.yearly ?? null), 'cadence', 'dashed', 0.7),
             this.areaSeries('Basic monthly', CHART_COLORS.basicMonthly, view.timeline.map(item => item.snapshot?.subscriptionCadence.basic.monthly ?? null), 'cadence', 'dotted', 0.95),
             this.areaSeries('Basic yearly', CHART_COLORS.basicYearly, view.timeline.map(item => item.snapshot?.subscriptionCadence.basic.yearly ?? null), 'cadence', 'solid', 0.65),
         ];
-        if (view.observed.some(snapshot => snapshot.subscriptionCadence.pro.unknown > 0)) {
+        if (hasProUnknownCadence) {
             series.push(this.areaSeries(
                 'Pro unknown',
                 CHART_COLORS.proUnknown,
@@ -309,7 +315,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
                 0.55,
             ));
         }
-        if (view.observed.some(snapshot => snapshot.subscriptionCadence.basic.unknown > 0)) {
+        if (hasBasicUnknownCadence) {
             series.push(this.areaSeries(
                 'Basic unknown',
                 CHART_COLORS.basicUnknown,
@@ -338,11 +344,19 @@ export class AdminUserHistoryComponent implements OnDestroy {
                         { label: 'Basic monthly', value: this.formatCount(snapshot.subscriptionCadence.basic.monthly), markerColor: CHART_COLORS.basicMonthly },
                         { label: 'Basic yearly', value: this.formatCount(snapshot.subscriptionCadence.basic.yearly), markerColor: CHART_COLORS.basicYearly },
                     ];
-                    if (view.hasUnknownCadence) {
-                        rows.push(
-                            { label: 'Pro unknown', value: this.formatCount(snapshot.subscriptionCadence.pro.unknown), markerColor: CHART_COLORS.proUnknown },
-                            { label: 'Basic unknown', value: this.formatCount(snapshot.subscriptionCadence.basic.unknown), markerColor: CHART_COLORS.basicUnknown },
-                        );
+                    if (hasProUnknownCadence) {
+                        rows.push({
+                            label: 'Pro unknown',
+                            value: this.formatCount(snapshot.subscriptionCadence.pro.unknown),
+                            markerColor: CHART_COLORS.proUnknown,
+                        });
+                    }
+                    if (hasBasicUnknownCadence) {
+                        rows.push({
+                            label: 'Basic unknown',
+                            value: this.formatCount(snapshot.subscriptionCadence.basic.unknown),
+                            markerColor: CHART_COLORS.basicUnknown,
+                        });
                     }
                     return renderDashboardEChartsTooltipCard(style, {
                         title: this.formatFullDate(snapshot.date),
