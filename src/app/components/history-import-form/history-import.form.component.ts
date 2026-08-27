@@ -33,6 +33,8 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppHealthService } from '../../services/app.health.service';
+import { HEALTH_PROVIDERS, HealthSyncState } from '@shared/health';
 
 dayjs.extend(relativeTime);
 
@@ -81,6 +83,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
   public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
+  public isSleepAndHealthBackfill = false;
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -93,9 +96,13 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private changeDetectorRef = inject(ChangeDetectorRef);
   private authService = inject(AppAuthService);
   private sleepService = inject(AppSleepService);
+  private healthService = inject(AppHealthService);
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
+  private healthSyncStateSubscription: Subscription | null = null;
+  private healthSyncStateKey: string | null = null;
+  private suuntoHealthRolloutAvailable = false;
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -156,6 +163,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
+    this.syncHealthSyncStateSubscription();
+    this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
 
@@ -298,6 +307,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
     this.sleepSyncStateSubscription?.unsubscribe();
+    this.healthSyncStateSubscription?.unsubscribe();
   }
 
   get cooldownDays(): number {
@@ -417,7 +427,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!provider || !this.canSubmitSleepBackfill) {
       return;
     }
-    const historyName = provider === SLEEP_PROVIDERS.COROSAPI
+    const historyName = this.isSleepAndHealthBackfill
       ? 'Sleep & Health history'
       : 'sleep history';
 
@@ -486,6 +496,47 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           this.changeDetectorRef.markForCheck();
         },
       });
+  }
+
+  private syncHealthSyncStateSubscription(): void {
+    const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
+      ? `${this.currentUserID}:${HEALTH_PROVIDERS.SuuntoApp}`
+      : null;
+    if (this.healthSyncStateKey === key) {
+      return;
+    }
+
+    this.healthSyncStateSubscription?.unsubscribe();
+    this.healthSyncStateSubscription = null;
+    this.healthSyncStateKey = key;
+    this.suuntoHealthRolloutAvailable = false;
+
+    if (!key || !this.currentUserID) {
+      return;
+    }
+
+    this.healthSyncStateSubscription = this.healthService
+      .watchSyncStates(this.currentUserID)
+      .subscribe({
+        next: (states: HealthSyncState[]) => {
+          this.suuntoHealthRolloutAvailable = states.some(
+            state => state.provider === HEALTH_PROVIDERS.SuuntoApp,
+          );
+          this.updateSleepAndHealthBackfillAvailability();
+          this.changeDetectorRef.markForCheck();
+        },
+        error: (error) => {
+          this.logger.error(error);
+          this.suuntoHealthRolloutAvailable = false;
+          this.updateSleepAndHealthBackfillAvailability();
+          this.changeDetectorRef.markForCheck();
+        },
+      });
+  }
+
+  private updateSleepAndHealthBackfillAvailability(): void {
+    this.isSleepAndHealthBackfill = this.serviceName === ServiceNames.COROSAPI
+      || (this.serviceName === ServiceNames.SuuntoApp && this.suuntoHealthRolloutAvailable);
   }
 
   private coerceUserID(user: User | null | undefined): string | null {

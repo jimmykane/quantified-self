@@ -108,7 +108,11 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       makeDoc('suuntoAppWorkoutQueue/workout-1', { userName: 'suunto-user' }),
     ]);
     setQueryDocs('sleepSyncQueue', 'providerUserId', 'suunto-user', [
-      makeDoc('sleepSyncQueue/sleep-1', { provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
+      makeDoc('sleepSyncQueue/suunto-health-1', {
+        type: 'suunto_health_poll',
+        provider: 'SuuntoApp',
+        providerUserId: 'suunto-user',
+      }),
     ]);
     setQueryDocs('routeDeliverySyncQueue', 'sourceProviderUserId', 'suunto-user', [
       makeDoc('routeDeliverySyncQueue/route-delivery-1', {
@@ -128,7 +132,12 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       makeDoc('failed_jobs/workout-dlq-1', { originalCollection: 'suuntoAppWorkoutQueue', userName: 'suunto-user' }),
     ]);
     setQueryDocs('failed_jobs', 'providerUserId', 'suunto-user', [
-      makeDoc('failed_jobs/sleep-dlq-1', { originalCollection: 'sleepSyncQueue', provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
+      makeDoc('failed_jobs/suunto-health-dlq-1', {
+        originalCollection: 'sleepSyncQueue',
+        type: 'suunto_health_poll',
+        provider: 'SuuntoApp',
+        providerUserId: 'suunto-user',
+      }),
     ]);
     setQueryDocs('failed_jobs', 'sourceProviderUserId', 'suunto-user', [
       makeDoc('failed_jobs/route-delivery-dlq-1', {
@@ -163,10 +172,10 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     });
     expect(mockRecursiveDelete).toHaveBeenCalledTimes(6);
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/workout-1' }));
-    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/suunto-health-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/route-delivery-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/workout-dlq-1' }));
-    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/sleep-dlq-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/suunto-health-dlq-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-delivery-dlq-1' }));
     expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/not-suunto-source' }));
     expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/not-suunto-source-dlq' }));
@@ -187,7 +196,7 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     );
     expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
       'sleepSyncQueue',
-      'sleep-dlq-1',
+      'suunto-health-dlq-1',
       'service_disconnect_cleanup',
     );
   });

@@ -13,6 +13,7 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_SYNC_STATUSES,
 } from '../../../shared/health';
+import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
 import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import {
     SleepSyncQueueItemInterface,
@@ -94,6 +95,20 @@ import {
     releaseSleepQueueRevision,
 } from './queue-revision';
 import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
+import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
+import {
+    captureSuuntoHealthWriteLifecycleGuards,
+    processSuuntoHealthQueueItem,
+    sanitizeSuuntoHealthErrorForTelemetry,
+    suuntoCredentialFromSnapshot,
+    SuuntoHealthWriteLifecycleGuards,
+} from '../suunto/health-sync';
+import {
+    SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
+    SUUNTO_HEALTH_MAX_SUPPORTED_TIMESTAMP_MS,
+    SUUNTO_HEALTH_MAX_WINDOW_DAYS,
+    SuuntoHealthResult,
+} from '../suunto/health';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
 
@@ -119,6 +134,7 @@ interface AddSleepSyncQueueItemInput {
     callbackURL?: string;
     rangeStartMs?: number;
     rangeEndMs?: number;
+    healthTrigger?: 'poll' | 'webhook' | 'backfill';
     dedupeKey?: string;
     dispatchImmediately?: boolean;
 }
@@ -145,8 +161,10 @@ const SLEEP_SYNC_QUEUE_ITEM_TYPES = new Set<SleepSyncQueueItemType>([
     'garmin_push',
     'suunto_webhook',
     'suunto_poll',
+    'suunto_health_poll',
     'coros_poll',
 ]);
+const SUUNTO_HEALTH_QUEUE_TRIGGERS = new Set(['poll', 'webhook', 'backfill']);
 
 function isValidSleepProvider(value: unknown): value is SleepProvider {
     return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
@@ -159,8 +177,32 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     if (!isValidSleepProvider(queueItem.provider)) {
         return `invalid provider ${queueItem.provider || 'missing'}`;
     }
+    if (queueItem.type === 'suunto_health_poll' && queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp) {
+        return 'Suunto Health queue item has an invalid provider';
+    }
+    if (queueItem.type === 'suunto_health_poll'
+        && !SUUNTO_HEALTH_QUEUE_TRIGGERS.has(`${queueItem.healthTrigger || ''}`)) {
+        return 'Suunto Health queue item has an invalid trigger';
+    }
+    if (queueItem.type === 'suunto_health_poll'
+        && (!Number.isSafeInteger(queueItem.rangeStartMs)
+            || !Number.isSafeInteger(queueItem.rangeEndMs)
+            || Number(queueItem.rangeStartMs) < 0
+            || Number(queueItem.rangeEndMs) <= Number(queueItem.rangeStartMs)
+            || Number(queueItem.rangeEndMs) > SUUNTO_HEALTH_MAX_SUPPORTED_TIMESTAMP_MS
+            || Number(queueItem.rangeEndMs) - Number(queueItem.rangeStartMs)
+                > SUUNTO_HEALTH_MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000)) {
+        return 'Suunto Health queue item has an invalid range';
+    }
+    if (queueItem.type !== 'suunto_health_poll' && queueItem.healthTrigger !== undefined) {
+        return 'sleep queue item unexpectedly contains a Health trigger';
+    }
     if (typeof queueItem.providerUserId !== 'string' || queueItem.providerUserId.trim().length === 0) {
         return 'missing providerUserId';
+    }
+    if (queueItem.type === 'suunto_health_poll'
+        && queueItem.providerUserId.trim().length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+        return 'Suunto Health queue item has an invalid provider account identifier';
     }
     return null;
 }
@@ -175,6 +217,7 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         callbackURL: input.callbackURL,
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
+        healthTrigger: input.healthTrigger,
     };
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
 }
@@ -208,6 +251,7 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         callbackURL: payload.callbackURL,
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
+        healthTrigger: payload.healthTrigger,
     });
 }
 
@@ -1120,6 +1164,7 @@ function assertNeverQueueItemType(type: never): never {
 function isPollQueueItemType(type: SleepSyncQueueItemType): boolean {
     switch (type) {
         case 'suunto_poll':
+        case 'suunto_health_poll':
         case 'coros_poll':
             return true;
         case 'garmin_ping':
@@ -1138,11 +1183,22 @@ function isWebhookQueueItemType(type: SleepSyncQueueItemType): boolean {
         case 'suunto_webhook':
             return true;
         case 'suunto_poll':
+        case 'suunto_health_poll':
         case 'coros_poll':
             return false;
         default:
             return assertNeverQueueItemType(type);
     }
+}
+
+function isSuuntoHealthQueueItem(queueItem: SleepSyncQueueItemInterface): boolean {
+    return queueItem.type === 'suunto_health_poll';
+}
+
+function isQueueUserAllowed(queueItem: SleepSyncQueueItemInterface, userID: string): boolean {
+    return isSuuntoHealthQueueItem(queueItem)
+        ? isSuuntoHealthSyncUserAllowed(userID)
+        : isSleepSyncUserAllowed(userID);
 }
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
@@ -1154,6 +1210,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
     delete queueItem.processingRevision;
     delete queueItem.processingLeaseExpiresAt;
     let corosLifecycleGuards: COROSWriteLifecycleGuards | null = null;
+    let suuntoHealthLifecycleGuards: SuuntoHealthWriteLifecycleGuards | null = null;
     let resolvedFirebaseUserID = typeof queueItem.userID === 'string'
         ? queueItem.userID.trim() || null
         : null;
@@ -1187,7 +1244,18 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             );
         }
 
-        if (!isSleepProviderEnabled(queueItem.provider)) {
+        if (isSuuntoHealthQueueItem(queueItem) && !isSuuntoHealthSyncEnabled()) {
+            logger.info(`[HealthSync][Suunto] Health ingestion is disabled; marking queue item ${queueItem.id} processed`);
+            return updateToProcessed(queueItem, undefined, {
+                resultStatus: 'provider_disabled',
+                providerDisabled: true,
+                sessionsWritten: 0,
+                sessionsSkipped: 0,
+                healthRecordsWritten: 0,
+            });
+        }
+
+        if (!isSuuntoHealthQueueItem(queueItem) && !isSleepProviderEnabled(queueItem.provider)) {
             logger.info(`[SleepSync] Provider ${queueItem.provider} disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; marking queue item ${queueItem.id} processed`);
             return updateToProcessed(queueItem, undefined, {
                 resultStatus: 'provider_disabled',
@@ -1197,8 +1265,8 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             });
         }
 
-        if (queueItem.userID && !isSleepSyncUserAllowed(queueItem.userID)) {
-            logger.info(`[SleepSync] User ${queueItem.userID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
+        if (queueItem.userID && !isQueueUserAllowed(queueItem, queueItem.userID)) {
+            logger.info(`[${isSuuntoHealthQueueItem(queueItem) ? 'HealthSync' : 'SleepSync'}] User outside the configured rollout; marking queue item ${queueItem.id} processed`);
             return updateToProcessed(queueItem, undefined, {
                 resultStatus: 'user_not_allowed',
                 userAllowed: false,
@@ -1220,8 +1288,8 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         // subsequent completion/retry/DLQ transition uses the shared user and
         // revision guard without rewriting the provider payload first.
         queueItem.userID = firebaseUserID;
-        if (!isSleepSyncUserAllowed(firebaseUserID)) {
-            logger.info(`[SleepSync] Resolved user ${firebaseUserID} outside SLEEP_SYNC_ALLOWED_USER_IDS; marking queue item ${queueItem.id} processed`);
+        if (!isQueueUserAllowed(queueItem, firebaseUserID)) {
+            logger.info(`[${isSuuntoHealthQueueItem(queueItem) ? 'HealthSync' : 'SleepSync'}] Resolved user is outside the configured rollout; marking queue item ${queueItem.id} processed`);
             return updateToProcessed(queueItem, undefined, {
                 resultStatus: 'user_not_allowed',
                 userAllowed: false,
@@ -1235,6 +1303,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 queueItem.providerUserId,
                 tokenSnapshot.ref,
                 corosCredentialFromSnapshot(tokenSnapshot),
+            );
+        }
+        if (isSuuntoHealthQueueItem(queueItem)) {
+            suuntoHealthLifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
+                firebaseUserID,
+                tokenSnapshot.ref,
+                suuntoCredentialFromSnapshot(tokenSnapshot),
             );
         }
         if (await shouldSkipQueueWorkForDeletedUser(
@@ -1268,13 +1343,31 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         processingUserID = firebaseUserID;
 
         let mapperResults: SleepMapperResult[] = [];
-        let healthResults: COROSDailyHealthResult[] = [];
+        let healthResults: Array<COROSDailyHealthResult | SuuntoHealthResult> = [];
         switch (queueItem.provider) {
             case SLEEP_PROVIDERS.GarminAPI:
                 mapperResults = await processGarminQueueItem(queueItem, tokenSnapshot, firebaseUserID);
                 break;
             case SLEEP_PROVIDERS.SuuntoApp:
-                mapperResults = await processSuuntoQueueItem(queueItem, tokenSnapshot);
+                if (isSuuntoHealthQueueItem(queueItem)) {
+                    const initialSuuntoLifecycleGuards = suuntoHealthLifecycleGuards;
+                    if (!initialSuuntoLifecycleGuards) {
+                        throw new Error('Missing Suunto Health lifecycle guards.');
+                    }
+                    const suuntoHealthResult = await processSuuntoHealthQueueItem(
+                        queueItem,
+                        tokenSnapshot,
+                        firebaseUserID,
+                        initialSuuntoLifecycleGuards,
+                        guards => {
+                            suuntoHealthLifecycleGuards = guards;
+                        },
+                    );
+                    healthResults = suuntoHealthResult.healthResults;
+                    suuntoHealthLifecycleGuards = suuntoHealthResult.lifecycleGuards;
+                } else {
+                    mapperResults = await processSuuntoQueueItem(queueItem, tokenSnapshot);
+                }
                 break;
             case SLEEP_PROVIDERS.COROSAPI:
                 {
@@ -1311,14 +1404,24 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && !corosLifecycleGuards) {
             throw new COROSDailyAccountValidationError();
         }
-        const result = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-            ? await upsertSleepSessions(
-                firebaseUserID,
-                mapperResults,
-                Date.now(),
-                corosLifecycleGuards || undefined,
-            )
-            : await upsertSleepSessions(firebaseUserID, mapperResults);
+        if (isSuuntoHealthQueueItem(queueItem) && !suuntoHealthLifecycleGuards) {
+            throw new Error('Missing Suunto Health lifecycle guards.');
+        }
+        const healthLifecycleGuards = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+            ? corosLifecycleGuards
+            : isSuuntoHealthQueueItem(queueItem)
+                ? suuntoHealthLifecycleGuards
+                : null;
+        const result = isSuuntoHealthQueueItem(queueItem)
+            ? { written: 0, skipped: 0, lifecycleGuardSkipped: false }
+            : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                ? await upsertSleepSessions(
+                    firebaseUserID,
+                    mapperResults,
+                    Date.now(),
+                    corosLifecycleGuards || undefined,
+                )
+                : await upsertSleepSessions(firebaseUserID, mapperResults);
         if (result.lifecycleGuardSkipped) {
             return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
                 skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
@@ -1337,7 +1440,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 firebaseUserID,
                 healthResult.input,
                 Date.now(),
-                corosLifecycleGuards || {},
+                healthLifecycleGuards || {},
             );
             if (writeResult.status === 'skipped_deleted_user') {
                 return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
@@ -1364,16 +1467,20 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             if (writeResult.status === 'stale') healthRecordsStale += 1;
         }
         const stateUpdateMs = Date.now();
-        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
-            const healthStateWritten = await updateHealthSyncState(firebaseUserID, HEALTH_PROVIDERS.COROSAPI, {
+        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI || isSuuntoHealthQueueItem(queueItem)) {
+            const healthProvider = isSuuntoHealthQueueItem(queueItem)
+                ? HEALTH_PROVIDERS.SuuntoApp
+                : HEALTH_PROVIDERS.COROSAPI;
+            const healthStateWritten = await updateHealthSyncState(firebaseUserID, healthProvider, {
                 status: HEALTH_SYNC_STATUSES.Ready,
                 lastSyncedAtMs: stateUpdateMs,
-                lastPollAtMs: stateUpdateMs,
+                lastPollAtMs: queueItem.healthTrigger === 'poll' ? stateUpdateMs : undefined,
+                lastWebhookAtMs: queueItem.healthTrigger === 'webhook' ? stateUpdateMs : undefined,
                 lastObservedAtMs: healthResults.length > 0
                     ? Math.max(...healthResults.map(item => item.observedAtMs))
                     : undefined,
                 lastErrorCode: null,
-            }, stateUpdateMs, corosLifecycleGuards || {});
+            }, stateUpdateMs, healthLifecycleGuards || {});
             if (!healthStateWritten) {
                 return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                     skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
@@ -1385,33 +1492,41 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 });
             }
         }
-        const sleepStateUpdate = {
-            status: SLEEP_SYNC_STATUSES.Ready,
-            lastSyncedAtMs: stateUpdateMs,
-            lastPollAtMs: isPollQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
-            lastWebhookAtMs: isWebhookQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
-            lastError: null,
-        };
-        const sleepStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-            ? await updateSleepSyncState(
-                firebaseUserID,
-                queueItem.provider,
-                sleepStateUpdate,
-                stateUpdateMs,
-                corosLifecycleGuards || {},
-            )
-            : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
-        if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && sleepStateWritten === false) {
-            return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
-                skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
-                sessionsWritten: result.written,
-                sessionsSkipped: result.skipped,
-                healthRecordsWritten,
-                healthRecordsUnchanged,
-                healthRecordsStale,
-            });
+        if (!isSuuntoHealthQueueItem(queueItem)) {
+            const sleepStateUpdate = {
+                status: SLEEP_SYNC_STATUSES.Ready,
+                lastSyncedAtMs: stateUpdateMs,
+                lastPollAtMs: isPollQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
+                lastWebhookAtMs: isWebhookQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
+                lastError: null,
+            };
+            const sleepStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                ? await updateSleepSyncState(
+                    firebaseUserID,
+                    queueItem.provider,
+                    sleepStateUpdate,
+                    stateUpdateMs,
+                    corosLifecycleGuards || {},
+                )
+                : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
+            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && sleepStateWritten === false) {
+                return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
+                    skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                    sessionsWritten: result.written,
+                    sessionsSkipped: result.skipped,
+                    healthRecordsWritten,
+                    healthRecordsUnchanged,
+                    healthRecordsStale,
+                });
+            }
         }
-        logger.info(`[SleepSync] Queue item ${queueItem.id} wrote ${result.written} sessions and skipped ${result.skipped}`);
+        logger.info(`[${isSuuntoHealthQueueItem(queueItem) ? 'HealthSync' : 'SleepSync'}] Queue item ${queueItem.id} completed`, {
+            sessionsWritten: result.written,
+            sessionsSkipped: result.skipped,
+            healthRecordsWritten,
+            healthRecordsUnchanged,
+            healthRecordsStale,
+        });
         return updateToProcessed(queueItem, undefined, {
             resultStatus: 'success',
             sessionsWritten: result.written,
@@ -1453,7 +1568,8 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             );
         }
         if (error instanceof MissingSleepProviderTokenError) {
-            if (queueItem.userID
+            if (!isSuuntoHealthQueueItem(queueItem)
+                && queueItem.userID
                 && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
                 if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
                     await markSleepSyncError(
@@ -1477,10 +1593,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (error instanceof TerminalServiceAuthError) {
             const errorUserID = error.firebaseUserID || queueItem.userID;
-            const telemetryError = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-                ? sanitizeCOROSDailyErrorForTelemetry(error)
-                : error;
-            if (errorUserID
+            const telemetryError = isSuuntoHealthQueueItem(queueItem)
+                ? sanitizeSuuntoHealthErrorForTelemetry(error)
+                : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                    ? sanitizeCOROSDailyErrorForTelemetry(error)
+                    : error;
+            if (!isSuuntoHealthQueueItem(queueItem)
+                && errorUserID
                 && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
                 if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
                     await markSleepSyncError(
@@ -1495,7 +1614,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 }
             }
             // Terminal token cleanup owns the guarded reconnect-required
-            // transition for both service metadata and COROS Health state.
+            // transition for service metadata and provider Health state when supported.
             // A second queue-local write could race a newer reconnect or
             // explicit disconnect and must not overwrite that lifecycle.
             logger.warn(`[SleepSync] Queue item ${queueItem.id} hit terminal auth failure for ${queueItem.provider}; moving to DLQ with ${error.dlqContext}`);
@@ -1524,21 +1643,25 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 serviceName: error.serviceName,
             });
         }
-        const telemetryError = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-            ? sanitizeCOROSDailyErrorForTelemetry(error)
-            : error;
+        const telemetryError = isSuuntoHealthQueueItem(queueItem)
+            ? sanitizeSuuntoHealthErrorForTelemetry(error)
+            : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                ? sanitizeCOROSDailyErrorForTelemetry(error)
+                : error;
         if (queueItem.userID) {
-            const sleepErrorStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-                ? corosLifecycleGuards
-                    ? await markSleepSyncError(
-                        queueItem.userID,
-                        queueItem.provider,
-                        telemetryError,
-                        Date.now(),
-                        corosLifecycleGuards,
-                    )
-                    : undefined
-                : await markSleepSyncError(queueItem.userID, queueItem.provider, telemetryError);
+            const sleepErrorStateWritten = isSuuntoHealthQueueItem(queueItem)
+                ? undefined
+                : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                    ? corosLifecycleGuards
+                        ? await markSleepSyncError(
+                            queueItem.userID,
+                            queueItem.provider,
+                            telemetryError,
+                            Date.now(),
+                            corosLifecycleGuards,
+                        )
+                        : undefined
+                    : await markSleepSyncError(queueItem.userID, queueItem.provider, telemetryError);
             if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 && corosLifecycleGuards
                 && sleepErrorStateWritten === false) {
@@ -1553,17 +1676,27 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     },
                 );
             }
-            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && corosLifecycleGuards) {
+            const failedHealthProvider = isSuuntoHealthQueueItem(queueItem)
+                ? HEALTH_PROVIDERS.SuuntoApp
+                : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                    ? HEALTH_PROVIDERS.COROSAPI
+                    : null;
+            const failedHealthLifecycleGuards = isSuuntoHealthQueueItem(queueItem)
+                ? suuntoHealthLifecycleGuards
+                : corosLifecycleGuards;
+            if (failedHealthProvider && failedHealthLifecycleGuards) {
                 try {
                     const healthStateWritten = await updateHealthSyncState(
                         queueItem.userID,
-                        HEALTH_PROVIDERS.COROSAPI,
+                        failedHealthProvider,
                         {
                             status: HEALTH_SYNC_STATUSES.Failed,
-                            lastErrorCode: 'coros_daily_sync_failed',
+                            lastErrorCode: isSuuntoHealthQueueItem(queueItem)
+                                ? 'suunto_health_sync_failed'
+                                : 'coros_daily_sync_failed',
                         },
                         Date.now(),
-                        corosLifecycleGuards,
+                        failedHealthLifecycleGuards,
                     );
                     if (!healthStateWritten) {
                         return markQueueItemSkipped(
@@ -1580,8 +1713,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 } catch {
                     // Queue retry accounting is the durable recovery path. A
                     // sync-state outage must not bypass that transition.
-                    logger.error('[SleepSync] Failed to record COROS Health sync failure.', {
-                        failure: 'coros_health_state_write_failed',
+                    logger.error('[HealthSync] Failed to record provider Health sync failure.', {
+                        failure: isSuuntoHealthQueueItem(queueItem)
+                            ? 'suunto_health_state_write_failed'
+                            : 'coros_health_state_write_failed',
                     });
                 }
             }

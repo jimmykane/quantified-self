@@ -20,6 +20,8 @@ export const SLEEP_BACKFILL_PROVIDER_COOLDOWN_DAYS: Partial<Record<SleepProvider
 
 export interface SleepBackfillQueueResponse {
   queued: number;
+  sleepQueued?: number;
+  healthQueued?: number;
   startDate: string;
   endDate: string;
   nextAllowedAtMs: number;

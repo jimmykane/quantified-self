@@ -351,6 +351,22 @@ describe('tokens', () => {
             expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 
+        it('omits raw token identifiers from opt-in opaque telemetry', async () => {
+            mockDoc.id = 'raw-provider-account-id';
+            mockToken.expired.mockReturnValue(false);
+
+            await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                opaqueTelemetry: true,
+            });
+
+            expect(hoisted.logger.info).toHaveBeenCalledWith(
+                '[ServiceAuth] Provider token remains valid.',
+                { serviceName: ServiceNames.SuuntoApp },
+            );
+            expect(JSON.stringify(hoisted.logger.info.mock.calls))
+                .not.toContain('raw-provider-account-id');
+        });
+
         it('preserves the credential generation on a non-expired COROS token projection', async () => {
             mockDoc.data.mockReturnValue({
                 accessToken: 'coros-access',
@@ -977,6 +993,34 @@ describe('tokens', () => {
                 .rejects.toBeInstanceOf(TerminalServiceAuthError);
 
             expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
+        });
+
+        it('passes opaque telemetry through terminal Suunto refresh handling', async () => {
+            mockDoc.id = 'raw-provider-account-id';
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('sensitive provider response');
+            error.statusCode = 401;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                opaqueTelemetry: true,
+            })).rejects.toBeInstanceOf(TerminalServiceAuthError);
+
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
+                expect.any(Object),
+                ServiceNames.SuuntoApp,
+                expect.any(Object),
+                expect.any(Object),
+                error,
+                { opaqueTelemetry: true },
+            );
+            const serializedLogs = JSON.stringify([
+                ...hoisted.logger.info.mock.calls,
+                ...hoisted.logger.warn.mock.calls,
+                ...hoisted.logger.error.mock.calls,
+            ]);
+            expect(serializedLogs).not.toContain('raw-provider-account-id');
+            expect(serializedLogs).not.toContain('sensitive provider response');
         });
 
         it('should treat Suunto 400 invalid_grant refresh errors as retryable while preserving the token', async () => {

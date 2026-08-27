@@ -19,6 +19,15 @@ import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
+import {
+    SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
+    isSuuntoHealthSyncUserAllowed,
+} from '../suunto/health-rollout';
+import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
+import {
+    SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
+    SUUNTO_HEALTH_MAX_WINDOW_DAYS,
+} from '../suunto/health';
 
 interface PollWindow {
     startMs: number;
@@ -131,7 +140,7 @@ function getUnavailableForSyncStateBestEffort(
     return isServiceUnavailableForSyncForUser(userID, serviceName).catch((error: unknown) => {
         logger.warn(
             `[SleepSync][${provider}] Failed to read service connection state for user ${userID} and service ${serviceName}; continuing sleep polling.`,
-            error,
+            { errorName: error instanceof Error ? error.name : 'UnknownError' },
         );
         return false;
     });
@@ -151,7 +160,7 @@ function getUserDeletionSkipStateBestEffort(
         .catch((error: unknown) => {
             logger.warn(
                 `[SleepSync][${provider}] Failed to read deletion guard for user ${userID}; skipping sleep polling for this user.`,
-                error,
+                { errorName: error instanceof Error ? error.name : 'UnknownError' },
             );
             return true;
         });
@@ -221,6 +230,80 @@ async function enqueueProviderPolls(
     return queued;
 }
 
+async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
+    if (!isSuuntoHealthSyncEnabled()) {
+        logger.info('[HealthSync][Suunto] Health ingestion is disabled; skipping polling');
+        return 0;
+    }
+
+    const windows = chunkRecentWindow(
+        nowMs,
+        SLEEP_SYNC_RECENT_WINDOW_DAYS,
+        SUUNTO_HEALTH_MAX_WINDOW_DAYS,
+    );
+    const tokenSnapshots = (await Promise.all(SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS.map(async userID => {
+        const snapshot = await admin.firestore()
+            .collection('suuntoAppAccessTokens')
+            .doc(userID)
+            .collection('tokens')
+            .where('serviceName', '==', ServiceNames.SuuntoApp)
+            .get();
+        return snapshot.docs;
+    }))).flat();
+    const deletionGuardCache = new Map<string, Promise<boolean>>();
+    const unavailableForSyncCache = new Map<string, Promise<boolean>>();
+    let queued = 0;
+    for (const tokenSnapshot of tokenSnapshots) {
+        const userID = getFirebaseUserID(tokenSnapshot);
+        const providerUserId = getProviderUserId(SLEEP_PROVIDERS.SuuntoApp, tokenSnapshot);
+        if (!userID || !providerUserId || !isSuuntoHealthSyncUserAllowed(userID)) continue;
+        if (providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+            logger.warn('[HealthSync][Suunto] Skipping token with an invalid provider account identifier.', {
+                userID,
+            });
+            continue;
+        }
+
+        let pendingDeletionSkip = deletionGuardCache.get(userID);
+        if (!pendingDeletionSkip) {
+            pendingDeletionSkip = getUserDeletionSkipStateBestEffort(SLEEP_PROVIDERS.SuuntoApp, userID);
+            deletionGuardCache.set(userID, pendingDeletionSkip);
+        }
+        if (await pendingDeletionSkip) continue;
+
+        let pendingUnavailableForSync = unavailableForSyncCache.get(userID);
+        if (!pendingUnavailableForSync) {
+            pendingUnavailableForSync = getUnavailableForSyncStateBestEffort(
+                SLEEP_PROVIDERS.SuuntoApp,
+                userID,
+                ServiceNames.SuuntoApp,
+            );
+            unavailableForSyncCache.set(userID, pendingUnavailableForSync);
+        }
+        if (await pendingUnavailableForSync) continue;
+
+        for (const window of windows) {
+            try {
+                await addSleepSyncQueueItem({
+                    type: 'suunto_health_poll',
+                    provider: SLEEP_PROVIDERS.SuuntoApp,
+                    userID,
+                    providerUserId,
+                    rangeStartMs: window.startMs,
+                    rangeEndMs: window.endMs,
+                    healthTrigger: 'poll',
+                    dedupeKey: `suunto-health-poll:${userID}:${providerUserId}:${window.startMs}:${window.endMs}`,
+                });
+                queued += 1;
+            } catch (error) {
+                if (isProviderQueueUserDeletedOrDeletingError(error)) break;
+                throw error;
+            }
+        }
+    }
+    return queued;
+}
+
 export const scheduleSuuntoSleepSync = onSchedule({
     region: 'europe-west2',
     schedule: 'every 24 hours',
@@ -249,9 +332,20 @@ export const scheduleCOROSSleepSync = onSchedule({
     logger.info(`[SleepSync][COROS] Scheduled ${queued} sleep poll queue items`);
 });
 
+export const scheduleSuuntoHealthSync = onSchedule({
+    region: 'europe-west2',
+    schedule: 'every 24 hours',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+}, async () => {
+    const queued = await enqueueSuuntoHealthPolls();
+    logger.info('[HealthSync][Suunto] Scheduled Health poll queue items', { queued });
+});
+
 export const sleepPollingTestInternals = {
     chunkRecentWindow,
     enqueueProviderPolls,
+    enqueueSuuntoHealthPolls,
     resolveActiveCOROSTokenSnapshots,
     COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY,
 };

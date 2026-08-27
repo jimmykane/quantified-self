@@ -897,9 +897,10 @@ describe('cleanupUserAccounts', () => {
                 field === 'providerUserId' && value === 'suunto-provider-user'
                     ? {
                         docs: [{
-                            id: 'sleep-job-1',
-                            ref: { path: 'sleepSyncQueue/sleep-job-1' },
+                            id: 'suunto-health-job-1',
+                            ref: { path: 'sleepSyncQueue/suunto-health-job-1' },
                             data: () => ({
+                                type: 'suunto_health_poll',
                                 provider: 'SuuntoApp',
                                 providerUserId: 'suunto-provider-user',
                             }),
@@ -934,14 +935,14 @@ describe('cleanupUserAccounts', () => {
         expect(whereMock).toHaveBeenCalledWith('userName', '==', 'suunto-provider-user');
         expect(whereMock).toHaveBeenCalledWith('openId', '==', 'coros-provider-user');
         expect(whereMock).toHaveBeenCalledWith('userID', '==', 'garmin-provider-user');
-        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-job-1' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/suunto-health-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'activitySyncQueue/activity-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/provider-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibReparseJobs/reparse-job-1' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'sportsLibRouteReparseJobs/route-reparse-job-1' }));
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'sleepSyncQueue',
-            'sleep-job-1',
+            'suunto-health-job-1',
             'account_deletion_cleanup',
         );
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(

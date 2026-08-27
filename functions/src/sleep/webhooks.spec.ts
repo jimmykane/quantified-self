@@ -95,7 +95,11 @@ vi.mock('./provider-flags', () => ({
     }),
 }));
 
-import { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './webhooks';
+import {
+    receiveGarminAPISleepData,
+    receiveSuuntoAppSleepData,
+    suuntoWebhookTestInternals,
+} from './webhooks';
 
 function createResponse() {
     return {
@@ -447,6 +451,171 @@ describe('sleep webhooks', () => {
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(403);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        'SUUNTO_247_ACTIVITY_CREATED',
+        'SUUNTO_247_RECOVERY_CREATED',
+    ])('queues compact canonical refetches for signed %s notifications', async (type) => {
+        hoisted.suuntoEnabled = false;
+        const body = {
+            type,
+            username: 'suunto-user-1',
+            samples: [
+                { timestamp: '2026-08-27T00:10:00.000+03:00', entryData: { HR: 60 } },
+                { timestamp: '2026-08-27T23:50:00.000+03:00', entryData: { HR: 62 } },
+            ],
+        };
+        const rawBody = Buffer.from(JSON.stringify(body));
+        const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(rawBody)
+            .digest('hex');
+        const response = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody,
+            body,
+            get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
+        } as any, response as any);
+
+        const startMs = Date.parse('2026-08-26T21:00:00.000Z');
+        const endMs = Date.parse('2026-08-27T21:00:00.000Z');
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith({
+            type: 'suunto_health_poll',
+            provider: 'SuuntoApp',
+            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: startMs,
+            rangeEndMs: endMs,
+            healthTrigger: 'webhook',
+            dedupeKey: expect.stringMatching(
+                new RegExp(`^suunto-health-webhook:xcsAolLDDTWTgtRN9eYF3lW2YKL2:suunto-user-1:${startMs}:${endMs}:[a-f0-9]{32}$`),
+            ),
+            dispatchImmediately: true,
+        });
+        expect(hoisted.addSleepSyncQueueItem.mock.calls[0][0]).not.toHaveProperty('payload');
+    });
+
+    it('deduplicates exact Health notification retries without suppressing later same-day revisions', async () => {
+        const deliver = async (heartRate: number) => {
+            const body = {
+                type: 'SUUNTO_247_ACTIVITY_CREATED',
+                username: 'suunto-user-1',
+                samples: [{
+                    timestamp: '2026-08-27T12:00:00.000+03:00',
+                    entryData: { HR: heartRate },
+                }],
+            };
+            const rawBody = Buffer.from(JSON.stringify(body));
+            const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+                .update(rawBody)
+                .digest('hex');
+            await receiveSuuntoAppSleepData({
+                rawBody,
+                body,
+                get: vi.fn(() => signature),
+            } as any, createResponse() as any);
+        };
+
+        await deliver(60);
+        await deliver(60);
+        await deliver(61);
+
+        const dedupeKeys = hoisted.addSleepSyncQueueItem.mock.calls
+            .map(([input]) => input.dedupeKey);
+        expect(dedupeKeys[0]).toBe(dedupeKeys[1]);
+        expect(dedupeKeys[2]).not.toBe(dedupeKeys[0]);
+    });
+
+    it('does not fill unnotified gaps between sparse webhook days', () => {
+        const windows = suuntoWebhookTestInternals.buildSuuntoHealthWebhookWindows([
+            { timestamp: '2026-01-01T12:00:00Z' },
+            { timestamp: '2026-02-01T12:00:00Z' },
+        ]);
+
+        expect(windows).toHaveLength(2);
+        expect(windows[0].endMs - windows[0].startMs).toBe(24 * 60 * 60 * 1000);
+        expect(windows[1].endMs - windows[1].startMs).toBe(24 * 60 * 60 * 1000);
+    });
+
+    it('chunks contiguous webhook-triggered refetches into bounded 28-day windows', () => {
+        const windows = suuntoWebhookTestInternals.buildSuuntoHealthWebhookWindows(
+            Array.from({ length: 32 }, (_, dayOffset) => ({
+                timestamp: new Date(Date.parse('2026-01-01T12:00:00Z') + dayOffset * 24 * 60 * 60 * 1000)
+                    .toISOString(),
+            })),
+        );
+
+        expect(windows).toHaveLength(2);
+        expect(windows[0].endMs - windows[0].startMs).toBe(28 * 24 * 60 * 60 * 1000);
+        expect(windows[1].endMs - windows[1].startMs).toBe(4 * 24 * 60 * 60 * 1000);
+    });
+
+    it('rejects impossible webhook wall-clock values', () => {
+        expect(() => suuntoWebhookTestInternals.buildSuuntoHealthWebhookWindows([
+            { timestamp: '2026-08-27T25:00:00+03:00' },
+        ])).toThrow('webhook time');
+    });
+
+    it('rejects malformed and oversized signed Health notifications without queueing', async () => {
+        const malformedBody = {
+            type: 'SUUNTO_247_ACTIVITY_CREATED',
+            username: 'suunto-user-1',
+            samples: [{ timestamp: '2026-08-27T12:00:00' }],
+        };
+        const malformedRawBody = Buffer.from(JSON.stringify(malformedBody));
+        const malformedSignature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(malformedRawBody)
+            .digest('hex');
+        const malformedResponse = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody: malformedRawBody,
+            body: malformedBody,
+            get: vi.fn(() => malformedSignature),
+        } as any, malformedResponse as any);
+
+        expect(malformedResponse.status).toHaveBeenCalledWith(400);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+
+        const invalidAccountBody = {
+            type: 'SUUNTO_247_ACTIVITY_CREATED',
+            username: 'a'.repeat(513),
+            samples: [{ timestamp: '2026-08-27T12:00:00Z' }],
+        };
+        const invalidAccountRawBody = Buffer.from(JSON.stringify(invalidAccountBody));
+        const invalidAccountSignature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(invalidAccountRawBody)
+            .digest('hex');
+        const invalidAccountResponse = createResponse();
+
+        await receiveSuuntoAppSleepData({
+            rawBody: invalidAccountRawBody,
+            body: invalidAccountBody,
+            get: vi.fn(() => invalidAccountSignature),
+        } as any, invalidAccountResponse as any);
+
+        expect(invalidAccountResponse.status).toHaveBeenCalledWith(400);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+
+        const oversizedRawBody = Buffer.alloc(suuntoWebhookTestInternals.SUUNTO_HEALTH_WEBHOOK_MAX_BYTES + 1, 1);
+        const oversizedSignature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
+            .update(oversizedRawBody)
+            .digest('hex');
+        const oversizedResponse = createResponse();
+        await receiveSuuntoAppSleepData({
+            rawBody: oversizedRawBody,
+            body: {
+                type: 'SUUNTO_247_ACTIVITY_CREATED',
+                username: 'suunto-user-1',
+                samples: [{ timestamp: '2026-08-27T12:00:00Z' }],
+            },
+            get: vi.fn(() => oversizedSignature),
+        } as any, oversizedResponse as any);
+
+        expect(oversizedResponse.status).toHaveBeenCalledWith(413);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 });

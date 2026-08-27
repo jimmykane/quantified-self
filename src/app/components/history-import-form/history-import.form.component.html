@@ -153,10 +153,10 @@
 
 @if (isSleepBackfillVisible) {
 <section class="sleep-backfill-section"
-  [attr.aria-label]="sleepBackfillProviderLabel + (serviceName === serviceNames.COROSAPI ? ' sleep and health history import' : ' sleep history import')">
+  [attr.aria-label]="sleepBackfillProviderLabel + (isSleepAndHealthBackfill ? ' sleep and health history import' : ' sleep history import')">
   <div class="sleep-backfill-copy">
     <div class="sleep-backfill-title">
-      {{ serviceName === serviceNames.COROSAPI ? 'Sleep & Health history' : 'Sleep history' }}
+      {{ isSleepAndHealthBackfill ? 'Sleep & Health history' : 'Sleep history' }}
     </div>
     @if (serviceName === serviceNames.GarminAPI) {
     <p>
@@ -167,6 +167,11 @@
     <p>
       Imports available COROS sleep and daily Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
       today. COROS retains daily data for up to three months.
+    </p>
+    } @else if (isSleepAndHealthBackfill) {
+    <p>
+      Imports Suunto sleep and available 24/7 Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
+      today. Existing records are updated instead of duplicated.
     </p>
     } @else {
     <p>
@@ -206,7 +211,7 @@
       }
       <span>{{ isSleepBackfillSubmitting()
         ? 'Starting import...'
-        : (serviceName === serviceNames.COROSAPI ? 'Import Sleep & Health History' : 'Import Sleep History') }}</span>
+        : (isSleepAndHealthBackfill ? 'Import Sleep & Health History' : 'Import Sleep History') }}</span>
     </span>
   </button>
 </section>

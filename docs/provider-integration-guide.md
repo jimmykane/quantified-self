@@ -4,7 +4,7 @@ This document is the durable implementation guide for adding or materially chang
 
 Keep it current in the same change whenever a provider is added, removed, renamed, gains a capability, changes a lifecycle rule, or changes operational support. The root `AGENTS.md` makes that update mandatory.
 
-Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions.
+Use the provider-specific architecture document for exact API behavior and release decisions. [Wahoo integration](wahoo-integration.md) records its scope and launch checklist; [COROS integration](coros-integration.md) records its daily Health mapping, asynchronous upload, route, single-account, echo-suppression, and entitlement decisions; [Suunto 24/7 Health integration](suunto-integration.md) records its metric mapping, bounded pulls, webhooks, lifecycle fencing, and staged rollout.
 
 ## 1. Define the product contract before writing code
 
@@ -25,7 +25,7 @@ The current providers are intentionally not identical:
 | Provider | Current primary role                                                    | Important distinction                                                                                               |
 | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Garmin   | Activity/sleep import, route delivery, and activity delivery to Suunto/Wahoo/COROS | Garmin Connect receives a normalized Course Import payload; direct and saved GPX/FIT routes require Course Import permission. |
-| Suunto   | Activity/sleep/route import plus activity and saved-route source/destination workflows | Suunto receives GPX routes. Suunto activities can flow to Wahoo/COROS, while saved Suunto routes can flow to Garmin/Wahoo/COROS through shared queues. |
+| Suunto   | Activity/sleep/route import, staged 24/7 Health, plus activity and saved-route source/destination workflows | Staged Health independently reconciles Activity, daily statistics, and Recovery in windows of at most 28 days using signed webhook refetches, polling, and history work. Suunto receives GPX routes; activities can flow to Wahoo/COROS, while saved routes can flow to Garmin/Wahoo/COROS through shared queues. |
 | COROS    | Activity plus daily Health/Sleep import; asynchronous activity upload; activity delivery to/from supported providers; direct/saved GPX route delivery | Exactly one active COROS account is used. Daily Health reuses the Sleep poll/history queue, preserves aggregate Sleep through references, and stores bounded detailed HRV in Health. Activity upload is initialized then polled by 64-bit ID. Route push accepts bike/running GPX metadata and is available to eligible connected Pro users through one shared production-wide rollout gate. |
 | Wahoo    | Pro activity import, FIT activity delivery, direct GPX/FIT course/route delivery, and opt-in Suunto saved-route delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained Wahoo FITs can sync to Suunto or COROS, while Wahoo accepts activity delivery from Garmin/COROS/Suunto. |
 
@@ -58,7 +58,7 @@ Provider webhook / polling / history work
         -> shared direct/callable query projection
 ```
 
-Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed. COROS is the reference implementation for sharing one provider response between Sleep aggregates and Health daily/sample records without duplicating detailed samples.
+Do not put wellness records into activity events or create a second provider-specific health schema. Keep the existing normalized Sleep model canonical and use the foundation's allowlisted Sleep references when a relationship is needed. COROS is the reference implementation for sharing one provider response between Sleep aggregates and Health daily/sample records without duplicating detailed samples. Suunto is the reference for keeping separately fetched 24/7 Activity/Recovery data distinct from workout FIT and Sleep while reusing a guarded queue worker.
 
 Add a provider-specific architecture document under `docs/` when the integration has meaningful protocol, data-flow, rollout, or operational detail. Link it from the Architecture Documentation section of `README.md`; Wahoo is the reference example.
 

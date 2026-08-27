@@ -287,6 +287,48 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(mockMarkServiceReconnectRequired).not.toHaveBeenCalled();
   });
 
+  it('replaces provider refresh details in opaque terminal-auth resolutions', async () => {
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'raw-provider-account-id',
+        ref: {
+          parent: { parent: undefined },
+        },
+      } as any,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'raw-provider-account-id',
+      } as any,
+      {
+        statusCode: 401,
+        providerErrorCode: 'private-provider-code',
+        providerErrorMessage: 'sensitive provider response',
+        isInvalidGrant: false,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'sensitive provider response',
+      },
+      new Error('sensitive transport detail'),
+      { opaqueTelemetry: true },
+    );
+
+    expect(resolution.kind).toBe('terminal_error');
+    if (resolution.kind !== 'terminal_error') {
+      throw new Error('Expected terminal_error resolution');
+    }
+    expect(resolution.error).toMatchObject({
+      providerErrorCode: 'provider_auth_failed',
+      providerErrorMessage: 'Provider authentication failed.',
+      originalError: expect.objectContaining({ message: 'Provider token refresh failed.' }),
+    });
+    expect(JSON.stringify(resolution.error)).not.toContain('sensitive provider response');
+    expect(JSON.stringify(resolution.error)).not.toContain('sensitive transport detail');
+  });
+
   it('treats a newer token snapshot with the same millisecond value as replaced', async () => {
     const staleTokenSnapshot: any = {
       id: 'suunto-user',

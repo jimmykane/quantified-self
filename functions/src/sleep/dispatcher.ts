@@ -132,7 +132,7 @@ async function shouldDispatchSleepSyncCandidate(
         }
 
         if (!resolvedUserID) {
-            await deleteSleepSyncCandidateBeforeDispatch(doc, `provider user ${providerUserId} no longer resolves to a local token`);
+            await deleteSleepSyncCandidateBeforeDispatch(doc, 'provider user no longer resolves to a local token');
             return false;
         }
     }

@@ -156,6 +156,7 @@ export type SleepSyncQueueItemType =
   | 'garmin_ping'
   | 'suunto_webhook'
   | 'suunto_poll'
+  | 'suunto_health_poll'
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
@@ -167,6 +168,7 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   callbackURL?: string;
   rangeStartMs?: number;
   rangeEndMs?: number;
+  healthTrigger?: 'poll' | 'webhook' | 'backfill';
 }
 
 export interface QueueItemError {

@@ -90,6 +90,21 @@ describe('sleep polling', () => {
             get: hoisted.collectionGroupGet,
         });
         hoisted.collection.mockImplementation((name: string) => {
+            if (name === 'suuntoAppAccessTokens') {
+                return {
+                    doc: vi.fn((userID: string) => ({
+                        collection: vi.fn(() => ({
+                            where: vi.fn().mockReturnThis(),
+                            get: vi.fn().mockResolvedValue({
+                                docs: hoisted.installedTokenDocs.filter(token => (
+                                    token.ref.parent.parent.id === userID
+                                    && token.data().serviceName === ServiceNames.SuuntoApp
+                                )),
+                            }),
+                        })),
+                    })),
+                };
+            }
             if (name !== 'users') {
                 return undefined;
             }
@@ -249,6 +264,36 @@ describe('sleep polling', () => {
         }));
     });
 
+    it('queues staged Suunto Health polls without changing production-wide Sleep polling', async () => {
+        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const nowMs = Date.UTC(2026, 7, 27, 12);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'private-suunto-account',
+            }),
+            createTokenDoc('non-staged-user', {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'other-suunto-account',
+            }),
+        ]);
+
+        const queued = await sleepPollingTestInternals.enqueueSuuntoHealthPolls(nowMs);
+
+        expect(queued).toBe(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith({
+            type: 'suunto_health_poll',
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            userID,
+            providerUserId: 'private-suunto-account',
+            rangeStartMs: nowMs - (7 * 24 * 60 * 60 * 1000),
+            rangeEndMs: nowMs,
+            healthTrigger: 'poll',
+            dedupeKey: `suunto-health-poll:${userID}:private-suunto-account:${nowMs - (7 * 24 * 60 * 60 * 1000)}:${nowMs}`,
+        });
+    });
+
     it('skips users marked reconnect_required in service meta', async () => {
         const userID = 'suunto-user-id';
         const nowMs = Date.UTC(2026, 3, 28);
@@ -360,7 +405,7 @@ describe('sleep polling', () => {
         }));
         expect(logger.warn).toHaveBeenCalledWith(
             '[SleepSync][SuuntoApp] Failed to read deletion guard for user suunto-user-id-1; skipping sleep polling for this user.',
-            expect.any(Error),
+            { errorName: 'Error' },
         );
     });
 
@@ -391,7 +436,7 @@ describe('sleep polling', () => {
         expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
         expect(logger.warn).toHaveBeenCalledWith(
             '[SleepSync][SuuntoApp] Failed to read service connection state for user suunto-user-id-1 and service suuntoApp; continuing sleep polling.',
-            expect.any(Error),
+            { errorName: 'Error' },
         );
     });
 

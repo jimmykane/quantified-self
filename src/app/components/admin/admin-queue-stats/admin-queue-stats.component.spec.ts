@@ -438,7 +438,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Cloud Tasks (Activity Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Route Delivery)');
             expect(host.textContent).toContain('Cloud Tasks (Route Sync)');
-            expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
+            expect(host.textContent).toContain('Cloud Tasks (Sleep & Health Sync)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
             expect(host.textContent).toContain('Cloud Tasks (Route Reparse)');
@@ -484,7 +484,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(readCardValue('Cloud Tasks (Activity Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Route Delivery)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Route Sync)')).toBe('0');
-            expect(readCardValue('Cloud Tasks (Sleep Sync)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Sleep & Health Sync)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Normal)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Heavy)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Route Reparse)')).toBe('0');
@@ -759,12 +759,12 @@ describe('AdminQueueStatsComponent', () => {
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
-            expect(host.textContent).toContain('Sleep Sync');
-            expect(host.textContent).toContain('Cloud Tasks (Sleep Sync)');
+            expect(host.textContent).toContain('Sleep & Health Sync');
+            expect(host.textContent).toContain('Cloud Tasks (Sleep & Health Sync)');
             expect(host.textContent).toContain('Provider Disabled');
             expect(host.textContent).toContain('Garmin, COROS');
             expect(host.textContent).toContain('Provider Queue Status (Sleep)');
-            expect(host.textContent).toContain('Recent Sleep Sync Failures');
+            expect(host.textContent).toContain('Recent Sleep & Health Sync Failures');
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Activity Sync');
             expect(host.textContent).not.toContain('Event Reparse');

@@ -647,7 +647,7 @@
     <div class="pipeline-section" *ngIf="showSleepSyncSection">
         <h3 class="pipeline-title">
             <mat-icon>hotel</mat-icon>
-            Sleep Sync
+            Sleep &amp; Health Sync
         </h3>
 
         <div class="stats-grid">
@@ -663,10 +663,10 @@
                 <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
             </mat-card>
             <mat-card class="app-stat-card status-info"
-                matTooltip="Tasks currently in flight or scheduled in the sleep sync Cloud Tasks queue.">
+                matTooltip="Tasks currently in flight or scheduled in the Sleep and Health sync Cloud Tasks queue.">
                 <div class="app-stat-header">
                     <mat-icon>hotel</mat-icon>
-                    <span>Cloud Tasks (Sleep Sync)</span>
+                    <span>Cloud Tasks (Sleep &amp; Health Sync)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sleepSync?.pending ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
@@ -765,7 +765,7 @@
         <mat-card class="table-container"
             *ngIf="(stats?.sleepSync?.dlqByContext?.length || 0) > 0 || (stats?.sleepSync?.advanced?.topErrors?.length || 0) > 0"
             style="margin-bottom: 24px;">
-            <h3 class="card-title">Recent Sleep Sync Failures (Last 50)</h3>
+            <h3 class="card-title">Recent Sleep &amp; Health Sync Failures (Last 50)</h3>
             <div class="failures-analysis-container">
                 <div class="analysis-column">
                     <h4 class="subsection-title">By Reason</h4>

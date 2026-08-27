@@ -13,7 +13,7 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
 import {
-  retryPendingCOROSHealthLifecycleProjection,
+  retryPendingHealthLifecycleProjection,
   retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
   retryWahooReconnectQueueRelease,
@@ -491,7 +491,7 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
   return repairedCount;
 }
 
-async function retryPendingCOROSHealthLifecycleProjections(): Promise<number> {
+async function retryPendingHealthLifecycleProjections(): Promise<number> {
   const docs = await getLifecycleRepairPage(
     'coros_health_lifecycle_projection',
     'healthLifecycleProjectionPending',
@@ -499,18 +499,18 @@ async function retryPendingCOROSHealthLifecycleProjections(): Promise<number> {
   let repairedCount = 0;
 
   await processWithBoundedConcurrency(docs, async metaSnapshot => {
-    if (metaSnapshot.id !== ServiceNames.COROSAPI) return;
+    if (metaSnapshot.id !== ServiceNames.COROSAPI && metaSnapshot.id !== ServiceNames.SuuntoApp) return;
     const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
     if (!userID) return;
 
     try {
-      if (await retryPendingCOROSHealthLifecycleProjection(userID)) {
+      if (await retryPendingHealthLifecycleProjection(userID, metaSnapshot.id)) {
         repairedCount += 1;
       }
     } catch (error) {
-      logger.error('[RetryPendingServiceDisconnects] Failed to repair a COROS Health lifecycle projection.', {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a Health lifecycle projection.', {
         userID,
-        serviceName: ServiceNames.COROSAPI,
+        serviceName: metaSnapshot.id,
         errorName: error instanceof Error ? error.name : 'UnknownError',
       });
     }
@@ -601,10 +601,9 @@ export const retryPendingServiceDisconnects = onSchedule({
     repairedCount: repairedWahooReconnectReleaseCount,
   });
 
-  const repairedCOROSHealthLifecycleProjectionCount = await retryPendingCOROSHealthLifecycleProjections();
-  logger.info('[RetryPendingServiceDisconnects] Repaired pending COROS Health lifecycle projections.', {
-    serviceName: ServiceNames.COROSAPI,
-    repairedCount: repairedCOROSHealthLifecycleProjectionCount,
+  const repairedHealthLifecycleProjectionCount = await retryPendingHealthLifecycleProjections();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending Health lifecycle projections.', {
+    repairedCount: repairedHealthLifecycleProjectionCount,
   });
 
   const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
@@ -652,7 +651,8 @@ export const retryPendingServiceDisconnectsTestInternals = {
   getLifecycleRepairPage,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
-  retryPendingCOROSHealthLifecycleProjections,
+  retryPendingHealthLifecycleProjections,
+  retryPendingCOROSHealthLifecycleProjections: retryPendingHealthLifecycleProjections,
   retryPendingDisconnectQueueReleases,
   retryPendingServiceRouteRestorations,
   retryPendingWahooReconnectQueueReleases,
