@@ -100,16 +100,16 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     expect(hoisted.transactionSet).toHaveBeenCalledWith(
       hoisted.bindingRef,
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         userID: 'user-1',
         tokenCredentialGeneration: 'token-generation-1',
       },
     );
   });
 
-  it('never transfers an existing binding outside the OAuth transaction', async () => {
+  it('does not overwrite a malformed per-user binding owned by another UID', async () => {
     hoisted.state.binding = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       userID: 'other-user',
       tokenCredentialGeneration: 'other-generation',
     };

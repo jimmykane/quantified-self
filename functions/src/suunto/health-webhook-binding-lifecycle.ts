@@ -18,8 +18,8 @@ import {
 
 /**
  * Backfills the server-owned reverse binding for an existing active Suunto
- * connection. A binding owned by another UID is never transferred here;
- * account transfers remain exclusive to the OAuth credential transaction.
+ * connection. Each Firebase user has an independent binding so the same
+ * provider account can fan out to every active staged connection.
  */
 export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
   db: admin.firestore.Firestore,
@@ -27,7 +27,7 @@ export async function ensureSuuntoHealthWebhookAccountBindingForActiveToken(
   providerUserId: string,
   nowMs = Date.now(),
 ): Promise<'created' | 'current' | 'conflict' | 'inactive'> {
-  const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId);
+  const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const tokenRootRef = getServiceTokenRootDocumentRef(userID, ServiceNames.SuuntoApp);
   const tokenRef = tokenRootRef.collection('tokens').doc(providerUserId);
   const serviceMetaRef = db.collection('users').doc(userID)

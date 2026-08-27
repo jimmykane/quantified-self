@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -28,7 +29,10 @@ import {
   SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from './health';
 import { isSuuntoHealthSyncEnabled } from './health-flags';
-import { isSuuntoHealthSyncUserAllowed } from './health-rollout';
+import {
+  isSuuntoHealthSyncUserAllowed,
+  SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
+} from './health-rollout';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import {
   doesSuuntoHealthWebhookBindingMatch,
@@ -40,7 +44,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FIREBASE_UID_MAX_LENGTH = 128;
-const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 3;
+const SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION = 4;
 export const SUUNTO_HEALTH_WEBHOOK_MAX_WINDOWS = 16;
 
 export type SuuntoHealthWebhookNotificationType =
@@ -81,6 +85,7 @@ type IngressDiscardReason =
   | 'queue_skipped';
 
 export interface PersistSuuntoHealthWebhookIngressDependencies {
+  candidateUserIDs?: readonly string[];
   db?: admin.firestore.Firestore;
   isUserAllowed?: (uid: string) => boolean;
   nowMs?: () => number;
@@ -242,13 +247,15 @@ async function getActiveIngressBindingInTransaction(
   db: admin.firestore.Firestore,
   transaction: admin.firestore.Transaction,
   providerUserId: string,
+  userID: string,
   isUserAllowed: (uid: string) => boolean,
   nowMs: number,
 ): Promise<ActiveIngressBinding | null> {
-  const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId);
+  if (!isUserAllowed(userID)) return null;
+  const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const bindingSnapshot = await transaction.get(bindingRef);
   const binding = parseSuuntoHealthWebhookAccountBinding(bindingSnapshot.data());
-  if (!binding || !isUserAllowed(binding.userID)) return null;
+  if (!binding || binding.userID !== userID) return null;
 
   const tokenRootRef = db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(binding.userID);
   const tokenRef = tokenRootRef.collection('tokens').doc(providerUserId);
@@ -312,6 +319,30 @@ async function getActiveIngressBindingInTransaction(
   };
 }
 
+function getIngressDocumentID(notificationDigest: string, userID: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(notificationDigest)
+    .update('\0')
+    .update(userID)
+    .digest('hex');
+}
+
+function getCandidateUserIDs(
+  values: readonly string[],
+  isUserAllowed: (uid: string) => boolean,
+): string[] {
+  const candidateUserIDs = new Set<string>();
+  for (const value of values) {
+    const userID = typeof value === 'string' ? value.trim() : '';
+    if (userID && userID === value && userID.length <= FIREBASE_UID_MAX_LENGTH
+      && isUserAllowed(userID)) {
+      candidateUserIDs.add(userID);
+    }
+  }
+  return [...candidateUserIDs];
+}
+
 export async function persistSuuntoHealthWebhookIngress(
   input: PersistSuuntoHealthWebhookIngressInput,
   dependencies: PersistSuuntoHealthWebhookIngressDependencies = {},
@@ -332,36 +363,56 @@ export async function persistSuuntoHealthWebhookIngress(
 
   const db = dependencies.db || admin.firestore();
   const isUserAllowed = dependencies.isUserAllowed || isSuuntoHealthSyncUserAllowed;
-  const ref = db
-    .collection(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME)
-    .doc(input.notificationDigest);
   const expireAt = getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS);
   return db.runTransaction(async transaction => {
-    const activeBinding = await getActiveIngressBindingInTransaction(
-      db,
-      transaction,
-      providerUserId,
+    const candidateUserIDs = getCandidateUserIDs(
+      dependencies.candidateUserIDs || SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
       isUserAllowed,
-      nowMs,
     );
-    if (!activeBinding) return 'permanent_skip';
-    const currentIngressSnapshot = await transaction.get(ref);
-    if (currentIngressSnapshot.exists) return 'duplicate';
+    const resolvedBindings = await Promise.all(
+      candidateUserIDs.map(userID => getActiveIngressBindingInTransaction(
+        db,
+        transaction,
+        providerUserId,
+        userID,
+        isUserAllowed,
+        nowMs,
+      )),
+    );
+    const activeBindings = resolvedBindings.filter(
+      (binding): binding is ActiveIngressBinding => binding !== null,
+    );
+    if (activeBindings.length === 0) return 'permanent_skip';
 
-    transaction.create(ref, {
-      schemaVersion: SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION,
-      userID: activeBinding.binding.userID,
-      notificationType: input.notificationType,
-      providerUserId,
-      tokenCredentialGeneration: activeBinding.binding.tokenCredentialGeneration,
-      connectionState: activeBinding.connectionState,
-      connectionStateGeneration: activeBinding.connectionStateGeneration,
-      windows,
-      receivedAtMs,
-      processed: false,
-      expireAt,
-    });
-    return 'created';
+    const ingressTargets = await Promise.all(activeBindings.map(async activeBinding => {
+      const ref = db
+        .collection(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME)
+        .doc(getIngressDocumentID(input.notificationDigest, activeBinding.binding.userID));
+      return {
+        activeBinding,
+        ref,
+        snapshot: await transaction.get(ref),
+      };
+    }));
+    let created = false;
+    for (const target of ingressTargets) {
+      if (target.snapshot.exists) continue;
+      transaction.create(target.ref, {
+        schemaVersion: SUUNTO_HEALTH_WEBHOOK_INGRESS_SCHEMA_VERSION,
+        userID: target.activeBinding.binding.userID,
+        notificationType: input.notificationType,
+        providerUserId,
+        tokenCredentialGeneration: target.activeBinding.binding.tokenCredentialGeneration,
+        connectionState: target.activeBinding.connectionState,
+        connectionStateGeneration: target.activeBinding.connectionStateGeneration,
+        windows,
+        receivedAtMs,
+        processed: false,
+        expireAt,
+      });
+      created = true;
+    }
+    return created ? 'created' : 'duplicate';
   });
 }
 
@@ -428,6 +479,7 @@ export async function processSuuntoHealthWebhookIngressDocument(
       db,
       transaction,
       ingress.providerUserId,
+      ingress.userID,
       isUserAllowed,
       nowMs,
     ));

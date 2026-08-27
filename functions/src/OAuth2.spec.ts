@@ -1127,7 +1127,7 @@ describe('OAuth2', () => {
                         return {
                             exists: true,
                             data: () => ({
-                                schemaVersion: 1,
+                                schemaVersion: 2,
                                 userID,
                                 tokenCredentialGeneration: 'credential-generation-1',
                             }),
@@ -1792,7 +1792,7 @@ describe('OAuth2', () => {
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
             expect(mockDocInstance.set).toHaveBeenCalledWith({
-                schemaVersion: 1,
+                schemaVersion: 2,
                 userID,
                 tokenCredentialGeneration: expect.any(String),
             }, undefined);

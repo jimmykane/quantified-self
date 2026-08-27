@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME =
   'suuntoHealthWebhookAccountBindings';
-export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 1;
+export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 2;
 
 export interface SuuntoHealthWebhookAccountBinding {
   schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
@@ -23,9 +23,17 @@ export function normalizeSuuntoTokenCredentialGeneration(value: unknown): string
 export function getSuuntoHealthWebhookAccountBindingRef(
   db: admin.firestore.Firestore,
   providerUserId: string,
+  userID: string,
 ): admin.firestore.DocumentReference {
-  const digest = crypto.createHash('sha256').update(providerUserId).digest('hex');
-  return db.collection(SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME).doc(digest);
+  const digest = crypto
+    .createHash('sha256')
+    .update(providerUserId)
+    .update('\0')
+    .update(userID)
+    .digest('hex');
+  return db
+    .collection(SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME)
+    .doc(digest);
 }
 
 export function buildSuuntoHealthWebhookAccountBinding(

@@ -133,7 +133,11 @@ export async function deleteLocalServiceToken(
       ? tokenID.trim()
       : '';
     const suuntoBindingRef = suuntoProviderUserId
-      ? getSuuntoHealthWebhookAccountBindingRef(admin.firestore(), suuntoProviderUserId)
+      ? getSuuntoHealthWebhookAccountBindingRef(
+        admin.firestore(),
+        suuntoProviderUserId,
+        userID,
+      )
       : null;
     const suuntoBindingSnapshot = suuntoBindingRef
       ? await transaction.get(suuntoBindingRef)

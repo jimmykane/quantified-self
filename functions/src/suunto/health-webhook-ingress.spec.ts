@@ -5,40 +5,63 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
   const bindingRef = { path: 'suuntoHealthWebhookAccountBindings/digest' };
+  const bindingRef2 = { path: 'suuntoHealthWebhookAccountBindings/digest-2' };
   const ingressRef = { path: `suuntoHealthWebhookIngress/${'a'.repeat(64)}` };
+  const ingressRef2 = { path: `suuntoHealthWebhookIngress/${'b'.repeat(64)}` };
   const tokenRef = { path: 'suuntoAppAccessTokens/firebase-user-1/tokens/suunto-account-1' };
+  const tokenRef2 = { path: 'suuntoAppAccessTokens/firebase-user-2/tokens/suunto-account-1' };
   const tokenRootRef: any = {
     path: 'suuntoAppAccessTokens/firebase-user-1',
     collection: vi.fn(() => ({ doc: vi.fn(() => tokenRef) })),
   };
+  const tokenRootRef2: any = {
+    path: 'suuntoAppAccessTokens/firebase-user-2',
+    collection: vi.fn(() => ({ doc: vi.fn(() => tokenRef2) })),
+  };
   const serviceMetaRef = { path: 'users/firebase-user-1/meta/SuuntoApp' };
+  const serviceMetaRef2 = { path: 'users/firebase-user-2/meta/SuuntoApp' };
   const userRef = {
     collection: vi.fn(() => ({ doc: vi.fn(() => serviceMetaRef) })),
+  };
+  const userRef2 = {
+    collection: vi.fn(() => ({ doc: vi.fn(() => serviceMetaRef2) })),
   };
   const collectionGroup = vi.fn(() => {
     throw new Error('Webhook binding must not use collection-group token lookup.');
   });
   const collection = vi.fn((name: string) => ({
-    doc: vi.fn(() => {
-      if (name === 'suuntoHealthWebhookAccountBindings') return bindingRef;
-      if (name === 'suuntoHealthWebhookIngress') return ingressRef;
-      if (name === 'suuntoAppAccessTokens') return tokenRootRef;
-      if (name === 'users') return userRef;
+    doc: vi.fn((id: string) => {
+      if (name === 'suuntoHealthWebhookAccountBindings') {
+        return id === 'ccf4ef38d2a13e51ac427ffce2d71e2ec690fef05753ed5f6f112a8e832287ed'
+          ? bindingRef2
+          : bindingRef;
+      }
+      if (name === 'suuntoHealthWebhookIngress') {
+        return id === 'b696f85ef3779e44bb99b1c99c1f84267dbf80e7ec5ab1596d3c7f30ef5421ba'
+          ? ingressRef2
+          : ingressRef;
+      }
+      if (name === 'suuntoAppAccessTokens') {
+        return id === 'firebase-user-2' ? tokenRootRef2 : tokenRootRef;
+      }
+      if (name === 'users') return id === 'firebase-user-2' ? userRef2 : userRef;
       throw new Error(`Unexpected collection ${name}`);
     }),
   }));
+  const stateKeyByRef = new Map<unknown, string>([
+    [bindingRef, 'binding'],
+    [bindingRef2, 'binding2'],
+    [tokenRef, 'token'],
+    [tokenRef2, 'token2'],
+    [tokenRootRef, 'tokenRoot'],
+    [tokenRootRef2, 'tokenRoot2'],
+    [serviceMetaRef, 'serviceMeta'],
+    [serviceMetaRef2, 'serviceMeta2'],
+    [ingressRef, 'ingress'],
+    [ingressRef2, 'ingress2'],
+  ]);
   const transactionGet = vi.fn(async (ref: unknown) => {
-    const key = ref === bindingRef
-      ? 'binding'
-      : ref === tokenRef
-        ? 'token'
-        : ref === tokenRootRef
-          ? 'tokenRoot'
-          : ref === serviceMetaRef
-            ? 'serviceMeta'
-            : ref === ingressRef
-              ? 'ingress'
-              : null;
+    const key = stateKeyByRef.get(ref);
     if (!key) throw new Error('Unexpected transaction read.');
     const data = state[key];
     return { exists: data !== undefined, data: () => data };
@@ -52,11 +75,13 @@ const hoisted = vi.hoisted(() => {
   return {
     addQueueItem: vi.fn(),
     bindingRef,
+    bindingRef2,
     collectionGroup,
     db,
     getDeletionGuardInTransaction: vi.fn(),
     getRegisteredTriggerOptions: () => registeredTriggerOptions,
     ingressRef,
+    ingressRef2,
     isQueueSkip: vi.fn(() => false),
     onDocumentCreated: vi.fn((options: unknown, handler: unknown) => {
       registeredTriggerOptions = options;
@@ -65,9 +90,12 @@ const hoisted = vi.hoisted(() => {
     recursiveDelete,
     runTransaction,
     serviceMetaRef,
+    serviceMetaRef2,
     state,
     tokenRef,
+    tokenRef2,
     tokenRootRef,
+    tokenRootRef2,
     transactionCreate,
   };
 });
@@ -109,7 +137,7 @@ function snapshot(data?: Record<string, unknown>, exists = true) {
 
 function ingressData(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     userID: 'firebase-user-1',
     notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
     providerUserId: 'suunto-account-1',
@@ -155,11 +183,18 @@ function persistInput() {
   };
 }
 
+function persistDependencies(isAllowed = true) {
+  return {
+    candidateUserIDs: ['firebase-user-1'],
+    isUserAllowed: vi.fn(() => isAllowed),
+  };
+}
+
 describe('Suunto Health webhook ingress', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.state.binding = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       userID: 'firebase-user-1',
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
@@ -174,6 +209,11 @@ describe('Suunto Health webhook ingress', () => {
       connectionStateGeneration: CONNECTION_GENERATION,
     };
     hoisted.state.ingress = undefined;
+    hoisted.state.binding2 = undefined;
+    hoisted.state.token2 = undefined;
+    hoisted.state.tokenRoot2 = undefined;
+    hoisted.state.serviceMeta2 = undefined;
+    hoisted.state.ingress2 = undefined;
     hoisted.addQueueItem.mockResolvedValue({ id: 'queue-item' });
     hoisted.getDeletionGuardInTransaction.mockResolvedValue({
       userExists: true, deletionInProgress: false, shouldSkip: false,
@@ -190,15 +230,16 @@ describe('Suunto Health webhook ingress', () => {
     }));
   });
 
-  it('binds an active staged user before atomically creating schema-v3 ingress', async () => {
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('created');
+  it('binds an active staged user before atomically creating schema-v4 ingress', async () => {
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('created');
 
     expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
     expect(hoisted.transactionCreate).toHaveBeenCalledWith(hoisted.ingressRef, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       userID: 'firebase-user-1',
       notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
       providerUserId: 'suunto-account-1',
@@ -214,58 +255,104 @@ describe('Suunto Health webhook ingress', () => {
 
   it('treats an existing bound ingress as a durable duplicate', async () => {
     hoisted.state.ingress = { processed: false };
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('duplicate');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('duplicate');
     expect(hoisted.transactionCreate).not.toHaveBeenCalled();
+  });
+
+  it('creates independent durable ingress for every active staged connection', async () => {
+    hoisted.state.binding2 = {
+      schemaVersion: 2,
+      userID: 'firebase-user-2',
+      tokenCredentialGeneration: 'credential-generation-2',
+    };
+    hoisted.state.token2 = {
+      serviceName: ServiceNames.SuuntoApp,
+      userName: 'suunto-account-1',
+      tokenCredentialGeneration: 'credential-generation-2',
+    };
+    hoisted.state.tokenRoot2 = {
+      activeOAuthCredentialGeneration: 'credential-generation-2',
+    };
+    hoisted.state.serviceMeta2 = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connection-generation-2',
+    };
+
+    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
+      candidateUserIDs: ['firebase-user-1', 'firebase-user-2'],
+      isUserAllowed: () => true,
+    })).resolves.toBe('created');
+
+    expect(hoisted.transactionCreate).toHaveBeenCalledTimes(2);
+    expect(hoisted.transactionCreate).toHaveBeenCalledWith(
+      hoisted.ingressRef,
+      expect.objectContaining({ userID: 'firebase-user-1' }),
+    );
+    expect(hoisted.transactionCreate).toHaveBeenCalledWith(
+      hoisted.ingressRef2,
+      expect.objectContaining({
+        userID: 'firebase-user-2',
+        tokenCredentialGeneration: 'credential-generation-2',
+        connectionStateGeneration: 'connection-generation-2',
+      }),
+    );
   });
 
   it('does not persist ingress for unknown or non-rollout bindings', async () => {
     hoisted.state.binding = undefined;
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('permanent_skip');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('permanent_skip');
 
     hoisted.state.binding = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       userID: 'firebase-user-1',
       tokenCredentialGeneration: TOKEN_GENERATION,
     };
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => false,
-    })).resolves.toBe('permanent_skip');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(false),
+    )).resolves.toBe('permanent_skip');
     expect(hoisted.transactionCreate).not.toHaveBeenCalled();
   });
 
   it('does not persist ingress when deletion, disconnect, or reconnect-required wins', async () => {
     hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('permanent_skip');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('permanent_skip');
 
     hoisted.state.tokenRoot = {
       activeOAuthCredentialGeneration: TOKEN_GENERATION,
       disconnectState: 'disconnect_pending',
     };
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('permanent_skip');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('permanent_skip');
 
     hoisted.state.tokenRoot = { activeOAuthCredentialGeneration: TOKEN_GENERATION };
     hoisted.state.serviceMeta = {
       connectionState: 'reconnect_required',
       connectionStateGeneration: 'replacement-generation',
     };
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('permanent_skip');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('permanent_skip');
     expect(hoisted.transactionCreate).not.toHaveBeenCalled();
   });
 
   it('cannot be poisoned by similarly named client-writable token documents', async () => {
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      isUserAllowed: () => true,
-    })).resolves.toBe('created');
+    await expect(persistSuuntoHealthWebhookIngress(
+      persistInput(),
+      persistDependencies(),
+    )).resolves.toBe('created');
     expect(hoisted.collectionGroup).not.toHaveBeenCalled();
   });
 
@@ -302,7 +389,7 @@ describe('Suunto Health webhook ingress', () => {
   });
 
   it('recursively deletes malformed, disabled, stale, and deleting ingress', async () => {
-    const malformed = ingressSnapshot(ingressData({ schemaVersion: 2 }));
+    const malformed = ingressSnapshot(ingressData({ schemaVersion: 3 }));
     await processSuuntoHealthWebhookIngressDocument(malformed.snapshot, activeDependencies() as any);
     expect(hoisted.recursiveDelete).toHaveBeenCalledWith(malformed.ref);
 
@@ -318,7 +405,7 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.recursiveDelete).toHaveBeenCalledWith(stale.ref);
 
     hoisted.state.binding = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       userID: 'firebase-user-1',
       tokenCredentialGeneration: TOKEN_GENERATION,
     };

@@ -471,7 +471,7 @@ async function setOAuthTokenIfUserActive(
     ? tokenData.userName.trim()
     : null;
   const suuntoBindingRef = suuntoProviderUserId
-    ? getSuuntoHealthWebhookAccountBindingRef(db, suuntoProviderUserId)
+    ? getSuuntoHealthWebhookAccountBindingRef(db, suuntoProviderUserId, userID)
     : null;
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
@@ -558,7 +558,7 @@ async function deleteSupersededOAuthCredentialIfCurrent(
     const suuntoBindingRef = serviceName === ServiceNames.SuuntoApp
       && typeof guard.tokenRef.id === 'string'
       && guard.tokenRef.id.trim().length > 0
-      ? getSuuntoHealthWebhookAccountBindingRef(db, guard.tokenRef.id.trim())
+      ? getSuuntoHealthWebhookAccountBindingRef(db, guard.tokenRef.id.trim(), userID)
       : null;
     const [tokenRootSnapshot, tokenSnapshot, suuntoBindingSnapshot] = await Promise.all([
       transaction.get(guard.rootGenerationGuard.documentRef),
