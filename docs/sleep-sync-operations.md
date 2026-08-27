@@ -183,11 +183,19 @@ npm --prefix functions run migrate-coros-sleep-to-health -- --execute --confirm-
 
 The migration writes the Health replacement first. Only after the exact content is successfully written or is
 already present unchanged does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS
-daily fields from that Sleep document. A stale result proves only that a newer Health record exists, not that it
-contains every legacy value, so the source fields remain for operator review. Aggregate Sleep vitals and timing
-remain. A concurrent Sleep change fails the cleanup closed, and rerunning is idempotent. Malformed,
-out-of-window, or inconsistent legacy samples/vitals also remain untouched and are counted as invalid so an
-operator can review them without data loss.
+daily fields from that Sleep document. It also handles a narrowly bounded rollout race where a current daily
+backfill has already written the same provider date and revision while scalar-only legacy fields remain on the
+same referenced Sleep document. That cleanup requires the stored Health record to match the user, provider,
+source type, receipt revision, day, interval, coverage, metric identities and definitions, and exact Sleep
+references, with no incoming samples or stored sample chunks. The current Health scalar values may supersede
+older retained Sleep-side summaries; `healthRecordsSuperseded` reports this case. The Health record and unchanged
+legacy fingerprint are both rechecked inside the cleanup transaction.
+
+A stale result or any conflict containing sample-series data does not prove that every legacy value is durable,
+so the source fields remain for operator review. Aggregate Sleep vitals and timing remain. A concurrent Sleep or
+Health change fails the cleanup closed, and rerunning is idempotent. Malformed, out-of-window, or inconsistent
+legacy samples/vitals also remain untouched and are counted as invalid so an operator can review them without
+data loss.
 
 ## Temporarily Disable A Provider
 

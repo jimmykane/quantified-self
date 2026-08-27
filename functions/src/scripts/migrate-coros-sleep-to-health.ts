@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import {
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+    type HealthMetricEntry,
+} from '../../../shared/health';
 import { SLEEP_PROVIDERS, SLEEP_SESSIONS_COLLECTION_ID } from '../../../shared/sleep';
 import { COROSDailyHealthResult, mapCOROSDailyHealth } from '../coros/daily-health';
 import { COROS_DAILY_MAX_HRV_POINTS } from '../coros/constants';
@@ -11,6 +15,7 @@ import {
     parseCOROSDailyRecord,
 } from '../coros/daily';
 import {
+    HealthSourceRecordRevisionConflictError,
     replaceHealthSourceRecord,
     type HealthSourceRecordWriteStatus,
 } from '../health/writer';
@@ -33,6 +38,7 @@ const MIGRATION_FIELD_MASK = [
 ] as const;
 const SAFE_SLEEP_DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const SAFE_USER_ID_PATTERN = /^[^/\s]{1,128}$/;
+const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
 const BOOLEAN_ARGUMENTS = new Set(['--execute', '--confirm-all-users']);
 const VALUE_ARGUMENTS = ['--uid', '--limit', '--start-after'] as const;
 
@@ -51,6 +57,7 @@ export interface COROSSleepToHealthMigrationSummary {
     healthRecordsWritten: number;
     healthRecordsUnchanged: number;
     healthRecordsStale: number;
+    healthRecordsSuperseded: number;
     sleepSessionsCleaned: number;
     skippedNotLegacy: number;
     skippedInvalid: number;
@@ -67,7 +74,11 @@ export interface COROSLegacyHealthMigrationCandidate {
     health: COROSDailyHealthResult;
 }
 
-type CleanupResult = 'cleaned' | 'skipped_user_deletion' | 'concurrent_change';
+type CleanupResult =
+    | 'cleaned'
+    | 'skipped_user_deletion'
+    | 'concurrent_change'
+    | 'not_superseding_health';
 
 export function canCleanCOROSLegacySleepFieldsAfterHealthWrite(
     status: HealthSourceRecordWriteStatus,
@@ -77,6 +88,131 @@ export function canCleanCOROSLegacySleepFieldsAfterHealthWrite(
     // Delete the source fields only after this exact content was committed or
     // was already committed unchanged.
     return status === 'written' || status === 'unchanged';
+}
+
+function stableComparableValue(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(stableComparableValue);
+    if (!value || typeof value !== 'object') return value === undefined ? null : value;
+    const source = value as Record<string, unknown>;
+    return Object.keys(source).sort().reduce<Record<string, unknown>>((result, key) => {
+        if (source[key] !== undefined) result[key] = stableComparableValue(source[key]);
+        return result;
+    }, {});
+}
+
+function stableValueKey(value: unknown): string {
+    return JSON.stringify(stableComparableValue(value));
+}
+
+function healthMetricIdentity(value: unknown): string | null {
+    const metric = asRecord(value);
+    const fields = [metric.metricId, metric.aggregation, metric.semanticVariant];
+    return fields.every(field => typeof field === 'string' && field.length > 0)
+        ? fields.join('\u0000')
+        : null;
+}
+
+function providerValueMetricDefinition(value: unknown): unknown {
+    const metric = asRecord(value);
+    const native = asRecord(metric.native);
+    const canonical = asRecord(metric.canonical);
+    const hasCanonicalValue = Boolean(metric.canonical)
+        && typeof metric.canonical === 'object'
+        && !Array.isArray(metric.canonical);
+    const nativeDefinition = { ...native };
+    const canonicalDefinition = { ...canonical };
+    delete nativeDefinition.value;
+    delete canonicalDefinition.value;
+    return {
+        ...metric,
+        native: nativeDefinition,
+        // Validation normalizes an omitted canonical value to null. Treat the
+        // two representations as equivalent while keeping a real definition
+        // (including its unit) strict.
+        ...(hasCanonicalValue
+            ? { canonical: canonicalDefinition }
+            : { canonical: undefined }),
+    };
+}
+
+function supersedingMetricsMatch(
+    existingMetricsValue: unknown,
+    candidateMetrics: readonly HealthMetricEntry[],
+): boolean {
+    if (!Array.isArray(existingMetricsValue)
+        || existingMetricsValue.length !== candidateMetrics.length) {
+        return false;
+    }
+    const existingByIdentity = new Map<string, unknown>();
+    for (const existingMetric of existingMetricsValue) {
+        const identity = healthMetricIdentity(existingMetric);
+        if (!identity || existingByIdentity.has(identity)) return false;
+        existingByIdentity.set(identity, existingMetric);
+    }
+    if (existingByIdentity.size !== candidateMetrics.length) return false;
+
+    return candidateMetrics.every(candidateMetric => {
+        const identity = healthMetricIdentity(candidateMetric);
+        if (!identity) return false;
+        const existingMetric = asRecord(existingByIdentity.get(identity));
+        if (candidateMetric.kind === 'sleep_reference') {
+            // Sleep-backed values must still resolve through the exact Sleep
+            // document and field retained by this migration candidate.
+            return stableValueKey(existingMetric) === stableValueKey(candidateMetric);
+        }
+        if (candidateMetric.kind !== 'value' || existingMetric.kind !== 'value') return false;
+        // A newly fetched daily record supersedes the stale scalar retained in
+        // Sleep. Only the provider value may differ; its metric semantics and
+        // units must remain identical.
+        return stableValueKey(providerValueMetricDefinition(existingMetric))
+            === stableValueKey(providerValueMetricDefinition(candidateMetric));
+    });
+}
+
+export function canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+    existingValue: unknown,
+    candidate: COROSLegacyHealthMigrationCandidate,
+    existingDocumentId: string,
+): boolean {
+    const existing = asRecord(existingValue);
+    const source = asRecord(existing.source);
+    const revision = asRecord(source.revision);
+    const input = candidate.health.input;
+    const sampleChunkIds = existing.sampleChunkIds;
+    const expectedMetricIds = [...new Set(input.metrics.map(metric => metric.metricId))].sort();
+    const existingMetricIds = Array.isArray(existing.metricIds)
+        ? [...existing.metricIds].sort()
+        : null;
+
+    return OPAQUE_ID_PATTERN.test(existingDocumentId)
+        && existing.id === existingDocumentId
+        && existing.userID === candidate.userID
+        && source.provider === input.provider
+        && typeof source.accountKey === 'string'
+        && OPAQUE_ID_PATTERN.test(source.accountKey)
+        && source.sourceRecordType === input.sourceRecordType
+        && typeof source.sourceRecordKey === 'string'
+        && OPAQUE_ID_PATTERN.test(source.sourceRecordKey)
+        && revision.order === input.revision.order
+        && typeof revision.token === 'string'
+        && OPAQUE_ID_PATTERN.test(revision.token)
+        && typeof revision.digest === 'string'
+        && OPAQUE_ID_PATTERN.test(revision.digest)
+        && source.receivedAtMs === input.receivedAtMs
+        && existing.kind === input.kind
+        && existing.calendarDate === input.calendarDate
+        && existing.startTimeMs === input.startTimeMs
+        && existing.endTimeMs === input.endTimeMs
+        && stableValueKey(existing.coverage) === stableValueKey(input.coverage)
+        && stableValueKey(existing.device) === stableValueKey(input.device)
+        // Legacy HRV samples may contain unique data. Never discard them on a
+        // conflict; only exact normal writes can prove those samples durable.
+        && input.sampleSeries.length === 0
+        && Array.isArray(sampleChunkIds)
+        && sampleChunkIds.length === 0
+        && existingMetricIds !== null
+        && stableValueKey(existingMetricIds) === stableValueKey(expectedMetricIds)
+        && supersedingMetricsMatch(existing.metrics, input.metrics);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -442,6 +578,7 @@ async function getSleepDocuments(
 async function cleanLegacySleepFields(
     ref: admin.firestore.DocumentReference,
     candidate: COROSLegacyHealthMigrationCandidate,
+    supersedingHealthSourceRecordId?: string,
 ): Promise<CleanupResult> {
     const db = admin.firestore();
     return db.runTransaction(async transaction => {
@@ -456,6 +593,24 @@ async function cleanLegacySleepFields(
             throw new UserDeletionGuardReadError(candidate.userID, 'coros_sleep_health_migration_cleanup', error);
         }
         if (deletionGuard.shouldSkip) return 'skipped_user_deletion';
+
+        if (supersedingHealthSourceRecordId) {
+            if (!OPAQUE_ID_PATTERN.test(supersedingHealthSourceRecordId)) {
+                return 'not_superseding_health';
+            }
+            const healthRef = db.collection('users').doc(candidate.userID)
+                .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+                .doc(supersedingHealthSourceRecordId);
+            const healthSnapshot = await transaction.get(healthRef);
+            if (!healthSnapshot.exists
+                || !canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+                    healthSnapshot.data(),
+                    candidate,
+                    healthSnapshot.id,
+                )) {
+                return 'not_superseding_health';
+            }
+        }
 
         const currentSnapshot = await transaction.get(ref);
         const currentData = currentSnapshot.exists
@@ -496,6 +651,7 @@ export async function runCOROSSleepToHealthMigration(
         healthRecordsWritten: 0,
         healthRecordsUnchanged: 0,
         healthRecordsStale: 0,
+        healthRecordsSuperseded: 0,
         sleepSessionsCleaned: 0,
         skippedNotLegacy: 0,
         skippedInvalid: 0,
@@ -547,7 +703,31 @@ export async function runCOROSSleepToHealthMigration(
             if (cleanup === 'cleaned') summary.sleepSessionsCleaned += 1;
             if (cleanup === 'skipped_user_deletion') summary.skippedUserDeletion += 1;
             if (cleanup === 'concurrent_change') summary.skippedConcurrentChange += 1;
-        } catch {
+        } catch (error) {
+            if (error instanceof HealthSourceRecordRevisionConflictError) {
+                try {
+                    const cleanup = await cleanLegacySleepFields(
+                        document.ref,
+                        candidate,
+                        error.sourceRecordId,
+                    );
+                    if (cleanup === 'cleaned') {
+                        summary.healthRecordsSuperseded += 1;
+                        summary.sleepSessionsCleaned += 1;
+                        continue;
+                    }
+                    if (cleanup === 'skipped_user_deletion') {
+                        summary.skippedUserDeletion += 1;
+                        continue;
+                    }
+                    if (cleanup === 'concurrent_change') {
+                        summary.skippedConcurrentChange += 1;
+                        continue;
+                    }
+                } catch {
+                    // Count and log below using the same redacted failure path.
+                }
+            }
             summary.failed += 1;
             logger.error(`${LOG_PREFIX} Failed to migrate one legacy COROS Sleep session.`, {
                 failure: 'legacy_sleep_migration_failed',

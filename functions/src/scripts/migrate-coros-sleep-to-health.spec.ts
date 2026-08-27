@@ -4,8 +4,10 @@ import { validateHealthSourceRecordInput } from '../health/validation';
 import {
   buildCOROSLegacyHealthMigrationCandidate,
   canCleanCOROSLegacySleepFieldsAfterHealthWrite,
+  canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict,
   parseCOROSSleepToHealthMigrationOptions,
 } from './migrate-coros-sleep-to-health';
+import { buildHealthSourceRecordWrite } from '../health/writer';
 
 const SLEEP_DOCUMENT_ID = 'c'.repeat(64);
 
@@ -54,6 +56,94 @@ describe('COROS legacy Sleep to Health migration', () => {
     expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('stale')).toBe(false);
     expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('skipped_deleted_user')).toBe(false);
     expect(canCleanCOROSLegacySleepFieldsAfterHealthWrite('skipped_lifecycle_guard')).toBe(false);
+  });
+
+  it('cleans retained scalars when the same fetch already wrote superseding Health', async () => {
+    const legacy = legacySleepSession();
+    delete legacy.hrvSamples;
+    const candidate = buildCOROSLegacyHealthMigrationCandidate(
+      legacy,
+      'user-1',
+      SLEEP_DOCUMENT_ID,
+    );
+    expect(candidate).not.toBeNull();
+
+    const supersedingInput = structuredClone(candidate?.health.input);
+    supersedingInput.timezoneOffsetSeconds = 3_600;
+    const steps = supersedingInput.metrics.find(metric => metric.metricId === HEALTH_METRIC_IDS.Steps);
+    if (!steps || steps.kind !== 'value') throw new Error('Expected a steps value metric.');
+    steps.native.value = 12_400;
+    if (steps.canonical) steps.canonical.value = 12_400;
+    supersedingInput.revision.token = 'fresh-provider-content';
+    const existing = (await buildHealthSourceRecordWrite(
+      'user-1',
+      supersedingInput,
+      Date.parse('2026-04-29T12:01:00.000Z'),
+    )).sourceRecord;
+
+    expect(canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+      existing,
+      candidate!,
+      existing.id,
+    )).toBe(true);
+  });
+
+  it('does not clean conflicts that could discard samples or change metric semantics', async () => {
+    const candidateWithSamples = buildCOROSLegacyHealthMigrationCandidate(
+      legacySleepSession(),
+      'user-1',
+      SLEEP_DOCUMENT_ID,
+    );
+    expect(candidateWithSamples).not.toBeNull();
+    const existingWithSamples = (await buildHealthSourceRecordWrite(
+      'user-1',
+      candidateWithSamples?.health.input,
+    )).sourceRecord;
+    expect(canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+      existingWithSamples,
+      candidateWithSamples!,
+      existingWithSamples.id,
+    )).toBe(false);
+
+    const legacyWithoutSamples = legacySleepSession();
+    delete legacyWithoutSamples.hrvSamples;
+    const scalarCandidate = buildCOROSLegacyHealthMigrationCandidate(
+      legacyWithoutSamples,
+      'user-1',
+      SLEEP_DOCUMENT_ID,
+    );
+    expect(scalarCandidate).not.toBeNull();
+    const changedReferenceInput = structuredClone(scalarCandidate?.health.input);
+    const sleepReference = changedReferenceInput.metrics.find(metric => metric.kind === 'sleep_reference');
+    if (!sleepReference || sleepReference.kind !== 'sleep_reference') {
+      throw new Error('Expected a Sleep reference metric.');
+    }
+    sleepReference.reference.documentId = 'd'.repeat(64);
+    changedReferenceInput.revision.token = 'different-sleep-reference';
+    const changedReference = (await buildHealthSourceRecordWrite(
+      'user-1',
+      changedReferenceInput,
+    )).sourceRecord;
+    expect(canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+      changedReference,
+      scalarCandidate!,
+      changedReference.id,
+    )).toBe(false);
+
+    const changedMetricInput = structuredClone(scalarCandidate?.health.input);
+    const changedSteps = changedMetricInput.metrics.find(metric => metric.metricId === HEALTH_METRIC_IDS.Steps);
+    if (!changedSteps || changedSteps.kind !== 'value') throw new Error('Expected a steps value metric.');
+    changedSteps.native.metric = 'different-step-definition';
+    changedMetricInput.revision.token = 'different-metric-definition';
+    const changedMetric = (await buildHealthSourceRecordWrite(
+      'user-1',
+      changedMetricInput,
+    )).sourceRecord;
+    expect(canCleanCOROSLegacySleepFieldsAfterSupersedingHealthConflict(
+      changedMetric,
+      scalarCandidate!,
+      changedMetric.id,
+    )).toBe(false);
   });
 
   it('defaults to dry-run and gates an unscoped execution', () => {
