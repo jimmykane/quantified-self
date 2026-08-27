@@ -122,7 +122,9 @@ describe('Suunto Health provider sync', () => {
     vi.clearAllMocks();
     hoisted.tokenData = tokenProjection('initial-access-token');
     hoisted.tokenRootData = {
-      activeOAuthCredentialGeneration: 'credential-generation-1',
+      // A Suunto user may retain multiple connected accounts. The root tracks
+      // the latest OAuth lifecycle revision, which need not belong to this token.
+      activeOAuthCredentialGeneration: 'credential-generation-2',
     };
     hoisted.tokenGet.mockImplementation(async () => ({
       exists: true,
@@ -178,6 +180,10 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(result.lifecycleGuards.requiredExistingTokenCredential.credentialGeneration)
+      .toBe('credential-generation-1');
+    expect(result.lifecycleGuards.additionalRequiredDocumentFieldValues[0]?.expectedFields)
+      .toEqual({ activeOAuthCredentialGeneration: 'credential-generation-2' });
     const requestStartMs = START_MS - 24 * 60 * 60 * 1000;
     const requestEndMs = END_MS + 24 * 60 * 60 * 1000;
     expect(hoisted.requestGet.mock.calls.map(([options]) => options.url)).toEqual([
@@ -271,7 +277,7 @@ describe('Suunto Health provider sync', () => {
     expect(result.healthResults).toHaveLength(1);
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
-      requireActiveOAuthCredentialGeneration: true,
+      expectedActiveOAuthCredentialGeneration: 'credential-generation-2',
     });
     expect(hoisted.requestGet.mock.calls[1]?.[0]?.headers.Authorization)
       .toBe('Bearer refreshed-access-token');
@@ -375,7 +381,7 @@ describe('Suunto Health provider sync', () => {
   it('stops before the next feed when the active OAuth credential generation changes', async () => {
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       hoisted.tokenRootData = {
-        activeOAuthCredentialGeneration: 'credential-generation-2',
+        activeOAuthCredentialGeneration: 'credential-generation-3',
       };
       return [{
         timestamp: '2026-08-26T12:00:00.000Z',

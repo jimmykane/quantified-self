@@ -83,7 +83,10 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
-import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import {
+  SleepBackfillQueueResponse,
+  SuuntoHealthSyncAvailabilityResponse,
+} from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
@@ -1359,6 +1362,13 @@ export class AppUserService implements OnDestroy {
   async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
     const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
     return result.data;
+  }
+
+  async getSuuntoHealthSyncAvailabilityForCurrentUser(): Promise<boolean> {
+    const result = await this.functionsService.call<undefined, SuuntoHealthSyncAvailabilityResponse>(
+      'getSuuntoHealthSyncAvailability',
+    );
+    return result.data.available === true;
   }
 
   async backfillCorosSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {

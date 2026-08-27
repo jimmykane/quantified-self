@@ -33,8 +33,6 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
-import { AppHealthService } from '../../services/app.health.service';
-import { HEALTH_PROVIDERS, HealthSyncState } from '@shared/health';
 
 dayjs.extend(relativeTime);
 
@@ -96,12 +94,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private changeDetectorRef = inject(ChangeDetectorRef);
   private authService = inject(AppAuthService);
   private sleepService = inject(AppSleepService);
-  private healthService = inject(AppHealthService);
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
-  private healthSyncStateSubscription: Subscription | null = null;
-  private healthSyncStateKey: string | null = null;
+  private suuntoHealthAvailabilityRequestKey: string | null = null;
+  private suuntoHealthAvailabilityRequestGeneration = 0;
   private suuntoHealthRolloutAvailable = false;
 
   async ngOnInit() {
@@ -163,7 +160,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
-    this.syncHealthSyncStateSubscription();
+    this.syncSuuntoHealthRolloutAvailability();
     this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
@@ -307,7 +304,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
     this.sleepSyncStateSubscription?.unsubscribe();
-    this.healthSyncStateSubscription?.unsubscribe();
+    this.suuntoHealthAvailabilityRequestGeneration += 1;
   }
 
   get cooldownDays(): number {
@@ -498,39 +495,38 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       });
   }
 
-  private syncHealthSyncStateSubscription(): void {
+  private syncSuuntoHealthRolloutAvailability(): void {
     const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
-      ? `${this.currentUserID}:${HEALTH_PROVIDERS.SuuntoApp}`
+      ? this.currentUserID
       : null;
-    if (this.healthSyncStateKey === key) {
+    if (this.suuntoHealthAvailabilityRequestKey === key) {
       return;
     }
 
-    this.healthSyncStateSubscription?.unsubscribe();
-    this.healthSyncStateSubscription = null;
-    this.healthSyncStateKey = key;
+    this.suuntoHealthAvailabilityRequestKey = key;
+    const requestGeneration = ++this.suuntoHealthAvailabilityRequestGeneration;
     this.suuntoHealthRolloutAvailable = false;
+    this.updateSleepAndHealthBackfillAvailability();
 
-    if (!key || !this.currentUserID) {
+    if (!key) {
       return;
     }
 
-    this.healthSyncStateSubscription = this.healthService
-      .watchSyncStates(this.currentUserID)
-      .subscribe({
-        next: (states: HealthSyncState[]) => {
-          this.suuntoHealthRolloutAvailable = states.some(
-            state => state.provider === HEALTH_PROVIDERS.SuuntoApp,
-          );
-          this.updateSleepAndHealthBackfillAvailability();
-          this.changeDetectorRef.markForCheck();
-        },
-        error: (error) => {
-          this.logger.error(error);
-          this.suuntoHealthRolloutAvailable = false;
-          this.updateSleepAndHealthBackfillAvailability();
-          this.changeDetectorRef.markForCheck();
-        },
+    void this.userService.getSuuntoHealthSyncAvailabilityForCurrentUser()
+      .then((available) => {
+        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
+          || this.suuntoHealthAvailabilityRequestKey !== key) return;
+        this.suuntoHealthRolloutAvailable = available;
+        this.updateSleepAndHealthBackfillAvailability();
+        this.changeDetectorRef.markForCheck();
+      })
+      .catch((error) => {
+        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
+          || this.suuntoHealthAvailabilityRequestKey !== key) return;
+        this.logger.error(error);
+        this.suuntoHealthRolloutAvailable = false;
+        this.updateSleepAndHealthBackfillAvailability();
+        this.changeDetectorRef.markForCheck();
       });
   }
 

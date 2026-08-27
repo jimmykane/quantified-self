@@ -123,6 +123,7 @@ export { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './sleep/we
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
 export { scheduleSuuntoSleepSync, scheduleCOROSSleepSync, scheduleSuuntoHealthSync } from './sleep/polling';
 export { backfillCorosAPISleep, backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
+export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,

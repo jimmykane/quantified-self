@@ -171,7 +171,7 @@ describe('token refresh coordinator', () => {
     store.beginExplicitDisconnect('disconnect-operation-1');
 
     await expect(store.coordinator.claim(store.ref, credential, 1_000))
-      .resolves.toEqual({ kind: 'skipped_service_disconnect' });
+      .resolves.toEqual({ kind: 'skipped_service_disconnect', reason: 'service_disconnect' });
     expect(store.getStoredToken()).not.toHaveProperty('tokenRefreshLeaseOwner');
   });
 
@@ -180,12 +180,15 @@ describe('token refresh coordinator', () => {
     const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
 
     await expect(store.coordinator.claim(store.ref, credential, 1_000, {
-      requireActiveOAuthCredentialGeneration: true,
-    })).resolves.toEqual({ kind: 'skipped_service_disconnect' });
+      expectedActiveOAuthCredentialGeneration: credential.credentialGeneration,
+    })).resolves.toEqual({
+      kind: 'skipped_service_disconnect',
+      reason: 'inactive_oauth_credential',
+    });
 
     store.setTokenRoot({ activeOAuthCredentialGeneration: 'generation-1' });
     await expect(store.coordinator.claim(store.ref, credential, 1_000, {
-      requireActiveOAuthCredentialGeneration: true,
+      expectedActiveOAuthCredentialGeneration: credential.credentialGeneration,
     })).resolves.toMatchObject({ kind: 'owner' });
   });
 
@@ -195,7 +198,7 @@ describe('token refresh coordinator', () => {
     store.setTokenRoot({ serviceName: 'corosAPI' });
 
     await expect(store.coordinator.claim(store.ref, credential, 1_000, {
-      requireActiveOAuthCredentialGeneration: true,
+      expectedActiveOAuthCredentialGeneration: credential.credentialGeneration,
     })).resolves.toMatchObject({ kind: 'owner' });
   });
 
@@ -204,7 +207,7 @@ describe('token refresh coordinator', () => {
     const credential = getTokenCredentialSnapshot(store.getStoredToken()!);
     store.setTokenRoot({ activeOAuthCredentialGeneration: 'generation-1' });
     const claim = await store.coordinator.claim(store.ref, credential, Date.now(), {
-      requireActiveOAuthCredentialGeneration: true,
+      expectedActiveOAuthCredentialGeneration: 'generation-1',
     });
     expect(claim.kind).toBe('owner');
     if (claim.kind !== 'owner') return;
@@ -215,7 +218,7 @@ describe('token refresh coordinator', () => {
       claim.leaseOwner,
       claim.credential,
       { accessToken: 'stale-refresh-result' },
-      { requireActiveOAuthCredentialGeneration: true },
+      { expectedActiveOAuthCredentialGeneration: 'generation-1' },
     )).resolves.toMatchObject({ kind: 'superseded' });
     expect(store.getStoredToken()).toEqual(expect.objectContaining({
       accessToken: 'access-1',
@@ -241,7 +244,7 @@ describe('token refresh coordinator', () => {
     store.beginExplicitDisconnect('expired-disconnect-operation', 999);
 
     await expect(store.coordinator.claim(store.ref, credential, 1_000))
-      .resolves.toEqual({ kind: 'skipped_service_disconnect' });
+      .resolves.toEqual({ kind: 'skipped_service_disconnect', reason: 'service_disconnect' });
   });
 
   it('rejects a stale refresh result after reauthorization replaces the credential generation', async () => {

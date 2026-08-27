@@ -143,8 +143,8 @@ interface GetTokenDataOptions {
   allowDisconnectPendingTokenUse?: boolean;
   /** Omits token/account identifiers and provider response detail from auth telemetry. */
   opaqueTelemetry?: boolean;
-  /** Fail closed unless the token still belongs to the root's active OAuth credential. */
-  requireActiveOAuthCredentialGeneration?: boolean;
+  /** Fail closed unless the token root retains this captured OAuth lifecycle revision. */
+  expectedActiveOAuthCredentialGeneration?: string | null;
   /** Only the explicit-disconnect owner may use a token while its fence is active. */
   expectedDisconnectOperationGeneration?: string;
 }
@@ -153,19 +153,28 @@ function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | Document
   return doc.ref.parent.parent?.id || null;
 }
 
-function shouldRequireActiveOAuthCredentialGeneration(
+function expectedActiveOAuthCredentialGeneration(
+  doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
   options: Pick<
     GetTokenDataOptions,
-    'expectedDisconnectOperationGeneration' | 'requireActiveOAuthCredentialGeneration'
+    'expectedActiveOAuthCredentialGeneration' | 'expectedDisconnectOperationGeneration'
   >,
-): boolean {
+): string | null | undefined {
   // The exact explicit-disconnect owner must still be able to deauthorize and
-  // delete a historical orphan. All ordinary COROS workers and explicitly
-  // fenced provider operations fail closed.
-  return !options.expectedDisconnectOperationGeneration
-    && (serviceName === ServiceNames.COROSAPI
-      || options.requireActiveOAuthCredentialGeneration === true);
+  // delete a historical orphan. Ordinary COROS workers remain bound to their
+  // token generation; multi-account providers may instead supply the root
+  // revision captured when their work began.
+  if (options.expectedDisconnectOperationGeneration) return undefined;
+  if (options.expectedActiveOAuthCredentialGeneration !== undefined) {
+    return options.expectedActiveOAuthCredentialGeneration;
+  }
+  if (serviceName !== ServiceNames.COROSAPI) return undefined;
+  const tokenData = doc.data() as Record<string, unknown> | undefined;
+  return typeof tokenData?.tokenCredentialGeneration === 'string'
+    && tokenData.tokenCredentialGeneration.trim().length > 0
+    ? tokenData.tokenCredentialGeneration.trim()
+    : null;
 }
 
 async function assertTokenUseAllowedForUser(
@@ -175,9 +184,9 @@ async function assertTokenUseAllowedForUser(
   options: Pick<
     GetTokenDataOptions,
     | 'allowDisconnectPendingTokenUse'
+    | 'expectedActiveOAuthCredentialGeneration'
     | 'expectedDisconnectOperationGeneration'
     | 'opaqueTelemetry'
-    | 'requireActiveOAuthCredentialGeneration'
   > = {},
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
@@ -206,10 +215,11 @@ async function assertTokenUseAllowedForUser(
   }
 
   const tokenRootData = await getServiceDisconnectPendingData(firebaseUserID, serviceName);
-  if (shouldRequireActiveOAuthCredentialGeneration(serviceName, options)
+  const expectedRootGeneration = expectedActiveOAuthCredentialGeneration(doc, serviceName, options);
+  if (expectedRootGeneration !== undefined
     && !doesOAuthCredentialGenerationAuthorizeToken(
       tokenRootData as Record<string, unknown> | null,
-      (doc.data() as Record<string, unknown> | undefined)?.tokenCredentialGeneration,
+      expectedRootGeneration,
     )) {
     logger.warn(
       `Skipping ${serviceName} token use during ${phase} because its active OAuth credential root is missing or changed.`,
@@ -379,11 +389,11 @@ export async function getTokenData(
   }
 
   const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
-  const requireActiveOAuthCredentialGeneration = shouldRequireActiveOAuthCredentialGeneration(serviceName, options);
+  const expectedRootGeneration = expectedActiveOAuthCredentialGeneration(doc, serviceName, options);
   const claimResult = await claimTokenRefresh(doc.ref, initialCredential, {
     expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
-    ...(requireActiveOAuthCredentialGeneration
-      ? { requireActiveOAuthCredentialGeneration: true }
+    ...(expectedRootGeneration !== undefined
+      ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
       : {}),
   });
   if (claimResult.kind === 'skipped_user_deletion') {
@@ -396,7 +406,13 @@ export async function getTokenData(
   if (claimResult.kind === 'skipped_service_disconnect') {
     const userID = getFirebaseUserIDForTokenDocument(doc);
     if (userID) {
-      throw new TokenUseSkippedForPendingDisconnectError(userID, serviceName, doc.id, 'before_refresh');
+      throw new TokenUseSkippedForPendingDisconnectError(
+        userID,
+        serviceName,
+        doc.id,
+        'before_refresh',
+        claimResult.reason,
+      );
     }
     throw new TokenRefreshSupersededError(serviceName, doc.id);
   }
@@ -436,8 +452,8 @@ export async function getTokenData(
     )
   ) {
     await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
-      ...(requireActiveOAuthCredentialGeneration
-        ? { requireActiveOAuthCredentialGeneration: true }
+      ...(expectedRootGeneration !== undefined
+        ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
         : {}),
     });
     return retryWithLatestTokenSnapshot(refreshDoc.exists ? refreshDoc : null, serviceName, doc.id, options);
@@ -643,8 +659,8 @@ export async function getTokenData(
           }],
         } : {}),
         expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
-        ...(requireActiveOAuthCredentialGeneration
-          ? { requireActiveOAuthCredentialGeneration: true }
+        ...(expectedRootGeneration !== undefined
+          ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
           : {}),
       },
     );
@@ -674,8 +690,8 @@ export async function getTokenData(
     if (releaseClaim) {
       try {
         await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
-          ...(requireActiveOAuthCredentialGeneration
-            ? { requireActiveOAuthCredentialGeneration: true }
+          ...(expectedRootGeneration !== undefined
+            ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
             : {}),
         });
       } catch (releaseError) {

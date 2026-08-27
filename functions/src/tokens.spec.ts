@@ -462,11 +462,38 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(false);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
-                requireActiveOAuthCredentialGeneration: true,
+                expectedActiveOAuthCredentialGeneration: 'credential-generation-old',
             })).rejects.toMatchObject({
                 name: 'TokenUseSkippedForPendingDisconnectError',
                 phase: 'before_return',
             });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
+        it('allows a Suunto account token fenced to the current root revision of another account', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'older-account-access',
+                refreshToken: 'older-account-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'older-suunto-account',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-account-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-account-2',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedActiveOAuthCredentialGeneration: 'credential-generation-account-2',
+            })).resolves.toEqual(expect.objectContaining({
+                accessToken: 'older-account-access',
+                userName: 'older-suunto-account',
+            }));
 
             expect(mockToken.refresh).not.toHaveBeenCalled();
             expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
@@ -682,10 +709,35 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(true);
             // The claim transaction is the atomic fence: model disconnect
             // winning after the earlier root check but before this lease.
-            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'skipped_service_disconnect' });
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({
+                kind: 'skipped_service_disconnect',
+                reason: 'service_disconnect',
+            });
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('reports a root-revision race separately from a pending disconnect', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                activeOAuthCredentialGeneration: 'root-generation-1',
+            });
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({
+                kind: 'skipped_service_disconnect',
+                reason: 'inactive_oauth_credential',
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedActiveOAuthCredentialGeneration: 'root-generation-1',
+            })).rejects.toMatchObject({
+                name: 'TokenUseSkippedForPendingDisconnectError',
+                reason: 'inactive_oauth_credential',
+                phase: 'before_refresh',
+            });
 
             expect(mockToken.refresh).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();

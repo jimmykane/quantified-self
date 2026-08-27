@@ -2,7 +2,7 @@
 
 This document is the source of truth for the Suunto 24/7 Health ingestion added by issue #612. It supplements the repository-wide [provider integration guide](provider-integration-guide.md), [unified Health model](unified-health-data.md), and [Sleep sync operations](sleep-sync-operations.md).
 
-The integration is deliberately staged independently from production-wide Suunto Sleep. Only Firebase UIDs in the server-only `functions/src/suunto/health-rollout.ts` receive Health work, and `functions/src/suunto/health-flags.ts` is the source-controlled kill switch. An empty Health allowlist is deny-all; it does not mean all users. Sleep enablement and its empty-allowlist semantics are unchanged. The Angular bundle never receives the raw rollout list; it derives the combined-history label from the authenticated user's server-owned Suunto Health sync state.
+The integration is deliberately staged independently from production-wide Suunto Sleep. Only Firebase UIDs in the server-only `functions/src/suunto/health-rollout.ts` receive Health work, and `functions/src/suunto/health-flags.ts` is the source-controlled kill switch. An empty Health allowlist is deny-all; it does not mean all users. Sleep enablement and its empty-allowlist semantics are unchanged. The Angular bundle never receives the raw rollout list; an authenticated App Check-protected callable returns only the current user's combined-history availability. Retained Health sync state is historical operational data and is not treated as rollout authorization.
 
 ## Provider contract
 
@@ -67,7 +67,7 @@ Each provider response is capped at 4 MiB and 10,000 activity or recovery sample
 
 ## Lifecycle and deletion
 
-Every request and write is fenced to the original token document credential, token-root OAuth generation, connection state, and connection generation. The worker checks account deletion before token resolution, before every provider request, and through the shared Health writer transaction. A stale worker cannot adopt a later OAuth connection.
+Every request and write is fenced to the original account token document credential, the token root's captured OAuth lifecycle revision, connection state, and connection generation. Suunto can retain multiple account tokens, so an account token is not required to own the root's latest OAuth generation; all retained accounts remain usable while the captured root revision stays unchanged. A completed OAuth connection rotates that root revision and invalidates in-flight work across the account set without silently excluding older connected accounts. The worker checks account deletion before token resolution, before every provider request, and through the shared Health writer transaction. A stale worker cannot adopt a later OAuth connection.
 
 Connected and reconnect-required Suunto transitions mirror `ready` or `reconnect_required` into Health sync state for staged users using a durable generation-keyed repair marker. Token-root deletion supersedes a pending projection while proving the root is absent, then projects `disconnected` unless current service metadata authoritatively owns reconnect-required. The scheduled lifecycle repair scans both COROS and Suunto markers.
 
@@ -86,4 +86,4 @@ Before enabling another account:
 5. Verify poll, webhook, history, 401 refresh, reconnect, disconnect, and account deletion for the staged account.
 6. Monitor queue age/retries, opaque error categories, Health sync timestamps, validation rejects, and provider rate-limit responses before widening the allowlist.
 
-Rollback sets `SUUNTO_HEALTH_SYNC_ENABLED` to false and deploys the affected Functions. New schedules and webhooks then stop Health work, and already queued Health rows are acknowledged as provider-disabled without calling Suunto. Existing imported Health data remains until account deletion; Sleep continues independently.
+Rollback sets `SUUNTO_HEALTH_SYNC_ENABLED` to false and deploys the affected Functions. New schedules and webhooks then stop Health work, already queued Health rows are acknowledged as provider-disabled without calling Suunto, and the availability callable makes the History Import UI sleep-only even when an older Health sync-state document remains. Existing imported Health data remains until account deletion; Sleep continues independently.

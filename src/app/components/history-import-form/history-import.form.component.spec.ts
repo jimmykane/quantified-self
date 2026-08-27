@@ -18,7 +18,6 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
-import { AppHealthService } from '../../services/app.health.service';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { Firestore } from 'app/firebase/firestore';
 import { of } from 'rxjs';
@@ -56,7 +55,6 @@ describe('HistoryImportFormComponent', () => {
     let mockLoggerService: any;
     let mockAuthService: any;
     let mockSleepService: any;
-    let mockHealthService: any;
     let snackBar: MatSnackBar;
 
     beforeEach(async () => {
@@ -64,6 +62,7 @@ describe('HistoryImportFormComponent', () => {
         mockUserService = {
             isPro: vi.fn().mockResolvedValue(true),
             importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true),
+            getSuuntoHealthSyncAvailabilityForCurrentUser: vi.fn().mockResolvedValue(false),
             backfillSuuntoSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 135,
                 startDate: '2016-01-01T00:00:00.000Z',
@@ -98,9 +97,6 @@ describe('HistoryImportFormComponent', () => {
         mockSleepService = {
             watchSyncState: vi.fn().mockReturnValue(of(null)),
         };
-        mockHealthService = {
-            watchSyncStates: vi.fn().mockReturnValue(of([])),
-        };
 
         await TestBed.configureTestingModule({
             declarations: [HistoryImportFormComponent],
@@ -127,7 +123,6 @@ describe('HistoryImportFormComponent', () => {
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppSleepService, useValue: mockSleepService },
-                { provide: AppHealthService, useValue: mockHealthService },
                 { provide: Firestore, useValue: {} },
                 { provide: APP_STORAGE, useValue: localStorage },
             ]
@@ -169,22 +164,36 @@ describe('HistoryImportFormComponent', () => {
 
     it('should render the combined Suunto Sleep and Health action for the staged account', async () => {
         await fixture.whenStable();
-        mockHealthService.watchSyncStates.mockReturnValueOnce(of([{
-            provider: 'SuuntoApp',
-            status: 'ready',
-            updatedAtMs: Date.now(),
-        }]));
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
         component.serviceName = ServiceNames.SuuntoApp;
         component.userMetaForService = {} as UserServiceMetaInterface;
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
         expect(text).toContain('Sleep & Health history');
         expect(text).toContain('Import Sleep & Health History');
         expect(text).toContain('Imports Suunto sleep and available 24/7 Health metrics');
+    });
+
+    it('keeps the Suunto action sleep-only when the current rollback signal is disabled', async () => {
+        await fixture.whenStable();
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(false);
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Import Sleep History');
+        expect(text).not.toContain('Import Sleep & Health History');
+        expect(text).not.toContain('available 24/7 Health metrics');
     });
 
     it('should render Garmin sleep backfill button for connected Pro users', async () => {

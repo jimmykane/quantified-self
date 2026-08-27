@@ -84,16 +84,26 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
 ): Promise<SuuntoHealthWriteLifecycleGuards> {
   const tokenRootRef = getServiceTokenRootDocumentRef(firebaseUserID, ServiceNames.SuuntoApp);
   let serviceMeta;
+  let tokenRootSnapshot: admin.firestore.DocumentSnapshot;
   try {
-    serviceMeta = await getServiceConnectionMeta(firebaseUserID, ServiceNames.SuuntoApp);
+    [serviceMeta, tokenRootSnapshot] = await Promise.all([
+      getServiceConnectionMeta(firebaseUserID, ServiceNames.SuuntoApp),
+      tokenRootRef.get(),
+    ]);
   } catch {
     throw new SuuntoHealthAccountValidationError();
   }
   if (!expectedCredential.accessToken
+    || !tokenRootSnapshot.exists
     || !serviceMeta
     || isServiceUnavailableForSyncConnection(serviceMeta)) {
     throw new SuuntoHealthAccountValidationError();
   }
+  const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
+  const activeRootGeneration = typeof tokenRootData?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] === 'string'
+    && tokenRootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD].trim().length > 0
+    ? tokenRootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD].trim()
+    : null;
   return {
     requiredExistingDocumentRef: tokenRef,
     requiredExistingTokenCredential: expectedCredential,
@@ -107,15 +117,23 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
     additionalRequiredDocumentFieldValues: [{
       documentRef: tokenRootRef,
       expectedFields: {
-        [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: expectedCredential.credentialGeneration || undefined,
+        [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: activeRootGeneration || undefined,
       },
     }],
   };
 }
 
-async function assertCurrentTokenRootCredential(
+function capturedTokenRootGeneration(
+  guards: SuuntoHealthWriteLifecycleGuards,
+): string | null {
+  const value = guards.additionalRequiredDocumentFieldValues[0]
+    ?.expectedFields[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+async function assertCurrentTokenRootGeneration(
   firebaseUserID: string,
-  expectedCredential: TokenCredentialSnapshot,
+  expectedRootGeneration: string | null,
 ): Promise<void> {
   let tokenRootSnapshot: admin.firestore.DocumentSnapshot;
   try {
@@ -129,7 +147,7 @@ async function assertCurrentTokenRootCredential(
   if (!tokenRootSnapshot.exists
     || !doesOAuthCredentialGenerationAuthorizeToken(
       tokenRootSnapshot.data() as Record<string, unknown> | undefined,
-      expectedCredential.credentialGeneration,
+      expectedRootGeneration,
     )) {
     throw new SuuntoHealthAccountValidationError();
   }
@@ -142,7 +160,8 @@ function assertLifecycleContinuity(
   if (initial.requiredDocumentFieldValues.expectedFields.connectionStateGeneration
     !== current.requiredDocumentFieldValues.expectedFields.connectionStateGeneration
     || initial.requiredExistingTokenCredential.credentialGeneration
-    !== current.requiredExistingTokenCredential.credentialGeneration) {
+    !== current.requiredExistingTokenCredential.credentialGeneration
+    || capturedTokenRootGeneration(initial) !== capturedTokenRootGeneration(current)) {
     throw new SuuntoHealthAccountValidationError();
   }
 }
@@ -175,7 +194,7 @@ async function assertCurrentLifecycle(
   if (!areTokenCredentialSnapshotsEqual(currentCredential, expectedCredential)) {
     throw new SuuntoHealthAccountValidationError();
   }
-  await assertCurrentTokenRootCredential(firebaseUserID, currentCredential);
+  await assertCurrentTokenRootGeneration(firebaseUserID, capturedTokenRootGeneration(initialGuards));
   const currentGuards = await captureSuuntoHealthWriteLifecycleGuards(
     firebaseUserID,
     tokenRef,
@@ -290,9 +309,10 @@ export async function processSuuntoHealthQueueItem(
   lifecycleGuards: SuuntoHealthWriteLifecycleGuards;
 }> {
   const { startMs, endMs } = assertSuuntoHealthRange(queueItem.rangeStartMs, queueItem.rangeEndMs);
+  const expectedRootGeneration = capturedTokenRootGeneration(initialGuards);
   const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, false, {
     opaqueTelemetry: true,
-    requireActiveOAuthCredentialGeneration: true,
+    expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
   });
   let accessToken = typeof tokenData.accessToken === 'string' ? tokenData.accessToken : '';
   const providerUserID = typeof tokenData.userName === 'string' ? tokenData.userName.trim() : '';
@@ -333,7 +353,7 @@ export async function processSuuntoHealthQueueItem(
 
     const refreshedToken = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
-      requireActiveOAuthCredentialGeneration: true,
+      expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
     });
     const refreshedAccessToken = typeof refreshedToken.accessToken === 'string'
       ? refreshedToken.accessToken
