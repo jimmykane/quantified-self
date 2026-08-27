@@ -27,6 +27,17 @@ const hoisted = vi.hoisted(() => {
   const mockHasBasicAccess = vi.fn();
   const mockAssertEventWriteUserActive = vi.fn();
   const mockSetEventDocumentIfUserActive = vi.fn();
+  class MockEventWriteSkippedForDeletedUserError extends Error {
+    public readonly name = 'EventWriteSkippedForDeletedUserError';
+    public readonly code = 'user_deleted_or_deleting';
+
+    constructor(
+      public readonly userID: string,
+      public readonly phase: string,
+    ) {
+      super(`Skipping event write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+    }
+  }
   const mockEnforceAppCheckFlag = { value: true };
   const mockFITImporter = { getFromArrayBuffer: vi.fn() };
   const mockGPXImporter = { getFromString: vi.fn() };
@@ -56,6 +67,7 @@ const hoisted = vi.hoisted(() => {
     mockHasBasicAccess,
     mockAssertEventWriteUserActive,
     mockSetEventDocumentIfUserActive,
+    MockEventWriteSkippedForDeletedUserError,
     mockEnforceAppCheckFlag,
     mockFITImporter,
     mockGPXImporter,
@@ -144,6 +156,7 @@ vi.mock('../utils', () => ({
   hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
   hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
   assertEventWriteUserActive: (...args: unknown[]) => hoisted.mockAssertEventWriteUserActive(...args),
+  EventWriteSkippedForDeletedUserError: hoisted.MockEventWriteSkippedForDeletedUserError,
   setEventDocumentIfUserActive: (...args: unknown[]) => hoisted.mockSetEventDocumentIfUserActive(...args),
 }));
 
@@ -169,7 +182,9 @@ vi.mock('@sports-alliance/sports-lib', () => ({
   EventImporterSuuntoJSON: hoisted.mockSuuntoJSONImporter,
   EventImporterSuuntoSML: hoisted.mockSuuntoSMLImporter,
   ActivityParsingOptions: class ActivityParsingOptions {
-    constructor(_options: unknown) {}
+    constructor(options: unknown) {
+      void options;
+    }
   },
 }));
 
@@ -295,8 +310,8 @@ describe('uploadActivity', () => {
     }));
   });
 
-  it('should fail closed before parsing or writing when the user deletion guard rejects the upload', async () => {
-    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(new Error('deletion in progress'));
+  it('should fail closed before parsing or writing when the user deletion guard cannot be verified', async () => {
+    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(new Error('deletion guard unavailable'));
     const response = makeResponse();
 
     await invokeUploadActivity(makeRequest({
@@ -308,10 +323,89 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not upload activity.' });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
     expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('returns a deletion conflict before parsing or writing when the account is deleting', async () => {
+    hoisted.mockAssertEventWriteUserActive.mockRejectedValueOnce(
+      new hoisted.MockEventWriteSkippedForDeletedUserError('user-1', 'activity_upload_start'),
+    );
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Account deletion is in progress. Please sign in again.',
+      code: 'user_deleted_or_deleting',
+    });
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('returns a deletion conflict when deletion starts during event persistence', async () => {
+    hoisted.mockWriteAllEventData.mockImplementationOnce(async () => {
+      const firestoreAdapter = hoisted.capturedFirestoreAdapter.value as {
+        setDoc: (path: string[], data: unknown) => Promise<void>;
+      };
+      await firestoreAdapter.setDoc(['users', 'user-1', 'events', 'event-1'], { name: 'blocked event' });
+    });
+    hoisted.mockSetEventDocumentIfUserActive.mockRejectedValueOnce(
+      new hoisted.MockEventWriteSkippedForDeletedUserError(
+        'user-1',
+        'activity_upload_writer:users/user-1/events/event-1',
+      ),
+    );
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Account deletion is in progress. Please sign in again.',
+      code: 'user_deleted_or_deleting',
+    });
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+  });
+
+  it('returns a deletion conflict when deletion starts during processing metadata persistence', async () => {
+    hoisted.mockSetEventDocumentIfUserActive.mockRejectedValueOnce(
+      new hoisted.MockEventWriteSkippedForDeletedUserError('user-1', 'activity_upload_processing_metadata'),
+    );
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+    }), response);
+
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Account deletion is in progress. Please sign in again.',
+      code: 'user_deleted_or_deleting',
+    });
   });
 
   it('should reject non-POST methods', async () => {

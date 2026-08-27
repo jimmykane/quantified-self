@@ -174,6 +174,23 @@ describe('AppFitUploadService', () => {
     } satisfies Partial<UploadError>);
   });
 
+  it('should surface account-deletion upload conflicts with their stable code', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({
+        error: 'Account deletion is in progress. Please sign in again.',
+        code: 'user_deleted_or_deleting',
+      }),
+    });
+
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toMatchObject({
+      message: 'Account deletion is in progress. Please sign in again.',
+      status: 409,
+      code: 'user_deleted_or_deleting',
+    } satisfies Partial<UploadError>);
+  });
+
   it('should provide a friendly message when backend returns non-JSON 500 response', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
