@@ -41,6 +41,7 @@ import {
   isOpaqueWahooRefreshFailure,
   toWahooRefreshFailureError,
 } from './wahoo/refresh-recovery';
+import { resolveSuuntoProviderUserIdFromTokenResponse } from './suunto/auth/token-identity';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -581,7 +582,11 @@ export async function getTokenData(
     switch (serviceName) {
       default:
         throw new Error('Not implemented');
-      case ServiceNames.SuuntoApp:
+      case ServiceNames.SuuntoApp: {
+        const refreshedSuuntoProviderUserId = resolveSuuntoProviderUserIdFromTokenResponse(
+          responseToken.token as Record<string, unknown>,
+          typeof refreshTokenData.userName === 'string' ? refreshTokenData.userName : null,
+        );
         newToken = <SuuntoAPIAuth2ServiceTokenInterface>{
           serviceName,
           accessToken: responseToken.token.access_token,
@@ -589,11 +594,12 @@ export async function getTokenData(
           expiresAt: (responseToken.token as any).expires_at.getTime() - 600000,
           scope: responseToken.token.scope,
           tokenType: responseToken.token.token_type,
-          userName: (responseToken.token as any).user,
+          userName: refreshedSuuntoProviderUserId,
           dateRefreshed: date.getTime(),
           dateCreated: refreshTokenData.dateCreated,
         };
         break;
+      }
       case ServiceNames.GarminAPI:
         newToken = <GarminAPIAuth2ServiceTokenInterface>{
           serviceName,

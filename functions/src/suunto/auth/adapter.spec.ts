@@ -36,6 +36,17 @@ describe('SuuntoAuthAdapter', () => {
             const result = await adapter.processNewToken(token, 'u1');
             expect(result.uniqueId).toBe('user-123');
         });
+
+        it('should return uniqueId from the documented access-token user claim', async () => {
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'jwt-user-123' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            const token: any = { token: { access_token: accessToken } };
+            const result = await adapter.processNewToken(token, 'u1');
+            expect(result.uniqueId).toBe('jwt-user-123');
+        });
     });
 
     describe('convertTokenResponse', () => {
@@ -55,7 +66,7 @@ describe('SuuntoAuthAdapter', () => {
             expect(result.scope).toBe('workout');
         });
         
-         it('should use provided values if present', () => {
+        it('should use provided values if present', () => {
             const token: any = {
                 token: {
                     access_token: 'at',
@@ -70,6 +81,26 @@ describe('SuuntoAuthAdapter', () => {
             const result = adapter.convertTokenResponse(token);
             expect(result.tokenType).toBe('custom');
             expect(result.scope).toBe('scope');
+        });
+
+        it('should reject a raw user that disagrees with the access-token claim', () => {
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'jwt-user' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            const token: any = {
+                token: {
+                    access_token: accessToken,
+                    refresh_token: 'rt',
+                    expires_in: 3600,
+                    user: 'raw-user',
+                },
+            };
+
+            expect(() => adapter.convertTokenResponse(token)).toThrow(
+                'Suunto returned inconsistent account identity data.',
+            );
         });
     });
 

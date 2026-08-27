@@ -59,11 +59,23 @@ vi.mock('./route-processing', () => ({
 }));
 
 const suuntoRouteMocks = {
+  createSuuntoRouteUploadContext: vi.fn(),
   exportSuuntoRouteAsGPX: vi.fn(),
 };
 
 vi.mock('../suunto/routes', () => ({
+  createSuuntoRouteUploadContext: (...args: any[]) => suuntoRouteMocks.createSuuntoRouteUploadContext(...args),
   exportSuuntoRouteAsGPX: (...args: any[]) => suuntoRouteMocks.exportSuuntoRouteAsGPX(...args),
+}));
+
+const sourceLifecycleMocks = {
+  captureCurrentSuuntoRouteDeliverySourceLifecycle: vi.fn(),
+};
+
+vi.mock('../route-delivery-sync/source-lifecycle', () => ({
+  captureCurrentSuuntoRouteDeliverySourceLifecycle: (...args: any[]) => (
+    sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle(...args)
+  ),
 }));
 
 const upsertSyncedRouteMocks = {
@@ -178,6 +190,18 @@ describe('processRouteSyncQueueItem', () => {
     queueUtilsMocks.moveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createParsedRouteFile());
     routeProcessingMocks.getRouteParsingFailureMessage.mockReturnValue('Could not parse route.');
+    sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle.mockResolvedValue({
+      status: 'active',
+      fence: {
+        connectionStateGeneration: 'connection-generation-1',
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+      },
+    });
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValue({
+      tokenRefs: [],
+      userNames: ['suunto-user'],
+    });
     suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValue('<gpx />');
     upsertSyncedRouteMocks.upsertSyncedRoute.mockResolvedValue({
       status: 'created',
@@ -238,9 +262,116 @@ describe('processRouteSyncQueueItem', () => {
       sourceServiceName: ServiceNames.SuuntoApp,
       sourceProviderRouteId: 'provider-route-1',
       sourceProviderUserId: 'suunto-user',
+      sourceLifecycleFence: {
+        connectionStateGeneration: 'connection-generation-1',
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+      },
       sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
       manual: false,
     }));
+    expect(suuntoRouteMocks.createSuuntoRouteUploadContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not deliver an unchanged route after its Suunto source starts disconnecting', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      sourceSummary: {
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+      },
+    });
+    sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle.mockResolvedValueOnce({
+      status: 'disconnect_pending',
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-01T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(queueUtilsMocks.deferQueueItemForPendingDisconnect).toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the Suunto source before delivering an unchanged route', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      sourceSummary: {
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+      },
+    });
+    sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle
+      .mockResolvedValueOnce({
+        status: 'active',
+        fence: {
+          connectionStateGeneration: 'connection-generation-1',
+          tokenCredentialGeneration: 'token-generation-1',
+          rootOAuthCredentialGeneration: 'root-generation-1',
+        },
+      })
+      .mockResolvedValueOnce({ status: 'disconnect_pending' });
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-01T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(suuntoRouteMocks.createSuuntoRouteUploadContext).toHaveBeenCalledTimes(1);
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not deliver an unchanged route when Suunto requires reconnect', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      sourceSummary: {
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:09.000Z'),
+      },
+    });
+    sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle.mockResolvedValueOnce({
+      status: 'inactive',
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-01T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_auth_required',
+      expect.objectContaining({ resultStatus: 'skipped' }),
+    );
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not process a route for a Suunto source account that is no longer connected', async () => {
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValueOnce({
+      tokenRefs: [],
+      userNames: ['another-suunto-user'],
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_auth_required',
+      expect.objectContaining({ resultStatus: 'skipped' }),
+    );
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
   });
 
   it('does not require provider user id for unchanged legacy routes that were saved before sourceSummary stored it', async () => {
@@ -438,7 +569,10 @@ describe('processRouteSyncQueueItem', () => {
     expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).toHaveBeenCalledWith(
       'user-1',
       'provider-route-1',
-      { providerUserId: 'suunto-user' },
+      {
+        context: expect.objectContaining({ userNames: ['suunto-user'] }),
+        providerUserId: 'suunto-user',
+      },
     );
     expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledWith(expect.objectContaining({
       routeID: 'route-doc-1',

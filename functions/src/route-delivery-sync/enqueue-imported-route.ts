@@ -13,6 +13,7 @@ import { isRouteDeliverySyncRouteEnabledForUser } from './settings';
 import { enqueueRouteDeliverySyncQueueItem } from './queue';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { hasSuccessfulRouteDeliveryMetadataForRevision } from './delivery-metadata';
+import { RouteDeliverySourceLifecycleFence } from './source-lifecycle';
 export { buildRouteDeliverySourceRevisionKey } from './revision';
 
 export interface EnqueueRouteDeliverySyncJobsForImportedRouteParams {
@@ -21,6 +22,7 @@ export interface EnqueueRouteDeliverySyncJobsForImportedRouteParams {
     sourceServiceName: ServiceNames;
     sourceProviderRouteId?: string;
     sourceProviderUserId?: string;
+    sourceLifecycleFence?: RouteDeliverySourceLifecycleFence;
     sourceRevisionKey: string;
     manual?: boolean;
     routeIdFilter?: RouteDeliverySyncRouteId;
@@ -117,6 +119,7 @@ export async function enqueueRouteDeliverySyncJobsForImportedRoute(
             sourceRevisionKey: params.sourceRevisionKey,
             sourceProviderRouteId: params.sourceProviderRouteId,
             sourceProviderUserId: params.sourceProviderUserId,
+            sourceLifecycleFence: params.sourceLifecycleFence,
             manual: params.manual === true,
         });
 

@@ -133,9 +133,18 @@ const TOKEN_GENERATION = 'credential-generation-1';
 const PROVIDER_ACCOUNT_DIGEST = createHash('sha256').update('suunto-account-1').digest('hex');
 const ROOT_GENERATION = 'root-credential-generation-2';
 const CONNECTION_GENERATION = 'connection-generation-1';
+const CREATE_TIME = { isEqual: (other: unknown) => other === CREATE_TIME };
+const RECREATED_CREATE_TIME = { isEqual: (other: unknown) => other === RECREATED_CREATE_TIME };
+const UPDATE_TIME = { isEqual: (other: unknown) => other === UPDATE_TIME };
+const RECREATED_UPDATE_TIME = { isEqual: (other: unknown) => other === RECREATED_UPDATE_TIME };
 
-function snapshot(data?: Record<string, unknown>, exists = true) {
-  return { exists, data: () => data };
+function snapshot(
+  data?: Record<string, unknown>,
+  exists = true,
+  createTime = CREATE_TIME,
+  updateTime = UPDATE_TIME,
+) {
+  return { exists, data: () => data, createTime, updateTime };
 }
 
 function ingressData(overrides: Record<string, unknown> = {}) {
@@ -162,8 +171,12 @@ function ingressSnapshot(data = ingressData(), id = INGRESS_ID) {
   const ref = {
     get: vi.fn().mockResolvedValue(snapshot(data)),
     update: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   };
-  return { snapshot: { id, data: () => data, ref } as any, ref };
+  return {
+    snapshot: { id, data: () => data, ref, createTime: CREATE_TIME, updateTime: UPDATE_TIME } as any,
+    ref,
+  };
 }
 
 function activeDependencies(overrides: Record<string, unknown> = {}) {
@@ -402,25 +415,27 @@ describe('Suunto Health webhook ingress', () => {
       processedAtMs: PROCESSED_AT_MS,
       resultStatus: 'queued',
       windowsQueued: 2,
+    }, {
+      lastUpdateTime: UPDATE_TIME,
     });
     expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
   });
 
-  it('recursively deletes malformed, disabled, stale, and deleting ingress', async () => {
+  it('version-deletes malformed, disabled, stale, and deleting ingress', async () => {
     const malformed = ingressSnapshot(ingressData({ schemaVersion: 4 }));
     await processSuuntoHealthWebhookIngressDocument(malformed.snapshot, activeDependencies() as any);
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(malformed.ref);
+    expect(malformed.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
 
     const disabled = ingressSnapshot();
     await processSuuntoHealthWebhookIngressDocument(disabled.snapshot, activeDependencies({
       isHealthEnabled: vi.fn(() => false),
     }) as any);
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(disabled.ref);
+    expect(disabled.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
 
     const stale = ingressSnapshot();
     hoisted.state.binding = undefined;
     await processSuuntoHealthWebhookIngressDocument(stale.snapshot, activeDependencies() as any);
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(stale.ref);
+    expect(stale.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
 
     hoisted.state.binding = {
       schemaVersion: 3,
@@ -432,11 +447,11 @@ describe('Suunto Health webhook ingress', () => {
     hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });
     const deleting = ingressSnapshot();
     await processSuuntoHealthWebhookIngressDocument(deleting.snapshot, activeDependencies() as any);
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(deleting.ref);
+    expect(deleting.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
     expect(hoisted.addQueueItem).not.toHaveBeenCalled();
   });
 
-  it('recursively deletes ingress when the captured token-root generation rotated', async () => {
+  it('version-deletes ingress when the captured token-root generation rotated', async () => {
     const rotated = ingressSnapshot();
     hoisted.state.tokenRoot = {
       activeOAuthCredentialGeneration: 'root-credential-generation-3',
@@ -447,21 +462,21 @@ describe('Suunto Health webhook ingress', () => {
       activeDependencies() as any,
     );
 
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(rotated.ref);
+    expect(rotated.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
     expect(hoisted.addQueueItem).not.toHaveBeenCalled();
   });
 
-  it('recursively deletes lifecycle queue skips instead of retaining metadata', async () => {
+  it('version-deletes lifecycle queue skips instead of retaining metadata', async () => {
     const { snapshot: eventSnapshot, ref } = ingressSnapshot();
     hoisted.addQueueItem.mockRejectedValueOnce(new Error('deleting'));
     hoisted.isQueueSkip.mockReturnValueOnce(true);
 
     await processSuuntoHealthWebhookIngressDocument(eventSnapshot, activeDependencies() as any);
-    expect(hoisted.recursiveDelete).toHaveBeenCalledWith(ref);
+    expect(ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
     expect(ref.update).not.toHaveBeenCalled();
   });
 
-  it('propagates transient fan-out and recursive-delete failures for Eventarc retry', async () => {
+  it('propagates transient fan-out and conditional-delete failures for Eventarc retry', async () => {
     const transient = ingressSnapshot();
     hoisted.addQueueItem.mockRejectedValueOnce(new Error('Cloud Tasks unavailable'));
     await expect(processSuuntoHealthWebhookIngressDocument(
@@ -471,10 +486,82 @@ describe('Suunto Health webhook ingress', () => {
     expect(transient.ref.update).not.toHaveBeenCalled();
 
     const malformed = ingressSnapshot(ingressData({ windows: [] }));
-    hoisted.recursiveDelete.mockRejectedValueOnce(new Error('Firestore unavailable'));
+    malformed.ref.delete.mockRejectedValueOnce(new Error('Firestore unavailable'));
     await expect(processSuuntoHealthWebhookIngressDocument(
       malformed.snapshot,
       activeDependencies() as any,
     )).rejects.toThrow('Firestore unavailable');
+  });
+
+  it('does not let an old create event adopt an ingress recreated after reconnect', async () => {
+    const recreated = ingressSnapshot();
+    recreated.ref.get.mockResolvedValueOnce(snapshot(
+      ingressData({
+        tokenCredentialGeneration: 'replacement-token-generation',
+        rootOAuthCredentialGeneration: 'replacement-root-generation',
+        connectionStateGeneration: 'replacement-connection-generation',
+      }),
+      true,
+      RECREATED_CREATE_TIME,
+      RECREATED_UPDATE_TIME,
+    ));
+
+    await processSuuntoHealthWebhookIngressDocument(
+      recreated.snapshot,
+      activeDependencies() as any,
+    );
+
+    expect(hoisted.addQueueItem).not.toHaveBeenCalled();
+    expect(recreated.ref.update).not.toHaveBeenCalled();
+    expect(recreated.ref.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old create event adopt a later version of the same ingress incarnation', async () => {
+    const superseded = ingressSnapshot();
+    superseded.ref.get.mockResolvedValueOnce(snapshot(
+      ingressData({ rootOAuthCredentialGeneration: 'replacement-root-generation' }),
+      true,
+      CREATE_TIME,
+      RECREATED_UPDATE_TIME,
+    ));
+
+    await processSuuntoHealthWebhookIngressDocument(
+      superseded.snapshot,
+      activeDependencies() as any,
+    );
+
+    expect(hoisted.addQueueItem).not.toHaveBeenCalled();
+    expect(superseded.ref.update).not.toHaveBeenCalled();
+    expect(superseded.ref.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not complete or delete an ingress incarnation replaced during processing', async () => {
+    const completing = ingressSnapshot();
+    completing.ref.update.mockRejectedValueOnce(Object.assign(
+      new Error('new ingress occupies this path'),
+      { code: 9 },
+    ));
+
+    await expect(processSuuntoHealthWebhookIngressDocument(
+      completing.snapshot,
+      activeDependencies() as any,
+    )).resolves.toBeUndefined();
+    expect(completing.ref.update).toHaveBeenCalledWith(
+      expect.objectContaining({ processed: true }),
+      { lastUpdateTime: UPDATE_TIME },
+    );
+
+    const discarding = ingressSnapshot();
+    hoisted.state.binding = undefined;
+    discarding.ref.delete.mockRejectedValueOnce(Object.assign(
+      new Error('new ingress occupies this path'),
+      { code: 'FAILED_PRECONDITION' },
+    ));
+
+    await expect(processSuuntoHealthWebhookIngressDocument(
+      discarding.snapshot,
+      activeDependencies() as any,
+    )).resolves.toBeUndefined();
+    expect(discarding.ref.delete).toHaveBeenCalledWith({ lastUpdateTime: UPDATE_TIME });
   });
 });

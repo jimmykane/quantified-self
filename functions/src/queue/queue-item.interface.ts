@@ -135,6 +135,10 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
   sourceRevisionKey: string;
   sourceProviderRouteId?: string;
   sourceProviderUserId?: string;
+  /** Suunto source lifecycle captured atomically at queue admission. */
+  sourceConnectionStateGeneration?: string;
+  sourceTokenCredentialGeneration?: string;
+  sourceRootOAuthCredentialGeneration?: string;
   manual: boolean;
   skippedReason?: string;
   successProcessedAt?: number;

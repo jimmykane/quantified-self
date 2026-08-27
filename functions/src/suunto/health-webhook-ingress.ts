@@ -200,11 +200,23 @@ function parseIngressRecord(value: unknown): SuuntoHealthWebhookIngressRecord {
   };
 }
 
-function isNotFoundError(error: unknown): boolean {
+function isStaleIngressMutationError(error: unknown): boolean {
   const code = error && typeof error === 'object'
     ? (error as { code?: unknown }).code
     : undefined;
-  return code === 5 || code === 'not-found' || code === 'NOT_FOUND';
+  return code === 5
+    || code === 9
+    || code === 'not-found'
+    || code === 'NOT_FOUND'
+    || code === 'failed-precondition'
+    || code === 'FAILED_PRECONDITION';
+}
+
+function timestampsEqual(
+  left: admin.firestore.Timestamp | undefined,
+  right: admin.firestore.Timestamp | undefined,
+): boolean {
+  return Boolean(left && right && left.isEqual(right));
 }
 
 function tokenAndRootStillAuthorizeBinding(
@@ -427,30 +439,47 @@ export async function persistSuuntoHealthWebhookIngress(
 
 async function markIngressProcessed(
   ref: admin.firestore.DocumentReference,
+  expectedUpdateTime: admin.firestore.Timestamp,
   nowMs: number,
   windowsQueued: number,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await ref.update({
       processed: true,
       processedAtMs: nowMs,
       resultStatus: 'queued',
       windowsQueued,
+    }, {
+      lastUpdateTime: expectedUpdateTime,
     });
+    return true;
   } catch (error) {
-    // Account/service cleanup may recursively delete the short-lived ingress
-    // while its worker is finishing. Never recreate a deleted operational row.
-    if (!isNotFoundError(error)) throw error;
+    // Cleanup or another worker may delete, replace, or finish this exact
+    // ingress incarnation. Never mutate the document now occupying its path.
+    if (!isStaleIngressMutationError(error)) throw error;
+    return false;
   }
 }
 
-async function recursivelyDiscardIngress(
-  db: admin.firestore.Firestore,
+async function discardIngressIfCurrent(
   ref: admin.firestore.DocumentReference,
+  expectedUpdateTime: admin.firestore.Timestamp,
   reason: IngressDiscardReason,
-): Promise<void> {
-  await db.recursiveDelete(ref);
-  logger.info('[HealthSync][Suunto] Discarded non-retryable webhook ingress.', { reason });
+): Promise<boolean> {
+  try {
+    // Ingress records are permanent leaf documents by design. A conditional
+    // document delete is required here because recursiveDelete cannot carry a
+    // last-update precondition and could erase a reconnect-created ingress.
+    await ref.delete({ lastUpdateTime: expectedUpdateTime });
+    logger.info('[HealthSync][Suunto] Discarded non-retryable webhook ingress.', { reason });
+    return true;
+  } catch (error) {
+    if (!isStaleIngressMutationError(error)) throw error;
+    logger.info('[HealthSync][Suunto] Left a newer webhook ingress incarnation untouched.', {
+      reason,
+    });
+    return false;
+  }
 }
 
 export async function processSuuntoHealthWebhookIngressDocument(
@@ -461,6 +490,15 @@ export async function processSuuntoHealthWebhookIngressDocument(
   const nowMs = (dependencies.nowMs || Date.now)();
   const currentSnapshot = await eventSnapshot.ref.get();
   if (!currentSnapshot.exists) return;
+  if (!timestampsEqual(eventSnapshot.createTime, currentSnapshot.createTime)
+    || !timestampsEqual(eventSnapshot.updateTime, currentSnapshot.updateTime)) {
+    logger.info('[HealthSync][Suunto] Ignoring a stale webhook ingress create event.');
+    return;
+  }
+  const expectedUpdateTime = eventSnapshot.updateTime;
+  if (!expectedUpdateTime) {
+    throw new Error('Suunto Health webhook ingress version is unavailable.');
+  }
   const currentData = currentSnapshot.data() as Record<string, unknown> | undefined;
   if (currentData?.processed === true) return;
 
@@ -472,13 +510,13 @@ export async function processSuuntoHealthWebhookIngressDocument(
     ingress = parseIngressRecord(currentData);
   } catch {
     logger.warn('[HealthSync][Suunto] Ignoring malformed webhook ingress.');
-    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'invalid_ingress');
+    await discardIngressIfCurrent(eventSnapshot.ref, expectedUpdateTime, 'invalid_ingress');
     return;
   }
 
   const isHealthEnabled = dependencies.isHealthEnabled || isSuuntoHealthSyncEnabled;
   if (!isHealthEnabled()) {
-    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'provider_disabled');
+    await discardIngressIfCurrent(eventSnapshot.ref, expectedUpdateTime, 'provider_disabled');
     return;
   }
 
@@ -499,9 +537,9 @@ export async function processSuuntoHealthWebhookIngressDocument(
       !== ingress.rootOAuthCredentialGeneration
     || activeBinding.connectionState !== ingress.connectionState
     || activeBinding.connectionStateGeneration !== ingress.connectionStateGeneration) {
-    await recursivelyDiscardIngress(
-      db,
+    await discardIngressIfCurrent(
       eventSnapshot.ref,
+      expectedUpdateTime,
       'user_not_allowed_or_disconnected',
     );
     return;
@@ -545,11 +583,17 @@ export async function processSuuntoHealthWebhookIngressDocument(
   } catch (error) {
     if (!isProviderQueueSkippedWithoutRetryError(error)) throw error;
     logger.info('[HealthSync][Suunto] Webhook ingress fan-out skipped by account lifecycle.');
-    await recursivelyDiscardIngress(db, eventSnapshot.ref, 'queue_skipped');
+    await discardIngressIfCurrent(eventSnapshot.ref, expectedUpdateTime, 'queue_skipped');
     return;
   }
 
-  await markIngressProcessed(eventSnapshot.ref, nowMs, ingress.windows.length);
+  const processed = await markIngressProcessed(
+    eventSnapshot.ref,
+    expectedUpdateTime,
+    nowMs,
+    ingress.windows.length,
+  );
+  if (!processed) return;
   logger.info('[HealthSync][Suunto] Fanned out durable webhook ingress.', {
     windows: ingress.windows.length,
   });

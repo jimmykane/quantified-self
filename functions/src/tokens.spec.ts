@@ -268,7 +268,7 @@ describe('tokens', () => {
                     access_token: 'default-access',
                     refresh_token: 'default-refresh',
                     expires_at: new Date(),
-                    user: 'default-user',
+                    user: 'suunto-user',
                     token_type: 'Bearer',
                     scope: 'default-scope',
                 }
@@ -618,6 +618,57 @@ describe('tokens', () => {
             expect(result.accessToken).toBe('new-access');
             expect(mockDoc.ref.update).toHaveBeenCalled();
             expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(3);
+        });
+
+        it('persists Suunto identity from the refreshed access-token claim when raw user is absent', async () => {
+            mockToken.expired.mockReturnValue(false);
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'suunto-user' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: accessToken,
+                    refresh_token: 'new-refresh',
+                    expires_at: new Date(Date.now() + 3600000),
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, true);
+
+            expect(result.userName).toBe('suunto-user');
+            expect(mockDoc.ref.update).toHaveBeenCalledWith(expect.objectContaining({
+                userName: 'suunto-user',
+                accessToken,
+            }));
+        });
+
+        it('does not persist a refreshed Suunto token when raw and claim identities disagree', async () => {
+            mockToken.expired.mockReturnValue(false);
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'suunto-user' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: accessToken,
+                    refresh_token: 'new-refresh',
+                    expires_at: new Date(Date.now() + 3600000),
+                    user: 'different-user',
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, true))
+                .rejects.toMatchObject({ name: 'SuuntoTokenIdentityError' });
+
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalledOnce();
         });
 
         it('should not call provider refresh when user deletion is in progress before refresh', async () => {
