@@ -64,7 +64,9 @@ export class EventDiveProfileComponent implements OnChanges {
     const value = Number(this.userSettingsQuery.chartSettings()?.strokeWidth);
     return Number.isFinite(value) && value > 0 ? value : AppUserUtilities.getDefaultChartStrokeWidth();
   });
-  public readonly fillOpacity = 1;
+  public readonly fillOpacity = computed(() => (
+    AppUserUtilities.getResolvedChartFillOpacity(this.userSettingsQuery.chartSettings())
+  ));
   public readonly cursorBehaviour = computed<ChartCursorBehaviours>(() => (
     this.userSettingsQuery.chartSettings()?.chartCursorBehaviour
       ?? AppUserUtilities.getDefaultChartCursorBehaviour()
