@@ -8,6 +8,11 @@ const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
   const bindingRef = { path: 'suuntoHealthWebhookAccountBindings/digest' };
   const tokenRef = { path: 'suuntoAppAccessTokens/user-1/tokens/provider-1' };
+  const tokenSnapshot = {
+    id: 'provider-1',
+    ref: tokenRef,
+    data: () => state.token,
+  };
   const tokenRootRef = {
     path: 'suuntoAppAccessTokens/user-1',
     collection: vi.fn(() => ({ doc: vi.fn(() => tokenRef) })),
@@ -51,8 +56,10 @@ const hoisted = vi.hoisted(() => {
     serviceMetaRef,
     state,
     tokenRef,
+    tokenSnapshot,
     tokenRootRef,
     transactionSet,
+    getTokenData: vi.fn(),
   };
 });
 
@@ -61,6 +68,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 vi.mock('../service-token-store', () => ({
   getServiceTokenRootDocumentRef: vi.fn(() => hoisted.tokenRootRef),
+  SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   doesServiceDisconnectOperationPermitTokenUse: vi.fn((data: Record<string, unknown>) =>
     !data.disconnectOperationGeneration),
 }));
@@ -68,13 +76,25 @@ vi.mock('../service-disconnect-pending-state', () => ({
   isServiceDisconnectPendingData: vi.fn((data: Record<string, unknown>) =>
     data.disconnectState === 'disconnect_pending'),
 }));
-import { ensureSuuntoHealthWebhookAccountBindingForActiveToken } from './health-webhook-binding-lifecycle';
+vi.mock('../tokens', () => ({
+  getTokenData: (...args: unknown[]) => hoisted.getTokenData(...args),
+}));
+import {
+  areSuuntoWebhookWriteLifecycleGuardsContinuous,
+  captureActiveSuuntoWebhookWriteLifecycleGuards,
+  captureCurrentSuuntoWebhookWriteLifecycleGuards,
+  ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
+  getSuuntoWebhookWriteLifecycleAuthorityDigest,
+} from './health-webhook-binding-lifecycle';
 
 describe('Suunto Health webhook account binding lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.state.binding = undefined;
     hoisted.state.token = {
+      accessToken: 'access-token-1',
+      refreshToken: 'refresh-token-1',
+      expiresAt: 1_800_000_000_000,
       serviceName: ServiceNames.SuuntoApp,
       userName: 'provider-1',
       tokenCredentialGeneration: 'token-generation-1',
@@ -85,20 +105,31 @@ describe('Suunto Health webhook account binding lifecycle', () => {
       connectionStateGeneration: 'connection-generation-1',
     };
     hoisted.deletionGuard.mockResolvedValue({ shouldSkip: false });
+    hoisted.getTokenData.mockResolvedValue({ userName: 'provider-1' });
   });
 
-  it('creates a binding for a retained token whose generation predates the root revision', async () => {
-    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+  it('creates a binding only after Suunto verifies a retained token whose generation predates the root revision', async () => {
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
       hoisted.db as never,
       'user-1',
-      'provider-1',
+      hoisted.tokenSnapshot as never,
       1_777_777_777_000,
     )).resolves.toBe('created');
 
+    expect(hoisted.getTokenData).toHaveBeenCalledWith(
+      hoisted.tokenSnapshot,
+      ServiceNames.SuuntoApp,
+      true,
+      {
+        opaqueTelemetry: true,
+        allowSupersededSnapshotRetry: false,
+      },
+    );
     expect(hoisted.transactionSet).toHaveBeenCalledWith(
       hoisted.bindingRef,
       {
         schemaVersion: 3,
+        authorizationSource: 'provider_refresh',
         userID: 'user-1',
         providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
         tokenCredentialGeneration: 'token-generation-1',
@@ -106,7 +137,7 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     );
   });
 
-  it('does not overwrite a malformed per-user binding owned by another UID', async () => {
+  it('replaces a provenance-less binding only after provider verification', async () => {
     hoisted.state.binding = {
       schemaVersion: 3,
       userID: 'other-user',
@@ -114,31 +145,229 @@ describe('Suunto Health webhook account binding lifecycle', () => {
       tokenCredentialGeneration: 'other-generation',
     };
 
-    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('created');
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      expect.objectContaining({
+        authorizationSource: 'provider_refresh',
+        userID: 'user-1',
+      }),
+    );
+  });
+
+  it('does not mint victim webhook authority when Suunto refresh returns another account', async () => {
+    hoisted.getTokenData.mockResolvedValueOnce({ userName: 'attacker-provider-account' });
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('unverified');
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('accepts a current OAuth-authorized binding without another provider refresh', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('current');
+
+    expect(hoisted.getTokenData).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('captures every current authority field for transaction-level Sleep writes', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+
+    await expect(captureActiveSuuntoWebhookWriteLifecycleGuards(
       hoisted.db as never,
       'user-1',
       'provider-1',
-    )).resolves.toBe('conflict');
-    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+      hoisted.tokenSnapshot as never,
+      1_777_777_777_000,
+    )).resolves.toEqual({
+      requiredExistingDocumentRef: hoisted.tokenRef,
+      requiredExistingTokenCredential: expect.objectContaining({
+        accessToken: 'access-token-1',
+        credentialGeneration: 'token-generation-1',
+      }),
+      requiredDocumentFieldValues: {
+        documentRef: hoisted.bindingRef,
+        expectedFields: hoisted.state.binding,
+      },
+      additionalRequiredDocumentFieldValues: [{
+        documentRef: hoisted.tokenRef,
+        expectedFields: {
+          userName: 'provider-1',
+          serviceName: ServiceNames.SuuntoApp,
+          tokenCredentialGeneration: 'token-generation-1',
+        },
+      }, {
+        documentRef: hoisted.tokenRootRef,
+        expectedFields: {
+          activeOAuthCredentialGeneration: 'root-generation-2',
+          disconnectState: undefined,
+          disconnectOperationGeneration: undefined,
+        },
+      }, {
+        documentRef: hoisted.serviceMetaRef,
+        expectedFields: {
+          connectionState: 'connected',
+          connectionStateGeneration: 'connection-generation-1',
+        },
+      }],
+    });
+  });
+
+  it('atomically rebases rotating credentials without changing webhook authority', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      accessToken: 'rotated-access-token',
+      refreshToken: 'rotated-refresh-token',
+    };
+
+    const guards = await captureCurrentSuuntoWebhookWriteLifecycleGuards(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+    );
+
+    expect(guards?.requiredExistingTokenCredential).toEqual(expect.objectContaining({
+      accessToken: 'rotated-access-token',
+      refreshToken: 'rotated-refresh-token',
+      credentialGeneration: 'token-generation-1',
+    }));
+    expect(guards?.requiredDocumentFieldValues.expectedFields).toEqual(hoisted.state.binding);
+  });
+
+  it('allows credential rotation only while every authority field remains continuous', () => {
+    const initial = {
+      requiredExistingDocumentRef: hoisted.tokenRef,
+      requiredExistingTokenCredential: { accessToken: 'old-access', credentialGeneration: 'generation-1' },
+      requiredDocumentFieldValues: {
+        documentRef: hoisted.bindingRef,
+        expectedFields: { authorizationSource: 'oauth_callback', tokenCredentialGeneration: 'generation-1' },
+      },
+      additionalRequiredDocumentFieldValues: [{
+        documentRef: hoisted.tokenRootRef,
+        expectedFields: { activeOAuthCredentialGeneration: 'root-generation-1' },
+      }],
+    };
+    const rotatedCredential = {
+      ...initial,
+      requiredExistingTokenCredential: { accessToken: 'new-access', credentialGeneration: 'generation-1' },
+    };
+
+    expect(areSuuntoWebhookWriteLifecycleGuardsContinuous(initial as never, rotatedCredential as never))
+      .toBe(true);
+    expect(areSuuntoWebhookWriteLifecycleGuardsContinuous(initial as never, {
+      ...rotatedCredential,
+      additionalRequiredDocumentFieldValues: [{
+        documentRef: hoisted.tokenRootRef,
+        expectedFields: { activeOAuthCredentialGeneration: 'root-generation-2' },
+      }],
+    } as never)).toBe(false);
+  });
+
+  it('digests authority changes without treating credential rotation as new authority', () => {
+    const initial = {
+      requiredExistingDocumentRef: hoisted.tokenRef,
+      requiredExistingTokenCredential: { accessToken: 'old-access', credentialGeneration: 'generation-1' },
+      requiredDocumentFieldValues: {
+        documentRef: hoisted.bindingRef,
+        expectedFields: { authorizationSource: 'oauth_callback', tokenCredentialGeneration: 'generation-1' },
+      },
+      additionalRequiredDocumentFieldValues: [{
+        documentRef: hoisted.tokenRootRef,
+        expectedFields: {
+          activeOAuthCredentialGeneration: 'root-generation-1',
+          disconnectOperationGeneration: undefined,
+        },
+      }],
+    };
+    const rotatedCredential = {
+      ...initial,
+      requiredExistingTokenCredential: { accessToken: 'new-access', credentialGeneration: 'generation-1' },
+    };
+    const replacedConnection = {
+      ...rotatedCredential,
+      additionalRequiredDocumentFieldValues: [{
+        documentRef: hoisted.tokenRootRef,
+        expectedFields: {
+          activeOAuthCredentialGeneration: 'root-generation-2',
+          disconnectOperationGeneration: undefined,
+        },
+      }],
+    };
+
+    expect(getSuuntoWebhookWriteLifecycleAuthorityDigest(initial as never))
+      .toBe(getSuuntoWebhookWriteLifecycleAuthorityDigest(rotatedCredential as never));
+    expect(getSuuntoWebhookWriteLifecycleAuthorityDigest(replacedConnection as never))
+      .not.toBe(getSuuntoWebhookWriteLifecycleAuthorityDigest(initial as never));
+  });
+
+  it('refuses to capture Sleep write authority from a provenance-less binding', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+
+    await expect(captureActiveSuuntoWebhookWriteLifecycleGuards(
+      hoisted.db as never,
+      'user-1',
+      'provider-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBeNull();
   });
 
   it('does not bind deleting or reconnect-required accounts', async () => {
     hoisted.deletionGuard.mockResolvedValueOnce({ shouldSkip: true });
-    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
       hoisted.db as never,
       'user-1',
-      'provider-1',
+      hoisted.tokenSnapshot as never,
     )).resolves.toBe('inactive');
 
     hoisted.state.serviceMeta = {
       connectionState: 'reconnect_required',
       connectionStateGeneration: 'replacement-generation',
     };
-    await expect(ensureSuuntoHealthWebhookAccountBindingForActiveToken(
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
       hoisted.db as never,
       'user-1',
-      'provider-1',
+      hoisted.tokenSnapshot as never,
     )).resolves.toBe('inactive');
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    expect(hoisted.getTokenData).not.toHaveBeenCalled();
   });
 });

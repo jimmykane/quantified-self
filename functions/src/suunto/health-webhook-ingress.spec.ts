@@ -199,6 +199,7 @@ describe('Suunto Health webhook ingress', () => {
     vi.clearAllMocks();
     hoisted.state.binding = {
       schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
       userID: 'firebase-user-1',
       providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,
@@ -271,6 +272,7 @@ describe('Suunto Health webhook ingress', () => {
   it('creates independent durable ingress for every active staged connection', async () => {
     hoisted.state.binding2 = {
       schemaVersion: 3,
+      authorizationSource: 'provider_refresh',
       userID: 'firebase-user-2',
       providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: 'credential-generation-2',
@@ -318,6 +320,7 @@ describe('Suunto Health webhook ingress', () => {
 
     hoisted.state.binding = {
       schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
       userID: 'firebase-user-1',
       providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,
@@ -383,7 +386,12 @@ describe('Suunto Health webhook ingress', () => {
       suuntoHealthRootOAuthCredentialGeneration: ROOT_GENERATION,
       suuntoHealthConnectionStateGeneration: CONNECTION_GENERATION,
       requiredDocumentFieldValues: expect.arrayContaining([
-        expect.objectContaining({ documentRef: hoisted.bindingRef }),
+        expect.objectContaining({
+          documentRef: hoisted.bindingRef,
+          expectedFields: expect.objectContaining({
+            authorizationSource: 'oauth_callback',
+          }),
+        }),
         expect.objectContaining({ documentRef: hoisted.tokenRef }),
         expect.objectContaining({ documentRef: hoisted.tokenRootRef }),
         expect.objectContaining({ documentRef: hoisted.serviceMetaRef }),
@@ -416,6 +424,7 @@ describe('Suunto Health webhook ingress', () => {
 
     hoisted.state.binding = {
       schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
       userID: 'firebase-user-1',
       providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
       tokenCredentialGeneration: TOKEN_GENERATION,

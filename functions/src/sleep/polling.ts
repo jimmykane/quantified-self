@@ -1,5 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
+import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS, SleepProvider } from '../../../shared/sleep';
@@ -28,7 +30,10 @@ import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
     SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from '../suunto/health';
-import { ensureSuuntoHealthWebhookAccountBindingForActiveToken } from '../suunto/health-webhook-binding-lifecycle';
+import {
+    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
+} from '../suunto/health-webhook-binding-lifecycle';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface PollWindow {
     startMs: number;
@@ -36,6 +41,36 @@ interface PollWindow {
 }
 
 const COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY = 20;
+const SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE = 4;
+const SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE = 100;
+const SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT = 8;
+const SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SUUNTO_SLEEP_POLL_MAX_SWEEP_AGE_MS = 6 * 24 * 60 * 60 * 1000;
+const SUUNTO_BINDING_VERIFICATION_INITIAL_BACKOFF_MS = 30 * 60 * 1000;
+const SUUNTO_BINDING_VERIFICATION_MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
+const SUUNTO_BINDING_VERIFICATION_STATE_COLLECTION = 'providerMaintenanceState';
+const SUUNTO_BINDING_VERIFICATION_CURSOR_DOCUMENT = 'suuntoWebhookBindingVerification';
+const SUUNTO_SLEEP_POLL_CURSOR_DOCUMENT = 'suuntoSleepPolling';
+const SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT = 'suuntoHealthPolling';
+const SUUNTO_BINDING_VERIFICATION_FAILURE_COUNT_FIELD =
+    'suuntoWebhookBindingVerificationFailureCount';
+const SUUNTO_BINDING_VERIFICATION_NEXT_ATTEMPT_FIELD =
+    'suuntoWebhookBindingVerificationNextAttemptAtMs';
+const SUUNTO_BINDING_VERIFICATION_LAST_ATTEMPT_FIELD =
+    'suuntoWebhookBindingVerificationLastAttemptAtMs';
+const SUUNTO_BINDING_VERIFICATION_EPOCH_FIELD =
+    'suuntoWebhookBindingVerificationEpoch';
+
+interface SuuntoBindingVerificationCandidate {
+    tokenSnapshot: PollingTokenSnapshot;
+    userID: string;
+}
+
+interface ProviderTokenSnapshotPage {
+    snapshots: PollingTokenSnapshot[];
+    commitCursor?: () => Promise<void>;
+    verificationEpoch?: string;
+}
 
 function chunkRecentWindow(nowMs: number, recentWindowDays: number, maxWindowDays: number): PollWindow[] {
     const maxWindowMs = maxWindowDays * 24 * 60 * 60 * 1000;
@@ -79,7 +114,163 @@ async function resolveActiveCOROSTokenSnapshots(candidateUserIDs: readonly strin
     return activeTokens.filter((token): token is PollingTokenSnapshot => token !== null);
 }
 
-async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: ServiceNames): Promise<PollingTokenSnapshot[]> {
+async function getPagedSuuntoTokenSnapshots(
+    cursorDocumentID: string,
+    rootPageSize: number,
+    nowMs = Date.now(),
+    minimumSweepIntervalMs = 0,
+    allowedUserIDs: readonly string[] = [],
+): Promise<ProviderTokenSnapshotPage & { commitCursor: () => Promise<void> }> {
+    const db = admin.firestore();
+    const cursorRef = db.collection(SUUNTO_BINDING_VERIFICATION_STATE_COLLECTION)
+        .doc(cursorDocumentID);
+    const cursorSnapshot = await cursorRef.get();
+    const cursorData = cursorSnapshot.data() as Record<string, unknown> | undefined;
+    let verificationEpoch = typeof cursorData?.verificationEpoch === 'string'
+        && cursorData.verificationEpoch.length === 36
+        ? cursorData.verificationEpoch
+        : undefined;
+    if (cursorDocumentID === SUUNTO_BINDING_VERIFICATION_CURSOR_DOCUMENT
+        && !verificationEpoch) {
+        verificationEpoch = crypto.randomUUID();
+        await cursorRef.set({ verificationEpoch }, { merge: true });
+    }
+    const lastCompletedUserID = typeof cursorData?.lastCompletedUserID === 'string'
+        && cursorData.lastCompletedUserID.trim()
+        ? cursorData.lastCompletedUserID
+        : null;
+    const currentUserID = typeof cursorData?.currentUserID === 'string'
+        && cursorData.currentUserID.trim()
+        ? cursorData.currentUserID
+        : null;
+    const lastProcessedTokenID = currentUserID
+        && typeof cursorData?.lastProcessedTokenID === 'string'
+        && cursorData.lastProcessedTokenID.trim()
+        ? cursorData.lastProcessedTokenID
+        : null;
+    const lastCompletedSweepAtMs = Number(cursorData?.lastCompletedSweepAtMs);
+    const sweepStartedAtMs = Number(cursorData?.sweepStartedAtMs);
+    if (!lastCompletedUserID
+        && !currentUserID
+        && Number.isFinite(lastCompletedSweepAtMs)
+        && lastCompletedSweepAtMs > 0
+        && nowMs - lastCompletedSweepAtMs < minimumSweepIntervalMs) {
+        return {
+            snapshots: [],
+            commitCursor: async () => undefined,
+            verificationEpoch,
+        };
+    }
+    if (Number.isFinite(sweepStartedAtMs)
+        && sweepStartedAtMs > 0
+        && nowMs - sweepStartedAtMs > SUUNTO_SLEEP_POLL_MAX_SWEEP_AGE_MS) {
+        logger.warn('[SleepSync][Suunto] Canonical account sweep is approaching the recovery-window limit.', {
+            cursorDocumentID,
+            sweepAgeMs: nowMs - sweepStartedAtMs,
+        });
+    }
+
+    let rootPage: Array<{
+        userID: string;
+        snapshot: admin.firestore.DocumentSnapshot | null;
+    }> = [];
+    let hasMoreRoots = false;
+    if (currentUserID) {
+        const currentRootSnapshot = await db.collection('suuntoAppAccessTokens')
+            .doc(currentUserID)
+            .get();
+        rootPage = [{
+            userID: currentUserID,
+            snapshot: currentRootSnapshot.exists ? currentRootSnapshot : null,
+        }];
+    } else if (allowedUserIDs.length > 0) {
+        const normalizedAllowedUserIDs = [...new Set(allowedUserIDs
+            .map(userID => userID.trim())
+            .filter(userID => userID.length > 0))].sort();
+        const remainingUserIDs = normalizedAllowedUserIDs
+            .filter(userID => !lastCompletedUserID || userID > lastCompletedUserID);
+        const selectedUserIDs = remainingUserIDs.slice(0, rootPageSize);
+        rootPage = await Promise.all(selectedUserIDs.map(async userID => {
+            const snapshot = await db.collection('suuntoAppAccessTokens').doc(userID).get();
+            return { userID, snapshot: snapshot.exists ? snapshot : null };
+        }));
+        hasMoreRoots = remainingUserIDs.length > rootPageSize;
+    } else {
+        let rootQuery: admin.firestore.Query = db.collection('suuntoAppAccessTokens')
+            .orderBy(FieldPath.documentId());
+        if (lastCompletedUserID) rootQuery = rootQuery.startAfter(lastCompletedUserID);
+        const rootSnapshot = await rootQuery.limit(rootPageSize + 1).get();
+        rootPage = rootSnapshot.docs.slice(0, rootPageSize).map(snapshot => ({
+            userID: snapshot.id,
+            snapshot,
+        }));
+        hasMoreRoots = rootSnapshot.docs.length > rootPageSize;
+    }
+
+    const snapshots: PollingTokenSnapshot[] = [];
+    // The user may have disconnected or completed deletion between pages;
+    // advance past a vanished canonical root instead of pinning the sweep.
+    let completedUserID = lastCompletedUserID;
+    let partialUserID: string | null = null;
+    let partialTokenID: string | null = null;
+    for (const rootEntry of rootPage) {
+        if (!rootEntry.snapshot) {
+            completedUserID = rootEntry.userID;
+            continue;
+        }
+        let tokenQuery: admin.firestore.Query = rootEntry.snapshot.ref.collection('tokens')
+            .where('serviceName', '==', ServiceNames.SuuntoApp)
+            .orderBy(FieldPath.documentId());
+        if (currentUserID === rootEntry.userID && lastProcessedTokenID) {
+            tokenQuery = tokenQuery.startAfter(lastProcessedTokenID);
+        }
+        const tokenSnapshot = await tokenQuery
+            .limit(SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT + 1)
+            .get();
+        const selectedTokens = tokenSnapshot.docs.slice(0, SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT);
+        snapshots.push(...selectedTokens);
+        if (tokenSnapshot.docs.length > SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT) {
+            partialUserID = rootEntry.userID;
+            partialTokenID = selectedTokens[selectedTokens.length - 1]?.id || null;
+            break;
+        }
+        completedUserID = rootEntry.userID;
+    }
+    const resumedRootNeedsAnotherInvocation = !!currentUserID && !partialUserID;
+    const hasMoreWork = !!partialUserID || resumedRootNeedsAnotherInvocation || hasMoreRoots;
+    const currentSweepStartedAtMs = Number.isFinite(sweepStartedAtMs) && sweepStartedAtMs > 0
+        ? sweepStartedAtMs
+        : nowMs;
+    return {
+        snapshots,
+        verificationEpoch,
+        commitCursor: async () => {
+            await cursorRef.set({
+                ...(verificationEpoch ? { verificationEpoch } : {}),
+                lastCompletedUserID: hasMoreWork ? completedUserID : null,
+                currentUserID: partialUserID,
+                // This short-lived keyset stays in a backend-only maintenance
+                // document and is cleared as soon as this account page ends.
+                lastProcessedTokenID: partialTokenID,
+                rootPageSize,
+                perRootTokenLimit: SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT,
+                sweepStartedAtMs: hasMoreWork ? currentSweepStartedAtMs : null,
+                lastCompletedSweepAtMs: hasMoreWork
+                    ? (Number.isFinite(lastCompletedSweepAtMs) && lastCompletedSweepAtMs > 0
+                        ? lastCompletedSweepAtMs
+                        : null)
+                    : nowMs,
+                updatedAtMs: nowMs,
+            }, { merge: false });
+        },
+    };
+}
+
+async function getProviderTokenSnapshots(
+    provider: SleepProvider,
+    serviceName: ServiceNames,
+    nowMs: number,
+): Promise<ProviderTokenSnapshotPage> {
     const allowedUserIDs = getAllowedSleepSyncUserIds();
     if (provider === SLEEP_PROVIDERS.COROSAPI) {
         let candidateUserIDs = allowedUserIDs;
@@ -93,10 +284,19 @@ async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: S
                 .filter((userID): userID is string => !!userID)));
         }
 
-        return resolveActiveCOROSTokenSnapshots(candidateUserIDs);
+        return { snapshots: await resolveActiveCOROSTokenSnapshots(candidateUserIDs) };
     }
 
     if (allowedUserIDs.length > 0) {
+        if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+            return getPagedSuuntoTokenSnapshots(
+                SUUNTO_SLEEP_POLL_CURSOR_DOCUMENT,
+                SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
+                nowMs,
+                SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS,
+                allowedUserIDs,
+            );
+        }
         const snapshots = await Promise.all(allowedUserIDs.map(async (userID) => {
             const tokenRoot = getTokenRoot(provider, userID);
             if (!tokenRoot) {
@@ -105,14 +305,21 @@ async function getProviderTokenSnapshots(provider: SleepProvider, serviceName: S
             const snapshot = await tokenRoot.where('serviceName', '==', serviceName).get();
             return snapshot.docs;
         }));
-        return snapshots.flat();
+        return { snapshots: snapshots.flat() };
     }
 
-    const snapshot = await admin.firestore()
-        .collectionGroup('tokens')
-        .where('serviceName', '==', serviceName)
-        .get();
-    return snapshot.docs;
+    if (provider === SLEEP_PROVIDERS.SuuntoApp) {
+        return getPagedSuuntoTokenSnapshots(
+            SUUNTO_SLEEP_POLL_CURSOR_DOCUMENT,
+            SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
+            nowMs,
+            SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS,
+        );
+    }
+
+    const snapshot = await admin.firestore().collectionGroup('tokens')
+        .where('serviceName', '==', serviceName).get();
+    return { snapshots: snapshot.docs };
 }
 
 function getFirebaseUserID(tokenSnapshot: PollingTokenSnapshot): string | null {
@@ -122,14 +329,151 @@ function getFirebaseUserID(tokenSnapshot: PollingTokenSnapshot): string | null {
 function getProviderUserId(provider: SleepProvider, tokenSnapshot: PollingTokenSnapshot): string | null {
     const tokenData = tokenSnapshot.data();
     switch (provider) {
-        case SLEEP_PROVIDERS.SuuntoApp:
-            return typeof tokenData?.userName === 'string' ? tokenData.userName : null;
+        case SLEEP_PROVIDERS.SuuntoApp: {
+            const providerUserId = typeof tokenData?.userName === 'string'
+                ? tokenData.userName.trim()
+                : '';
+            return providerUserId
+                && providerUserId === tokenData?.userName
+                && providerUserId === tokenSnapshot.id
+                ? providerUserId
+                : null;
+        }
         case SLEEP_PROVIDERS.COROSAPI:
             return typeof tokenData?.openId === 'string' && tokenData.openId.trim()
                 ? tokenData.openId.trim()
                 : tokenSnapshot.id;
         default:
             return null;
+    }
+}
+
+function suuntoBindingCandidateKey(candidate: SuuntoBindingVerificationCandidate): string {
+    return `${candidate.userID}\0${candidate.tokenSnapshot.id}`;
+}
+
+function suuntoBindingVerificationFailureCount(tokenSnapshot: PollingTokenSnapshot): number {
+    const value = Number(tokenSnapshot.data()?.[SUUNTO_BINDING_VERIFICATION_FAILURE_COUNT_FIELD]);
+    return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function shouldDeferSuuntoBindingVerification(
+    tokenSnapshot: PollingTokenSnapshot,
+    nowMs: number,
+    verificationEpoch: string,
+): boolean {
+    if (tokenSnapshot.data()?.[SUUNTO_BINDING_VERIFICATION_EPOCH_FIELD]
+        !== verificationEpoch) return false;
+    const nextAttemptAtMs = Number(
+        tokenSnapshot.data()?.[SUUNTO_BINDING_VERIFICATION_NEXT_ATTEMPT_FIELD],
+    );
+    return Number.isFinite(nextAttemptAtMs) && nextAttemptAtMs > nowMs;
+}
+
+async function recordSuuntoBindingVerificationResult(
+    tokenSnapshot: PollingTokenSnapshot,
+    nowMs: number,
+    succeeded: boolean,
+    verificationEpoch: string,
+): Promise<void> {
+    const expectedTokenCredentialGeneration = typeof tokenSnapshot.data()?.tokenCredentialGeneration === 'string'
+        ? tokenSnapshot.data()?.tokenCredentialGeneration
+        : null;
+    await admin.firestore().runTransaction(async transaction => {
+        const liveTokenSnapshot = await transaction.get(tokenSnapshot.ref);
+        const liveTokenData = liveTokenSnapshot.data() as Record<string, unknown> | undefined;
+        const liveTokenCredentialGeneration = typeof liveTokenData?.tokenCredentialGeneration === 'string'
+            ? liveTokenData.tokenCredentialGeneration
+            : null;
+        if (!liveTokenSnapshot.exists
+            || liveTokenData?.serviceName !== ServiceNames.SuuntoApp
+            || liveTokenData.userName !== tokenSnapshot.id
+            || liveTokenCredentialGeneration !== expectedTokenCredentialGeneration) {
+            return;
+        }
+        if (succeeded) {
+            transaction.update(tokenSnapshot.ref, {
+                [SUUNTO_BINDING_VERIFICATION_FAILURE_COUNT_FIELD]: 0,
+                [SUUNTO_BINDING_VERIFICATION_NEXT_ATTEMPT_FIELD]: 0,
+                [SUUNTO_BINDING_VERIFICATION_LAST_ATTEMPT_FIELD]: nowMs,
+                [SUUNTO_BINDING_VERIFICATION_EPOCH_FIELD]: verificationEpoch,
+            });
+            return;
+        }
+        const failureCount = Math.min(
+            suuntoBindingVerificationFailureCount(tokenSnapshot) + 1,
+            31,
+        );
+        const backoffMs = Math.min(
+            SUUNTO_BINDING_VERIFICATION_INITIAL_BACKOFF_MS * (2 ** (failureCount - 1)),
+            SUUNTO_BINDING_VERIFICATION_MAX_BACKOFF_MS,
+        );
+        transaction.update(tokenSnapshot.ref, {
+            [SUUNTO_BINDING_VERIFICATION_FAILURE_COUNT_FIELD]: failureCount,
+            [SUUNTO_BINDING_VERIFICATION_NEXT_ATTEMPT_FIELD]: nowMs + backoffMs,
+            [SUUNTO_BINDING_VERIFICATION_LAST_ATTEMPT_FIELD]: nowMs,
+            [SUUNTO_BINDING_VERIFICATION_EPOCH_FIELD]: verificationEpoch,
+        });
+    });
+}
+
+async function verifySuuntoWebhookBindingsBestEffort(
+    candidates: readonly SuuntoBindingVerificationCandidate[],
+    nowMs: number,
+    verificationEpoch: string,
+): Promise<void> {
+    if (candidates.length === 0) return;
+    const uniqueCandidates = [...new Map(candidates.map(candidate => [
+        suuntoBindingCandidateKey(candidate),
+        candidate,
+    ])).values()];
+    const eligibleCandidates = uniqueCandidates.filter(
+        candidate => !shouldDeferSuuntoBindingVerification(
+            candidate.tokenSnapshot,
+            nowMs,
+            verificationEpoch,
+        ),
+    );
+    const results = await Promise.allSettled(eligibleCandidates.map(async candidate => {
+        try {
+            const status = await ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+                admin.firestore(),
+                candidate.userID,
+                candidate.tokenSnapshot,
+                nowMs,
+            );
+            const succeeded = status !== 'unverified';
+            await recordSuuntoBindingVerificationResult(
+                candidate.tokenSnapshot,
+                nowMs,
+                succeeded,
+                verificationEpoch,
+            );
+            return succeeded ? status : 'failed';
+        } catch {
+            await recordSuuntoBindingVerificationResult(
+                candidate.tokenSnapshot,
+                nowMs,
+                false,
+                verificationEpoch,
+            );
+            return 'failed';
+        }
+    }));
+    const statusCounts = results.reduce<Record<string, number>>((counts, result) => {
+        const status = result.status === 'fulfilled' ? result.value : 'failed';
+        counts[status] = (counts[status] || 0) + 1;
+        return counts;
+    }, { deferred: uniqueCandidates.length - eligibleCandidates.length });
+    logger.info('[SleepSync][Suunto] Completed bounded provider verification for webhook bindings.', {
+        selectedCount: eligibleCandidates.length,
+        candidateCount: uniqueCandidates.length,
+        statusCounts,
+    });
+    if (results.some(result => result.status === 'rejected')) {
+        // A retry-state write failure is the only page-level failure. Do not
+        // advance until durable per-candidate recovery state exists.
+        throw new Error('Suunto webhook-binding verification state was not persisted.');
     }
 }
 
@@ -179,11 +523,11 @@ async function enqueueProviderPolls(
     }
 
     const windows = chunkRecentWindow(nowMs, SLEEP_SYNC_RECENT_WINDOW_DAYS, maxWindowDays);
-    const tokenSnapshots = await getProviderTokenSnapshots(provider, serviceName);
+    const tokenPage = await getProviderTokenSnapshots(provider, serviceName, nowMs);
     const deletionGuardCache = new Map<string, Promise<boolean>>();
     const unavailableForSyncCache = new Map<string, Promise<boolean>>();
     let queued = 0;
-    for (const tokenSnapshot of tokenSnapshots) {
+    for (const tokenSnapshot of tokenPage.snapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(provider, tokenSnapshot);
         if (!userID || !providerUserId || !isSleepSyncUserAllowed(userID)) {
@@ -207,20 +551,6 @@ async function enqueueProviderPolls(
             logger.info(`[SleepSync][${provider}] Skipping user ${userID} because ${serviceName} is unavailable for sync`);
             continue;
         }
-        if (provider === SLEEP_PROVIDERS.SuuntoApp) {
-            const bindingStatus = await ensureSuuntoHealthWebhookAccountBindingForActiveToken(
-                admin.firestore(),
-                userID,
-                providerUserId,
-                nowMs,
-            );
-            if (bindingStatus === 'conflict' || bindingStatus === 'inactive') {
-                logger.warn('[SleepSync][Suunto] Could not seed an active signed-webhook binding; scheduled polling remains enabled.', {
-                    userID,
-                    bindingStatus,
-                });
-            }
-        }
         for (const window of windows) {
             try {
                 await addSleepSyncQueueItem({
@@ -242,6 +572,7 @@ async function enqueueProviderPolls(
             }
         }
     }
+    await tokenPage.commitCursor?.();
     return queued;
 }
 
@@ -250,25 +581,27 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
         logger.info('[HealthSync][Suunto] Health ingestion is disabled; skipping polling');
         return 0;
     }
+    if (SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS.length === 0) {
+        logger.info('[HealthSync][Suunto] No staged users are configured; skipping polling');
+        return 0;
+    }
 
     const windows = chunkRecentWindow(
         nowMs,
         SLEEP_SYNC_RECENT_WINDOW_DAYS,
         SUUNTO_HEALTH_MAX_WINDOW_DAYS,
     );
-    const tokenSnapshots = (await Promise.all(SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS.map(async userID => {
-        const snapshot = await admin.firestore()
-            .collection('suuntoAppAccessTokens')
-            .doc(userID)
-            .collection('tokens')
-            .where('serviceName', '==', ServiceNames.SuuntoApp)
-            .get();
-        return snapshot.docs;
-    }))).flat();
+    const tokenPage = await getPagedSuuntoTokenSnapshots(
+        SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT,
+        SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
+        nowMs,
+        SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS,
+        SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
+    );
     const deletionGuardCache = new Map<string, Promise<boolean>>();
     const unavailableForSyncCache = new Map<string, Promise<boolean>>();
     let queued = 0;
-    for (const tokenSnapshot of tokenSnapshots) {
+    for (const tokenSnapshot of tokenPage.snapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(SLEEP_PROVIDERS.SuuntoApp, tokenSnapshot);
         if (!userID || !providerUserId || !isSuuntoHealthSyncUserAllowed(userID)) continue;
@@ -297,20 +630,6 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
         }
         if (await pendingUnavailableForSync) continue;
 
-        const bindingStatus = await ensureSuuntoHealthWebhookAccountBindingForActiveToken(
-            admin.firestore(),
-            userID,
-            providerUserId,
-            nowMs,
-        );
-        if (bindingStatus === 'conflict' || bindingStatus === 'inactive') {
-            logger.warn('[HealthSync][Suunto] Skipping Health polling because the webhook account binding is not active.', {
-                userID,
-                bindingStatus,
-            });
-            continue;
-        }
-
         for (const window of windows) {
             try {
                 await addSleepSyncQueueItem({
@@ -330,12 +649,37 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
             }
         }
     }
+    await tokenPage.commitCursor();
     return queued;
+}
+
+async function verifyNextSuuntoWebhookBindingPage(nowMs = Date.now()): Promise<void> {
+    const tokenPage = await getPagedSuuntoTokenSnapshots(
+        SUUNTO_BINDING_VERIFICATION_CURSOR_DOCUMENT,
+        SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE,
+        nowMs,
+    );
+    const candidates = tokenPage.snapshots.flatMap(tokenSnapshot => {
+        const userID = getFirebaseUserID(tokenSnapshot);
+        const providerUserId = getProviderUserId(SLEEP_PROVIDERS.SuuntoApp, tokenSnapshot);
+        return userID && providerUserId ? [{ tokenSnapshot, userID }] : [];
+    });
+    if (!tokenPage.verificationEpoch) {
+        throw new Error('Suunto webhook-binding verification epoch is unavailable.');
+    }
+    await verifySuuntoWebhookBindingsBestEffort(
+        candidates,
+        nowMs,
+        tokenPage.verificationEpoch,
+    );
+    await tokenPage.commitCursor();
 }
 
 export const scheduleSuuntoSleepSync = onSchedule({
     region: 'europe-west2',
-    schedule: 'every 24 hours',
+    // A keyset page is advanced every invocation until the canonical account
+    // sweep completes, then the maintenance cursor pauses for 24 hours.
+    schedule: 'every 30 minutes',
     timeoutSeconds: 300,
     memory: '512MiB',
 }, async () => {
@@ -363,7 +707,9 @@ export const scheduleCOROSSleepSync = onSchedule({
 
 export const scheduleSuuntoHealthSync = onSchedule({
     region: 'europe-west2',
-    schedule: 'every 24 hours',
+    // Advance bounded retained-account pages promptly, then pause for 24h
+    // once the staged Health sweep completes.
+    schedule: 'every 30 minutes',
     timeoutSeconds: 300,
     memory: '512MiB',
 }, async () => {
@@ -371,10 +717,26 @@ export const scheduleSuuntoHealthSync = onSchedule({
     logger.info('[HealthSync][Suunto] Scheduled Health poll queue items', { queued });
 });
 
+export const scheduleSuuntoWebhookBindingVerification = onSchedule({
+    region: 'europe-west2',
+    schedule: 'every 30 minutes',
+    timeoutSeconds: 180,
+    memory: '256MiB',
+    secrets: FUNCTION_SECRET_BINDINGS.scheduleSuuntoWebhookBindingVerification,
+}, async () => {
+    await verifyNextSuuntoWebhookBindingPage();
+});
+
 export const sleepPollingTestInternals = {
     chunkRecentWindow,
     enqueueProviderPolls,
     enqueueSuuntoHealthPolls,
+    getPagedSuuntoTokenSnapshots,
+    verifyNextSuuntoWebhookBindingPage,
+    verifySuuntoWebhookBindingsBestEffort,
     resolveActiveCOROSTokenSnapshots,
     COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY,
+    SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE,
+    SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
+    SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT,
 };

@@ -30,6 +30,7 @@ import {
 import {
     buildSleepSessionDocumentId,
     markSleepSyncError,
+    type SleepLifecycleWriterDependencies,
     updateSleepSyncState,
     upsertSleepSessions,
 } from './writer';
@@ -97,10 +98,8 @@ import {
 import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
-    captureSuuntoHealthWriteLifecycleGuards,
     processSuuntoHealthQueueItem,
     sanitizeSuuntoHealthErrorForTelemetry,
-    suuntoCredentialFromSnapshot,
     SuuntoHealthWriteLifecycleGuards,
 } from '../suunto/health-sync';
 import {
@@ -109,8 +108,34 @@ import {
     SUUNTO_HEALTH_MAX_WINDOW_DAYS,
     SuuntoHealthResult,
 } from '../suunto/health';
+import {
+    areSuuntoWebhookWriteLifecycleGuardsContinuous,
+    captureActiveSuuntoWebhookWriteLifecycleGuards,
+    captureCurrentSuuntoWebhookWriteLifecycleGuards,
+    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
+    getSuuntoWebhookWriteLifecycleAuthorityDigest,
+    type SuuntoWebhookWriteLifecycleGuards,
+} from '../suunto/health-webhook-binding-lifecycle';
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
+
+class SuuntoSleepLifecycleChangedError extends Error {
+    public readonly name = 'SuuntoSleepLifecycleChangedError';
+
+    constructor() {
+        super('Suunto Sleep account lifecycle changed.');
+    }
+}
+
+class SuuntoCredentialRotationRetryableError extends Error {
+    public readonly name = 'SuuntoCredentialRotationRetryableError';
+
+    constructor() {
+        super('Suunto credential rotated repeatedly during an authorized write.');
+    }
+}
+
+const SUUNTO_CREDENTIAL_GUARD_WRITE_ATTEMPTS = 3;
 
 interface COROSWriteLifecycleGuards {
     requiredExistingDocumentRef: admin.firestore.DocumentReference;
@@ -140,6 +165,7 @@ interface AddSleepSyncQueueItemInput {
     suuntoHealthTokenCredentialGeneration?: string | null;
     suuntoHealthRootOAuthCredentialGeneration?: string | null;
     suuntoHealthConnectionStateGeneration?: string | null;
+    suuntoWebhookAuthorityDigest?: string;
     /** Server-only write fences. These references are never persisted in the queue payload. */
     requiredDocumentFieldValues?: ReadonlyArray<{
         documentRef: admin.firestore.DocumentReference;
@@ -225,6 +251,14 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
             || queueItem.suuntoHealthConnectionStateGeneration !== undefined)) {
         return 'sleep queue item unexpectedly contains Suunto Health lifecycle fences';
     }
+    if (queueItem.type === 'suunto_webhook'
+        && !/^[a-f0-9]{64}$/.test(`${queueItem.suuntoWebhookAuthorityDigest || ''}`)) {
+        return 'Suunto Sleep webhook queue item has an invalid authority fence';
+    }
+    if (queueItem.type !== 'suunto_webhook'
+        && queueItem.suuntoWebhookAuthorityDigest !== undefined) {
+        return 'non-webhook queue item unexpectedly contains a Suunto authority fence';
+    }
     if (queueItem.type === 'suunto_health_poll'
         && (!isValidOptionalLifecycleGeneration(queueItem.suuntoHealthTokenCredentialGeneration)
             || !isValidOptionalLifecycleGeneration(
@@ -258,6 +292,7 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         suuntoHealthRootOAuthCredentialGeneration:
             input.suuntoHealthRootOAuthCredentialGeneration,
         suuntoHealthConnectionStateGeneration: input.suuntoHealthConnectionStateGeneration,
+        suuntoWebhookAuthorityDigest: input.suuntoWebhookAuthorityDigest,
     };
     return JSON.parse(JSON.stringify(payload)) as Partial<SleepSyncQueueItemInterface>;
 }
@@ -296,6 +331,7 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         suuntoHealthRootOAuthCredentialGeneration:
             payload.suuntoHealthRootOAuthCredentialGeneration,
         suuntoHealthConnectionStateGeneration: payload.suuntoHealthConnectionStateGeneration,
+        suuntoWebhookAuthorityDigest: payload.suuntoWebhookAuthorityDigest,
     });
 }
 
@@ -530,6 +566,13 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         || !isValidOptionalLifecycleGeneration(input.suuntoHealthConnectionStateGeneration)) {
         throw new Error('Invalid Suunto Health queue lifecycle fences.');
     }
+    if ((input.type === 'suunto_webhook'
+            && input.suuntoWebhookAuthorityDigest !== undefined
+            && !/^[a-f0-9]{64}$/.test(input.suuntoWebhookAuthorityDigest))
+        || (input.type !== 'suunto_webhook'
+            && input.suuntoWebhookAuthorityDigest !== undefined)) {
+        throw new Error('Invalid Suunto Sleep webhook authority fence.');
+    }
     const nowMs = Date.now();
     let queueId = await generateIDFromParts([
         input.provider,
@@ -539,10 +582,34 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     ]);
     const userID = await resolveFirebaseUserIDForSleepQueueInput(input, queueId);
     await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_before_write:${input.provider}`);
-    const queuePayloadInput: AddSleepSyncQueueItemInput = {
+    let queuePayloadInput: AddSleepSyncQueueItemInput = {
         ...input,
         userID,
     };
+    if (input.type === 'suunto_webhook') {
+        const admissionGuards = await captureCurrentSuuntoWebhookWriteLifecycleGuards(
+            admin.firestore(),
+            userID,
+            input.providerUserId,
+            nowMs,
+        );
+        if (!admissionGuards) {
+            throw new ProviderQueueUserNotConnectedError(
+                serviceNameForProvider(input.provider),
+                input.providerUserId,
+                queueId,
+            );
+        }
+        queuePayloadInput = {
+            ...queuePayloadInput,
+            suuntoWebhookAuthorityDigest:
+                getSuuntoWebhookWriteLifecycleAuthorityDigest(admissionGuards),
+            requiredDocumentFieldValues: [
+                admissionGuards.requiredDocumentFieldValues,
+                ...admissionGuards.additionalRequiredDocumentFieldValues,
+            ],
+        };
+    }
     const queuePayload = compactQueuePayload(queuePayloadInput);
     let docRef = queueCollection().doc(queueId);
     if (input.dispatchImmediately) {
@@ -578,7 +645,7 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         docRef,
         queueId,
         queuePayload,
-        input,
+        queuePayloadInput,
         userID,
         nowMs,
     );
@@ -1003,12 +1070,52 @@ async function processGarminQueueItem(queueItem: SleepSyncQueueItemInterface, to
         .filter((result): result is SleepMapperResult => result !== null);
 }
 
-async function processSuuntoQueueItem(queueItem: SleepSyncQueueItemInterface, tokenSnapshot: TokenSnapshot): Promise<SleepMapperResult[]> {
+async function processSuuntoQueueItem(
+    queueItem: SleepSyncQueueItemInterface,
+    tokenSnapshot: TokenSnapshot,
+    firebaseUserID: string,
+    initialLifecycleGuards: SuuntoWebhookWriteLifecycleGuards,
+    onLifecycleGuardsCaptured: (guards: SuuntoWebhookWriteLifecycleGuards) => void,
+): Promise<SleepMapperResult[]> {
     if (queueItem.type === 'suunto_poll') {
         if (!Number.isFinite(queueItem.rangeStartMs) || !Number.isFinite(queueItem.rangeEndMs)) {
             throw new Error(`Suunto poll queue item ${queueItem.id} has invalid range`);
         }
         const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp);
+        const refreshedProviderUserId = typeof tokenData.userName === 'string'
+            ? tokenData.userName.trim()
+            : '';
+        if (refreshedProviderUserId !== queueItem.providerUserId) {
+            throw new SuuntoSleepLifecycleChangedError();
+        }
+        const refreshedTokenSnapshot = {
+            id: tokenSnapshot.id,
+            ref: tokenSnapshot.ref,
+            data: () => ({
+                ...(tokenSnapshot.data() as Record<string, unknown> | undefined),
+                ...(tokenData as unknown as Record<string, unknown>),
+                serviceName: ServiceNames.SuuntoApp,
+                userName: refreshedProviderUserId,
+                tokenCredentialGeneration:
+                    initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration,
+            }),
+        } as unknown as TokenSnapshot;
+        const currentLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
+            admin.firestore(),
+            firebaseUserID,
+            queueItem.providerUserId,
+            refreshedTokenSnapshot,
+        );
+        if (!currentLifecycleGuards
+            || !areSuuntoWebhookWriteLifecycleGuardsContinuous(
+                initialLifecycleGuards,
+                currentLifecycleGuards,
+            )) {
+            throw new SuuntoSleepLifecycleChangedError();
+        }
+        // Publish the rotated credential guard before provider I/O so a later
+        // request failure cannot make our own refresh suppress error state.
+        onLifecycleGuardsCaptured(currentLifecycleGuards);
         const payload = await requestPromise.get({
             headers: {
                 Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
@@ -1026,6 +1133,97 @@ async function processSuuntoQueueItem(queueItem: SleepSyncQueueItemInterface, to
     return keepBestMapperResultPerSourceSession(normalizePayloadArray(queueItem.payload, 'samples')
         .map((sample) => mapSuuntoSleepSample(sample, queueItem.providerUserId, Date.now()))
         .filter((result): result is SleepMapperResult => result !== null));
+}
+
+async function rebaseContinuousSuuntoWebhookGuards(
+    firebaseUserID: string,
+    providerUserId: string,
+    authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoWebhookWriteLifecycleGuards | null> {
+    let currentGuards: SuuntoWebhookWriteLifecycleGuards | null;
+    try {
+        currentGuards = await captureCurrentSuuntoWebhookWriteLifecycleGuards(
+            admin.firestore(),
+            firebaseUserID,
+            providerUserId,
+        );
+    } catch {
+        throw new SuuntoCredentialRotationRetryableError();
+    }
+    return currentGuards
+        && areSuuntoWebhookWriteLifecycleGuardsContinuous(authorityBaseline, currentGuards)
+        ? currentGuards
+        : null;
+}
+
+async function runWithSuuntoWebhookCredentialRebase<T>(
+    firebaseUserID: string,
+    providerUserId: string,
+    authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+    currentGuards: SuuntoWebhookWriteLifecycleGuards,
+    write: (guards: SuuntoWebhookWriteLifecycleGuards) => Promise<T>,
+    wasCredentialGuardRejected: (result: T) => boolean,
+): Promise<{ result: T; guards: SuuntoWebhookWriteLifecycleGuards | null }> {
+    let guards = currentGuards;
+    for (let attempt = 0; attempt < SUUNTO_CREDENTIAL_GUARD_WRITE_ATTEMPTS; attempt += 1) {
+        const result = await write(guards);
+        if (!wasCredentialGuardRejected(result)) return { result, guards };
+        const rebasedGuards = await rebaseContinuousSuuntoWebhookGuards(
+            firebaseUserID,
+            providerUserId,
+            authorityBaseline,
+        );
+        if (!rebasedGuards) return { result, guards: null };
+        guards = rebasedGuards;
+    }
+    throw new SuuntoCredentialRotationRetryableError();
+}
+
+async function rebaseContinuousSuuntoHealthGuards(
+    firebaseUserID: string,
+    providerUserId: string,
+    authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoHealthWriteLifecycleGuards | null> {
+    const webhookGuards = await rebaseContinuousSuuntoWebhookGuards(
+        firebaseUserID,
+        providerUserId,
+        authorityBaseline,
+    );
+    return webhookGuards;
+}
+
+async function runWithSuuntoHealthCredentialRebase<T>(
+    firebaseUserID: string,
+    providerUserId: string,
+    authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+    currentGuards: SuuntoHealthWriteLifecycleGuards,
+    write: (guards: SuuntoHealthWriteLifecycleGuards) => Promise<T>,
+    wasCredentialGuardRejected: (result: T) => boolean,
+): Promise<{ result: T; guards: SuuntoHealthWriteLifecycleGuards | null }> {
+    let guards = currentGuards;
+    for (let attempt = 0; attempt < SUUNTO_CREDENTIAL_GUARD_WRITE_ATTEMPTS; attempt += 1) {
+        const result = await write(guards);
+        if (!wasCredentialGuardRejected(result)) return { result, guards };
+        const rebasedGuards = await rebaseContinuousSuuntoHealthGuards(
+            firebaseUserID,
+            providerUserId,
+            authorityBaseline,
+        );
+        if (!rebasedGuards) return { result, guards: null };
+        guards = rebasedGuards;
+    }
+    throw new SuuntoCredentialRotationRetryableError();
+}
+
+function expectedSuuntoLifecycleField(
+    guards: SuuntoWebhookWriteLifecycleGuards,
+    fieldName: string,
+): unknown {
+    return [
+        guards.requiredDocumentFieldValues,
+        ...guards.additionalRequiredDocumentFieldValues,
+    ].map(guard => guard.expectedFields[fieldName])
+        .find(value => value !== undefined);
 }
 
 function normalizeCOROSDailyResultCode(value: unknown): string {
@@ -1290,6 +1488,8 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
     delete queueItem.processingLeaseExpiresAt;
     let corosLifecycleGuards: COROSWriteLifecycleGuards | null = null;
     let suuntoHealthLifecycleGuards: SuuntoHealthWriteLifecycleGuards | null = null;
+    let suuntoSleepLifecycleGuards: SuuntoWebhookWriteLifecycleGuards | null = null;
+    let suuntoAuthorityBaseline: SuuntoWebhookWriteLifecycleGuards | null = null;
     let resolvedFirebaseUserID = typeof queueItem.userID === 'string'
         ? queueItem.userID.trim() || null
         : null;
@@ -1361,7 +1561,9 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             throw new UnsupportedGarminPushPayloadError();
         }
 
-        const { tokenSnapshot, firebaseUserID } = await resolveTokenAndUser(queueItem);
+        const resolvedTokenAndUser = await resolveTokenAndUser(queueItem);
+        let tokenSnapshot = resolvedTokenAndUser.tokenSnapshot;
+        const firebaseUserID = resolvedTokenAndUser.firebaseUserID;
         resolvedFirebaseUserID = firebaseUserID;
         // Legacy provider-only rows gain the resolved uid in memory so every
         // subsequent completion/retry/DLQ transition uses the shared user and
@@ -1376,6 +1578,65 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 sessionsSkipped: 0,
             });
         }
+        if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp) {
+            suuntoSleepLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
+                admin.firestore(),
+                firebaseUserID,
+                queueItem.providerUserId,
+                tokenSnapshot,
+            );
+            if (!suuntoSleepLifecycleGuards && queueItem.type !== 'suunto_webhook') {
+                const verificationStatus = await ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+                    admin.firestore(),
+                    firebaseUserID,
+                    tokenSnapshot,
+                );
+                if (verificationStatus === 'created' || verificationStatus === 'current') {
+                    const refreshedResolution = await resolveTokenAndUser(queueItem);
+                    if (refreshedResolution.firebaseUserID === firebaseUserID) {
+                        tokenSnapshot = refreshedResolution.tokenSnapshot;
+                        suuntoSleepLifecycleGuards =
+                            await captureActiveSuuntoWebhookWriteLifecycleGuards(
+                                admin.firestore(),
+                                firebaseUserID,
+                                queueItem.providerUserId,
+                                tokenSnapshot,
+                            );
+                    }
+                }
+            }
+            if (!suuntoSleepLifecycleGuards) {
+                logger.info('[SleepSync][Suunto] Skipping work without a current provider-authorized binding.');
+                return markQueueItemSkipped(
+                    queueItem,
+                    undefined,
+                    'user_or_provider_lifecycle_changed',
+                    {
+                        skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                        sessionsWritten: 0,
+                        sessionsSkipped: 0,
+                    },
+                );
+            }
+            suuntoAuthorityBaseline = suuntoSleepLifecycleGuards;
+            if (queueItem.type === 'suunto_webhook'
+                && queueItem.suuntoWebhookAuthorityDigest
+                    !== getSuuntoWebhookWriteLifecycleAuthorityDigest(
+                        suuntoSleepLifecycleGuards,
+                    )) {
+                logger.info('[SleepSync][Suunto] Skipping webhook work from a superseded account authority.');
+                return markQueueItemSkipped(
+                    queueItem,
+                    undefined,
+                    'user_or_provider_lifecycle_changed',
+                    {
+                        skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                        sessionsWritten: 0,
+                        sessionsSkipped: 0,
+                    },
+                );
+            }
+        }
         if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
             corosLifecycleGuards = await captureCOROSWriteLifecycleGuards(
                 firebaseUserID,
@@ -1385,20 +1646,23 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             );
         }
         if (isSuuntoHealthQueueItem(queueItem)) {
-            suuntoHealthLifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
-                firebaseUserID,
-                tokenSnapshot.ref,
-                suuntoCredentialFromSnapshot(tokenSnapshot),
-            );
+            if (!suuntoSleepLifecycleGuards) {
+                throw new SuuntoSleepLifecycleChangedError();
+            }
+            suuntoHealthLifecycleGuards = suuntoSleepLifecycleGuards;
             const capturedTokenGeneration = suuntoHealthLifecycleGuards
                 .requiredExistingTokenCredential.credentialGeneration || null;
             const capturedRootOAuthGeneration = normalizeLifecycleGeneration(
-                suuntoHealthLifecycleGuards.additionalRequiredDocumentFieldValues[0]
-                    ?.expectedFields[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+                expectedSuuntoLifecycleField(
+                    suuntoHealthLifecycleGuards,
+                    ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
+                ),
             );
             const capturedConnectionGeneration = normalizeLifecycleGeneration(
-                suuntoHealthLifecycleGuards.requiredDocumentFieldValues
-                    .expectedFields.connectionStateGeneration,
+                expectedSuuntoLifecycleField(
+                    suuntoHealthLifecycleGuards,
+                    'connectionStateGeneration',
+                ),
             );
             if ((queueItem.suuntoHealthTokenCredentialGeneration !== undefined
                     && queueItem.suuntoHealthTokenCredentialGeneration !== capturedTokenGeneration)
@@ -1477,7 +1741,19 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     healthResults = suuntoHealthResult.healthResults;
                     suuntoHealthLifecycleGuards = suuntoHealthResult.lifecycleGuards;
                 } else {
-                    mapperResults = await processSuuntoQueueItem(queueItem, tokenSnapshot);
+                    const initialSuuntoLifecycleGuards = suuntoSleepLifecycleGuards;
+                    if (!initialSuuntoLifecycleGuards) {
+                        throw new SuuntoSleepLifecycleChangedError();
+                    }
+                    mapperResults = await processSuuntoQueueItem(
+                        queueItem,
+                        tokenSnapshot,
+                        firebaseUserID,
+                        initialSuuntoLifecycleGuards,
+                        guards => {
+                            suuntoSleepLifecycleGuards = guards;
+                        },
+                    );
                 }
                 break;
             case SLEEP_PROVIDERS.COROSAPI:
@@ -1518,21 +1794,35 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (isSuuntoHealthQueueItem(queueItem) && !suuntoHealthLifecycleGuards) {
             throw new Error('Missing Suunto Health lifecycle guards.');
         }
-        const healthLifecycleGuards = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+        const corosHealthLifecycleGuards = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
             ? corosLifecycleGuards
-            : isSuuntoHealthQueueItem(queueItem)
-                ? suuntoHealthLifecycleGuards
-                : null;
-        const result = isSuuntoHealthQueueItem(queueItem)
-            ? { written: 0, skipped: 0, lifecycleGuardSkipped: false }
-            : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-                ? await upsertSleepSessions(
-                    firebaseUserID,
-                    mapperResults,
-                    Date.now(),
-                    corosLifecycleGuards || undefined,
-                )
-                : await upsertSleepSessions(firebaseUserID, mapperResults);
+            : null;
+        let result: Awaited<ReturnType<typeof upsertSleepSessions>>;
+        if (isSuuntoHealthQueueItem(queueItem)) {
+            result = { written: 0, skipped: 0 };
+        } else if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI) {
+            result = await upsertSleepSessions(
+                firebaseUserID,
+                mapperResults,
+                Date.now(),
+                corosLifecycleGuards || undefined,
+            );
+        } else if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp
+            && suuntoSleepLifecycleGuards
+            && suuntoAuthorityBaseline) {
+            const writeAttempt = await runWithSuuntoWebhookCredentialRebase(
+                firebaseUserID,
+                queueItem.providerUserId,
+                suuntoAuthorityBaseline,
+                suuntoSleepLifecycleGuards,
+                guards => upsertSleepSessions(firebaseUserID, mapperResults, Date.now(), guards),
+                writeResult => writeResult.lifecycleGuardSkipped === true,
+            );
+            result = writeAttempt.result;
+            suuntoSleepLifecycleGuards = writeAttempt.guards;
+        } else {
+            result = await upsertSleepSessions(firebaseUserID, mapperResults);
+        }
         if (result.lifecycleGuardSkipped) {
             return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
                 skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
@@ -1547,12 +1837,33 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         let healthRecordsUnchanged = 0;
         let healthRecordsStale = 0;
         for (const healthResult of healthResults) {
-            const writeResult = await replaceHealthSourceRecord(
-                firebaseUserID,
-                healthResult.input,
-                Date.now(),
-                healthLifecycleGuards || {},
-            );
+            let writeResult: Awaited<ReturnType<typeof replaceHealthSourceRecord>>;
+            if (isSuuntoHealthQueueItem(queueItem)
+                && suuntoHealthLifecycleGuards
+                && suuntoAuthorityBaseline) {
+                const writeAttempt = await runWithSuuntoHealthCredentialRebase(
+                    firebaseUserID,
+                    queueItem.providerUserId,
+                    suuntoAuthorityBaseline,
+                    suuntoHealthLifecycleGuards,
+                    guards => replaceHealthSourceRecord(
+                        firebaseUserID,
+                        healthResult.input,
+                        Date.now(),
+                        guards,
+                    ),
+                    candidate => candidate.status === 'skipped_lifecycle_guard',
+                );
+                writeResult = writeAttempt.result;
+                suuntoHealthLifecycleGuards = writeAttempt.guards;
+            } else {
+                writeResult = await replaceHealthSourceRecord(
+                    firebaseUserID,
+                    healthResult.input,
+                    Date.now(),
+                    corosHealthLifecycleGuards || {},
+                );
+            }
             if (writeResult.status === 'skipped_deleted_user') {
                 return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
                     skippedContext: 'USER_DELETION_GUARD',
@@ -1584,7 +1895,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 : HEALTH_PROVIDERS.COROSAPI;
             const isHealthPoll = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 || queueItem.healthTrigger === 'poll';
-            const healthStateWritten = await updateHealthSyncState(firebaseUserID, healthProvider, {
+            const healthStateUpdate = {
                 status: HEALTH_SYNC_STATUSES.Ready,
                 lastSyncedAtMs: stateUpdateMs,
                 lastPollAtMs: isHealthPoll ? stateUpdateMs : undefined,
@@ -1593,7 +1904,36 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     ? Math.max(...healthResults.map(item => item.observedAtMs))
                     : undefined,
                 lastErrorCode: null,
-            }, stateUpdateMs, healthLifecycleGuards || {});
+            };
+            let healthStateWritten: boolean;
+            if (isSuuntoHealthQueueItem(queueItem)
+                && suuntoHealthLifecycleGuards
+                && suuntoAuthorityBaseline) {
+                const stateAttempt = await runWithSuuntoHealthCredentialRebase(
+                    firebaseUserID,
+                    queueItem.providerUserId,
+                    suuntoAuthorityBaseline,
+                    suuntoHealthLifecycleGuards,
+                    guards => updateHealthSyncState(
+                        firebaseUserID,
+                        healthProvider,
+                        healthStateUpdate,
+                        stateUpdateMs,
+                        guards,
+                    ),
+                    written => !written,
+                );
+                healthStateWritten = stateAttempt.result;
+                suuntoHealthLifecycleGuards = stateAttempt.guards;
+            } else {
+                healthStateWritten = await updateHealthSyncState(
+                    firebaseUserID,
+                    healthProvider,
+                    healthStateUpdate,
+                    stateUpdateMs,
+                    corosHealthLifecycleGuards || {},
+                );
+            }
             if (!healthStateWritten) {
                 return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                     skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
@@ -1613,16 +1953,45 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 lastWebhookAtMs: isWebhookQueueItemType(queueItem.type) ? stateUpdateMs : undefined,
                 lastError: null,
             };
-            const sleepStateWritten = queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-                ? await updateSleepSyncState(
+            let sleepStateWritten: boolean;
+            let usedSleepLifecycleGuard = false;
+            if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp
+                && suuntoSleepLifecycleGuards
+                && suuntoAuthorityBaseline) {
+                usedSleepLifecycleGuard = true;
+                const stateAttempt = await runWithSuuntoWebhookCredentialRebase(
                     firebaseUserID,
-                    queueItem.provider,
-                    sleepStateUpdate,
-                    stateUpdateMs,
-                    corosLifecycleGuards || {},
-                )
-                : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
-            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI && sleepStateWritten === false) {
+                    queueItem.providerUserId,
+                    suuntoAuthorityBaseline,
+                    suuntoSleepLifecycleGuards,
+                    guards => updateSleepSyncState(
+                        firebaseUserID,
+                        queueItem.provider,
+                        sleepStateUpdate,
+                        stateUpdateMs,
+                        guards,
+                    ),
+                    written => !written,
+                );
+                sleepStateWritten = stateAttempt.result;
+                suuntoSleepLifecycleGuards = stateAttempt.guards;
+            } else {
+                const sleepLifecycleGuards: SleepLifecycleWriterDependencies | undefined =
+                    queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                        ? corosLifecycleGuards || undefined
+                        : undefined;
+                usedSleepLifecycleGuard = !!sleepLifecycleGuards;
+                sleepStateWritten = sleepLifecycleGuards
+                    ? await updateSleepSyncState(
+                        firebaseUserID,
+                        queueItem.provider,
+                        sleepStateUpdate,
+                        stateUpdateMs,
+                        sleepLifecycleGuards,
+                    )
+                    : await updateSleepSyncState(firebaseUserID, queueItem.provider, sleepStateUpdate);
+            }
+            if (usedSleepLifecycleGuard && sleepStateWritten === false) {
                 return markQueueItemSkipped(queueItem, undefined, 'user_or_provider_lifecycle_changed', {
                     skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
                     sessionsWritten: result.written,
@@ -1650,6 +2019,22 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         });
     } catch (error) {
         if (error instanceof ProviderOperationStillInFlightError) throw error;
+        if (error instanceof SuuntoCredentialRotationRetryableError) {
+            logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
+            return increaseRetryCountForQueueItem(queueItem, error);
+        }
+        if (error instanceof SuuntoSleepLifecycleChangedError) {
+            return markQueueItemSkipped(
+                queueItem,
+                undefined,
+                'user_or_provider_lifecycle_changed',
+                {
+                    skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                    sessionsWritten: 0,
+                    sessionsSkipped: 0,
+                },
+            );
+        }
         if (error instanceof InvalidGarminCallbackUrlError) {
             logger.warn(`[SleepSync] Queue item ${queueItem.id} has untrusted Garmin callback URL; moving to DLQ`);
             return moveSleepQueueItemToDeadLetterQueue(
@@ -1692,7 +2077,16 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         Date.now(),
                         corosLifecycleGuards || {},
                     );
-                } else {
+                } else if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp
+                    && suuntoSleepLifecycleGuards) {
+                    await markSleepSyncError(
+                        queueItem.userID,
+                        queueItem.provider,
+                        error,
+                        Date.now(),
+                        suuntoSleepLifecycleGuards,
+                    );
+                } else if (queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp) {
                     await markSleepSyncError(queueItem.userID, queueItem.provider, error);
                 }
             }
@@ -1722,7 +2116,16 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         Date.now(),
                         corosLifecycleGuards || {},
                     );
-                } else {
+                } else if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp
+                    && suuntoSleepLifecycleGuards) {
+                    await markSleepSyncError(
+                        errorUserID,
+                        queueItem.provider,
+                        telemetryError,
+                        Date.now(),
+                        suuntoSleepLifecycleGuards,
+                    );
+                } else if (queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp) {
                     await markSleepSyncError(errorUserID, queueItem.provider, telemetryError);
                 }
             }
@@ -1792,9 +2195,19 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                             corosLifecycleGuards,
                         )
                         : undefined
-                    : await markSleepSyncError(queueItem.userID, queueItem.provider, telemetryError);
-            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
-                && corosLifecycleGuards
+                    : queueItem.provider === SLEEP_PROVIDERS.SuuntoApp
+                        ? suuntoSleepLifecycleGuards
+                            ? await markSleepSyncError(
+                                queueItem.userID,
+                                queueItem.provider,
+                                telemetryError,
+                                Date.now(),
+                                suuntoSleepLifecycleGuards,
+                            )
+                            : undefined
+                        : await markSleepSyncError(queueItem.userID, queueItem.provider, telemetryError);
+            if ((queueItem.provider === SLEEP_PROVIDERS.COROSAPI && corosLifecycleGuards
+                || queueItem.provider === SLEEP_PROVIDERS.SuuntoApp && suuntoSleepLifecycleGuards)
                 && sleepErrorStateWritten === false) {
                 return markQueueItemSkipped(
                     queueItem,

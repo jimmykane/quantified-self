@@ -5,11 +5,20 @@ export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME =
   'suuntoHealthWebhookAccountBindings';
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 3;
 export const SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS = 32;
+export const SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES = {
+  OAuthCallback: 'oauth_callback',
+  ProviderRefresh: 'provider_refresh',
+} as const;
+
+export type SuuntoWebhookBindingAuthorizationSource =
+  typeof SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES[keyof
+    typeof SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES];
 
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
 export interface SuuntoHealthWebhookAccountBinding {
   schemaVersion: typeof SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION;
+  authorizationSource: SuuntoWebhookBindingAuthorizationSource;
   userID: string;
   providerAccountDigest: string;
   tokenCredentialGeneration: string | null;
@@ -52,9 +61,11 @@ export function buildSuuntoHealthWebhookAccountBinding(
   userID: string,
   providerUserId: string,
   tokenCredentialGeneration: string | null,
+  authorizationSource: SuuntoWebhookBindingAuthorizationSource,
 ): SuuntoHealthWebhookAccountBinding {
   return {
     schemaVersion: SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
+    authorizationSource,
     userID,
     providerAccountDigest: getSuuntoWebhookProviderAccountDigest(providerUserId),
     tokenCredentialGeneration: normalizeSuuntoTokenCredentialGeneration(
@@ -73,7 +84,10 @@ export function parseSuuntoHealthWebhookAccountBinding(
   const tokenCredentialGeneration = normalizeSuuntoTokenCredentialGeneration(
     data.tokenCredentialGeneration,
   );
+  const authorizationSource = Object.values(SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES)
+    .find(source => source === data.authorizationSource);
   if (data.schemaVersion !== SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+    || !authorizationSource
     || !userID
     || userID !== data.userID
     || userID.length > 128
@@ -91,6 +105,7 @@ export function parseSuuntoHealthWebhookAccountBinding(
   }
   return {
     schemaVersion: SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION,
+    authorizationSource,
     userID,
     providerAccountDigest,
     tokenCredentialGeneration,

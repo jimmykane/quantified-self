@@ -303,6 +303,7 @@ async function getActiveIngressBindingInTransaction(
     rootOAuthCredentialGeneration,
     bindingExpectedFields: {
       schemaVersion: binding.schemaVersion,
+      authorizationSource: binding.authorizationSource,
       userID: binding.userID,
       providerAccountDigest: binding.providerAccountDigest,
       tokenCredentialGeneration: binding.tokenCredentialGeneration,

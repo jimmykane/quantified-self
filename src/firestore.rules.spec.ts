@@ -246,6 +246,46 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Suunto server-owned OAuth state and token credentials', () => {
+        const userId = 'suunto_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('preserves owner reads while denying root, credential, and provider-identity mutations', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
+                    state: 'server-oauth-state',
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`).set({
+                    accessToken: 'stored-access-token',
+                    refreshToken: 'stored-refresh-token',
+                    serviceName: 'SuuntoApp',
+                    userName: 'suunto-account',
+                });
+            });
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const rootRef = db.doc(`suuntoAppAccessTokens/${userId}`);
+            const tokenRef = db.doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`);
+
+            await assertSucceeds(rootRef.get());
+            await assertSucceeds(tokenRef.get());
+            await assertFails(rootRef.set({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.update({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.delete());
+            await assertFails(db.doc(`suuntoAppAccessTokens/${userId}/tokens/victim-account`).set({
+                accessToken: 'attacker-access-token',
+                refreshToken: 'attacker-refresh-token',
+                serviceName: 'SuuntoApp',
+                userName: 'victim-account',
+            }));
+            await assertFails(tokenRef.update({ userName: 'victim-account' }));
+            await assertFails(tokenRef.delete());
+            const cursorRef = db.doc('providerMaintenanceState/suuntoWebhookBindingVerification');
+            await assertFails(cursorRef.get());
+            await assertFails(cursorRef.set({ nextOffset: 0 }));
+        });
+    });
+
     describe('COROS server-owned token credentials', () => {
         const userId = 'coros_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };

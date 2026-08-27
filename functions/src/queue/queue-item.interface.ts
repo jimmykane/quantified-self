@@ -175,6 +175,8 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   suuntoHealthRootOAuthCredentialGeneration?: string | null;
   /** Webhook-only fence captured from the authoritative service connection metadata. */
   suuntoHealthConnectionStateGeneration?: string | null;
+  /** Opaque binding/token/root/connection authority fence for signed Suunto Sleep payloads. */
+  suuntoWebhookAuthorityDigest?: string;
 }
 
 export interface QueueItemError {

@@ -45,6 +45,11 @@ const hoisted = vi.hoisted(() => ({
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
     processSuuntoHealthQueueItem: vi.fn(),
+    captureActiveSuuntoWebhookWriteLifecycleGuards: vi.fn(),
+    captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
+    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
+    areSuuntoWebhookWriteLifecycleGuardsContinuous: vi.fn(),
+    getSuuntoWebhookWriteLifecycleAuthorityDigest: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -94,6 +99,7 @@ vi.mock('firebase-admin', () => {
                     data: () => ({
                         processed: false,
                         dateCreated: 1_700_000_000_000,
+                        authorizationSource: 'oauth_callback',
                     }),
                 }
         ),
@@ -284,9 +290,24 @@ vi.mock('../suunto/health-sync', () => ({
     })),
 }));
 
+vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
+    captureActiveSuuntoWebhookWriteLifecycleGuards:
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards,
+    captureCurrentSuuntoWebhookWriteLifecycleGuards:
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards,
+    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken:
+        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
+    areSuuntoWebhookWriteLifecycleGuardsContinuous:
+        hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous,
+    getSuuntoWebhookWriteLifecycleAuthorityDigest:
+        hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest,
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
+
+const SUUNTO_WEBHOOK_AUTHORITY_DIGEST = 'a'.repeat(64);
 
 describe('sleep queue', () => {
     beforeEach(() => {
@@ -305,7 +326,7 @@ describe('sleep queue', () => {
         });
         hoisted.requestGet.mockResolvedValue({ sleeps: [] });
         hoisted.markSleepSyncError.mockResolvedValue(true);
-        hoisted.updateSleepSyncState.mockResolvedValue(undefined);
+        hoisted.updateSleepSyncState.mockResolvedValue(true);
         hoisted.upsertSleepSessions.mockResolvedValue({ written: 0, skipped: 0 });
         hoisted.buildSleepSessionDocumentId.mockResolvedValue('b'.repeat(64));
         hoisted.replaceHealthSourceRecord.mockResolvedValue({
@@ -366,6 +387,22 @@ describe('sleep queue', () => {
                 additionalRequiredDocumentFieldValues: [],
             },
         });
+        const suuntoAuthorityGuards = {
+            requiredExistingDocumentRef: { path: 'suunto-token' },
+            requiredExistingTokenCredential: { accessToken: 'suunto-access-token' },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suunto-binding' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards
+            .mockResolvedValue(suuntoAuthorityGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards
+            .mockResolvedValue(suuntoAuthorityGuards);
+        hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest.mockReturnValue('a'.repeat(64));
+        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mockResolvedValue('current');
+        hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous.mockReturnValue(true);
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -390,8 +427,16 @@ describe('sleep queue', () => {
             type: 'suunto_webhook',
             provider: 'SuuntoApp',
             providerUserId: 'suunto-user-1',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
         }), { merge: false });
+        expect(hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards)
+            .toHaveBeenCalledWith(
+                expect.anything(),
+                'test-user-uid',
+                'suunto-user-1',
+                expect.any(Number),
+            );
     });
 
     it('can dispatch webhook queue items immediately after writing the queue document', async () => {
@@ -404,6 +449,7 @@ describe('sleep queue', () => {
                 userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
+                suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
                 dedupeKey: 'suunto-user-1:123',
                 dispatchImmediately: true,
             });
@@ -520,6 +566,7 @@ describe('sleep queue', () => {
                 userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
+                suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
                 processed: true,
                 dispatchedToCloudTask: 1_777_000_000_000,
             }),
@@ -549,6 +596,7 @@ describe('sleep queue', () => {
                 userID: 'test-user-uid',
                 providerUserId: 'suunto-user-1',
                 payload: { samples: [{ SleepId: 123 }] },
+                suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
                 processed: false,
                 dispatchedToCloudTask: 1_777_000_000_000,
             }),
@@ -633,6 +681,7 @@ describe('sleep queue', () => {
                     userID: 'test-user-uid',
                     providerUserId: 'suunto-user-1',
                     payload: { samples: [{ SleepId: 123, Duration: 1200 }] },
+                    suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
                     processed: true,
                     dispatchedToCloudTask: 1_777_000_000_000,
                 }),
@@ -645,6 +694,7 @@ describe('sleep queue', () => {
                     userID: 'test-user-uid',
                     providerUserId: 'suunto-user-1',
                     payload: { samples: [{ SleepId: 123, Duration: 2400 }] },
+                    suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
                     processed: true,
                     dispatchedToCloudTask: 1_777_000_010_000,
                 }),
@@ -1090,13 +1140,36 @@ describe('sleep queue', () => {
     });
 
     it('prefixes Suunto sleep poll access tokens with Bearer', async () => {
+        const initialGuards = {
+            requiredExistingDocumentRef: { path: 'suunto-token' },
+            requiredExistingTokenCredential: {
+                accessToken: 'expired-suunto-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suunto-binding' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const refreshedGuards = {
+            ...initialGuards,
+            requiredExistingTokenCredential: {
+                accessToken: 'raw-suunto-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+        };
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards
+            .mockResolvedValueOnce(initialGuards)
+            .mockResolvedValueOnce(refreshedGuards);
         hoisted.getTokenData.mockResolvedValue({
             accessToken: 'raw-suunto-access-token',
+            userName: 'suunto-user-1',
         });
         hoisted.requestGet.mockResolvedValue({ samples: [] });
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
-                id: 'suunto-token-1',
+                id: 'suunto-user-1',
                 data: () => ({
                     serviceName: 'SuuntoApp',
                     userName: 'suunto-user-1',
@@ -1138,10 +1211,125 @@ describe('sleep queue', () => {
             }),
             json: true,
         }));
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith(
+            'test-user-uid',
+            [],
+            expect.any(Number),
+            refreshedGuards,
+        );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             processed: true,
             resultStatus: 'success',
         }));
+    });
+
+    it('rebases a same-generation Suunto credential rotation before finalizing an embedded Sleep webhook', async () => {
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+            ref: { parent: { parent: { id: 'test-user-uid' } } },
+        };
+        const initialGuards = {
+            requiredExistingDocumentRef: tokenSnapshot.ref,
+            requiredExistingTokenCredential: {
+                accessToken: 'old-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suunto-binding' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const rotatedGuards = {
+            ...initialGuards,
+            requiredExistingTokenCredential: {
+                accessToken: 'rotated-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
+        hoisted.upsertSleepSessions
+            .mockResolvedValueOnce({ written: 0, skipped: 0, lifecycleGuardSkipped: true })
+            .mockResolvedValueOnce({ written: 1, skipped: 0 });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-rotated-webhook',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
+            payload: { samples: [] },
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledTimes(2);
+        expect(hoisted.upsertSleepSessions).toHaveBeenLastCalledWith(
+            'test-user-uid',
+            [],
+            expect.any(Number),
+            rotatedGuards,
+        );
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith(
+            'test-user-uid',
+            'SuuntoApp',
+            expect.objectContaining({ status: 'ready' }),
+            expect.any(Number),
+            rotatedGuards,
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'success',
+        }));
+    });
+
+    it('drops an embedded Sleep webhook when account authority changed after admission', async () => {
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user-1',
+            }),
+            ref: { parent: { parent: { id: 'test-user-uid' } } },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest.mockReturnValue('b'.repeat(64));
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-superseded-webhook-authority',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+        }));
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
     });
 
     it('does not call the provider after a Sleep queue revision is superseded', async () => {
@@ -1266,6 +1454,7 @@ describe('sleep queue', () => {
     it('keeps the fullest Suunto sample when a poll returns interim and final records for the same sleep id', async () => {
         hoisted.getTokenData.mockResolvedValue({
             accessToken: 'raw-suunto-access-token',
+            userName: 'suunto-user-1',
         });
         hoisted.requestGet.mockResolvedValue([
             {
@@ -1334,25 +1523,34 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.Processed);
-        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('test-user-uid', [
-            expect.objectContaining({
-                sourceSessionKey: '1777402260',
-                session: expect.objectContaining({
-                    isNap: false,
-                    durationSeconds: 33300,
-                    inBedDurationSeconds: 34260,
-                    stageDurationsSeconds: expect.objectContaining({
-                        deep: 6210,
-                        light: 20070,
-                        rem: 7020,
-                        awake: 960,
-                    }),
-                    score: expect.objectContaining({
-                        value: 67,
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith(
+            'test-user-uid',
+            [
+                expect.objectContaining({
+                    sourceSessionKey: '1777402260',
+                    session: expect.objectContaining({
+                        isNap: false,
+                        durationSeconds: 33300,
+                        inBedDurationSeconds: 34260,
+                        stageDurationsSeconds: expect.objectContaining({
+                            deep: 6210,
+                            light: 20070,
+                            rem: 7020,
+                            awake: 960,
+                        }),
+                        score: expect.objectContaining({
+                            value: 67,
+                        }),
                     }),
                 }),
+            ],
+            expect.any(Number),
+            expect.objectContaining({
+                requiredDocumentFieldValues: expect.objectContaining({
+                    expectedFields: { authorizationSource: 'oauth_callback' },
+                }),
             }),
-        ]);
+        );
     });
 
     it('moves Garmin ping queue items with untrusted callback URLs to DLQ without resolving tokens', async () => {
@@ -1431,6 +1629,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-2',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
             ref: {
                 update,
@@ -1467,6 +1666,7 @@ describe('sleep queue', () => {
             providerUserId: 'unknown-suunto-user',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
             ref: queueRef as unknown as admin.firestore.DocumentReference,
         });
@@ -1482,6 +1682,122 @@ describe('sleep queue', () => {
         expect(hoisted.loggerWarn.mock.calls.flat().join(' ')).not.toContain('unknown-suunto-user');
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('drops a previously queued embedded Suunto webhook when its provider-authorized binding is absent', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'victim-provider-id',
+                data: () => ({
+                    userName: 'victim-provider-id',
+                    serviceName: ServiceNames.SuuntoApp,
+                }),
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'test-user-uid',
+                        },
+                    },
+                },
+            }],
+            empty: false,
+        });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(null);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-sleep-untrusted-binding',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'victim-provider-id',
+            retryCount: 0,
+            type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
+            payload: { samples: [{ SleepId: 123 }] },
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards).toHaveBeenCalledWith(
+            expect.any(Object),
+            'test-user-uid',
+            'victim-provider-id',
+            expect.objectContaining({ id: 'victim-provider-id' }),
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+            skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+        }));
+        expect(hoisted.claimSleepQueueRevision).not.toHaveBeenCalled();
+        expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken).not.toHaveBeenCalled();
+    });
+
+    it('provider-verifies legacy Suunto poll work before allowing provider I/O', async () => {
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                serviceName: ServiceNames.SuuntoApp,
+            }),
+            ref: { parent: { parent: { id: 'test-user-uid' } } },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        const authorizedGuards = {
+            requiredExistingDocumentRef: tokenSnapshot.ref,
+            requiredExistingTokenCredential: {
+                accessToken: 'raw-suunto-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suunto-binding' },
+                expectedFields: { authorizationSource: 'provider_refresh' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards
+            .mockResolvedValueOnce(null)
+            .mockResolvedValue(authorizedGuards);
+        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mockResolvedValueOnce('created');
+        hoisted.getTokenData.mockResolvedValue({
+            accessToken: 'raw-suunto-access-token',
+            userName: 'suunto-user-1',
+        });
+        hoisted.requestGet.mockResolvedValue({ samples: [] });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-legacy-poll',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_poll',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken).toHaveBeenCalledWith(
+            expect.any(Object),
+            'test-user-uid',
+            tokenSnapshot,
+        );
+        expect(hoisted.requestGet).toHaveBeenCalledOnce();
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith(
+            'test-user-uid',
+            [],
+            expect.any(Number),
+            authorizedGuards,
+        );
     });
 
     it('moves malformed queue items to DLQ without writing sleep state', async () => {
@@ -1690,6 +2006,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
             ref: {
                 update,
@@ -1741,6 +2058,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
             ref: {
                 update,
@@ -1909,6 +2227,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: {
                 samples: [{
                     entryData: {
@@ -1927,7 +2246,16 @@ describe('sleep queue', () => {
         expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('userName', '==', 'suunto-user-1');
         expect(hoisted.collectionGroupWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
         expect(hoisted.collectionGroupLimit).toHaveBeenCalledWith(1);
-        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('user-id', expect.any(Array));
+        expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith(
+            'user-id',
+            expect.any(Array),
+            expect.any(Number),
+            expect.objectContaining({
+                requiredDocumentFieldValues: expect.objectContaining({
+                    expectedFields: { authorizationSource: 'oauth_callback' },
+                }),
+            }),
+        );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             processed: true,
             resultStatus: 'success',
@@ -1989,6 +2317,12 @@ describe('sleep queue', () => {
             'SuuntoApp',
             expect.objectContaining({
                 dlqContext: 'INVALID_GRANT',
+            }),
+            expect.any(Number),
+            expect.objectContaining({
+                requiredDocumentFieldValues: expect.objectContaining({
+                    expectedFields: { authorizationSource: 'oauth_callback' },
+                }),
             }),
         );
         expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
@@ -2099,6 +2433,7 @@ describe('sleep queue', () => {
             providerUserId: 'other-suunto-user',
             retryCount: 0,
             type: 'suunto_webhook',
+            suuntoWebhookAuthorityDigest: SUUNTO_WEBHOOK_AUTHORITY_DIGEST,
             payload: { samples: [{ SleepId: 123 }] },
             ref: queueRef as unknown as admin.firestore.DocumentReference,
         });
@@ -2106,13 +2441,7 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.MovedToDLQ);
         expect(hoisted.tokenRootWhere).toHaveBeenCalledWith('userName', '==', 'other-suunto-user');
         expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
-        expect(hoisted.markSleepSyncError).toHaveBeenCalledWith(
-            'test-user-uid',
-            'SuuntoApp',
-            expect.objectContaining({
-                message: 'No SuuntoApp token found',
-            }),
-        );
+        expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
         expect(hoisted.batchSet).toHaveBeenCalledWith(expect.objectContaining({
             id: 'suunto-sleep-provider-mismatch',
         }), expect.objectContaining({
@@ -3636,13 +3965,43 @@ describe('sleep queue', () => {
         hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
         const lifecycleGuards = {
             requiredExistingDocumentRef: tokenRef,
-            requiredExistingTokenCredential: { accessToken: 'suunto-access-token' },
-            requiredDocumentFieldValues: {
-                expectedFields: { connectionStateGeneration: 'suunto-generation-1' },
+            requiredExistingTokenCredential: {
+                accessToken: 'suunto-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
             },
-            additionalRequiredDocumentFieldValues: [],
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suuntoHealthWebhookAccountBindings/binding-1' },
+                expectedFields: {
+                    schemaVersion: 3,
+                    authorizationSource: 'oauth_callback',
+                    userID: stagedUserID,
+                    providerAccountDigest: 'opaque-account-digest',
+                    tokenCredentialGeneration: 'suunto-credential-generation-1',
+                },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: tokenRef,
+                expectedFields: {
+                    userName: 'suunto-user-1',
+                    serviceName: ServiceNames.SuuntoApp,
+                    tokenCredentialGeneration: 'suunto-credential-generation-1',
+                },
+            }, {
+                documentRef: { path: `suuntoAppAccessTokens/${stagedUserID}` },
+                expectedFields: {
+                    activeOAuthCredentialGeneration: 'root-generation-1',
+                    disconnectState: undefined,
+                    disconnectOperationGeneration: undefined,
+                },
+            }, {
+                documentRef: { path: `users/${stagedUserID}/meta/${ServiceNames.SuuntoApp}` },
+                expectedFields: {
+                    connectionState: 'connected',
+                    connectionStateGeneration: 'suunto-generation-1',
+                },
+            }],
         };
-        hoisted.captureSuuntoHealthWriteLifecycleGuards.mockResolvedValue(lifecycleGuards);
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(lifecycleGuards);
         hoisted.processSuuntoHealthQueueItem.mockResolvedValue({
             healthResults: [{
                 input: {

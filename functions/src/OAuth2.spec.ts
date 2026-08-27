@@ -1129,6 +1129,7 @@ describe('OAuth2', () => {
                             exists: true,
                             data: () => ({
                                 schemaVersion: 3,
+                                authorizationSource: 'oauth_callback',
                                 userID,
                                 providerAccountDigest: createHash('sha256').update(tokenID).digest('hex'),
                                 tokenCredentialGeneration: 'credential-generation-1',
@@ -1795,6 +1796,7 @@ describe('OAuth2', () => {
             }), { merge: true });
             expect(mockDocInstance.set).toHaveBeenCalledWith({
                 schemaVersion: 3,
+                authorizationSource: 'oauth_callback',
                 userID,
                 providerAccountDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
                 tokenCredentialGeneration: expect.any(String),

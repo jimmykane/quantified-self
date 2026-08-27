@@ -50,6 +50,7 @@ import {
   doesSuuntoHealthWebhookBindingMatch,
   getSuuntoHealthWebhookAccountBindingRef,
   parseSuuntoHealthWebhookAccountBinding,
+  SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES,
 } from './suunto/health-webhook-binding';
 import {
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
@@ -505,6 +506,7 @@ async function setOAuthTokenIfUserActive(
           userID,
           suuntoProviderUserId,
           persistedTokenData.tokenCredentialGeneration,
+          SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.OAuthCallback,
         ),
       );
     }

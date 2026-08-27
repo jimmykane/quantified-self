@@ -10,6 +10,7 @@ import {
   parseSuuntoHealthWebhookAccountBinding,
   SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME,
   SUUNTO_WEBHOOK_MAX_MATCHING_ACCOUNT_BINDINGS,
+  SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES,
 } from './health-webhook-binding';
 
 interface TestSnapshot {
@@ -47,7 +48,12 @@ function createBindingStore() {
   const setBinding = (
     providerUserId: string,
     userID: string,
-    data = buildSuuntoHealthWebhookAccountBinding(userID, providerUserId, `generation-${userID}`),
+    data = buildSuuntoHealthWebhookAccountBinding(
+      userID,
+      providerUserId,
+      `generation-${userID}`,
+      SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.OAuthCallback,
+    ),
   ): TestSnapshot => {
     const ref = getSuuntoHealthWebhookAccountBindingRef(db as never, providerUserId, userID);
     const snapshot = {
@@ -82,10 +88,12 @@ describe('Suunto webhook account bindings', () => {
       'firebase-user-1',
       'suunto-account-1',
       'credential-generation-1',
+      SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.OAuthCallback,
     );
 
     expect(binding).toEqual({
       schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
       userID: 'firebase-user-1',
       providerAccountDigest: getSuuntoWebhookProviderAccountDigest('suunto-account-1'),
       tokenCredentialGeneration: 'credential-generation-1',
@@ -101,6 +109,15 @@ describe('Suunto webhook account bindings', () => {
     })).toBeNull();
   });
 
+  it('rejects provenance-less bindings created from untrusted legacy token data', () => {
+    expect(parseSuuntoHealthWebhookAccountBinding({
+      schemaVersion: 3,
+      userID: 'firebase-user-1',
+      providerAccountDigest: getSuuntoWebhookProviderAccountDigest('suunto-account-1'),
+      tokenCredentialGeneration: 'credential-generation-1',
+    })).toBeNull();
+  });
+
   it('resolves every matching binding from the bounded server-owned digest index', async () => {
     const first = store.setBinding('suunto-account-1', 'firebase-user-1');
     const second = store.setBinding('suunto-account-1', 'firebase-user-2');
@@ -108,6 +125,7 @@ describe('Suunto webhook account bindings', () => {
       'firebase-user-3',
       'suunto-account-1',
       'generation-3',
+      SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.ProviderRefresh,
     );
     store.setQuerySnapshots([
       second,
