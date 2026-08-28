@@ -83,6 +83,7 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
 8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
+9. Validate field semantics against the provider's published examples, including signed event values and inclusive sample endpoints. Cap or compact provider arrays against the shared metric and sample write budgets before handing a normalized record to the writer; do not let a provider-valid payload fail only at the generic persistence boundary.
 
 ## 4. OAuth and provider identity
 

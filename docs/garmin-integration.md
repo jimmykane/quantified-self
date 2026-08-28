@@ -46,6 +46,8 @@ Disconnecting Garmin stops future imports and retains imported Sleep and Health 
 
 The callback `uploadEndTimeInSeconds` is the ordered revision watermark. Source identities use the stable provider interval, calendar date, or measurement timestamp rather than `summaryId`, because Garmin can update a record with a new summary ID. Recognized normalized content alone is hashed into the revision token, so replacing only the summary ID remains unchanged. Fractional provider timestamps are rounded to the Health model's millisecond precision. A higher identical delivery advances the maximum-observed watermark; a later distinct but older delivery is stale and cannot overwrite it.
 
+Garmin Health Snapshot epoch maps use an inclusive final endpoint: when the documented final sample is one second beyond `durationInSeconds`, the normalized source-record end and coverage extend to that epoch. Stress Details keeps Body Battery activity `eventStartTimeInSeconds` as a bounded signed provider value rather than interpreting negative values as invalid Unix timestamps. Provider event arrays remain input-bounded, and emitted event metrics are deterministically capped to the unified Health record's 128-metric budget; the last retained event records the provider count when truncation occurs.
+
 ## Rollout and history
 
 Garmin Health is controlled independently from Garmin Sleep by the deny-all-when-empty UID allowlist in `functions/src/garmin/health-rollout.ts`. Sleep remains governed by the existing Sleep provider/user controls.

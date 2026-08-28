@@ -106,7 +106,7 @@ describe('Garmin Health API summary mapping', () => {
       },
       bodyBatteryActivityEvents: [{
         eventType: 'RECOVERY',
-        eventStartTimeInSeconds: 1_760_000_180,
+        eventStartTimeInSeconds: -1_760_000_180,
         eventStartTimeOffsetInSeconds: 0,
         duration: 180,
         bodyBatteryImpact: 3,
@@ -138,8 +138,71 @@ describe('Garmin Health API summary mapping', () => {
       expect.objectContaining({
         metricId: HEALTH_METRIC_IDS.BodyEnergyChange,
         semanticVariant: 'garmin_recovery',
+        native: expect.objectContaining({
+          qualifiers: expect.objectContaining({
+            eventStartTimeInSeconds: -1_760_000_180,
+          }),
+        }),
       }),
     ]));
+  });
+
+  it('caps Body Battery activity events within the shared metric write budget', () => {
+    const bodyBatteryActivityEvents = Array.from({ length: 256 }, (_, index) => ({
+      eventType: 'ACTIVITY',
+      eventStartTimeInSeconds: index - 128,
+      eventStartTimeOffsetInSeconds: 0,
+      duration: 60,
+      bodyBatteryImpact: -1,
+    }));
+    const [result] = map('stressDetails', [{
+      summaryId: 'stress-event-budget',
+      calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000,
+      startTimeOffsetInSeconds: 0,
+      durationInSeconds: 540,
+      timeOffsetBodyBatteryValues: { 0: 55 },
+      bodyBatteryDynamicFeedbackEvent: {
+        eventStartTimeInSeconds: 1_760_000_360,
+        bodyBatteryLevel: 'MODERATE',
+      },
+      bodyBatteryActivityEvents,
+    }]);
+
+    expect(result.input.metrics).toHaveLength(128);
+    expect(result.input.metrics.at(-1)).toMatchObject({
+      native: {
+        qualifiers: {
+          bodyBatteryActivityEventsTruncated: true,
+          bodyBatteryActivityEventCount: 256,
+        },
+      },
+    });
+  });
+
+  it('still validates Body Battery events that exceed the emitted metric budget', () => {
+    const bodyBatteryActivityEvents = Array.from({ length: 129 }, (_, index) => ({
+      eventType: index === 128 ? 'UNKNOWN' : 'ACTIVITY',
+      eventStartTimeInSeconds: index - 64,
+      eventStartTimeOffsetInSeconds: 0,
+      duration: 60,
+      bodyBatteryImpact: -1,
+    }));
+
+    expect(() => mapGarminHealthSummaries(
+      'stressDetails',
+      [{
+        summaryId: 'stress-invalid-truncated-event',
+        calendarDate: '2025-10-09',
+        startTimeInSeconds: 1_760_000_000,
+        startTimeOffsetInSeconds: 0,
+        durationInSeconds: 540,
+        bodyBatteryActivityEvents,
+      }],
+      PROVIDER_ACCOUNT_ID,
+      REVISION_ORDER,
+      RECEIVED_AT_MS,
+    )).toThrow(GarminHealthValidationError);
   });
 
   it('maps overnight HRV aggregates and five-minute RMSSD samples', () => {
@@ -327,6 +390,29 @@ describe('Garmin Health API summary mapping', () => {
     });
   });
 
+  it('accepts Garmin\'s inclusive final Health Snapshot epoch and extends the record end', () => {
+    const startTimeInSeconds = 1_760_000_000;
+    const [result] = map('healthSnapshot', [{
+      summaryId: 'snapshot-inclusive-end',
+      calendarDate: '2025-10-09',
+      startTimeInSeconds,
+      offsetStartTimeInSeconds: 7_200,
+      durationInSeconds: 119,
+      summaries: [{
+        summaryType: 'heart_rate',
+        epochSummaries: { 0: 84, 120: 85 },
+      }],
+    }]);
+
+    expect(result.input.endTimeMs).toBe((startTimeInSeconds + 120) * 1_000);
+    expect(result.input.coverage).toMatchObject({
+      expectedEndTimeMs: (startTimeInSeconds + 120) * 1_000,
+      observedDurationSeconds: 120,
+      expectedDurationSeconds: 120,
+    });
+    expect(result.input.sampleSeries[0].offsetMs).toEqual([0, 120_000]);
+  });
+
   it('keeps the last row for duplicate identities in the same callback', () => {
     const results = map('userMetrics', [{
       summaryId: 'metrics-1', calendarDate: '2025-10-09', vo2Max: 47,
@@ -377,6 +463,11 @@ describe('Garmin Health API summary mapping', () => {
     ['nonzero on-demand duration', 'pulseox', [{
       summaryId: 'pulse-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
       durationInSeconds: 60, onDemand: true, timeOffsetSpo2Values: { 0: 96 },
+    }]],
+    ['Snapshot sample beyond the inclusive endpoint', 'healthSnapshot', [{
+      summaryId: 'snapshot-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
+      durationInSeconds: 119,
+      summaries: [{ summaryType: 'heart_rate', epochSummaries: { 121: 70 } }],
     }]],
   ] as const)('rejects %s', (_caseName, type, payload) => {
     expect(() => mapGarminHealthSummaries(

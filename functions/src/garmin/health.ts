@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   HEALTH_COVERAGE_STATUSES,
+  HEALTH_MAX_METRICS_PER_SOURCE_RECORD,
   HEALTH_METRIC_IDS,
   HEALTH_NORMALIZATION_STATUSES,
   HEALTH_PROVIDERS,
@@ -166,6 +167,16 @@ function timestampMs(value: unknown, field: string): number {
     throw new GarminHealthValidationError(`${field} is outside the supported timestamp range.`);
   }
   return milliseconds;
+}
+
+function signedEventSeconds(value: unknown, field: string): number {
+  return requiredNumber(
+    value,
+    field,
+    -MAX_TIMESTAMP_SECONDS,
+    MAX_TIMESTAMP_SECONDS,
+    true,
+  );
 }
 
 function calendarDateFromTime(startTimeMs: number, timezoneOffsetSeconds: number | null): string {
@@ -842,13 +853,21 @@ function mapStressDetails(
     if (!Array.isArray(eventsValue) || eventsValue.length > MAX_EVENTS_PER_SUMMARY) {
       throw new GarminHealthValidationError(`${field}.bodyBatteryActivityEvents must be a bounded array.`);
     }
+    const availableEventMetricSlots = Math.max(
+      0,
+      HEALTH_MAX_METRICS_PER_SOURCE_RECORD - metrics.length,
+    );
+    const eventsTruncated = availableEventMetricSlots < eventsValue.length;
     eventsValue.forEach((eventValue, eventIndex) => {
       const event = asRecord(eventValue, `${field}.bodyBatteryActivityEvents[${eventIndex}]`);
       const eventType = boundedString(event.eventType, `${field}.bodyBatteryActivityEvents[${eventIndex}].eventType`, 64).toUpperCase();
       if (!['SLEEP', 'RECOVERY', 'NAP', 'ACTIVITY', 'STRESS'].includes(eventType)) {
         throw new GarminHealthValidationError(`${field}.bodyBatteryActivityEvents contains an unsupported event type.`);
       }
-      const eventStartTimeMs = timestampMs(event.eventStartTimeInSeconds, `${field}.bodyBatteryActivityEvents[${eventIndex}].eventStartTimeInSeconds`);
+      const eventStartTimeInSeconds = signedEventSeconds(
+        event.eventStartTimeInSeconds,
+        `${field}.bodyBatteryActivityEvents[${eventIndex}].eventStartTimeInSeconds`,
+      );
       const eventOffset = aliasedValue(
         event,
         ['eventStartTimeOffsetInSeconds', 'eventStartTimeOffsetINSeconds'],
@@ -859,6 +878,7 @@ function mapStressDetails(
         : requiredNumber(eventOffset, `${field}.bodyBatteryActivityEvents offset`, -86_399, 86_399, true);
       const durationSeconds = requiredNumber(event.duration, `${field}.bodyBatteryActivityEvents[${eventIndex}].duration`, 0, MAX_DURATION_SECONDS, true);
       const impact = requiredNumber(event.bodyBatteryImpact, `${field}.bodyBatteryActivityEvents[${eventIndex}].bodyBatteryImpact`, -1_000, 1_000, true);
+      if (eventIndex >= availableEventMetricSlots) return;
       metrics.push(nativeNumberMetric({
         metricId: HEALTH_METRIC_IDS.BodyEnergyChange,
         aggregation: 'event',
@@ -869,9 +889,13 @@ function mapStressDetails(
         recordingMethod: HEALTH_RECORDING_METHODS.Device,
         qualifiers: {
           eventType,
-          eventStartTimeMs,
+          eventStartTimeInSeconds,
           eventStartTimeOffsetInSeconds: offsetSeconds,
           durationSeconds,
+          ...(eventsTruncated && eventIndex === availableEventMetricSlots - 1 ? {
+            bodyBatteryActivityEventsTruncated: true,
+            bodyBatteryActivityEventCount: eventsValue.length,
+          } : {}),
         },
       }));
     });
@@ -1379,6 +1403,7 @@ function mapHealthSnapshot(
   const metrics: HealthMetricEntry[] = [];
   const sampleSeries: HealthSampleSeriesInput[] = [];
   const seenTypes = new Set<string>();
+  let maximumEpochOffsetSeconds = interval.durationSeconds;
   interval.summary.summaries.forEach((summaryValue, summaryIndex) => {
     const snapshotSummary = asRecord(summaryValue, `${field}.summaries[${summaryIndex}]`);
     const summaryType = boundedString(snapshotSummary.summaryType, `${field}.summaries[${summaryIndex}].summaryType`, 64).toLowerCase();
@@ -1415,7 +1440,18 @@ function mapHealthSnapshot(
       0,
       definition.maximum,
     );
-    assertPointsWithinInterval(points, interval.durationSeconds, `${field}.summaries[${summaryIndex}].epochSummaries`);
+    // Garmin's published Snapshot payload models the final epoch inclusively:
+    // duration 119 can contain an epoch at offset 120. Accept only that single
+    // endpoint second and extend the normalized record boundary to contain it.
+    assertPointsWithinInterval(
+      points,
+      interval.durationSeconds + 1,
+      `${field}.summaries[${summaryIndex}].epochSummaries`,
+    );
+    maximumEpochOffsetSeconds = Math.max(
+      maximumEpochOffsetSeconds,
+      points[points.length - 1]?.offsetSeconds || 0,
+    );
     const series = numericSeries({
       seriesKey: `health_snapshot_${summaryType}`,
       points,
@@ -1432,11 +1468,22 @@ function mapHealthSnapshot(
     });
     if (series) sampleSeries.push(series);
   });
+  const snapshotDurationSeconds = maximumEpochOffsetSeconds;
+  const snapshotEndTimeMs = interval.startTimeMs + (snapshotDurationSeconds * 1_000);
+  const normalizedSampleSeries = sampleSeries.map(series => ({
+    ...series,
+    coverage: {
+      ...series.coverage,
+      expectedEndTimeMs: snapshotEndTimeMs,
+      observedDurationSeconds: snapshotDurationSeconds,
+      expectedDurationSeconds: snapshotDurationSeconds,
+    },
+  }));
   const coverage = commonCoverage(
     interval.startTimeMs,
-    interval.endTimeMs,
-    interval.durationSeconds,
-    Math.max(0, ...sampleSeries.map(series => series.offsetMs.length)),
+    snapshotEndTimeMs,
+    snapshotDurationSeconds,
+    Math.max(0, ...normalizedSampleSeries.map(series => series.offsetMs.length)),
   );
   return finalizeResult({
     providerAccountId,
@@ -1449,12 +1496,12 @@ function mapHealthSnapshot(
       kind: HEALTH_SOURCE_RECORD_KINDS.IntervalSummary,
       calendarDate: interval.calendarDate,
       startTimeMs: interval.startTimeMs,
-      endTimeMs: interval.endTimeMs,
+      endTimeMs: snapshotEndTimeMs,
       timezoneOffsetSeconds: interval.timezoneOffsetSeconds,
       metrics,
       coverage,
       device: GARMIN_DEVICE,
-      sampleSeries,
+      sampleSeries: normalizedSampleSeries,
     },
   });
 }
