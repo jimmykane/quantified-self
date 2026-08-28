@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminDashboardHistoryPoint, AdminDashboardHistoryResponse } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -11,6 +11,7 @@ import { AdminUserHistoryComponent } from './admin-user-history.component';
 describe('AdminUserHistoryComponent', () => {
     let fixture: ComponentFixture<AdminUserHistoryComponent>;
     let component: AdminUserHistoryComponent;
+    let restoreDateNow: () => void;
     let loader: {
         init: ReturnType<typeof vi.fn>;
         setOption: ReturnType<typeof vi.fn>;
@@ -21,6 +22,9 @@ describe('AdminUserHistoryComponent', () => {
     };
 
     beforeEach(async () => {
+        const dateNowSpy = vi.spyOn(Date, 'now')
+            .mockReturnValue(Date.parse('2026-08-27T12:00:00.000Z'));
+        restoreDateNow = () => dateNowSpy.mockRestore();
         const chart = {
             isDisposed: vi.fn().mockReturnValue(false),
             dispatchAction: vi.fn(),
@@ -45,6 +49,10 @@ describe('AdminUserHistoryComponent', () => {
 
         fixture = TestBed.createComponent(AdminUserHistoryComponent);
         component = fixture.componentInstance;
+    });
+
+    afterEach(() => {
+        restoreDateNow();
     });
 
     it('shows collection progress until eight selected-range snapshots exist', () => {
