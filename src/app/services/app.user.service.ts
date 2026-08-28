@@ -84,6 +84,7 @@ import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc 
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
+  GarminHealthSyncAvailabilityResponse,
   SleepBackfillQueueResponse,
   SuuntoHealthSyncAvailabilityResponse,
 } from '@shared/sleep-backfill';
@@ -1376,13 +1377,20 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
+  async getGarminHealthSyncAvailabilityForCurrentUser(): Promise<boolean> {
+    const result = await this.functionsService.call<undefined, GarminHealthSyncAvailabilityResponse>(
+      'getGarminHealthSyncAvailability',
+    );
+    return result.data.available === true;
+  }
+
   async addSuuntoRoutesToQueueForCurrentUser(): Promise<RouteSyncCatchUpSummary> {
     const result = await this.functionsService.call<undefined, RouteSyncCatchUpSummary>('addSuuntoAppRoutesToQueue');
     return result.data;
   }
 
-  async backfillGarminSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPISleep');
+  async backfillGarminHealthForCurrentUser(): Promise<SleepBackfillQueueResponse> {
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth');
     return result.data;
   }
 

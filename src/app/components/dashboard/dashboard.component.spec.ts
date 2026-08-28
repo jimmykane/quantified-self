@@ -88,7 +88,7 @@ describe('DashboardComponent', () => {
             shouldShowPromo: vi.fn().mockReturnValue(false),
             updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
             updateActivitySyncRouteSettings: vi.fn().mockReturnValue(Promise.resolve()),
-            backfillGarminSleepForCurrentUser: vi.fn().mockResolvedValue({
+            backfillGarminHealthForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 43,
                 startDate: '2016-01-01T00:00:00.000Z',
                 endDate: '2026-04-30T12:00:00.000Z',
@@ -715,7 +715,7 @@ describe('DashboardComponent', () => {
         expect(mockSleepService.watchSyncState).toHaveBeenCalledWith(mockUser.uid, SLEEP_PROVIDERS.GarminAPI);
         const prompt = component.dashboardActionPrompts.find(item => item.id === 'backfillGarminSleep');
         expect(prompt).toBeTruthy();
-        expect(prompt?.title).toBe('Import Garmin sleep history');
+        expect(prompt?.title).toBe('Import Garmin history');
         expect(prompt?.primaryAction?.id).toBe('backfillGarminSleep');
     });
 
@@ -779,7 +779,7 @@ describe('DashboardComponent', () => {
 
         await component.backfillGarminSleepPrompt();
 
-        expect(mockUserService.backfillGarminSleepForCurrentUser).toHaveBeenCalled();
+        expect(mockUserService.backfillGarminHealthForCurrentUser).toHaveBeenCalled();
         expect((component as any).analyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
             method: ServiceNames.GarminAPI,
             source: 'dashboard_prompt',

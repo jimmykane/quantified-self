@@ -29,6 +29,7 @@ const hoisted = vi.hoisted(() => ({
     replaceHealthSourceRecord: vi.fn(),
     updateHealthSyncState: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
+    enqueueGarminHealthBackfillTask: vi.fn(),
     markQueueItemDispatchedIfUserActive: vi.fn(),
     shouldSkipQueueWorkForDeletedUser: vi.fn(),
     getUserDeletionGuardState: vi.fn(),
@@ -227,6 +228,7 @@ vi.mock('../utils', async () => {
     return {
         ...actual,
         enqueueSleepSyncTask: hoisted.enqueueSleepSyncTask,
+        enqueueGarminHealthBackfillTask: hoisted.enqueueGarminHealthBackfillTask,
     };
 });
 
@@ -379,6 +381,7 @@ describe('sleep queue', () => {
         hoisted.claimSleepQueueRevision.mockResolvedValue('claimed');
         hoisted.releaseSleepQueueRevision.mockResolvedValue(undefined);
         hoisted.enqueueSleepSyncTask.mockResolvedValue(true);
+        hoisted.enqueueGarminHealthBackfillTask.mockResolvedValue(true);
         hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         hoisted.getUserDeletionGuardState.mockReset().mockResolvedValue({
             userExists: true,
@@ -586,6 +589,109 @@ describe('sleep queue', () => {
                 .toBeLessThan(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0]);
             expect(hoisted.enqueueSleepSyncTask.mock.invocationCallOrder[0])
                 .toBeLessThan(hoisted.docUpdate.mock.invocationCallOrder[0]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('captures lifecycle fences and uses the dedicated task for Garmin Health backfill', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-05-06T05:30:00.000Z'));
+        try {
+            const tokenRef = {
+                parent: { parent: { id: 'test-user-uid' } },
+                get: vi.fn().mockResolvedValue({
+                    exists: true,
+                    data: () => ({
+                        serviceName: ServiceNames.GarminAPI,
+                        userID: 'garmin-user-1',
+                        tokenCredentialGeneration: 'garmin-token-generation-1',
+                    }),
+                }),
+            };
+            hoisted.tokenRootGet.mockResolvedValueOnce({
+                docs: [{
+                    ref: tokenRef,
+                    exists: true,
+                    data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                }],
+                empty: false,
+            });
+            hoisted.captureActiveGarminHealthWriteLifecycleGuards.mockResolvedValueOnce({
+                requiredExistingDocumentRef: tokenRef,
+                requiredExistingTokenCredential: {
+                    accessToken: 'garmin-access-token',
+                    credentialGeneration: 'garmin-token-generation-1',
+                },
+                requiredDocumentFieldValues: {
+                    documentRef: {
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                connectionState: 'connected',
+                                connectionStateGeneration: 'garmin-connection-generation-1',
+                            }),
+                        }),
+                    },
+                    expectedFields: {
+                        connectionState: 'connected',
+                        connectionStateGeneration: 'garmin-connection-generation-1',
+                    },
+                },
+                additionalRequiredDocumentFieldValues: [{
+                    documentRef: {
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                activeOAuthCredentialGeneration: 'garmin-root-generation-1',
+                            }),
+                        }),
+                    },
+                    expectedFields: {
+                        activeOAuthCredentialGeneration: 'garmin-root-generation-1',
+                    },
+                }],
+                providerUserId: 'garmin-user-1',
+                providerIdentityPinned: true,
+                tokenCredentialGeneration: 'garmin-token-generation-1',
+                rootOAuthCredentialGeneration: 'garmin-root-generation-1',
+                connectionStateGeneration: 'garmin-connection-generation-1',
+            });
+            const rangeStartMs = Date.parse('2016-01-01T00:00:00.000Z');
+            const rangeEndMs = Date.parse('2016-03-01T00:00:00.000Z');
+
+            await addSleepSyncQueueItem({
+                type: 'garmin_health_backfill',
+                provider: 'GarminAPI',
+                userID: 'test-user-uid',
+                providerUserId: 'garmin-user-1',
+                rangeStartMs,
+                rangeEndMs,
+                healthTrigger: 'backfill',
+                garminHealthBackfillSummaryIndex: 0,
+                garminHealthBackfillNextStartMs: rangeStartMs,
+                garminHealthBackfillWindowsCompleted: 0,
+                garminHealthBackfillWindowsTotal: 10,
+                dedupeKey: 'garmin-health-backfill:test-user-uid',
+                dispatchImmediately: true,
+            });
+
+            expect(hoisted.enqueueGarminHealthBackfillTask).toHaveBeenCalledWith(
+                expect.any(String),
+                Date.now(),
+                undefined,
+                {
+                    queueRevision: expect.any(String),
+                    queueDateCreated: Date.now(),
+                },
+            );
+            expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                type: 'garmin_health_backfill',
+                garminHealthTokenCredentialGeneration: 'garmin-token-generation-1',
+                garminHealthRootOAuthCredentialGeneration: 'garmin-root-generation-1',
+                garminHealthConnectionStateGeneration: 'garmin-connection-generation-1',
+            }), { merge: false });
         } finally {
             vi.useRealTimers();
         }

@@ -186,6 +186,24 @@ describe('Garmin Health callback synchronization', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a legacy identity lookup failure opaque and retryable', async () => {
+    hoisted.captureGuards.mockResolvedValue(lifecycleGuards(false));
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('secret provider body'), {
+      statusCode: 503,
+    }));
+
+    await expect(processGarminHealthQueueItem(
+      queueItem(),
+      tokenSnapshot(),
+      'test-user',
+      lifecycleGuards(false),
+    )).rejects.toMatchObject({
+      name: 'GarminHealthRequestError',
+      message: 'Garmin Health callback request failed.',
+      statusCode: 503,
+    });
+  });
+
   it('maps Garmin 412 callback responses to a non-retryable permission state', async () => {
     hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('provider body'), {
       statusCode: 412,

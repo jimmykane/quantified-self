@@ -804,7 +804,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const result = await this.userService.backfillGarminSleepForCurrentUser();
+      const result = await this.userService.backfillGarminHealthForCurrentUser();
       const lastBackfillQueuedAtMs = Date.now();
       this.garminSleepSyncState = {
         ...(this.garminSleepSyncState || {
@@ -821,9 +821,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
         updatedAtMs: lastBackfillQueuedAtMs,
       };
       this.garminSleepSyncStateLoaded = true;
-      this.snackBar.open(`Garmin sleep history import started for ${result.queued} date ranges.`, undefined, { duration: 3000 });
+      const historyLabel = typeof result.healthQueued === 'number' && result.healthQueued > 0
+        ? 'Sleep & Health history'
+        : 'sleep history';
+      this.snackBar.open(`Garmin ${historyLabel} import started for ${result.queued} date ranges.`, undefined, { duration: 3000 });
     } catch (error) {
-      this.garminSleepBackfillPromptError = 'Could not request Garmin sleep history.';
+      this.garminSleepBackfillPromptError = 'Could not request Garmin history.';
       this.logger.error('[DashboardComponent] Failed to request Garmin sleep backfill from dashboard prompt', error);
     } finally {
       this.isBackfillingGarminSleepPrompt = false;

@@ -7,7 +7,11 @@ import { MAX_PENDING_TASKS, QUEUE_SCHEDULE } from '../shared/queue-config';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { config } from '../config';
-import { enqueueSleepSyncTask, getCloudTaskQueueDepthForQueue } from '../utils';
+import {
+    enqueueGarminHealthBackfillTask,
+    enqueueSleepSyncTask,
+    getCloudTaskQueueDepthForQueue,
+} from '../utils';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import {
     markQueueItemDispatchedIfUserActive,
@@ -156,10 +160,13 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
     dispatched: number;
     skippedRecent: number;
 }> {
-    const cloudTaskQueueId = config.cloudtasks.sleepSyncQueue;
-    const pendingCloudTasks = await getCloudTaskQueueDepthForQueue(cloudTaskQueueId, true);
-    if (pendingCloudTasks >= MAX_PENDING_TASKS) {
-        logger.info(`[SleepSyncDispatcher] Queue busy (${pendingCloudTasks} pending tasks), skipping dispatch reconciliation.`);
+    const [pendingSleepTasks, pendingGarminHealthBackfillTasks] = await Promise.all([
+        getCloudTaskQueueDepthForQueue(config.cloudtasks.sleepSyncQueue, true),
+        getCloudTaskQueueDepthForQueue(config.cloudtasks.garminHealthBackfillQueue, true),
+    ]);
+    if (pendingSleepTasks >= MAX_PENDING_TASKS
+        && pendingGarminHealthBackfillTasks >= MAX_PENDING_TASKS) {
+        logger.info('[SleepSyncDispatcher] Both task queues are at capacity; skipping dispatch reconciliation.');
         return {
             inspected: 0,
             dispatched: 0,
@@ -167,14 +174,11 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         };
     }
 
-    const availableSlots = Math.max(0, MAX_PENDING_TASKS - pendingCloudTasks);
-    if (availableSlots === 0) {
-        return {
-            inspected: 0,
-            dispatched: 0,
-            skippedRecent: 0,
-        };
-    }
+    const availableSleepSlots = Math.max(0, MAX_PENDING_TASKS - pendingSleepTasks);
+    const availableGarminHealthBackfillSlots = Math.max(
+        0,
+        MAX_PENDING_TASKS - pendingGarminHealthBackfillTasks,
+    );
 
     const scannedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
     const pageSize = Math.min(SLEEP_SYNC_RECONCILIATION_PAGE_SIZE, MAX_SLEEP_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
@@ -243,6 +247,7 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 userID: toNonEmptyString(data.userID),
                 provider: toSleepProvider(data.provider),
                 providerUserId: toNonEmptyString(data.providerUserId),
+                type: data.type,
             };
         })
         .sort((left, right) => {
@@ -257,10 +262,12 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
 
     let dispatched = 0;
     let skippedRecent = 0;
-    const dispatchLimit = Math.min(availableSlots, candidates.length);
+    let sleepDispatched = 0;
+    let garminHealthBackfillDispatched = 0;
 
     for (const candidate of candidates) {
-        if (dispatched >= dispatchLimit) {
+        if (sleepDispatched >= availableSleepSlots
+            && garminHealthBackfillDispatched >= availableGarminHealthBackfillSlots) {
             break;
         }
 
@@ -279,6 +286,12 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         }
 
         try {
+            const isGarminHealthBackfill = candidate.type === 'garmin_health_backfill';
+            if ((isGarminHealthBackfill
+                    && garminHealthBackfillDispatched >= availableGarminHealthBackfillSlots)
+                || (!isGarminHealthBackfill && sleepDispatched >= availableSleepSlots)) {
+                continue;
+            }
             if (!(await shouldDispatchSleepSyncCandidate(
                 candidate.doc,
                 candidate.userID,
@@ -293,7 +306,10 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 queueDateCreated: candidate.dateCreated,
                 recoveryTaskKey: `${candidate.needsLeaseRecovery ? 'lease' : 'dispatch'}-${nowMs}`,
             };
-            const wasTaskEnqueued = await enqueueSleepSyncTask(
+            const enqueueTask = isGarminHealthBackfill
+                ? enqueueGarminHealthBackfillTask
+                : enqueueSleepSyncTask;
+            const wasTaskEnqueued = await enqueueTask(
                 candidate.doc.id,
                 candidate.dateCreated,
                 undefined,
@@ -328,6 +344,11 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
                 continue;
             }
             dispatched += 1;
+            if (isGarminHealthBackfill) {
+                garminHealthBackfillDispatched += 1;
+            } else {
+                sleepDispatched += 1;
+            }
         } catch (error) {
             logger.error(`[SleepSyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }

@@ -105,7 +105,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'monitor_heart',
         title: 'Sleep and staged Health summaries',
-        copy: 'Import normalized Garmin Sleep sessions. During the limited Health rollout, supported Daily, Stress, HRV, body, respiration, blood-pressure, skin-temperature, and Health Snapshot summaries stay source-attributed and separate from workouts and Sleep.',
+        copy: 'Import normalized Garmin Sleep sessions. During the limited Health rollout, the same history action also queues supported Daily, Stress, HRV, body, respiration, blood-pressure, skin-temperature, and Health Snapshot history; those records stay source-attributed and separate from workouts and Sleep.',
       },
       {
         icon: 'route',

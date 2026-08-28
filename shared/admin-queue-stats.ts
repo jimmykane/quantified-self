@@ -44,6 +44,7 @@ export interface CloudTaskQueueBreakdown {
     derivedMetricsIngress: CloudTaskQueueStats;
     derivedMetrics: CloudTaskQueueStats;
     sleepSync: CloudTaskQueueStats;
+    garminHealthBackfill: CloudTaskQueueStats;
 }
 
 export interface ReparseCheckpointBaseStats {

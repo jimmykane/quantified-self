@@ -163,6 +163,7 @@ export type SleepSyncQueueItemType =
   | 'suunto_webhook'
   | 'suunto_poll'
   | 'suunto_health_poll'
+  | 'garmin_health_backfill'
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
@@ -180,6 +181,11 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   garminHealthTokenCredentialGeneration?: string | null;
   garminHealthRootOAuthCredentialGeneration?: string | null;
   garminHealthConnectionStateGeneration?: string | null;
+  /** Durable Garmin Summary Backfill cursor. */
+  garminHealthBackfillSummaryIndex?: number;
+  garminHealthBackfillNextStartMs?: number;
+  garminHealthBackfillWindowsCompleted?: number;
+  garminHealthBackfillWindowsTotal?: number;
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';

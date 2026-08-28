@@ -1,0 +1,632 @@
+import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES } from '../../../shared/health';
+import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
+import {
+  increaseRetryCountForQueueItem,
+  isCurrentSleepQueueTransition,
+  markQueueItemSkipped,
+  moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned,
+  moveToDeadLetterQueueIfCurrentUserActive,
+  QUEUE_SKIPPED_REASONS,
+  QueueResult,
+} from '../queue-utils';
+import * as requestPromise from '../request-helper';
+import {
+  getUserDeletionGuardState,
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../shared/user-deletion-guard';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import {
+  areTokenCredentialSnapshotsEqual,
+  getTokenCredentialSnapshot,
+} from '../token-refresh-coordinator';
+import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { updateHealthSyncState } from '../health/writer';
+import { updateSleepSyncState } from '../sleep/writer';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import {
+  areGarminHealthWriteLifecycleGuardsContinuous,
+  captureActiveGarminHealthWriteLifecycleGuards,
+  doesGarminHealthTokenDataMatchGuard,
+  GarminHealthAccountValidationError,
+  type GarminHealthWriteLifecycleGuards,
+} from './health-lifecycle';
+import {
+  assertGarminHealthPermission,
+  GarminHealthPermissionError,
+  refreshAndCaptureGarminHealthGuards,
+  verifyLegacyGarminProviderIdentity,
+} from './health-sync';
+import { isGarminHealthSyncEnabled, isGarminHealthSyncUserAllowed } from './health-rollout';
+import {
+  advanceGarminHealthBackfillCursor,
+  clipGarminHealthBackfillCursorToMinimum,
+  countGarminHealthBackfillRequests,
+  GARMIN_HEALTH_BACKFILL_ENDPOINTS,
+  getGarminHealthBackfillWindow,
+  isCompleteGarminHealthBackfillCursor,
+  type GarminHealthBackfillCursor,
+} from './health-backfill-range';
+import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
+import {
+  extractGarminBackfillMinimumStartMs,
+  getGarminBackfillStatusCode,
+  isGarminBackfillMinimumStartError,
+} from './backfill-error';
+
+const GARMIN_HEALTH_BACKFILL_BASE_URI = 'https://apis.garmin.com/wellness-api/rest/backfill';
+const GARMIN_HEALTH_BACKFILL_RESPONSE_BYTES = 16 * 1024;
+const GARMIN_HEALTH_BACKFILL_REQUEST_TIMEOUT_MS = 30_000;
+export const GARMIN_HEALTH_BACKFILL_REQUEST_PACING_MS = 1_500;
+
+type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
+
+class GarminHealthBackfillValidationError extends Error {
+  readonly name = 'GarminHealthBackfillValidationError';
+  constructor() {
+    super('Garmin Health backfill job is invalid.');
+  }
+}
+
+class GarminHealthBackfillRequestError extends Error {
+  readonly name = 'GarminHealthBackfillRequestError';
+  constructor(readonly statusCode: number | null) {
+    super('Garmin Health backfill request failed.');
+  }
+}
+
+function queueFenceMatches(
+  queueItem: SleepSyncQueueItemInterface,
+  guards: GarminHealthWriteLifecycleGuards,
+): boolean {
+  return queueItem.garminHealthTokenCredentialGeneration === guards.tokenCredentialGeneration
+    && queueItem.garminHealthRootOAuthCredentialGeneration === guards.rootOAuthCredentialGeneration
+    && queueItem.garminHealthConnectionStateGeneration === guards.connectionStateGeneration;
+}
+
+function parseCursor(queueItem: SleepSyncQueueItemInterface): {
+  rangeStartMs: number;
+  rangeEndMs: number;
+  total: number;
+  cursor: GarminHealthBackfillCursor;
+} {
+  const rangeStartMs = Number(queueItem.rangeStartMs);
+  const rangeEndMs = Number(queueItem.rangeEndMs);
+  const total = Number(queueItem.garminHealthBackfillWindowsTotal);
+  const cursor = {
+    summaryIndex: Number(queueItem.garminHealthBackfillSummaryIndex),
+    nextStartMs: Number(queueItem.garminHealthBackfillNextStartMs),
+    windowsCompleted: Number(queueItem.garminHealthBackfillWindowsCompleted),
+  };
+  try {
+    if (queueItem.type !== 'garmin_health_backfill'
+      || queueItem.provider !== SLEEP_PROVIDERS.GarminAPI
+      || queueItem.healthTrigger !== 'backfill'
+      || typeof queueItem.userID !== 'string'
+      || !queueItem.userID.trim()
+      || typeof queueItem.providerUserId !== 'string'
+      || !queueItem.providerUserId.trim()
+      || !Number.isSafeInteger(total)
+      || total <= 0
+      || !Number.isSafeInteger(cursor.windowsCompleted)
+      || cursor.windowsCompleted < 0
+      || cursor.windowsCompleted > total
+      || isCompleteGarminHealthBackfillCursor(cursor)) {
+      throw new Error('invalid');
+    }
+    // This validates the summary index and whole-second range/cursor invariants.
+    getGarminHealthBackfillWindow(cursor, rangeEndMs);
+    if (!Number.isSafeInteger(rangeStartMs)
+      || !Number.isSafeInteger(rangeEndMs)
+      || rangeStartMs < 0
+      || rangeEndMs < rangeStartMs
+      || rangeStartMs % 1_000 !== 0
+      || rangeEndMs % 1_000 !== 0
+      || cursor.nextStartMs < rangeStartMs
+      || cursor.nextStartMs > rangeEndMs
+      || total !== countGarminHealthBackfillRequests(rangeStartMs, rangeEndMs)) {
+      throw new Error('invalid');
+    }
+  } catch {
+    throw new GarminHealthBackfillValidationError();
+  }
+  return { rangeStartMs, rangeEndMs, total, cursor };
+}
+
+async function findExactToken(
+  userID: string,
+  providerUserId: string,
+): Promise<TokenSnapshot | null> {
+  const snapshot = await admin.firestore()
+    .collection('garminAPITokens')
+    .doc(userID)
+    .collection('tokens')
+    .where('serviceName', '==', ServiceNames.GarminAPI)
+    .where('userID', '==', providerUserId)
+    .limit(1)
+    .get();
+  return snapshot.docs[0] || null;
+}
+
+async function captureFencedGuards(
+  queueItem: SleepSyncQueueItemInterface,
+  tokenSnapshot: TokenSnapshot,
+): Promise<GarminHealthWriteLifecycleGuards | null> {
+  const guards = await captureActiveGarminHealthWriteLifecycleGuards(
+    admin.firestore(),
+    queueItem.userID!,
+    queueItem.providerUserId,
+    tokenSnapshot,
+  );
+  return guards && queueFenceMatches(queueItem, guards) ? guards : null;
+}
+
+function documentMatchesExpectedFields(
+  snapshot: admin.firestore.DocumentSnapshot,
+  expectedFields: Readonly<Record<string, unknown>>,
+): boolean {
+  if (!snapshot.exists) return false;
+  const data = snapshot.data() as Record<string, unknown> | undefined;
+  return Boolean(data) && Object.entries(expectedFields)
+    .every(([field, expected]) => data?.[field] === expected);
+}
+
+async function lifecycleMatchesInTransaction(
+  transaction: admin.firestore.Transaction,
+  guards: GarminHealthWriteLifecycleGuards,
+): Promise<boolean> {
+  const tokenSnapshot = await transaction.get(guards.requiredExistingDocumentRef);
+  if (!tokenSnapshot.exists
+    || !areTokenCredentialSnapshotsEqual(
+      getTokenCredentialSnapshot(tokenSnapshot.data() as Record<string, unknown> | undefined),
+      guards.requiredExistingTokenCredential,
+    )) {
+    return false;
+  }
+  const fieldGuards = [
+    ...(guards.requiredDocumentFieldValues ? [guards.requiredDocumentFieldValues] : []),
+    ...(guards.additionalRequiredDocumentFieldValues || []),
+  ];
+  const snapshots = await Promise.all(fieldGuards.map(guard => transaction.get(guard.documentRef)));
+  return snapshots.every((snapshot, index) => documentMatchesExpectedFields(
+    snapshot,
+    fieldGuards[index].expectedFields,
+  ));
+}
+
+function cursorsMatch(
+  left: GarminHealthBackfillCursor,
+  right: GarminHealthBackfillCursor,
+): boolean {
+  return left.summaryIndex === right.summaryIndex
+    && left.nextStartMs === right.nextStartMs
+    && left.windowsCompleted === right.windowsCompleted;
+}
+
+async function isCurrentQueueCursor(
+  queueItem: SleepSyncQueueItemInterface,
+  expectedCursor: GarminHealthBackfillCursor,
+): Promise<boolean> {
+  const snapshot = await queueItem.ref!.get();
+  if (!snapshot.exists) return false;
+  const current = snapshot.data() as SleepSyncQueueItemInterface;
+  if (current.processed
+    || current.userID !== queueItem.userID
+    || current.type !== 'garmin_health_backfill'
+    || !isCurrentSleepQueueTransition(current as unknown as Record<string, unknown>, queueItem)) {
+    return false;
+  }
+  try {
+    return cursorsMatch(parseCursor(current).cursor, expectedCursor);
+  } catch {
+    return false;
+  }
+}
+
+async function advanceCursorTransaction(
+  queueItem: SleepSyncQueueItemInterface,
+  expectedCursor: GarminHealthBackfillCursor,
+  nextCursor: GarminHealthBackfillCursor,
+  total: number,
+  guards: GarminHealthWriteLifecycleGuards,
+): Promise<'advanced' | 'superseded' | 'deleted' | 'lifecycle_changed'> {
+  const db = admin.firestore();
+  const stateRef = db.collection('users').doc(queueItem.userID!)
+    .collection('sleepSyncState').doc(SLEEP_PROVIDERS.GarminAPI);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(
+        db,
+        transaction,
+        queueItem.userID!,
+      );
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        queueItem.userID!,
+        'garmin_health_backfill_progress',
+        error,
+      );
+    }
+    if (deletionGuard.shouldSkip) return 'deleted';
+
+    const queueSnapshot = await transaction.get(queueItem.ref!);
+    if (!queueSnapshot.exists) return 'superseded';
+    const current = queueSnapshot.data() as SleepSyncQueueItemInterface;
+    if (!isCurrentSleepQueueTransition(current as unknown as Record<string, unknown>, queueItem)
+      || current.userID !== queueItem.userID
+      || current.type !== 'garmin_health_backfill') {
+      return 'superseded';
+    }
+    const currentCursor = parseCursor(current).cursor;
+    if (!cursorsMatch(currentCursor, expectedCursor)) {
+      return 'superseded';
+    }
+    if (!(await lifecycleMatchesInTransaction(transaction, guards))) {
+      return 'lifecycle_changed';
+    }
+
+    const complete = isCompleteGarminHealthBackfillCursor(nextCursor);
+    transaction.update(queueItem.ref!, {
+      garminHealthBackfillSummaryIndex: nextCursor.summaryIndex,
+      garminHealthBackfillNextStartMs: nextCursor.nextStartMs,
+      garminHealthBackfillWindowsCompleted: complete ? total : nextCursor.windowsCompleted,
+      retryCount: 0,
+      ...(complete ? {
+        processed: true,
+        processedAt: Date.now(),
+        resultStatus: 'success',
+        dispatchedToCloudTask: null,
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+      } : {}),
+    });
+    transaction.set(stateRef, {
+      provider: SLEEP_PROVIDERS.GarminAPI,
+      healthBackfillStatus: complete ? 'complete' : 'running',
+      healthBackfillWindowsCompleted: complete ? total : nextCursor.windowsCompleted,
+      healthBackfillWindowsTotal: total,
+      healthBackfillSummaryType: complete
+        ? null
+        : GARMIN_HEALTH_SUMMARY_TYPES[nextCursor.summaryIndex],
+      updatedAtMs: Date.now(),
+    }, { merge: true });
+    return 'advanced';
+  });
+}
+
+async function markLifecycleSkipped(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
+  return markQueueItemSkipped(
+    queueItem,
+    undefined,
+    'user_or_provider_lifecycle_changed',
+    { skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD' },
+  );
+}
+
+async function moveToDlq(
+  queueItem: SleepSyncQueueItemInterface,
+  error: Error,
+  context: string,
+): Promise<QueueResult> {
+  const userID = typeof queueItem.userID === 'string' ? queueItem.userID.trim() : '';
+  if (!userID) {
+    return moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned({
+      queueItem,
+      error,
+      context,
+      collectionName: SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+      logPrefix: 'GarminHealthBackfillLegacy',
+      isCurrent: current => isCurrentSleepQueueTransition(current, queueItem),
+    });
+  }
+  return moveToDeadLetterQueueIfCurrentUserActive({
+    queueItem,
+    error,
+    context,
+    userID,
+    phase: `garmin_health_backfill_dlq:${context}`,
+    logPrefix: 'GarminHealthBackfill',
+    isCurrent: current => isCurrentSleepQueueTransition(current, queueItem),
+  });
+}
+
+async function recordTerminalFailure(
+  queueItem: SleepSyncQueueItemInterface,
+  guards: GarminHealthWriteLifecycleGuards,
+  error: GarminHealthBackfillRequestError | GarminHealthPermissionError,
+): Promise<void> {
+  const permissionMissing = error instanceof GarminHealthPermissionError
+    || error.statusCode === 412;
+  await Promise.all([
+    updateSleepSyncState(queueItem.userID!, SLEEP_PROVIDERS.GarminAPI, {
+      healthBackfillStatus: 'failed',
+      lastError: permissionMissing
+        ? 'Garmin Health backfill permission is unavailable.'
+        : 'Garmin Health backfill authorization failed.',
+    }, Date.now(), guards),
+    updateHealthSyncState(queueItem.userID!, HEALTH_PROVIDERS.GarminAPI, {
+      status: permissionMissing
+        ? HEALTH_SYNC_STATUSES.PermissionMissing
+        : HEALTH_SYNC_STATUSES.ReconnectRequired,
+      lastErrorCode: permissionMissing
+        ? 'garmin_health_backfill_permission_missing'
+        : 'garmin_health_backfill_auth_required',
+    }, Date.now(), guards),
+  ]);
+}
+
+async function sleepForPacing(): Promise<void> {
+  await new Promise<void>(resolve => setTimeout(resolve, GARMIN_HEALTH_BACKFILL_REQUEST_PACING_MS));
+}
+
+export async function processGarminHealthBackfillQueueItem(
+  queueItem: SleepSyncQueueItemInterface,
+): Promise<QueueResult> {
+  let parsed;
+  try {
+    parsed = parseCursor(queueItem);
+  } catch (error) {
+    return moveToDlq(
+      queueItem,
+      error instanceof Error ? error : new GarminHealthBackfillValidationError(),
+      'INVALID_GARMIN_HEALTH_BACKFILL_JOB',
+    );
+  }
+
+  if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(queueItem.userID)) {
+    return markQueueItemSkipped(queueItem, undefined, 'user_not_allowed', {
+      skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+    });
+  }
+
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardState(admin.firestore(), queueItem.userID!);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(
+      queueItem.userID!,
+      'garmin_health_backfill_before_token',
+      error,
+    );
+  }
+  if (deletionGuard.shouldSkip) {
+    return markQueueItemSkipped(
+      queueItem,
+      undefined,
+      QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+      { skippedContext: 'USER_DELETION_GUARD' },
+    );
+  }
+
+  const tokenSnapshot = await findExactToken(queueItem.userID!, queueItem.providerUserId);
+  if (!tokenSnapshot) return markLifecycleSkipped(queueItem);
+  const initialGuards = await captureFencedGuards(queueItem, tokenSnapshot);
+  if (!initialGuards) return markLifecycleSkipped(queueItem);
+
+  let refreshed;
+  try {
+    refreshed = await refreshAndCaptureGarminHealthGuards(
+      queueItem,
+      tokenSnapshot,
+      queueItem.userID!,
+      initialGuards,
+    );
+    if (!queueFenceMatches(queueItem, refreshed.lifecycleGuards)) {
+      return markLifecycleSkipped(queueItem);
+    }
+    assertGarminHealthPermission(refreshed.tokenData, queueItem.userID!);
+    if (!refreshed.lifecycleGuards.providerIdentityPinned) {
+      await verifyLegacyGarminProviderIdentity(
+        refreshed.tokenData.accessToken,
+        queueItem.providerUserId,
+      );
+    }
+  } catch (error) {
+    if (error instanceof TokenRefreshSkippedForDeletedUserError) {
+      return markQueueItemSkipped(
+        queueItem,
+        undefined,
+        QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+        { skippedContext: 'USER_DELETION_GUARD' },
+      );
+    }
+    if (error instanceof GarminHealthPermissionError) {
+      await recordTerminalFailure(
+        queueItem,
+        refreshed?.lifecycleGuards || initialGuards,
+        error,
+      );
+      return moveToDlq(queueItem, error, 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING');
+    }
+    if (error instanceof TerminalServiceAuthError) {
+      return moveToDlq(
+        queueItem,
+        new GarminHealthBackfillRequestError(error.statusCode),
+        error.dlqContext,
+      );
+    }
+    if (error instanceof GarminHealthAccountValidationError) {
+      return markLifecycleSkipped(queueItem);
+    }
+    const statusCode = getGarminBackfillStatusCode(error);
+    if (statusCode === 401 || statusCode === 403 || statusCode === 412) {
+      const terminalError = statusCode === 412
+        ? new GarminHealthPermissionError(queueItem.userID!)
+        : new GarminHealthBackfillRequestError(statusCode);
+      await recordTerminalFailure(
+        queueItem,
+        refreshed?.lifecycleGuards || initialGuards,
+        terminalError,
+      );
+      return moveToDlq(
+        queueItem,
+        terminalError,
+        statusCode === 412
+          ? 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING'
+          : 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED',
+      );
+    }
+    if (statusCode !== null && statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
+      return moveToDlq(
+        queueItem,
+        new GarminHealthBackfillRequestError(statusCode),
+        'GARMIN_HEALTH_BACKFILL_INVALID_REQUEST',
+      );
+    }
+    const telemetryError = new GarminHealthBackfillRequestError(
+      statusCode,
+    );
+    logger.warn('[GarminHealthBackfill] Transient credential or lifecycle read failure.', {
+      statusCode: telemetryError.statusCode,
+    });
+    return increaseRetryCountForQueueItem(
+      queueItem,
+      telemetryError,
+      1,
+      undefined,
+      'GARMIN_HEALTH_BACKFILL_RETRIES_EXHAUSTED',
+    );
+  }
+
+  let cursor = parsed.cursor;
+  let requestCount = 0;
+  while (!isCompleteGarminHealthBackfillCursor(cursor)) {
+    if (requestCount > 0) await sleepForPacing();
+
+    // Pacing happens first so every external request is immediately preceded by
+    // fresh queue, deletion, and provider-lifecycle checks.
+    if (!(await isCurrentQueueCursor(queueItem, cursor))) {
+      return QueueResult.Processed;
+    }
+    if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(queueItem.userID)) {
+      return markQueueItemSkipped(queueItem, undefined, 'user_not_allowed', {
+        skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+      });
+    }
+    const currentTokenSnapshot = await refreshed.tokenSnapshot.ref.get();
+    const currentGuards = await captureFencedGuards(queueItem, currentTokenSnapshot);
+    if (!currentGuards
+      || !areGarminHealthWriteLifecycleGuardsContinuous(
+        refreshed.lifecycleGuards,
+        currentGuards,
+      )
+      || !doesGarminHealthTokenDataMatchGuard(refreshed.tokenData, currentGuards)) {
+      return markLifecycleSkipped(queueItem);
+    }
+    const beforeRequestGuard = await getUserDeletionGuardState(
+      admin.firestore(),
+      queueItem.userID!,
+    );
+    if (beforeRequestGuard.shouldSkip) {
+      return markQueueItemSkipped(
+        queueItem,
+        undefined,
+        QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+        { skippedContext: 'USER_DELETION_GUARD' },
+      );
+    }
+    const window = getGarminHealthBackfillWindow(cursor, parsed.rangeEndMs);
+    if (!window) return QueueResult.Processed;
+    let nextCursor: GarminHealthBackfillCursor;
+    try {
+      await requestPromise.get({
+        headers: { Authorization: `Bearer ${refreshed.tokenData.accessToken}` },
+        maxResponseBytes: GARMIN_HEALTH_BACKFILL_RESPONSE_BYTES,
+        timeout: GARMIN_HEALTH_BACKFILL_REQUEST_TIMEOUT_MS,
+        url: `${GARMIN_HEALTH_BACKFILL_BASE_URI}/${GARMIN_HEALTH_BACKFILL_ENDPOINTS[window.summaryType]}`
+          + `?summaryStartTimeInSeconds=${Math.floor(window.startMs / 1_000)}`
+          + `&summaryEndTimeInSeconds=${Math.floor(window.endMs / 1_000)}`,
+      });
+      nextCursor = advanceGarminHealthBackfillCursor(
+        cursor,
+        parsed.rangeStartMs,
+        parsed.rangeEndMs,
+      );
+    } catch (error) {
+      const statusCode = getGarminBackfillStatusCode(error);
+      if (statusCode === 409) {
+        nextCursor = advanceGarminHealthBackfillCursor(
+          cursor,
+          parsed.rangeStartMs,
+          parsed.rangeEndMs,
+        );
+      } else if (isGarminBackfillMinimumStartError(error)) {
+        const minimumStartMs = extractGarminBackfillMinimumStartMs(error);
+        if (minimumStartMs === null) {
+          return moveToDlq(
+            queueItem,
+            new GarminHealthBackfillRequestError(statusCode),
+            'GARMIN_HEALTH_BACKFILL_INVALID_RANGE',
+          );
+        }
+        if (minimumStartMs < cursor.nextStartMs) {
+          return moveToDlq(
+            queueItem,
+            new GarminHealthBackfillRequestError(statusCode),
+            'GARMIN_HEALTH_BACKFILL_INVALID_RANGE',
+          );
+        }
+        nextCursor = clipGarminHealthBackfillCursorToMinimum(
+          cursor,
+          parsed.rangeStartMs,
+          parsed.rangeEndMs,
+          minimumStartMs,
+        );
+      } else if (statusCode === 401 || statusCode === 403 || statusCode === 412) {
+        const terminalError = statusCode === 412
+          ? new GarminHealthPermissionError(queueItem.userID!)
+          : new GarminHealthBackfillRequestError(statusCode);
+        await recordTerminalFailure(queueItem, currentGuards, terminalError);
+        return moveToDlq(
+          queueItem,
+          terminalError,
+          statusCode === 412
+            ? 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING'
+            : 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED',
+        );
+      } else if (statusCode !== null && statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
+        return moveToDlq(
+          queueItem,
+          new GarminHealthBackfillRequestError(statusCode),
+          'GARMIN_HEALTH_BACKFILL_INVALID_REQUEST',
+        );
+      } else {
+        const telemetryError = new GarminHealthBackfillRequestError(statusCode);
+        logger.warn('[GarminHealthBackfill] Transient provider request failure.', { statusCode });
+        return increaseRetryCountForQueueItem(
+          queueItem,
+          telemetryError,
+          1,
+          undefined,
+          'GARMIN_HEALTH_BACKFILL_RETRIES_EXHAUSTED',
+        );
+      }
+    }
+    requestCount += 1;
+
+    const transition = await advanceCursorTransaction(
+      queueItem,
+      cursor,
+      nextCursor,
+      parsed.total,
+      currentGuards,
+    );
+    if (transition === 'deleted') {
+      return markQueueItemSkipped(
+        queueItem,
+        undefined,
+        QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+        { skippedContext: 'USER_DELETION_GUARD' },
+      );
+    }
+    if (transition === 'lifecycle_changed') return markLifecycleSkipped(queueItem);
+    if (transition === 'superseded') return QueueResult.Processed;
+    cursor = nextCursor;
+  }
+
+  return QueueResult.Processed;
+}

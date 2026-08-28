@@ -306,13 +306,14 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 71,
+            pending: 73,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 0),
                 routeSync: expectedQueueStats('processRouteSyncTask', 4),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 3),
+                garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 8),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 2),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
@@ -641,17 +642,19 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(2)
+            .mockResolvedValueOnce(2)
             .mockResolvedValueOnce(1)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 74,
+            pending: 76,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0, 'UNKNOWN', null),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 3),
                 routeSync: expectedQueueStats('processRouteSyncTask', 8),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 2),
+                garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 1),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 6),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
@@ -676,7 +679,7 @@ describe('getQueueStats Cloud Function', () => {
 
         const result = await (getQueueStats as any)(request);
 
-        expect(result.cloudTasks.pending).toBe(66);
+        expect(result.cloudTasks.pending).toBe(68);
         expect(result.cloudTasks.queues.derivedMetricsIngress).toEqual(
             expectedQueueStats('processDerivedMetricsIngressTask', 0, 'UNKNOWN', null),
         );

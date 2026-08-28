@@ -19,7 +19,7 @@ import {
     SleepSyncQueueItemType,
 } from '../queue/queue-item.interface';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { enqueueSleepSyncTask, generateIDFromParts } from '../utils';
+import { enqueueGarminHealthBackfillTask, enqueueSleepSyncTask, generateIDFromParts } from '../utils';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import {
     mapParsedCorosDailySleep,
@@ -120,6 +120,7 @@ import {
     type SuuntoWebhookWriteLifecycleGuards,
 } from '../suunto/health-webhook-binding-lifecycle';
 import {
+    GARMIN_HEALTH_SUMMARY_TYPES,
     isGarminHealthSummaryType,
     isGarminSupportedSummaryType,
     type GarminSupportedSummaryType,
@@ -128,6 +129,10 @@ import {
     isGarminHealthSyncEnabled,
     isGarminHealthSyncUserAllowed,
 } from '../garmin/health-rollout';
+import {
+    countGarminHealthBackfillRequests,
+    GARMIN_HEALTH_BACKFILL_SECOND_MS,
+} from '../garmin/health-backfill-range';
 import {
     captureActiveGarminHealthWriteLifecycleGuards,
     GarminHealthAccountValidationError,
@@ -187,6 +192,10 @@ interface AddSleepSyncQueueItemInput {
     garminHealthTokenCredentialGeneration?: string | null;
     garminHealthRootOAuthCredentialGeneration?: string | null;
     garminHealthConnectionStateGeneration?: string | null;
+    garminHealthBackfillSummaryIndex?: number;
+    garminHealthBackfillNextStartMs?: number;
+    garminHealthBackfillWindowsCompleted?: number;
+    garminHealthBackfillWindowsTotal?: number;
     rangeStartMs?: number;
     rangeEndMs?: number;
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
@@ -232,6 +241,7 @@ const SLEEP_SYNC_QUEUE_ITEM_TYPES = new Set<SleepSyncQueueItemType>([
     'suunto_webhook',
     'suunto_poll',
     'suunto_health_poll',
+    'garmin_health_backfill',
     'coros_poll',
 ]);
 const SUUNTO_HEALTH_QUEUE_TRIGGERS = new Set(['poll', 'webhook', 'backfill']);
@@ -264,6 +274,7 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     }
     const garminSummaryType = queueItem.garminSummaryType
         || (queueItem.provider === SLEEP_PROVIDERS.GarminAPI ? 'sleeps' : undefined);
+    const garminHealthBackfill = queueItem.type === 'garmin_health_backfill';
     if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI
         && (queueItem.type === 'garmin_ping'
             || queueItem.type === 'garmin_ping_batch'
@@ -276,21 +287,68 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
             || queueItem.garminCallbackURLs !== undefined
             || queueItem.garminHealthTokenCredentialGeneration !== undefined
             || queueItem.garminHealthRootOAuthCredentialGeneration !== undefined
-            || queueItem.garminHealthConnectionStateGeneration !== undefined)) {
+            || queueItem.garminHealthConnectionStateGeneration !== undefined
+            || queueItem.garminHealthBackfillSummaryIndex !== undefined
+            || queueItem.garminHealthBackfillNextStartMs !== undefined
+            || queueItem.garminHealthBackfillWindowsCompleted !== undefined
+            || queueItem.garminHealthBackfillWindowsTotal !== undefined)) {
         return 'non-Garmin queue item unexpectedly contains Garmin Health fields';
     }
     if (queueItem.provider === SLEEP_PROVIDERS.GarminAPI
         && !isGarminHealthSummaryType(garminSummaryType)
+        && !garminHealthBackfill
         && (queueItem.garminHealthTokenCredentialGeneration !== undefined
             || queueItem.garminHealthRootOAuthCredentialGeneration !== undefined
             || queueItem.garminHealthConnectionStateGeneration !== undefined)) {
         return 'Garmin Sleep queue item unexpectedly contains Garmin Health lifecycle fences';
     }
-    if (isGarminHealthSummaryType(garminSummaryType)
+    if ((isGarminHealthSummaryType(garminSummaryType) || garminHealthBackfill)
         && (!isValidOptionalLifecycleGeneration(queueItem.garminHealthTokenCredentialGeneration)
             || !isValidOptionalLifecycleGeneration(queueItem.garminHealthRootOAuthCredentialGeneration)
             || !isValidOptionalLifecycleGeneration(queueItem.garminHealthConnectionStateGeneration))) {
         return 'Garmin Health queue item has invalid lifecycle fences';
+    }
+    const hasGarminHealthBackfillFields = queueItem.garminHealthBackfillSummaryIndex !== undefined
+        || queueItem.garminHealthBackfillNextStartMs !== undefined
+        || queueItem.garminHealthBackfillWindowsCompleted !== undefined
+        || queueItem.garminHealthBackfillWindowsTotal !== undefined;
+    if (!garminHealthBackfill && hasGarminHealthBackfillFields) {
+        return 'non-backfill queue item unexpectedly contains Garmin Health backfill fields';
+    }
+    if (garminHealthBackfill) {
+        const rangeStartMs = Number(queueItem.rangeStartMs);
+        const rangeEndMs = Number(queueItem.rangeEndMs);
+        const summaryIndex = Number(queueItem.garminHealthBackfillSummaryIndex);
+        const nextStartMs = Number(queueItem.garminHealthBackfillNextStartMs);
+        const windowsCompleted = Number(queueItem.garminHealthBackfillWindowsCompleted);
+        const windowsTotal = Number(queueItem.garminHealthBackfillWindowsTotal);
+        const expectedWindowsTotal = Number.isSafeInteger(rangeStartMs)
+            && Number.isSafeInteger(rangeEndMs)
+            && rangeStartMs % GARMIN_HEALTH_BACKFILL_SECOND_MS === 0
+            && rangeEndMs % GARMIN_HEALTH_BACKFILL_SECOND_MS === 0
+            && rangeEndMs >= rangeStartMs
+            ? countGarminHealthBackfillRequests(rangeStartMs, rangeEndMs)
+            : null;
+        if (queueItem.provider !== SLEEP_PROVIDERS.GarminAPI
+            || queueItem.healthTrigger !== 'backfill'
+            || queueItem.callbackURL !== undefined
+            || queueItem.garminCallbackURLs !== undefined
+            || queueItem.garminSummaryType !== undefined
+            || !Number.isSafeInteger(summaryIndex)
+            || summaryIndex < 0
+            || summaryIndex > GARMIN_HEALTH_SUMMARY_TYPES.length
+            || !Number.isSafeInteger(nextStartMs)
+            || nextStartMs < rangeStartMs
+            || nextStartMs > rangeEndMs
+            || nextStartMs % GARMIN_HEALTH_BACKFILL_SECOND_MS !== 0
+            || !Number.isSafeInteger(windowsCompleted)
+            || windowsCompleted < 0
+            || !Number.isSafeInteger(windowsTotal)
+            || windowsTotal <= 0
+            || windowsCompleted > windowsTotal
+            || windowsTotal !== expectedWindowsTotal) {
+            return 'Garmin Health backfill queue item has an invalid cursor';
+        }
     }
     if (queueItem.type === 'suunto_health_poll' && queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp) {
         return 'Suunto Health queue item has an invalid provider';
@@ -309,7 +367,9 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
                 > SUUNTO_HEALTH_MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000)) {
         return 'Suunto Health queue item has an invalid range';
     }
-    if (queueItem.type !== 'suunto_health_poll' && queueItem.healthTrigger !== undefined) {
+    if (queueItem.type !== 'suunto_health_poll'
+        && queueItem.type !== 'garmin_health_backfill'
+        && queueItem.healthTrigger !== undefined) {
         return 'sleep queue item unexpectedly contains a Health trigger';
     }
     if (queueItem.type !== 'suunto_health_poll'
@@ -344,7 +404,7 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     if (typeof queueItem.providerUserId !== 'string' || queueItem.providerUserId.trim().length === 0) {
         return 'missing providerUserId';
     }
-    if (isGarminHealthSummaryType(garminSummaryType)
+    if ((isGarminHealthSummaryType(garminSummaryType) || garminHealthBackfill)
         && queueItem.providerUserId.trim().length > GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
         return 'Garmin Health queue item has an invalid provider account identifier';
     }
@@ -391,6 +451,10 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         garminHealthRootOAuthCredentialGeneration:
             input.garminHealthRootOAuthCredentialGeneration,
         garminHealthConnectionStateGeneration: input.garminHealthConnectionStateGeneration,
+        garminHealthBackfillSummaryIndex: input.garminHealthBackfillSummaryIndex,
+        garminHealthBackfillNextStartMs: input.garminHealthBackfillNextStartMs,
+        garminHealthBackfillWindowsCompleted: input.garminHealthBackfillWindowsCompleted,
+        garminHealthBackfillWindowsTotal: input.garminHealthBackfillWindowsTotal,
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
@@ -435,6 +499,10 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         garminHealthRootOAuthCredentialGeneration:
             payload.garminHealthRootOAuthCredentialGeneration,
         garminHealthConnectionStateGeneration: payload.garminHealthConnectionStateGeneration,
+        garminHealthBackfillSummaryIndex: payload.garminHealthBackfillSummaryIndex,
+        garminHealthBackfillNextStartMs: payload.garminHealthBackfillNextStartMs,
+        garminHealthBackfillWindowsCompleted: payload.garminHealthBackfillWindowsCompleted,
+        garminHealthBackfillWindowsTotal: payload.garminHealthBackfillWindowsTotal,
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
         healthTrigger: payload.healthTrigger,
@@ -568,7 +636,8 @@ async function prepareGarminHealthQueueAdmission(
     userID: string,
     queueId: string,
 ): Promise<AddSleepSyncQueueItemInput> {
-    if (!isGarminHealthSummaryType(input.garminSummaryType)) return { ...input, userID };
+    if (!isGarminHealthSummaryType(input.garminSummaryType)
+        && input.type !== 'garmin_health_backfill') return { ...input, userID };
     if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(userID)) {
         throw new ProviderQueueUserNotConnectedError(
             ServiceNames.GarminAPI,
@@ -738,7 +807,13 @@ async function writeSleepQueueItemIfUserActive(
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
     const garminHealthInput = input.provider === SLEEP_PROVIDERS.GarminAPI
-        && isGarminHealthSummaryType(input.garminSummaryType);
+        && (isGarminHealthSummaryType(input.garminSummaryType)
+            || input.type === 'garmin_health_backfill');
+    const garminHealthBackfillInput = input.type === 'garmin_health_backfill';
+    const hasGarminHealthBackfillFields = input.garminHealthBackfillSummaryIndex !== undefined
+        || input.garminHealthBackfillNextStartMs !== undefined
+        || input.garminHealthBackfillWindowsCompleted !== undefined
+        || input.garminHealthBackfillWindowsTotal !== undefined;
     if ((input.provider === SLEEP_PROVIDERS.GarminAPI
             && input.garminSummaryType !== undefined
             && !isGarminSupportedSummaryType(input.garminSummaryType))
@@ -747,7 +822,8 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
                 || input.garminCallbackURLs !== undefined
                 || input.garminHealthTokenCredentialGeneration !== undefined
                 || input.garminHealthRootOAuthCredentialGeneration !== undefined
-                || input.garminHealthConnectionStateGeneration !== undefined))
+                || input.garminHealthConnectionStateGeneration !== undefined
+                || hasGarminHealthBackfillFields))
         || (!garminHealthInput
             && (input.garminHealthTokenCredentialGeneration !== undefined
                 || input.garminHealthRootOAuthCredentialGeneration !== undefined
@@ -755,6 +831,16 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         || !isValidOptionalLifecycleGeneration(input.garminHealthTokenCredentialGeneration)
         || !isValidOptionalLifecycleGeneration(input.garminHealthRootOAuthCredentialGeneration)
         || !isValidOptionalLifecycleGeneration(input.garminHealthConnectionStateGeneration)
+        || (garminHealthBackfillInput !== hasGarminHealthBackfillFields)
+        || (garminHealthBackfillInput
+            && getMalformedSleepQueueItemReason({
+                ...input,
+                id: 'admission-validation',
+                dateCreated: 0,
+                processed: false,
+                retryCount: 0,
+                dispatchedToCloudTask: null,
+            } as SleepSyncQueueItemInterface) !== null)
         || (input.type === 'garmin_ping_batch'
             ? !parseGarminPingBatchCallbackURLs(
                 input.garminCallbackURLs,
@@ -865,7 +951,10 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     }
 
     if (input.dispatchImmediately && writeResult.shouldDispatchImmediately) {
-        const wasTaskEnqueued = await enqueueSleepSyncTask(queueId, writeResult.dateCreated, undefined, {
+        const enqueueTask = input.type === 'garmin_health_backfill'
+            ? enqueueGarminHealthBackfillTask
+            : enqueueSleepSyncTask;
+        const wasTaskEnqueued = await enqueueTask(queueId, writeResult.dateCreated, undefined, {
             queueRevision: writeResult.queueRevision,
             queueDateCreated: writeResult.dateCreated,
         });
@@ -1735,6 +1824,7 @@ function isPollQueueItemType(type: SleepSyncQueueItemType): boolean {
         case 'garmin_ping_batch':
         case 'garmin_push':
         case 'suunto_webhook':
+        case 'garmin_health_backfill':
             return false;
         default:
             return assertNeverQueueItemType(type);
@@ -1751,6 +1841,7 @@ function isWebhookQueueItemType(type: SleepSyncQueueItemType): boolean {
         case 'suunto_poll':
         case 'suunto_health_poll':
         case 'coros_poll':
+        case 'garmin_health_backfill':
             return false;
         default:
             return assertNeverQueueItemType(type);
@@ -1763,8 +1854,9 @@ function isSuuntoHealthQueueItem(queueItem: SleepSyncQueueItemInterface): boolea
 
 function isGarminHealthQueueItem(queueItem: SleepSyncQueueItemInterface): boolean {
     return queueItem.provider === SLEEP_PROVIDERS.GarminAPI
-        && (queueItem.type === 'garmin_ping' || queueItem.type === 'garmin_ping_batch')
-        && isGarminHealthSummaryType(queueItem.garminSummaryType);
+        && (queueItem.type === 'garmin_health_backfill'
+            || ((queueItem.type === 'garmin_ping' || queueItem.type === 'garmin_ping_batch')
+                && isGarminHealthSummaryType(queueItem.garminSummaryType)));
 }
 
 function isHealthQueueItem(queueItem: SleepSyncQueueItemInterface): boolean {

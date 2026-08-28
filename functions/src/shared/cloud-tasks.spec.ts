@@ -32,6 +32,7 @@ vi.mock('../config', () => ({
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
+            garminHealthBackfillQueue: 'processGarminHealthBackfillTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
@@ -303,6 +304,7 @@ describe('Cloud Tasks Utils', () => {
             ['enqueueRouteSyncTask', 'processRouteSyncTask', 'route-sync-item-123-9'],
             ['enqueueRouteDeliverySyncTask', 'processRouteDeliverySyncTask', 'route-delivery-sync-item-123-9'],
             ['enqueueSleepSyncTask', 'processSleepSyncTask', 'sleep-sync-item-123-9'],
+            ['enqueueGarminHealthBackfillTask', 'processGarminHealthBackfillTask', 'garmin-health-backfill-item-123-9'],
         ])('uses the matching function queue for %s', async (dispatcher, functionName, taskId) => {
             const tasks = await import('./cloud-tasks');
             const enqueue = tasks[dispatcher as keyof typeof tasks] as unknown as (id: string, date: number) => Promise<boolean>;

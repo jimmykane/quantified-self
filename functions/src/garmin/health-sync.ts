@@ -41,7 +41,7 @@ export class GarminHealthRequestError extends Error {
   }
 }
 
-function assertGarminHealthPermission(tokenData: Record<string, unknown>, userID: string): void {
+export function assertGarminHealthPermission(tokenData: Record<string, unknown>, userID: string): void {
   const permissions = tokenData.permissions;
   if (Array.isArray(permissions)
     && permissions.length > 0
@@ -57,7 +57,7 @@ function statusCodeFromError(error: unknown): number | null {
     : null;
 }
 
-async function verifyLegacyGarminProviderIdentity(
+export async function verifyLegacyGarminProviderIdentity(
   accessToken: unknown,
   expectedProviderUserId: string,
 ): Promise<void> {
@@ -73,8 +73,8 @@ async function verifyLegacyGarminProviderIdentity(
       timeout: GARMIN_HEALTH_REQUEST_TIMEOUT_MS,
       url: 'https://apis.garmin.com/wellness-api/rest/user/id',
     });
-  } catch {
-    throw new GarminHealthAccountValidationError();
+  } catch (error) {
+    throw new GarminHealthRequestError(statusCodeFromError(error));
   }
   const providerUserId = response && typeof response === 'object'
     ? `${(response as Record<string, unknown>).userId || ''}`.trim()
@@ -94,7 +94,7 @@ export function sanitizeGarminHealthErrorForTelemetry(error: unknown): Error {
   return new GarminHealthRequestError(statusCodeFromError(error));
 }
 
-async function refreshAndCaptureGarminHealthGuards(
+export async function refreshAndCaptureGarminHealthGuards(
   queueItem: SleepSyncQueueItemInterface,
   tokenSnapshot: TokenSnapshot,
   firebaseUserID: string,

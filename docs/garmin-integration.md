@@ -50,7 +50,11 @@ The callback `uploadEndTimeInSeconds` is the ordered revision watermark. Source 
 
 Garmin Health is controlled independently from Garmin Sleep by the deny-all-when-empty UID allowlist in `functions/src/garmin/health-rollout.ts`. Sleep remains governed by the existing Sleep provider/user controls.
 
-Existing Garmin Sleep history import remains Sleep-only. Historical Health data is requested operationally through Garmin's Summary Resender after the endpoint is enabled; no local migration script is required. Start with the staged user, one summary family and a narrow time range, verify normalized records and sync state, then expand deliberately.
+`backfillGarminAPIHealth` is the single user-facing Garmin history callable. It always requests the existing Sleep history for eligible connected Pro users. For UIDs in the staged Garmin Health rollout it also creates one durable `garmin_health_backfill` cursor spanning all ten supported Health families; users outside the rollout receive the same Sleep-only behavior as before. The UI checks the server-owned rollout state before presenting the action and reports the scope returned by the callable.
+
+The Health cursor advances one inclusive window of at most 90 days at a time from January 1, 2016 to the request time. A dedicated Cloud Tasks worker runs with one concurrent dispatch, at most one dispatch per second, a 30-minute timeout, and at least 1.5 seconds between Garmin calls. Every successful 2xx response advances the cursor, `409` is treated as an already-requested window, and Garmin's documented `400` minimum-start response clips only the affected family. Network errors, `429`, and `5xx` retry from the durable cursor; authorization, permission, and other permanent `4xx` responses fail closed without exposing provider response bodies. Queue revision, deletion, token, root OAuth, provider identity, connection generation, and rollout are rechecked immediately before every provider call and again when progress is committed.
+
+Sleep and Health share the existing 30-day Garmin history cooldown, but their ranges are independent: a provider-discovered Sleep minimum does not shorten another Health family's range. The callable reports `sleepQueued` and `healthQueued` separately while retaining `queued` as the number of Sleep date-range requests. Garmin Summary Resender remains an operational recovery option for a deliberately bounded family/range after live delivery is healthy; it is no longer the normal staged-user history flow, and no local credential migration script is required.
 
 ## Production configuration
 
@@ -62,8 +66,8 @@ In Garmin's Endpoint Configuration Tool:
 2. Leave `epochs` and out-of-scope families disabled.
 3. Keep the existing `receiveGarminAPIDeregistration` and `receiveGarminAPIUserPermissions` endpoint configurations enabled and unchanged.
 4. Keep the legacy Sleep function deployed until the canonical URL has demonstrated delivery, then remove the alias in a later cleanup change.
-5. Use Summary Resender for bounded historical Health replay after live delivery is healthy.
+5. For the staged UID, use the in-app Garmin history action and verify that it reports **Sleep & Health history**. Keep Summary Resender for bounded operational recovery only.
 
 For planned maintenance or an unhealthy receiver, set the affected summary families to **On Hold** before changing or rolling back endpoints. Garmin continues queueing notifications while a family is enabled and On Hold; remove On Hold only after the canonical endpoint is healthy. For rollback, put the affected families On Hold, restore `sleeps` to the still-deployed legacy Sleep URL, disable the staged Health families if necessary, deploy or restore the previous backend revision, verify the legacy endpoint, and then release On Hold. Use Summary Resender for a bounded recovery window if notifications were missed; do not replay an unbounded history range during incident recovery.
 
-Monitor non-2xx responses, queue retry/DLQ counts, `users/{uid}/healthSyncState/GarminAPI`, and the expected source-record/sample-chunk families. Do not log or export callback URLs, OAuth credentials, or raw provider account IDs.
+Monitor non-2xx responses, `processGarminHealthBackfillTask` depth/state in the admin queue view, `sleepSyncQueue` retry/DLQ counts, `users/{uid}/sleepSyncState/GarminAPI` Health cursor fields, `users/{uid}/healthSyncState/GarminAPI`, and the expected source-record/sample-chunk families. Do not log or export callback URLs, OAuth credentials, or raw provider account IDs.

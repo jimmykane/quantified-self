@@ -330,13 +330,13 @@ export function buildDashboardActionPromptViewModels(
     prompts.push({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
       icon: 'bedtime',
-      title: 'Import Garmin sleep history',
-      description: 'Import Garmin sleep records from January 1, 2016 to today. Records may appear gradually over the next few hours.',
+      title: 'Import Garmin history',
+      description: 'Import Garmin sleep and, when available for your account, Health metrics from January 1, 2016 to today. Records may appear gradually over the next few hours.',
       busy: options.backfillGarminSleepBusy,
       error: options.backfillGarminSleepError,
       primaryAction: {
         id: 'backfillGarminSleep',
-        label: 'Import sleep history',
+        label: 'Import history',
         loadingLabel: 'Requesting...',
         icon: 'bedtime',
       },

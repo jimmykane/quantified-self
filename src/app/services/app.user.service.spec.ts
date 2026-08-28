@@ -2243,8 +2243,24 @@ describe('AppUserService', () => {
             });
         });
 
-        describe('backfillGarminSleepForCurrentUser', () => {
-            it('should call cloud function for Garmin sleep backfill', async () => {
+        describe('getGarminHealthSyncAvailabilityForCurrentUser', () => {
+            it('returns the current server-owned Garmin Health availability', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { available: true } });
+
+                await expect(service.getGarminHealthSyncAvailabilityForCurrentUser()).resolves.toBe(true);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminHealthSyncAvailability');
+            });
+
+            it('fails closed when the callable response does not explicitly enable Health', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: {} });
+
+                await expect(service.getGarminHealthSyncAvailabilityForCurrentUser()).resolves.toBe(false);
+            });
+        });
+
+        describe('backfillGarminHealthForCurrentUser', () => {
+            it('should call the combined Garmin sleep and Health backfill function', async () => {
                 const response = {
                     queued: 43,
                     startDate: '2016-01-01T00:00:00.000Z',
@@ -2253,9 +2269,9 @@ describe('AppUserService', () => {
                 };
                 mockFunctionsService.call.mockResolvedValueOnce({ data: response });
 
-                await expect(service.backfillGarminSleepForCurrentUser()).resolves.toEqual(response);
+                await expect(service.backfillGarminHealthForCurrentUser()).resolves.toEqual(response);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPISleep');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIHealth');
             });
         });
 

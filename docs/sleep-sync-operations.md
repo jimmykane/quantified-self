@@ -3,8 +3,10 @@
 Sleep sync is controlled independently from activity sync. The shared Sleep & Health queue supports
 Garmin, Suunto, and COROS Sleep for every connected user. COROS daily responses also feed the unified
 Health writer. Suunto 24/7 Health uses the same queue and worker but has a separate scheduler, kill switch,
-and production-wide account cursor. Garmin Health API 1.2.4 Ping/Pull uses the same queue and worker with
-its own deny-all-when-empty rollout; enabling either Health adapter does not change provider Sleep behavior.
+and production-wide account cursor. Garmin Health API 1.2.4 Ping/Pull uses the shared Firestore queue;
+live callback pulls use the ordinary Sleep worker, while user-requested historical Health uses a dedicated
+single-concurrency Cloud Tasks worker. Garmin keeps its own deny-all-when-empty rollout, and enabling either
+Health adapter does not change provider Sleep behavior.
 
 COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
@@ -99,7 +101,8 @@ after completing a production-wide sweep.
 
 Garmin Health uses the same deny-all rollout rule in `functions/src/garmin/health-rollout.ts`. The
 Garmin handler can continue accepting Sleep for normal Sleep users while acknowledging staged Health
-families only for an explicitly allowed connected UID.
+families only for an explicitly allowed connected UID. The `getGarminHealthSyncAvailability` callable is
+the client-safe source of that decision; clients do not infer rollout membership locally.
 
 ## What Disabled Means
 
@@ -154,9 +157,20 @@ queue row permanently stuck.
    `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
    source-record types.
 
-The existing Garmin **Import Sleep History** flow remains Sleep-only. Use Garmin Summary Resender for
-a bounded Health history replay after live staged delivery is verified; there is no local Garmin Health
-migration script.
+The Garmin history control calls `backfillGarminAPIHealth`. It requests Sleep for every eligible connected
+Pro user and, for a UID in the staged Health rollout, adds one durable cursor for all ten Health families.
+The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
+completion from the server response. Sleep-only users retain the prior behavior.
+
+Historical Health requests use inclusive windows of at most 90 days from January 1, 2016 to the request
+time. `processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
+at least 1.5 seconds between Garmin requests. It advances its Firestore cursor after each accepted or
+already-requested window, clips a family when Garmin reports its minimum start, retries network/`429`/`5xx`
+failures, and treats permanent authorization/permission/request errors as terminal. It rechecks queue
+revision, account deletion, rollout, token credentials, root OAuth generation, provider identity, and
+connection generation before every provider request and transactionally before progress. Sleep and Health
+share the 30-day user cooldown, while each Health family can independently establish its provider minimum.
+Garmin Summary Resender is retained for bounded operational recovery rather than the normal user backfill.
 
 Garmin sleep ingestion stores average respiration from positive samples and derives the
 normalized maximum SpO₂ aggregate from valid recorded samples. MCP and other aggregate
