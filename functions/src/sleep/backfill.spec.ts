@@ -27,6 +27,7 @@ const hoisted = vi.hoisted(() => ({
     updateSleepSyncState: vi.fn(),
     requestGet: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
+    isSuuntoHealthSyncEnabled: vi.fn(),
     suuntoTokenLimit: vi.fn(),
 }));
 
@@ -210,6 +211,10 @@ vi.mock('./provider-flags', () => ({
     isSleepSyncUserAllowed: hoisted.isSleepSyncUserAllowed,
 }));
 
+vi.mock('../suunto/health-flags', () => ({
+    isSuuntoHealthSyncEnabled: hoisted.isSuuntoHealthSyncEnabled,
+}));
+
 vi.mock('../service-connection-meta', () => ({
     isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
 }));
@@ -288,6 +293,7 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.getTokenData.mockResolvedValue({ userName: 'suunto-user-1' });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isSuuntoHealthSyncEnabled.mockReturnValue(true);
         hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
@@ -350,6 +356,23 @@ describe('backfillSuuntoAppSleep', () => {
             nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
             lastError: null,
         }, nowMs);
+    });
+
+    it('preserves Sleep-only backfill without a Health account cap when Health is disabled', async () => {
+        seedSuuntoToken();
+        hoisted.isSuuntoHealthSyncEnabled.mockReturnValue(false);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillSuuntoAppSleep(createRequest());
+
+        expect(result).toMatchObject({
+            queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: 0,
+        });
+        expect(hoisted.suuntoTokenLimit).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length);
+        expect(hoisted.addSleepSyncQueueItem.mock.calls.every(([item]) => item.type === 'suunto_poll')).toBe(true);
     });
 
     it('queues paired Sleep and Health windows for every eligible Suunto account', async () => {
