@@ -796,6 +796,10 @@ async function deleteCurrentTerminalAuthToken(
           ? currentTokenData.tokenCredentialGeneration
           : null,
       )) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // Keep this transaction-fenced document delete to avoid erasing a
+      // binding recreated concurrently by a reconnect.
       transaction.delete(suuntoBindingRef);
     }
     if (remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow) {

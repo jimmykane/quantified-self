@@ -151,6 +151,9 @@ export async function deleteLocalServiceToken(
     transaction.delete(tokenDocRef);
     if (suuntoBindingRef
       && parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data())?.userID === userID) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // The document-only delete remains atomic with the token lifecycle fence.
       transaction.delete(suuntoBindingRef);
     }
 

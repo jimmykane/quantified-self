@@ -1968,6 +1968,17 @@ describe('Firestore Security Rules', () => {
                 userID: 'admin-user',
             }));
         });
+
+        it('forbids descendants beneath permanent Suunto binding leaf documents', async () => {
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .get());
+            await assertFails(adminDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .set({ value: 1 }));
+        });
     });
 
     describe('Changelogs Collection', () => {

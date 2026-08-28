@@ -4060,6 +4060,157 @@ describe('sleep queue', () => {
         }));
     });
 
+    it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
+        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: stagedUserID } },
+        };
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                accessToken: 'old-access-token',
+                refreshToken: 'suunto-refresh-token',
+                tokenCredentialGeneration: 'credential-generation-1',
+            }),
+            ref: tokenRef,
+        };
+        const initialGuards = {
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: {
+                accessToken: 'old-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suuntoHealthWebhookAccountBindings/binding-1' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const rotatedGuards = {
+            ...initialGuards,
+            requiredExistingTokenCredential: {
+                accessToken: 'rotated-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
+        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
+        hoisted.updateHealthSyncState
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-failure-after-credential-rotation',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: stagedUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'poll',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.RetryIncremented);
+        expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
+        expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
+            1,
+            stagedUserID,
+            'SuuntoApp',
+            expect.objectContaining({
+                status: 'failed',
+                lastErrorCode: 'suunto_health_sync_failed',
+            }),
+            expect.any(Number),
+            initialGuards,
+        );
+        expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
+            2,
+            stagedUserID,
+            'SuuntoApp',
+            expect.objectContaining({
+                status: 'failed',
+                lastErrorCode: 'suunto_health_sync_failed',
+            }),
+            expect.any(Number),
+            rotatedGuards,
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            retryCount: 1,
+            dispatchedToCloudTask: null,
+        }));
+    });
+
+    it('skips a failed Suunto Health item when rebasing finds changed account authority', async () => {
+        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: stagedUserID } },
+        };
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                accessToken: 'old-access-token',
+                refreshToken: 'suunto-refresh-token',
+                tokenCredentialGeneration: 'credential-generation-1',
+            }),
+            ref: tokenRef,
+        };
+        const initialGuards = {
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: {
+                accessToken: 'old-access-token',
+                credentialGeneration: 'credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suuntoHealthWebhookAccountBindings/binding-1' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(null);
+        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
+        hoisted.updateHealthSyncState.mockResolvedValueOnce(false);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-failure-after-authority-change',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: stagedUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'poll',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.updateHealthSyncState).toHaveBeenCalledOnce();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            processed: true,
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+        }));
+        expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+    });
+
     it('skips a webhook queue item before provider I/O when its captured connection generation changed', async () => {
         const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
         const tokenRef = {

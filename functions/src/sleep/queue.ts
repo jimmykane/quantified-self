@@ -2228,20 +2228,45 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             const failedHealthLifecycleGuards = isSuuntoHealthQueueItem(queueItem)
                 ? suuntoHealthLifecycleGuards
                 : corosLifecycleGuards;
-            if (failedHealthProvider && failedHealthLifecycleGuards) {
+            const failedHealthUserID = queueItem.userID;
+            if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
                 try {
-                    const healthStateWritten = await updateHealthSyncState(
-                        queueItem.userID,
-                        failedHealthProvider,
-                        {
-                            status: HEALTH_SYNC_STATUSES.Failed,
-                            lastErrorCode: isSuuntoHealthQueueItem(queueItem)
-                                ? 'suunto_health_sync_failed'
-                                : 'coros_daily_sync_failed',
-                        },
-                        Date.now(),
-                        failedHealthLifecycleGuards,
-                    );
+                    const failedAtMs = Date.now();
+                    const failureStateUpdate = {
+                        status: HEALTH_SYNC_STATUSES.Failed,
+                        lastErrorCode: isSuuntoHealthQueueItem(queueItem)
+                            ? 'suunto_health_sync_failed'
+                            : 'coros_daily_sync_failed',
+                    };
+                    let healthStateWritten: boolean;
+                    if (isSuuntoHealthQueueItem(queueItem)
+                        && suuntoHealthLifecycleGuards
+                        && suuntoAuthorityBaseline) {
+                        const stateAttempt = await runWithSuuntoHealthCredentialRebase(
+                            failedHealthUserID,
+                            queueItem.providerUserId,
+                            suuntoAuthorityBaseline,
+                            suuntoHealthLifecycleGuards,
+                            guards => updateHealthSyncState(
+                                failedHealthUserID,
+                                failedHealthProvider,
+                                failureStateUpdate,
+                                failedAtMs,
+                                guards,
+                            ),
+                            written => !written,
+                        );
+                        healthStateWritten = stateAttempt.result;
+                        suuntoHealthLifecycleGuards = stateAttempt.guards;
+                    } else {
+                        healthStateWritten = await updateHealthSyncState(
+                            failedHealthUserID,
+                            failedHealthProvider,
+                            failureStateUpdate,
+                            failedAtMs,
+                            failedHealthLifecycleGuards,
+                        );
+                    }
                     if (!healthStateWritten) {
                         return markQueueItemSkipped(
                             queueItem,

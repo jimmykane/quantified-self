@@ -1,6 +1,9 @@
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 
+// Permanent-leaf schema: binding documents never own subcollections. This
+// lets lifecycle transactions delete an exact binding atomically without a
+// post-transaction recursive delete racing a reconnect-created replacement.
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME =
   'suuntoHealthWebhookAccountBindings';
 export const SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION = 3;

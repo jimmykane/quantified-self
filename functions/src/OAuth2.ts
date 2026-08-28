@@ -587,6 +587,9 @@ async function deleteSupersededOAuthCredentialIfCurrent(
         guard.tokenRef.id.trim(),
         guard.tokenCredentialGeneration,
       )) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // The document-only delete remains atomic with the OAuth lifecycle fence.
       transaction.delete(suuntoBindingRef);
     }
     return true;
