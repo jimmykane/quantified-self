@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
 
 const mocks = vi.hoisted(() => ({
   getServiceConnectionMeta: vi.fn(),
   pinServiceConnectionProviderUserIdIfUnset: vi.fn(),
   tokenCollectionGet: vi.fn(),
   tokenDocumentGet: vi.fn(),
+  tokenRootGet: vi.fn(),
 }));
 
 vi.mock('../service-connection-meta', () => ({
@@ -16,6 +18,7 @@ vi.mock('firebase-admin', () => ({
   firestore: () => ({
     collection: () => ({
       doc: () => ({
+        get: mocks.tokenRootGet,
         collection: () => ({
           get: mocks.tokenCollectionGet,
           doc: () => ({ get: mocks.tokenDocumentGet }),
@@ -51,6 +54,7 @@ describe('COROS active account', () => {
     vi.clearAllMocks();
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.pinServiceConnectionProviderUserIdIfUnset.mockResolvedValue('pinned');
+    mocks.tokenRootGet.mockResolvedValue({ exists: true, data: () => ({}) });
   });
 
   it('chooses the newest refreshed token, then creation date and document id', () => {
@@ -70,13 +74,40 @@ describe('COROS active account', () => {
     expect(normalizeCOROSOpenId({ openId: 'open-1' })).toBeNull();
   });
 
-  it('uses the pinned account and never falls back to another token', async () => {
+  it('uses a pinned legacy account when its existing root and child both omit generations', async () => {
     mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
     const pinned = token('open-pinned', { openId: 'open-pinned' });
     mocks.tokenDocumentGet.mockResolvedValue(pinned);
 
     await expect(getActiveCOROSTokenSnapshot('user-1')).resolves.toBe(pinned);
     expect(mocks.tokenCollectionGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when only the legacy token root gains credential-generation metadata', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'root-generation' }),
+    });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', { openId: 'open-pinned' }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending data.',
+    });
+  });
+
+  it('fails closed when only the legacy token child gains credential-generation metadata', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', {
+      openId: 'open-pinned',
+      tokenCredentialGeneration: 'token-generation',
+    }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending data.',
+    });
   });
 
   it('fails closed before token access when the connection requires reconnect', async () => {
@@ -114,6 +145,35 @@ describe('COROS active account', () => {
 
     await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({ code: 'unauthenticated' });
     expect(mocks.tokenCollectionGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a token child is orphaned under a deleted root', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenRootGet.mockResolvedValue({ exists: false, data: () => undefined });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', { openId: 'open-pinned' }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Connect COROS before sending data.',
+    });
+    expect(mocks.tokenDocumentGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a recreated token root does not own the child credential generation', async () => {
+    mocks.getServiceConnectionMeta.mockResolvedValue({ providerUserId: 'open-pinned' });
+    mocks.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ activeOAuthCredentialGeneration: 'root-generation-new' }),
+    });
+    mocks.tokenDocumentGet.mockResolvedValue(token('open-pinned', {
+      openId: 'open-pinned',
+      tokenCredentialGeneration: 'token-generation-old',
+    }));
+
+    await expect(getActiveCOROSTokenSnapshot('user-1')).rejects.toMatchObject({
+      code: 'unauthenticated',
+      message: 'Reconnect COROS before sending data.',
+    });
   });
 
   it('fails closed when pinned metadata is malformed', async () => {
@@ -183,15 +243,16 @@ describe('COROS active account', () => {
           exists: true,
           data: () => ({ connectionState: 'connected', providerUserId: 'open-pinned' }),
         })
+        .mockResolvedValueOnce({ exists: true, data: () => ({}) })
         .mockResolvedValueOnce(token('open-pinned', { openId: 'open-pinned' })),
     };
 
     await expect(assertActiveCOROSAccountInTransaction(
       'user-1',
       'open-pinned',
-      transaction as any,
+      transaction as unknown as admin.firestore.Transaction,
     )).resolves.toBeUndefined();
-    expect(transaction.get).toHaveBeenCalledTimes(2);
+    expect(transaction.get).toHaveBeenCalledTimes(3);
   });
 
   it('rejects a transactional write after the COROS account becomes unavailable', async () => {
@@ -201,13 +262,56 @@ describe('COROS active account', () => {
           exists: true,
           data: () => ({ connectionState: 'disconnect_pending', providerUserId: 'open-pinned' }),
         })
+        .mockResolvedValueOnce({ exists: true, data: () => ({}) })
         .mockResolvedValueOnce(token('open-pinned', { openId: 'open-pinned' })),
     };
 
     await expect(assertActiveCOROSAccountInTransaction(
       'user-1',
       'open-pinned',
-      transaction as any,
+      transaction as unknown as admin.firestore.Transaction,
+    )).rejects.toMatchObject({ code: 'unauthenticated' });
+  });
+
+  it('rejects a transactional write when the COROS token root was deleted', async () => {
+    const transaction = {
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ connectionState: 'connected', providerUserId: 'open-pinned' }),
+        })
+        .mockResolvedValueOnce({ exists: false, data: () => undefined })
+        .mockResolvedValueOnce(token('open-pinned', { openId: 'open-pinned' })),
+    };
+
+    await expect(assertActiveCOROSAccountInTransaction(
+      'user-1',
+      'open-pinned',
+      transaction as unknown as admin.firestore.Transaction,
+    )).rejects.toMatchObject({ code: 'unauthenticated' });
+  });
+
+  it('rejects a transactional write after the token root credential generation changes', async () => {
+    const transaction = {
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ connectionState: 'connected', providerUserId: 'open-pinned' }),
+        })
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ activeOAuthCredentialGeneration: 'root-generation-new' }),
+        })
+        .mockResolvedValueOnce(token('open-pinned', {
+          openId: 'open-pinned',
+          tokenCredentialGeneration: 'token-generation-old',
+        })),
+    };
+
+    await expect(assertActiveCOROSAccountInTransaction(
+      'user-1',
+      'open-pinned',
+      transaction as unknown as admin.firestore.Transaction,
     )).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 });

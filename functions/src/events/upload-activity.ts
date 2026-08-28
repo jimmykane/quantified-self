@@ -11,6 +11,7 @@ import {
   ALLOWED_CORS_ORIGINS,
   ENFORCE_APP_CHECK,
   assertEventWriteUserActive,
+  EventWriteSkippedForDeletedUserError,
   hasBasicAccess,
   hasProAccess,
   setEventDocumentIfUserActive,
@@ -34,6 +35,7 @@ import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-f
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
+const ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE = 'Account deletion is in progress. Please sign in again.';
 const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroutesfromgpx.*routes/i;
 const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
 
@@ -465,6 +467,14 @@ export const uploadActivity = onRequest({
       uploadCountAfterWrite: eventAlreadyExists ? currentCount : (currentCount + 1),
     });
   } catch (error) {
+    if (error instanceof EventWriteSkippedForDeletedUserError) {
+      response.status(409).json({
+        error: ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE,
+        code: error.code,
+      });
+      return;
+    }
+
     if (error instanceof HttpStatusError) {
       response.status(error.status).json({ error: error.message });
       return;

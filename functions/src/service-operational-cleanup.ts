@@ -10,7 +10,11 @@ import {
 } from './queue/cleanup-tombstone';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './route-delivery-sync/constants';
-import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
+import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from './routes/route-sync.constants';
+import {
+  SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+  SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+} from './sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
 import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './wahoo/constants';
 
@@ -34,6 +38,7 @@ interface OperationalCleanupQuery {
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
   ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
   ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
+  ROUTE_SYNC_QUEUE_COLLECTION_NAME,
   SLEEP_SYNC_QUEUE_COLLECTION_NAME,
   SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
   COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -163,7 +168,8 @@ function getExplicitFirebaseUidAssociation(
   if (
     collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
     collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
-    collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+    collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
+    collectionName === SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME
   ) {
     return asNonEmptyString(data.userID);
   }
@@ -243,6 +249,12 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
   const isRouteDeliverySourceDocForProvider = (data: Record<string, unknown>) =>
     asNonEmptyString(data.sourceServiceName) === config.serviceName
     && asNonEmptyString(data.sourceProviderUserId) === config.providerUserId;
+  const isRouteSyncSourceDocForProvider = (data: Record<string, unknown>) =>
+    asNonEmptyString(data.sourceServiceName) === config.serviceName
+    && asNonEmptyString(data.providerUserId) === config.providerUserId;
+  const isSuuntoHealthIngressForProvider = (data: Record<string, unknown>) =>
+    config.serviceName === ServiceNames.SuuntoApp
+    && asNonEmptyString(data.providerUserId) === config.providerUserId;
 
   return [
     {
@@ -257,12 +269,26 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
       sourceCollectionName: SLEEP_SYNC_QUEUE_COLLECTION_NAME,
       matches: isSleepDocForProvider,
     },
+    ...(config.serviceName === ServiceNames.SuuntoApp ? [{
+      collectionName: SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+      fieldName: 'providerUserId',
+      // This ingress has no Cloud Task of its own, so recursive deletion does
+      // not require a missing-queue tombstone.
+      sourceCollectionName: () => null,
+      matches: isSuuntoHealthIngressForProvider,
+    }] : []),
     {
       collectionName: ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
       fieldName: 'sourceProviderUserId',
       sourceCollectionName: ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
       matches: isRouteDeliverySourceDocForProvider,
     },
+    ...(config.serviceName === ServiceNames.SuuntoApp ? [{
+      collectionName: ROUTE_SYNC_QUEUE_COLLECTION_NAME,
+      fieldName: 'providerUserId',
+      sourceCollectionName: ROUTE_SYNC_QUEUE_COLLECTION_NAME,
+      matches: isRouteSyncSourceDocForProvider,
+    }] : []),
     {
       collectionName: 'failed_jobs',
       fieldName: config.providerUserIdField,
@@ -273,7 +299,7 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
       collectionName: 'failed_jobs',
       fieldName: 'providerUserId',
       sourceCollectionName: failedJobSourceCollection,
-      matches: isSleepDocForProvider,
+      matches: data => isSleepDocForProvider(data) || isRouteSyncSourceDocForProvider(data),
     },
     {
       collectionName: 'failed_jobs',

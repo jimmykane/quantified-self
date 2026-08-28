@@ -49,7 +49,8 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
         parent: {
             id: 'tokens',
             parent: { id: 'mock-user-id' }
-        }
+        },
+        collection: vi.fn(() => collection),
     };
 
     const docSnapshot = {
@@ -1837,6 +1838,24 @@ describe('queue', () => {
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
+        it('namespaces shared-account Suunto queue items by Firebase owner', async () => {
+            await addToQueueForSuunto({
+                userName: 'user1',
+                workoutID: 'work1',
+                firebaseUserID: 'shared-owner-2',
+            });
+
+            const admin = await import('firebase-admin');
+            expect(admin.firestore().collection('suuntoAppWorkoutQueue').doc)
+                .toHaveBeenCalledWith('user1-work1-shared-owner-2');
+            expect(mockDocRef.create).toHaveBeenCalledWith(expect.objectContaining({
+                id: 'user1-work1-shared-owner-2',
+                firebaseUserID: 'shared-owner-2',
+                userName: 'user1',
+                workoutID: 'work1',
+            }));
+        });
+
         it('addToQueueForSuunto should not create provider-only queue docs when no local token resolves', async () => {
             mockCollection.get.mockResolvedValueOnce({
                 docs: [],
@@ -2662,6 +2681,113 @@ describe('queue', () => {
                 providerEventID: 'sw1',
                 providerEventIDField: 'serviceWorkoutID',
             });
+        });
+
+        it('processes a shared-account Suunto queue item only for its bound Firebase owner', async () => {
+            const firstToken = {
+                id: 'first-token',
+                ref: {
+                    parent: {
+                        id: 'tokens',
+                        parent: { id: 'shared-owner-1' },
+                    },
+                },
+                data: vi.fn(() => ({})),
+            };
+            const secondToken = {
+                id: 'second-token',
+                ref: {
+                    parent: {
+                        id: 'tokens',
+                        parent: { id: 'shared-owner-2' },
+                    },
+                },
+                data: vi.fn(() => ({})),
+            };
+            mockCollection.get.mockResolvedValueOnce({
+                size: 2,
+                docs: [firstToken, secondToken],
+                empty: false,
+            });
+            suuntoQueueItem.firebaseUserID = 'shared-owner-2';
+
+            const result = await parseWorkoutQueueItemForServiceName(
+                ServiceNames.SuuntoApp,
+                suuntoQueueItem,
+            );
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(getTokenData).toHaveBeenCalledTimes(1);
+            expect(getTokenData).toHaveBeenCalledWith(secondToken, ServiceNames.SuuntoApp);
+            const admin = await import('firebase-admin');
+            expect(admin.firestore().collection).toHaveBeenCalledWith('suuntoAppAccessTokens');
+            expect(mockCollection.doc).toHaveBeenCalledWith('shared-owner-2');
+            expect(mockDocRef.collection).toHaveBeenCalledWith('tokens');
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
+                'shared-owner-2',
+                'standardized-event-id',
+                expect.any(Object),
+                expect.any(Object),
+                expect.any(Object),
+                undefined,
+                undefined,
+                undefined,
+            );
+        });
+
+        it('keeps cached Suunto token queries isolated per Firebase owner', async () => {
+            const tokenFor = (firebaseUserID: string) => ({
+                id: `token-${firebaseUserID}`,
+                ref: {
+                    parent: {
+                        id: 'tokens',
+                        parent: { id: firebaseUserID },
+                    },
+                },
+                data: vi.fn(() => ({})),
+            });
+            const firstToken = tokenFor('shared-owner-1');
+            const secondToken = tokenFor('shared-owner-2');
+            mockCollection.get.mockReset();
+            mockCollection.get
+                .mockResolvedValueOnce({ size: 1, docs: [firstToken], empty: false })
+                .mockResolvedValueOnce({ size: 1, docs: [secondToken], empty: false });
+            const tokenCache = new Map();
+
+            await parseWorkoutQueueItemForServiceName(
+                ServiceNames.SuuntoApp,
+                { ...suuntoQueueItem, id: 'owner-1-item', firebaseUserID: 'shared-owner-1' },
+                undefined,
+                tokenCache,
+            );
+            await parseWorkoutQueueItemForServiceName(
+                ServiceNames.SuuntoApp,
+                { ...suuntoQueueItem, id: 'owner-2-item', firebaseUserID: 'shared-owner-2' },
+                undefined,
+                tokenCache,
+            );
+
+            expect(mockCollection.get).toHaveBeenCalledTimes(2);
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
+                'shared-owner-1',
+                'standardized-event-id',
+                expect.any(Object),
+                expect.any(Object),
+                expect.any(Object),
+                undefined,
+                undefined,
+                undefined,
+            );
+            expect(vi.mocked(utils.setEvent)).toHaveBeenCalledWith(
+                'shared-owner-2',
+                'standardized-event-id',
+                expect.any(Object),
+                expect.any(Object),
+                expect.any(Object),
+                undefined,
+                undefined,
+                undefined,
+            );
         });
 
         it('should mark processed as skipped without retrying or writing user data when token owner is being deleted before token refresh', async () => {

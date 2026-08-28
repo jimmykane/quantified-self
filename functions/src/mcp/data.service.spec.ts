@@ -4384,6 +4384,92 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
   });
 
+  it('keeps exact durability supporting-workout start times in the workspace only', async () => {
+    const durabilityDayMs = Date.parse('2026-07-01T00:00:00.000Z');
+    const nextDurabilityDayMs = durabilityDayMs + (24 * 60 * 60 * 1000);
+    const coverage = {
+      candidateActivityCount: 0,
+      evidenceActivityCount: 0,
+      eligibleActivityCount: 0,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 0,
+      eligibilityRatio: null,
+      exclusions: [],
+    };
+    const window = (periodDays: 28 | 7) => ({
+      periodDays,
+      windowStartDayMs: durabilityDayMs,
+      windowEndDayMs: nextDurabilityDayMs,
+      coverage,
+      summaries: [],
+    });
+    const scope = (
+      scopeId: 'running' | 'cycling' | 'pool-swimming' | 'open-water-swimming',
+      recentSupportingEvents: unknown[] = [],
+    ) => ({
+      scope: scopeId,
+      current: window(28),
+      baselineBlocks: [window(28), window(28), window(28)],
+      usual: { coverage, summaries: [] },
+      weeks: Array.from({ length: 12 }, () => window(7)),
+      recentSupportingEvents,
+    });
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 1,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: durabilityDayMs,
+        currentWindowDays: 28,
+        baselineBlockCount: 3,
+        weeklyPointCount: 12,
+        excludesMergedEvents: true,
+        excludesFutureEvents: true,
+        evidenceSource: 'persisted-activity-stat',
+        scopes: [
+          scope('running', [{
+            activityId: 'private-activity',
+            eventId: 'private-event',
+            label: '2026-07-01T09:00:00.000Z',
+            startDayMs: durabilityDayMs,
+            startMs: durabilityDayMs + (9 * 60 * 60 * 1000),
+            contextKey: 'running|speed|m/s|-|-',
+            decouplingPercent: 3,
+            outputRetentionPercent: 97,
+            heartRateDriftBpm: 2,
+            paceRetentionPercent: null,
+            swolfChange: null,
+          }]),
+          scope('cycling'),
+          scope('pool-swimming'),
+          scope('open-water-swimming'),
+        ],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingDurability,
+    );
+    const payload = MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.TrainingDurability]
+      .parse(result.payload);
+
+    expect(payload.scopes[0].recentSupportingEvents).toEqual([{
+      startDayMs: durabilityDayMs,
+      contextKey: 'running|speed|m/s|-|-',
+      decouplingPercent: 3,
+      outputRetentionPercent: 97,
+      heartRateDriftBpm: 2,
+      paceRetentionPercent: null,
+      swolfChange: null,
+    }]);
+    expect(JSON.stringify(payload)).not.toContain('private-activity');
+    expect(JSON.stringify(payload)).not.toContain('2026-07-01T09:00:00.000Z');
+    expect(JSON.stringify(payload)).not.toContain('startMs');
+  });
+
   it('projects expanded internal Training summaries through the frozen three-sport MCP contract', async () => {
     const contextByDiscipline = {
       running: ['running', 'endurance'],
@@ -6079,7 +6165,10 @@ describe('MCP data service', () => {
 
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
-      sleepDocument(),
+      sleepDocument({
+        healthSourceRecords: [{ source: { accountKey: 'private-health-account' } }],
+        healthSampleChunks: [{ nativeMetric: 'hrvList.hrv', nativeValues: [123] }],
+      }),
     ]);
 
     const result = await createMcpDataService(dependencies).listSleepSessions({
@@ -6115,6 +6204,9 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('spo2Samples');
     expect(JSON.stringify(result)).not.toContain('respirationSamples');
     expect(JSON.stringify(result)).not.toContain('stages');
+    expect(JSON.stringify(result)).not.toContain('healthSourceRecords');
+    expect(JSON.stringify(result)).not.toContain('healthSampleChunks');
+    expect(JSON.stringify(result)).not.toContain('hrvList.hrv');
   });
 
   it('discovers only recorded aggregate sleep vitals without source or sample data', async () => {

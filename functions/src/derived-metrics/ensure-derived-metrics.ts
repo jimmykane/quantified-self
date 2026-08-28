@@ -389,6 +389,9 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
     metricKind: DerivedMetricKind,
     payload: unknown,
 ): boolean {
+    if (metricKind === DERIVED_METRIC_KINDS.TrainingDurability) {
+        return hasTrainingDurabilitySupportingEventStartTimes(payload);
+    }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
         return normalizeDerivedTrainingReadinessMetricPayload(payload) !== null;
     }
@@ -399,4 +402,27 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
         return source?.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION;
     }
     return true;
+}
+
+function hasTrainingDurabilitySupportingEventStartTimes(payload: unknown): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return false;
+    }
+    const scopes = (payload as Record<string, unknown>).scopes;
+    if (!Array.isArray(scopes)) {
+        return false;
+    }
+    return scopes.every((scope) => {
+        if (!scope || typeof scope !== 'object' || Array.isArray(scope)) {
+            return false;
+        }
+        const recentSupportingEvents = (scope as Record<string, unknown>).recentSupportingEvents;
+        return Array.isArray(recentSupportingEvents) && recentSupportingEvents.every((event) => (
+            !!event
+            && typeof event === 'object'
+            && !Array.isArray(event)
+            && typeof (event as Record<string, unknown>).startMs === 'number'
+            && Number.isFinite((event as Record<string, unknown>).startMs)
+        ));
+    });
 }

@@ -19,7 +19,7 @@ import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.';
+const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one private training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
 const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
 
@@ -712,6 +712,7 @@ const topLevelRoutes: Routes = [
     path: '',
     loadComponent: () => import('./components/home/home.component').then(component => component.HomeComponent),
     data: {
+      title: 'Private Training Dashboard',
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
       jsonLd: {

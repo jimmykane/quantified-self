@@ -1,6 +1,6 @@
 # COROS Integration
 
-COROS is a Pro-only activity, sleep-summary, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported sleep summaries, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and implements direct or saved GPX/FIT route delivery to COROS. Activity upload, activity-sync routes, and route delivery are available production-wide to eligible connected users.
+COROS is a Pro-only activity, daily Health and sleep, activity-delivery, and route-delivery integration. Quantified Self imports COROS activity/history data, polls supported daily Health and sleep data, sends retained FIT activities in explicitly configured provider directions, uploads selected FIT activities, and implements direct or saved GPX/FIT route delivery to COROS. Activity upload, activity-sync routes, and route delivery are available production-wide to eligible connected users.
 
 This is the COROS-specific architecture and release record. For shared provider requirements, see the [provider integration implementation guide](provider-integration-guide.md).
 
@@ -10,7 +10,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 - Server-side binding-state verification when a connected account is shown in the Services connection grid.
 - One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Legacy multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
 - Recent COROS activity-history import within the provider's rolling three-month limit.
-- Daily sleep-summary polling plus a user-requested three-month sleep backfill in 30-day windows, subject to the existing cooldown. COROS does not supply sleep stages through this integration.
+- Daily Health and sleep polling plus a user-requested three-month replay in 30-day windows, subject to the existing cooldown. It stores steps, the native COROS calorie value, resting/sleep heart rate, overnight HRV, and bounded detailed HRV/interval-heart-rate samples when supplied. COROS does not supply sleep stages through this integration.
 - Direct FIT activity delivery with asynchronous provider status polling.
 - Automatic and date-range FIT activity delivery from Garmin, Suunto, or Wahoo to COROS through the shared activity-sync queue.
 - Existing COROS-to-Suunto and COROS-to-Wahoo automatic/date-range activity routes.
@@ -51,6 +51,30 @@ COROS activity and sleep dates are provider calendar dates, inclusive at both bo
 
 Webhook/history records may omit a FIT URL, and signed URLs may expire before a worker downloads them. The worker recovers a fresh URL from `GET /v2/coros/sport/detail/fit` using the stable `labelId`, parent `mode`/`subMode`, and multisport component identity. It validates the returned workout and component before a deletion-guarded queue update. A detail-auth response gets one forced OAuth refresh; a signed-URL 401/403/404/410 by itself does not incorrectly mark the account disconnected. Retryable detail failures stay retryable, while unusable detail responses enter the existing DLQ with a sanitized reason.
 
+## Daily Health and sleep ingestion
+
+The February 2026 COROS OpenAPI v2.0.6 partner reference does not provide a daily-data webhook. `scheduleCOROSSleepSync` retains its deployed name and queues a rolling seven-day `coros_poll` every 24 hours. The user callable `backfillCorosAPISleep` also retains its compatibility name, but its three-month replay now imports both Sleep and Health. Both paths call `GET /coros/daily/query` in inclusive, non-overlapping windows of at most 30 provider calendar dates.
+
+The response is decoded only within a 4 MiB limit. A request accepts at most 30 daily rows and each row at most 1,440 `hrvList` entries. A provider-confirmed success may return an exact empty `data` object when the requested range has no daily records; the worker treats only that empty object as an empty result. A non-empty unrecognized data object, missing success result, or malformed `dailyList` still fails closed. Calendar dates and local sleep timestamps are validated strictly; COROS timezone integers are interpreted in the documented 15-minute units. Duplicate daily rows use the final row for that provider date, and duplicate HRV timestamps use the final point. Missing or invalid measurements remain unavailable rather than becoming zero.
+
+The shared response is deliberately split across existing domains:
+
+| Native daily field | Storage contract |
+| --- | --- |
+| sleep start/end and compatibility aggregates `rhr`, `ppgHrv`, `sleepAvgHr` | Normalized `sleepSessions`; Health holds typed references for duration and populated aggregate vitals while retaining each native field's stable semantic variant |
+| `step` | Canonical Health `steps` daily total in count |
+| `calorie` | Health `total_energy` as native-only unit `calorie`; the API does not define enough unit semantics for a kcal conversion |
+| `hrvList[].hrv` | Bounded canonical Health HRV sample series in milliseconds, `overnight_interval` |
+| optional `hrvList[].hr` | Bounded canonical Health heart-rate sample series in bpm, `hrv_interval_mean` |
+
+Detailed `hrvList` data is not written into `sleepSessions.hrvSamples` for new responses. Existing legacy copies remain recoverable until the guarded migration has written their Health record and removed the moved fields. Existing Sleep consumers continue to use the aggregate vitals, while the unified Health layer retains detailed samples and exact provider/native semantics. Coverage remains `unknown` because COROS does not declare daily or series completeness.
+
+Each provider date becomes `coros_daily` / `daily_summary` with raw `happenDay` used only inside the writer's identity calculation. The persisted account key, source key, and revision token are opaque hashes. Response receipt time orders revisions; a SHA-256 token covers only recognized normalized content. The daily record uses the wake-date fixed offset and may extend at most 24 hours earlier for overnight samples. Sleep writes finish before Health replacements; every Sleep/Health record write and both final ready-state transitions transactionally require the same COROS token document, token-root credential generation, and exact in-memory credential revision plus the poll's original provider account, connection state, and connection generation to remain current. A refresh may update expiry metadata only within the original credential generation; an old queue task never adopts a same-account OAuth reconnect. Credential values are used only for equality checks and are never added to normalized records, state, or logs. User-scoped terminal queue transitions recheck account deletion and the exact queue revision in the same transaction as any failed-job copy. The queue reaches success only after both sync states are updated.
+
+Connecting COROS marks Health ready, a current terminal authentication loss marks reconnect required with an opaque error code, and deleting the COROS token root marks Health disconnected unless the service state read in the guarded transaction is reconnect-required. Browser clients can read their existing connection for compatibility but cannot create, update, or delete the root; server-owned OAuth and disconnect callables create it and remove token children before deleting it. This prevents an empty client-created root from reviving a legacy orphaned child, while every active-account lookup and downstream daily write also fails closed if the root is absent or owns a different credential generation. Pre-generation COROS connections remain compatible only while the existing root and selected token child both omit generation metadata; a generation on only one side or unequal generations fails closed. They do not require a credential migration or reconnect solely because both fields are absent. Connect and terminal-auth mirrors require the exact current service-connection generation and pending projection claim, while the delete trigger transactionally supersedes any pending claim only while the token root remains absent before selecting its Health state from current service metadata. Each connect or terminal-auth transition also commits a generation-keyed projection marker with the authoritative service state; the bounded lifecycle scheduler retries a failed Health mirror and clears only the exact marker after success. Clearing the claim invalidates an in-flight stale projection, and a concurrent reconnect preserves its newer claim. Delayed lifecycle work therefore cannot overwrite a newer reconnect or a completed disconnect. Disconnect never deletes imported Sleep or Health history. Recursive account deletion removes both domains and all Health sample chunks below `users/{uid}`.
+
+The operator replay command is `npm --prefix functions run backfill-coros-daily-health`; the older `backfill-coros-sleep` alias remains valid. A new dedupe generation ensures an older sleep-only operator run does not suppress the Health replay. Legacy detailed data can be moved with the dry-run-first `migrate-coros-sleep-to-health` script documented in [Sleep sync operations](sleep-sync-operations.md).
+
 ### Imported event metadata
 
 Imported COROS events preserve bounded provider attribution when supplied: effective `mode` and `subMode`, device name, start/end timezone, `planWorkoutId`, and stable multisport component identity. New events do not retain the provider's expiring FIT URL; the owned original file remains the durable source for export, reprocessing, and downstream delivery.
@@ -86,6 +110,8 @@ The following FIT-only routes use `shared/activity-sync-routes.ts`, the common d
 | COROS | Wahoo |
 
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
+
+For COROS-bound shared rows, provider status `1` is an expected asynchronous wait rather than a Cloud Task failure. The worker retains the upload ID, consumes the bounded polling budget, durably records the next poll's due time, acknowledges the current task, and schedules the next status-only poll using the configured Cloud Tasks backoff (15 minutes through four hours). The queue reconciler respects that due time instead of bypassing it with an immediate task, pages past future scheduled polls so they cannot hide newer work, and an early retry re-enqueues the same planned task rather than polling COROS ahead of schedule. It emits an info-level structured poll-scheduled log; the next worker never posts the FIT again. Scheduler/transport failures, exhausted polling, and status `-1` remain warning/error paths.
 
 ## Echo suppression
 

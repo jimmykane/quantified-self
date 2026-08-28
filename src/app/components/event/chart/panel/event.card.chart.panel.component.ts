@@ -219,6 +219,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() gainAndLossThreshold = AppUserUtilities.getDefaultGainAndLossThreshold();
   @Input() strokeWidth = AppUserUtilities.getDefaultChartStrokeWidth();
   @Input() fillOpacity = AppUserUtilities.getDefaultChartFillOpacity();
+  @Input() areaFillOrigin: 'auto' | 'start' | 'end' = 'auto';
+  @Input() areaFillColor: string | null = null;
   @Input() colorAltitudeByGrade = true;
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
@@ -515,6 +517,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       || changes.emitAxisPointerCursor
       || changes.strokeWidth
       || changes.fillOpacity
+      || changes.areaFillOrigin
+      || changes.areaFillColor
       || changes.colorAltitudeByGrade
       || changes.waterMark
       || changes.zoomBarOverviewData
@@ -706,7 +710,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     const seriesFillOpacity = Number.isFinite(resolvedFillOpacity)
       ? Math.min(1, Math.max(0, resolvedFillOpacity))
       : AppUserUtilities.getDefaultChartFillOpacity();
-    const primaryAreaFillOrigin: 'start' | 'end' = yAxisConfig.inverse ? 'end' : 'start';
+    const primaryAreaFillOrigin: 'start' | 'end' = this.areaFillOrigin === 'auto'
+      ? (yAxisConfig.inverse ? 'end' : 'start')
+      : this.areaFillOrigin;
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
 
@@ -749,7 +755,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           },
         } : {}),
         areaStyle: {
-          ...(!useZoneColors ? { color: series.color } : {}),
+          ...(this.areaFillColor
+            ? { color: this.areaFillColor }
+            : (!useZoneColors ? { color: series.color } : {})),
           opacity: seriesFillOpacity,
           origin: primaryAreaFillOrigin,
         },
@@ -1045,7 +1053,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           color: group.color,
         },
         areaStyle: {
-          color: group.color,
+          color: this.areaFillColor || group.color,
           opacity: fillOpacity,
           origin: areaFillOrigin,
         },

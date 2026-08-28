@@ -18,6 +18,7 @@ const {
   mockGetUserDeletionGuardState,
   mockGetUserDeletionGuardStateInTransaction,
   mockMarkQueueItemDeletedForUserCleanup,
+  mockRecheckSourceLifecycleInTransaction,
 } = vi.hoisted(() => {
   const mockGet = vi.fn();
   const mockSet = vi.fn().mockResolvedValue(undefined);
@@ -60,6 +61,7 @@ const {
     mockGetUserDeletionGuardState: vi.fn(),
     mockGetUserDeletionGuardStateInTransaction: vi.fn(),
     mockMarkQueueItemDeletedForUserCleanup: vi.fn(),
+    mockRecheckSourceLifecycleInTransaction: vi.fn(),
   };
 });
 
@@ -98,6 +100,19 @@ vi.mock('../queue/cleanup-tombstone', () => ({
   },
 }));
 
+vi.mock('./source-lifecycle', () => ({
+  parseRouteDeliverySourceLifecycleFence: (value: Record<string, unknown>) => (
+    value.connectionStateGeneration
+      && value.tokenCredentialGeneration
+      && value.rootOAuthCredentialGeneration
+      ? value
+      : null
+  ),
+  recheckSuuntoRouteDeliverySourceLifecycleInTransaction: (...args: any[]) => (
+    mockRecheckSourceLifecycleInTransaction(...args)
+  ),
+}));
+
 import { buildRouteDeliverySyncQueueItemId, enqueueRouteDeliverySyncQueueItem } from './queue';
 
 describe('route-delivery-sync/queue', () => {
@@ -124,6 +139,7 @@ describe('route-delivery-sync/queue', () => {
       shouldSkip: false,
     });
     mockMarkQueueItemDeletedForUserCleanup.mockResolvedValue(true);
+    mockRecheckSourceLifecycleInTransaction.mockResolvedValue({ status: 'active' });
   });
 
   it('builds deterministic queue item IDs with the source revision key', async () => {
@@ -183,6 +199,74 @@ describe('route-delivery-sync/queue', () => {
       expect.any(Number),
     );
     expect(mockUpdate).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+  });
+
+  it('persists a Suunto source fence only when it remains active in the queue transaction', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      });
+    const sourceLifecycleFence = {
+      connectionStateGeneration: 'connection-generation-1',
+      tokenCredentialGeneration: 'token-generation-1',
+      rootOAuthCredentialGeneration: 'root-generation-1',
+    };
+
+    const result = await enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp,
+      destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1',
+      savedRouteID: 'route-1',
+      sourceRevisionKey: 'rev-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceLifecycleFence,
+      manual: false,
+    });
+
+    expect(result.enqueued).toBe(true);
+    expect(mockRecheckSourceLifecycleInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'user-1',
+      'suunto-user',
+      sourceLifecycleFence,
+    );
+    expect(mockTransactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      sourceConnectionStateGeneration: 'connection-generation-1',
+      sourceTokenCredentialGeneration: 'token-generation-1',
+      sourceRootOAuthCredentialGeneration: 'root-generation-1',
+    }));
+  });
+
+  it('rejects queue admission when disconnect wins after the route worker source read', async () => {
+    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    mockRecheckSourceLifecycleInTransaction.mockResolvedValueOnce({ status: 'disconnect_pending' });
+
+    const result = await enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp,
+      destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1',
+      savedRouteID: 'route-1',
+      sourceRevisionKey: 'rev-1',
+      sourceProviderUserId: 'suunto-user',
+      sourceLifecycleFence: {
+        connectionStateGeneration: 'connection-generation-1',
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+      },
+      manual: false,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      enqueued: false,
+      reason: 'source_connection_changed',
+    }));
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueRouteDeliverySyncTask).not.toHaveBeenCalled();
   });
 
   it('does not overwrite a provider-operation claim when the worker starts before the dispatch marker is written', async () => {

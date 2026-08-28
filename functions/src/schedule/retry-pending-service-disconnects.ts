@@ -13,6 +13,7 @@ import {
   SERVICE_AUTH_CLEANUP_REASONS,
 } from '../service-auth-lifecycle';
 import {
+  retryPendingHealthLifecycleProjection,
   retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
   retryWahooReconnectQueueRelease,
@@ -34,7 +35,11 @@ interface PendingDisconnectCollectionConfig {
 }
 
 type PendingDisconnectScanType = 'due_retry' | 'restored_entitlement';
-type LifecycleRepairScanType = 'wahoo_reconnect_release' | 'route_restore' | 'pending_disconnect_queue_release';
+type LifecycleRepairScanType =
+  | 'coros_health_lifecycle_projection'
+  | 'wahoo_reconnect_release'
+  | 'route_restore'
+  | 'pending_disconnect_queue_release';
 
 interface PendingDisconnectScanCursorData {
   documentId?: string;
@@ -140,7 +145,11 @@ function getLifecycleRepairScanCursorRef(
 
 async function getLifecycleRepairPage(
   scanType: LifecycleRepairScanType,
-  markerField: 'wahooReconnectReleasePending' | 'routeRestorePending' | 'pendingDisconnectQueueReleasePending',
+  markerField:
+    | 'healthLifecycleProjectionPending'
+    | 'wahooReconnectReleasePending'
+    | 'routeRestorePending'
+    | 'pendingDisconnectQueueReleasePending',
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
   const cursorRef = getLifecycleRepairScanCursorRef(scanType);
   const cursorSnapshot = await cursorRef.get();
@@ -482,6 +491,35 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
   return repairedCount;
 }
 
+async function retryPendingHealthLifecycleProjections(): Promise<number> {
+  const docs = await getLifecycleRepairPage(
+    'coros_health_lifecycle_projection',
+    'healthLifecycleProjectionPending',
+  );
+  let repairedCount = 0;
+
+  await processWithBoundedConcurrency(docs, async metaSnapshot => {
+    if (metaSnapshot.id !== ServiceNames.COROSAPI && metaSnapshot.id !== ServiceNames.SuuntoApp) return;
+    const userID = getUserIDFromServiceMetaSnapshot(metaSnapshot);
+    if (!userID) return;
+
+    try {
+      if (await retryPendingHealthLifecycleProjection(userID, metaSnapshot.id)) {
+        repairedCount += 1;
+      }
+    } catch (error) {
+      logger.error('[RetryPendingServiceDisconnects] Failed to repair a Health lifecycle projection.', {
+        userID,
+        serviceName: metaSnapshot.id,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+    }
+  });
+  await checkpointLifecycleRepairPage('coros_health_lifecycle_projection', docs);
+
+  return repairedCount;
+}
+
 async function retryPendingServiceRouteRestorations(): Promise<number> {
   const docs = await getLifecycleRepairPage('route_restore', 'routeRestorePending');
   const knownServiceNames = new Set<string>(Object.values(ServiceNames));
@@ -563,6 +601,11 @@ export const retryPendingServiceDisconnects = onSchedule({
     repairedCount: repairedWahooReconnectReleaseCount,
   });
 
+  const repairedHealthLifecycleProjectionCount = await retryPendingHealthLifecycleProjections();
+  logger.info('[RetryPendingServiceDisconnects] Repaired pending Health lifecycle projections.', {
+    repairedCount: repairedHealthLifecycleProjectionCount,
+  });
+
   const repairedRouteRestoreCount = await retryPendingServiceRouteRestorations();
   logger.info('[RetryPendingServiceDisconnects] Repaired pending service route restorations.', {
     repairedCount: repairedRouteRestoreCount,
@@ -608,6 +651,8 @@ export const retryPendingServiceDisconnectsTestInternals = {
   getLifecycleRepairPage,
   getPendingDisconnectRootsForEntitlementCheck,
   retryPendingDisconnectRoot,
+  retryPendingHealthLifecycleProjections,
+  retryPendingCOROSHealthLifecycleProjections: retryPendingHealthLifecycleProjections,
   retryPendingDisconnectQueueReleases,
   retryPendingServiceRouteRestorations,
   retryPendingWahooReconnectQueueReleases,

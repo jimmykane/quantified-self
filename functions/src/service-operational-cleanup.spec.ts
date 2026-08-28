@@ -108,7 +108,17 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       makeDoc('suuntoAppWorkoutQueue/workout-1', { userName: 'suunto-user' }),
     ]);
     setQueryDocs('sleepSyncQueue', 'providerUserId', 'suunto-user', [
-      makeDoc('sleepSyncQueue/sleep-1', { provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
+      makeDoc('sleepSyncQueue/suunto-health-1', {
+        type: 'suunto_health_poll',
+        provider: 'SuuntoApp',
+        providerUserId: 'suunto-user',
+      }),
+    ]);
+    setQueryDocs('suuntoHealthWebhookIngress', 'providerUserId', 'suunto-user', [
+      makeDoc('suuntoHealthWebhookIngress/ingress-1', {
+        providerUserId: 'suunto-user',
+        processed: false,
+      }),
     ]);
     setQueryDocs('routeDeliverySyncQueue', 'sourceProviderUserId', 'suunto-user', [
       makeDoc('routeDeliverySyncQueue/route-delivery-1', {
@@ -124,11 +134,51 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
         destinationServiceName: ServiceNames.SuuntoApp,
       }),
     ]);
+    setQueryDocs('routeSyncQueue', 'providerUserId', 'suunto-user', [
+      makeDoc('routeSyncQueue/route-import-1', {
+        firebaseUserID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user',
+      }),
+      makeDoc('routeSyncQueue/route-import-other-user', {
+        firebaseUserID: 'other-firebase-user',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user',
+      }),
+      makeDoc('routeSyncQueue/route-import-other-source', {
+        firebaseUserID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.GarminAPI,
+        providerUserId: 'suunto-user',
+      }),
+    ]);
     setQueryDocs('failed_jobs', 'userName', 'suunto-user', [
       makeDoc('failed_jobs/workout-dlq-1', { originalCollection: 'suuntoAppWorkoutQueue', userName: 'suunto-user' }),
     ]);
     setQueryDocs('failed_jobs', 'providerUserId', 'suunto-user', [
-      makeDoc('failed_jobs/sleep-dlq-1', { originalCollection: 'sleepSyncQueue', provider: 'SuuntoApp', providerUserId: 'suunto-user' }),
+      makeDoc('failed_jobs/suunto-health-dlq-1', {
+        originalCollection: 'sleepSyncQueue',
+        type: 'suunto_health_poll',
+        provider: 'SuuntoApp',
+        providerUserId: 'suunto-user',
+      }),
+      makeDoc('failed_jobs/route-import-dlq-1', {
+        originalCollection: 'routeSyncQueue',
+        firebaseUserID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user',
+      }),
+      makeDoc('failed_jobs/route-import-other-user-dlq', {
+        originalCollection: 'routeSyncQueue',
+        firebaseUserID: 'other-firebase-user',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerUserId: 'suunto-user',
+      }),
+      makeDoc('failed_jobs/route-import-other-source-dlq', {
+        originalCollection: 'routeSyncQueue',
+        firebaseUserID: 'firebase-user-123',
+        sourceServiceName: ServiceNames.GarminAPI,
+        providerUserId: 'suunto-user',
+      }),
     ]);
     setQueryDocs('failed_jobs', 'sourceProviderUserId', 'suunto-user', [
       makeDoc('failed_jobs/route-delivery-dlq-1', {
@@ -158,18 +208,25 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
 
     expect(result).toMatchObject({
       providerUserId: 'suunto-user',
-      deletedDocCount: 6,
+      deletedDocCount: 9,
       skippedForActiveConnection: false,
     });
-    expect(mockRecursiveDelete).toHaveBeenCalledTimes(6);
+    expect(mockRecursiveDelete).toHaveBeenCalledTimes(9);
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoAppWorkoutQueue/workout-1' }));
-    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/sleep-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'sleepSyncQueue/suunto-health-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'suuntoHealthWebhookIngress/ingress-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/route-delivery-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'routeSyncQueue/route-import-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/workout-dlq-1' }));
-    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/sleep-dlq-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/suunto-health-dlq-1' }));
     expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-delivery-dlq-1' }));
+    expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-import-dlq-1' }));
     expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'routeDeliverySyncQueue/not-suunto-source' }));
     expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/not-suunto-source-dlq' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'routeSyncQueue/route-import-other-user' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'routeSyncQueue/route-import-other-source' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-import-other-user-dlq' }));
+    expect(mockRecursiveDelete).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'failed_jobs/route-import-other-source-dlq' }));
     expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
       'suuntoAppWorkoutQueue',
       'workout-1',
@@ -186,9 +243,24 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       'service_disconnect_cleanup',
     );
     expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
-      'sleepSyncQueue',
-      'sleep-dlq-1',
+      'routeSyncQueue',
+      'route-import-1',
       'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'routeSyncQueue',
+      'route-import-dlq-1',
+      'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'sleepSyncQueue',
+      'suunto-health-dlq-1',
+      'service_disconnect_cleanup',
+    );
+    expect(mockMarkQueueItemDeletedForUserCleanup).not.toHaveBeenCalledWith(
+      'suuntoHealthWebhookIngress',
+      expect.any(String),
+      expect.any(String),
     );
   });
 

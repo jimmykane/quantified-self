@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 interface TaskRequestMock {
   data: {
     queueItemId: string;
+    queueRevision?: string;
+    queueDateCreated?: number;
   };
 }
 
@@ -92,6 +94,98 @@ describe('processSleepSyncTask', () => {
       processed: false,
       userID: 'user-1',
     }));
+  });
+
+  it('processes only the queue revision bound into the task payload', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        queueRevision: 'revision-2',
+        dateCreated: 200,
+      }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await expect(invokeWorker({
+      data: {
+        queueItemId: 'sleep-item-1',
+        queueRevision: 'revision-2',
+        queueDateCreated: 200,
+      },
+    })).resolves.toBeUndefined();
+
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a stale task process a replacement revision', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        queueRevision: 'revision-2',
+        dateCreated: 200,
+      }),
+    });
+
+    await expect(invokeWorker({
+      data: {
+        queueItemId: 'sleep-item-1',
+        queueRevision: 'revision-1',
+        queueDateCreated: 100,
+      },
+    })).resolves.toBeUndefined();
+
+    expect(mockProcessSleepSyncQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('uses the creation time only for an unrevisioned legacy queue item', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        dateCreated: 100,
+      }),
+    });
+    mockProcessSleepSyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await expect(invokeWorker({
+      data: {
+        queueItemId: 'sleep-item-1',
+        queueDateCreated: 100,
+      },
+    })).resolves.toBeUndefined();
+    expect(mockProcessSleepSyncQueueItem).toHaveBeenCalledOnce();
+
+    vi.clearAllMocks();
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'sleep-item-1',
+      ref: { path: 'sleepSyncQueue/sleep-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        queueRevision: 'revision-2',
+        dateCreated: 100,
+      }),
+    });
+
+    await expect(invokeWorker({
+      data: {
+        queueItemId: 'sleep-item-1',
+        queueDateCreated: 100,
+      },
+    })).resolves.toBeUndefined();
+    expect(mockProcessSleepSyncQueueItem).not.toHaveBeenCalled();
   });
 
   it('stops retries when queue item is missing but exists in failed_jobs', async () => {

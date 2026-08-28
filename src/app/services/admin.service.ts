@@ -30,6 +30,61 @@ export interface ConnectionCountStats {
     expireAt?: string | null;
 }
 
+export interface AuthActivityStats {
+    last24Hours: number | null;
+    last7Days: number | null;
+    last30Days: number | null;
+    computedAt: string | null;
+}
+
+export interface SubscriptionCadenceTierStats {
+    monthly: number | null;
+    yearly: number | null;
+    unknown: number | null;
+}
+
+export interface SubscriptionCadenceStats {
+    pro: SubscriptionCadenceTierStats;
+    basic: SubscriptionCadenceTierStats;
+}
+
+export type AdminDashboardHistoryDays = 30 | 90 | 365;
+
+export interface AdminDashboardHistoryCadenceTierStats {
+    monthly: number;
+    yearly: number;
+    unknown: number;
+}
+
+export interface AdminDashboardHistoryPoint {
+    date: string;
+    computedAt: string;
+    users: {
+        total: number;
+        free: number;
+        basic: number;
+        pro: number;
+        onboardingCompleted: number;
+    };
+    authActivity: {
+        eligibleAccounts: number;
+        last24Hours: number;
+        last7Days: number;
+        last30Days: number;
+    };
+    subscriptionCadence: {
+        pro: AdminDashboardHistoryCadenceTierStats;
+        basic: AdminDashboardHistoryCadenceTierStats;
+    };
+}
+
+export interface AdminDashboardHistoryResponse {
+    days: AdminDashboardHistoryDays;
+    startDate: string;
+    endDate: string;
+    snapshots: AdminDashboardHistoryPoint[];
+}
+
 export interface GetTotalUserCountOptions {
     refreshEventCount?: boolean;
     refreshRouteCount?: boolean;
@@ -91,14 +146,17 @@ export interface UserCountStats {
     free: number;
     monthlyPaid: number;
     yearlyPaid: number;
+    subscriptionCadence?: SubscriptionCadenceStats;
     everPaid: number;
     canceled: number;
     cancelScheduled: number;
     onboardingCompleted: number;
+    marketingConsent: number | null;
     providers: Record<string, number>;
     events: EventCountStats;
     routes: RouteCountStats;
     connections?: ConnectionCountStats;
+    authActivity?: AuthActivityStats;
 }
 
 interface UserCountFunctionResponse {
@@ -109,14 +167,17 @@ interface UserCountFunctionResponse {
     free: number;
     monthlyPaid?: number;
     yearlyPaid?: number;
+    subscriptionCadence?: unknown;
     everPaid?: number;
     canceled?: number;
     cancelScheduled?: number;
     onboardingCompleted?: number;
+    marketingConsent?: number;
     providers: Record<string, number>;
     events?: Partial<EventCountStats>;
     routes?: Partial<RouteCountStats>;
     connections?: Partial<ConnectionCountStats>;
+    authActivity?: unknown;
 }
 
 export interface SubscriptionHistoryTrendBucket {
@@ -257,6 +318,8 @@ export class AdminService {
             map(result => {
                 const events = this.mapCountStats(result.data.events);
                 const routes = this.mapCountStats(result.data.routes);
+                const authActivity = this.mapAuthActivityStats(result.data.authActivity);
+                const subscriptionCadence = this.mapSubscriptionCadenceStats(result.data.subscriptionCadence);
 
                 return {
                     total: result.data.total ?? result.data.count, // Fallback for safety
@@ -269,14 +332,30 @@ export class AdminService {
                     canceled: result.data.canceled ?? 0,
                     cancelScheduled: result.data.cancelScheduled ?? 0,
                     onboardingCompleted: result.data.onboardingCompleted ?? 0,
+                    marketingConsent: this.mapNonNegativeInteger(result.data.marketingConsent),
                     providers: result.data.providers || {},
                     events,
                     routes,
                     ...(result.data.connections ? {
                         connections: this.mapConnectionCountStats(result.data.connections),
                     } : {}),
+                    ...(authActivity ? {
+                        authActivity,
+                    } : {}),
+                    ...(subscriptionCadence ? {
+                        subscriptionCadence,
+                    } : {}),
                 };
             })
+        );
+    }
+
+    getAdminDashboardHistory(days: AdminDashboardHistoryDays = 365): Observable<AdminDashboardHistoryResponse> {
+        return from(this.functionsService.call<{ days: AdminDashboardHistoryDays }, unknown>(
+            'getAdminDashboardHistory',
+            { days }
+        )).pipe(
+            map(result => this.mapAdminDashboardHistoryResponse(result.data, days))
         );
     }
 
@@ -296,6 +375,12 @@ export class AdminService {
             mapped.expireAt = stats.expireAt ?? null;
         }
         return mapped;
+    }
+
+    private mapNonNegativeInteger(value: unknown): number | null {
+        return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+            ? value
+            : null;
     }
 
     private mapConnectionCountStats(stats: Partial<ConnectionCountStats>): ConnectionCountStats {
@@ -329,6 +414,173 @@ export class AdminService {
         if (Object.prototype.hasOwnProperty.call(stats, 'expireAt')) {
             mapped.expireAt = stats.expireAt ?? null;
         }
+        return mapped;
+    }
+
+    private mapAuthActivityStats(stats: unknown): AuthActivityStats | undefined {
+        if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+            return undefined;
+        }
+
+        const rawStats = stats as Record<string, unknown>;
+        const mapCount = (value: unknown): number | null => (
+            typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+                ? value
+                : null
+        );
+        const computedAt = typeof rawStats['computedAt'] === 'string'
+            && !Number.isNaN(Date.parse(rawStats['computedAt']))
+            ? rawStats['computedAt']
+            : null;
+        const last24Hours = mapCount(rawStats['last24Hours']);
+        const last7Days = mapCount(rawStats['last7Days']);
+        const last30Days = mapCount(rawStats['last30Days']);
+        const hasInvalidWindowOrdering = (
+            (last24Hours !== null && last7Days !== null && last24Hours > last7Days)
+            || (last7Days !== null && last30Days !== null && last7Days > last30Days)
+            || (last24Hours !== null && last30Days !== null && last24Hours > last30Days)
+        );
+
+        return {
+            last24Hours: hasInvalidWindowOrdering ? null : last24Hours,
+            last7Days: hasInvalidWindowOrdering ? null : last7Days,
+            last30Days: hasInvalidWindowOrdering ? null : last30Days,
+            computedAt,
+        };
+    }
+
+    private mapSubscriptionCadenceStats(stats: unknown): SubscriptionCadenceStats | undefined {
+        if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+            return undefined;
+        }
+
+        const rawStats = stats as Record<string, unknown>;
+        const mapTier = (value: unknown): SubscriptionCadenceTierStats => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                return { monthly: null, yearly: null, unknown: null };
+            }
+            const rawTier = value as Record<string, unknown>;
+            const mapCount = (count: unknown): number | null => (
+                typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+                    ? count
+                    : null
+            );
+            return {
+                monthly: mapCount(rawTier['monthly']),
+                yearly: mapCount(rawTier['yearly']),
+                unknown: mapCount(rawTier['unknown']),
+            };
+        };
+
+        return {
+            pro: mapTier(rawStats['pro']),
+            basic: mapTier(rawStats['basic']),
+        };
+    }
+
+    private mapAdminDashboardHistoryResponse(
+        value: unknown,
+        expectedDays: AdminDashboardHistoryDays
+    ): AdminDashboardHistoryResponse {
+        const response = requireRecord(value, 'response');
+        const days = requireHistoryDays(response['days']);
+        if (days !== expectedDays) {
+            throw new Error('Admin dashboard history range does not match the request.');
+        }
+
+        const startDate = requireUtcDateKey(response['startDate'], 'startDate');
+        const endDate = requireUtcDateKey(response['endDate'], 'endDate');
+        const actualRangeMs = Date.parse(`${endDate}T00:00:00.000Z`)
+            - Date.parse(`${startDate}T00:00:00.000Z`);
+        const expectedRangeMs = (days - 1) * 24 * 60 * 60 * 1000;
+        if (actualRangeMs !== expectedRangeMs) {
+            throw new Error('Admin dashboard history date range does not match the requested days.');
+        }
+
+        if (!Array.isArray(response['snapshots'])) {
+            throw new Error('Admin dashboard history snapshots must be an array.');
+        }
+
+        const seenDates = new Set<string>();
+        const snapshots = response['snapshots'].map((snapshot, index) => {
+            const point = this.mapAdminDashboardHistoryPoint(snapshot, index);
+            if (point.date < startDate || point.date > endDate) {
+                throw new Error(`Admin dashboard history snapshot ${index} is outside the requested range.`);
+            }
+            if (seenDates.has(point.date)) {
+                throw new Error(`Admin dashboard history contains duplicate date ${point.date}.`);
+            }
+            seenDates.add(point.date);
+            return point;
+        }).sort((left, right) => left.date.localeCompare(right.date));
+
+        return { days, startDate, endDate, snapshots };
+    }
+
+    private mapAdminDashboardHistoryPoint(value: unknown, index: number): AdminDashboardHistoryPoint {
+        const point = requireRecord(value, `snapshots[${index}]`);
+        const users = requireRecord(point['users'], `snapshots[${index}].users`);
+        const authActivity = requireRecord(point['authActivity'], `snapshots[${index}].authActivity`);
+        const subscriptionCadence = requireRecord(
+            point['subscriptionCadence'],
+            `snapshots[${index}].subscriptionCadence`
+        );
+        const pro = requireCadenceTier(subscriptionCadence['pro'], `snapshots[${index}].subscriptionCadence.pro`);
+        const basic = requireCadenceTier(subscriptionCadence['basic'], `snapshots[${index}].subscriptionCadence.basic`);
+        const mapped: AdminDashboardHistoryPoint = {
+            date: requireUtcDateKey(point['date'], `snapshots[${index}].date`),
+            computedAt: requireIsoTimestamp(point['computedAt'], `snapshots[${index}].computedAt`),
+            users: {
+                total: requireCount(users['total'], `snapshots[${index}].users.total`),
+                free: requireCount(users['free'], `snapshots[${index}].users.free`),
+                basic: requireCount(users['basic'], `snapshots[${index}].users.basic`),
+                pro: requireCount(users['pro'], `snapshots[${index}].users.pro`),
+                onboardingCompleted: requireCount(
+                    users['onboardingCompleted'],
+                    `snapshots[${index}].users.onboardingCompleted`
+                ),
+            },
+            authActivity: {
+                eligibleAccounts: requireCount(
+                    authActivity['eligibleAccounts'],
+                    `snapshots[${index}].authActivity.eligibleAccounts`
+                ),
+                last24Hours: requireCount(
+                    authActivity['last24Hours'],
+                    `snapshots[${index}].authActivity.last24Hours`
+                ),
+                last7Days: requireCount(
+                    authActivity['last7Days'],
+                    `snapshots[${index}].authActivity.last7Days`
+                ),
+                last30Days: requireCount(
+                    authActivity['last30Days'],
+                    `snapshots[${index}].authActivity.last30Days`
+                ),
+            },
+            subscriptionCadence: { pro, basic },
+        };
+
+        if (
+            mapped.users.free + mapped.users.basic + mapped.users.pro !== mapped.users.total
+            || mapped.users.onboardingCompleted > mapped.users.total
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent user totals.`);
+        }
+        if (
+            mapped.authActivity.last24Hours > mapped.authActivity.last7Days
+            || mapped.authActivity.last7Days > mapped.authActivity.last30Days
+            || mapped.authActivity.last30Days > mapped.authActivity.eligibleAccounts
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent activity totals.`);
+        }
+        if (
+            cadenceTierTotal(pro) !== mapped.users.pro
+            || cadenceTierTotal(basic) !== mapped.users.basic
+        ) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent subscription cadence totals.`);
+        }
+
         return mapped;
     }
 
@@ -384,4 +636,61 @@ export class AdminService {
             map(result => result.data)
         );
     }
+}
+
+function requireRecord(value: unknown, field: string): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Admin dashboard history ${field} must be an object.`);
+    }
+    return value as Record<string, unknown>;
+}
+
+function requireCount(value: unknown, field: string): number {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`Admin dashboard history ${field} must be a non-negative integer.`);
+    }
+    return value;
+}
+
+function requireHistoryDays(value: unknown): AdminDashboardHistoryDays {
+    if (value !== 30 && value !== 90 && value !== 365) {
+        throw new Error('Admin dashboard history days must be 30, 90, or 365.');
+    }
+    return value;
+}
+
+function requireUtcDateKey(value: unknown, field: string): string {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new Error(`Admin dashboard history ${field} must be a UTC date.`);
+    }
+    const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+    if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== value) {
+        throw new Error(`Admin dashboard history ${field} must be a valid UTC date.`);
+    }
+    return value;
+}
+
+function requireIsoTimestamp(value: unknown, field: string): string {
+    const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+    if (
+        typeof value !== 'string'
+        || !Number.isFinite(parsed)
+        || new Date(parsed).toISOString() !== value
+    ) {
+        throw new Error(`Admin dashboard history ${field} must be an ISO timestamp.`);
+    }
+    return value;
+}
+
+function requireCadenceTier(value: unknown, field: string): AdminDashboardHistoryCadenceTierStats {
+    const tier = requireRecord(value, field);
+    return {
+        monthly: requireCount(tier['monthly'], `${field}.monthly`),
+        yearly: requireCount(tier['yearly'], `${field}.yearly`),
+        unknown: requireCount(tier['unknown'], `${field}.unknown`),
+    };
+}
+
+function cadenceTierTotal(value: AdminDashboardHistoryCadenceTierStats): number {
+    return value.monthly + value.yearly + value.unknown;
 }

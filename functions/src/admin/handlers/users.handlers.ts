@@ -10,8 +10,6 @@ import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../../wahoo/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
     ACTIVE_SUBSCRIPTION_STATUSES,
-    SUBSCRIPTION_INTERVAL_MONTH,
-    SUBSCRIPTION_INTERVAL_YEAR,
     SUBSCRIPTION_ROLE_BASIC,
     SUBSCRIPTION_ROLE_PRO
 } from '../shared/subscription.constants';
@@ -32,6 +30,10 @@ import {
     UserCountRequest,
     UserCountResponse,
 } from '../shared/types';
+import {
+    collectUserPlanActivityMetrics,
+    getCanonicalSubscriptionIdentity,
+} from '../shared/user-metrics';
 
 const ADMIN_STATS_COLLECTION = 'adminStats';
 const ADMIN_EVENT_COUNTS_DOC = 'eventCounts';
@@ -69,43 +71,9 @@ interface ActiveMcpConnectionCandidate {
 interface SubscriptionOwnerDocSnapshot {
     data: () => Record<string, unknown>;
     ref?: {
-        parent?: {
-            parent?: {
-                id?: string;
-            } | null;
-        } | null;
+        path?: string;
     } | null;
 }
-
-const resolveSubscriptionInterval = (subscription: Record<string, unknown>): string | null => {
-    const items = Array.isArray(subscription.items) ? subscription.items : [];
-    const firstItem = items.length > 0 && typeof items[0] === 'object' && items[0] !== null
-        ? items[0] as Record<string, unknown>
-        : null;
-
-    if (!firstItem) {
-        return null;
-    }
-
-    const plan = typeof firstItem.plan === 'object' && firstItem.plan !== null
-        ? firstItem.plan as Record<string, unknown>
-        : null;
-    if (typeof plan?.interval === 'string') {
-        return plan.interval;
-    }
-
-    const price = typeof firstItem.price === 'object' && firstItem.price !== null
-        ? firstItem.price as Record<string, unknown>
-        : null;
-    const recurring = typeof price?.recurring === 'object' && price.recurring !== null
-        ? price.recurring as Record<string, unknown>
-        : null;
-    if (typeof recurring?.interval === 'string') {
-        return recurring.interval;
-    }
-
-    return null;
-};
 
 function normalizeCount(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -116,14 +84,7 @@ function normalizeCount(value: unknown): number {
 }
 
 function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | null {
-    const parentId = doc.ref?.parent?.parent?.id;
-    if (typeof parentId === 'string' && parentId.trim()) {
-        return parentId.trim();
-    }
-
-    const data = doc.data();
-    const uid = data.uid ?? data.userId;
-    return typeof uid === 'string' && uid.trim() ? uid.trim() : null;
+    return getCanonicalSubscriptionIdentity(doc)?.ownerId ?? null;
 }
 
 function countDistinctPaidSubscriptionOwners(docs: SubscriptionOwnerDocSnapshot[]): number {
@@ -791,32 +752,24 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
+        const computedAt = new Date();
+        const marketingConsentQuery = db.collection('users')
+            .where('acceptedMarketingPolicy', '==', true)
+            .count();
+        const paidLifecycleQuery = db.collectionGroup('subscriptions')
+            .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
+            .select('role', 'status');
         const [
-            totalSnapshot,
-            proSnapshot,
-            basicSnapshot,
-            onboardedSnapshot,
+            userPlanActivityMetrics,
+            marketingConsentSnapshot,
             paidSubscriptionHistorySnapshot,
             eventStats,
             routeStats,
             connectionStats,
         ] = await Promise.all([
-            db.collection('users').count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where('role', '==', 'pro')
-                .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-                .where('role', '==', 'basic')
-                .count().get(),
-            db.collection('users')
-                .where('onboardingCompleted', '==', true)
-                .count().get(),
-            db.collectionGroup('subscriptions')
-                .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
-                .select('role', 'status')
-                .get(),
+            collectUserPlanActivityMetrics(db, admin.auth(), computedAt),
+            marketingConsentQuery.get(),
+            paidLifecycleQuery.get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
                 requestedByUid: request.auth?.uid || null,
@@ -828,69 +781,23 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             getConnectionCountStats(db, request.auth?.uid || null),
         ]);
 
-        const total = totalSnapshot.data().count;
-        const pro = proSnapshot.data().count;
-        const basic = basicSnapshot.data().count;
+        const {
+            total,
+            pro,
+            basic,
+            free,
+            monthlyPaid,
+            yearlyPaid,
+            subscriptionCadence,
+            cancelScheduled,
+            onboardingCompleted,
+            authActivity,
+            providers,
+        } = userPlanActivityMetrics;
+        const marketingConsent = marketingConsentSnapshot.data().count;
         const activePaid = pro + basic;
-        const onboardingCompleted = onboardedSnapshot.data().count;
         const everPaid = Math.max(activePaid, countDistinctPaidSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
         const canceled = Math.max(0, everPaid - activePaid);
-        const free = Math.max(0, total - activePaid);
-
-        let monthlyPaid = 0;
-        let yearlyPaid = 0;
-        let cancelScheduled = 0;
-
-        const activeSubscriptionSnapshot = await db.collectionGroup('subscriptions')
-            .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
-            .select('items', 'cancel_at_period_end', 'role')
-            .get();
-
-        activeSubscriptionSnapshot.docs.forEach((doc) => {
-            const subscription = doc.data() as Record<string, unknown>;
-            if (subscription.cancel_at_period_end === true) {
-                cancelScheduled += 1;
-            }
-            if (subscription.role !== SUBSCRIPTION_ROLE_PRO && subscription.role !== SUBSCRIPTION_ROLE_BASIC) {
-                return;
-            }
-            const interval = resolveSubscriptionInterval(subscription);
-            if (interval === SUBSCRIPTION_INTERVAL_MONTH) {
-                monthlyPaid += 1;
-            } else if (interval === SUBSCRIPTION_INTERVAL_YEAR) {
-                yearlyPaid += 1;
-            }
-        });
-
-        const unknownCadencePaid = Math.max(0, activePaid - monthlyPaid - yearlyPaid);
-
-        if (unknownCadencePaid > 0) {
-            logger.warn('Detected active paid subscriptions without supported monthly/yearly cadence.', {
-                unknownCadencePaid,
-                activePaid,
-                monthlyPaid,
-                yearlyPaid
-            });
-        }
-
-        // 2. Get provider breakdown from Firebase Auth
-        const providerCounts: Record<string, number> = {};
-        let nextPageToken: string | undefined;
-
-        do {
-            const listResult = await admin.auth().listUsers(1000, nextPageToken);
-            listResult.users.forEach(userRecord => {
-                const providers = userRecord.providerData.map(p => p.providerId);
-                if (providers.length === 0) {
-                    providerCounts['password'] = (providerCounts['password'] || 0) + 1;
-                } else {
-                    providers.forEach(p => {
-                        providerCounts[p] = (providerCounts[p] || 0) + 1;
-                    });
-                }
-            });
-            nextPageToken = listResult.pageToken;
-        } while (nextPageToken);
 
         return {
             count: total,
@@ -900,14 +807,17 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             free,
             monthlyPaid,
             yearlyPaid,
+            subscriptionCadence,
             everPaid,
             canceled,
             cancelScheduled,
             onboardingCompleted,
+            marketingConsent,
             events: eventStats,
             routes: routeStats,
             connections: connectionStats,
-            providers: providerCounts
+            authActivity,
+            providers
         };
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);

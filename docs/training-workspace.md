@@ -1170,8 +1170,10 @@ The chart has a full-height layout and an inverted pace axis, because lower seco
 Units follow the user's swim pace settings.
 
 Its header states whether pool and open-water pace are both available or only one environment has evidence, then states
-the number of explicit-pace weeks. The card never derives pace from elapsed duration or combines environments. A SWOLF
-follow-up appears only when the displayed value has one matching stroke and pool-length context.
+the number of explicit-pace weeks. The x-axis uses the shared compact `W35` marker convention; the visible key defines
+`W` as a Monday–Sunday UTC week and the tooltip retains the full week number and date range. The card never derives
+pace from elapsed duration or combines environments. A SWOLF follow-up appears only when the displayed value has one
+matching stroke and pool-length context.
 
 #### Power profile
 
@@ -1366,6 +1368,17 @@ and SWOLF change. Training compares:
 - Median of the three prior 28-day blocks.
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
+
+The workspace formats those supporting activities from their exact start instant in the viewer's local timezone; it does
+not render an imported activity name as a date. Snapshots written before the exact instant was retained are invalid for
+this metric only and automatically queue a durability rebuild. The MCP projection remains identity-safe: it exposes the
+existing UTC day bucket, never that exact activity start.
+
+The swimming-pace and durability trajectory x-axes use compact `W35` markers only on phone viewports; their visible
+key defines `W` as a Monday–Sunday UTC week. Wider viewports show the week-start date instead, while tooltips retain
+the full week number and date range. The durability summary remains a fixed twelve UTC weeks, but, when a later
+candidate workout exists, its chart collapses only a leading uninterrupted run of weeks with zero candidates into a
+short note. Any later zero-candidate week remains visible in the plot so training interruptions are not hidden.
 
 The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
 frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,

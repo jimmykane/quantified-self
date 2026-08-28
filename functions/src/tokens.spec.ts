@@ -182,6 +182,13 @@ vi.mock('./token-refresh-coordinator', () => ({
     claimTokenRefresh: hoisted.claimTokenRefresh,
     persistTokenRefresh: hoisted.persistTokenRefresh,
     releaseTokenRefreshClaim: hoisted.releaseTokenRefreshClaim,
+    doesOAuthCredentialGenerationAuthorizeToken: vi.fn((rootData: Record<string, unknown> | null | undefined, generation: unknown) => {
+        if (rootData === null || rootData === undefined) return false;
+        const normalize = (value: unknown) => typeof value === 'string' && value.trim().length > 0
+            ? value.trim()
+            : null;
+        return normalize(rootData.activeOAuthCredentialGeneration) === normalize(generation);
+    }),
     getTokenCredentialSnapshot: vi.fn((data: any) => ({
         accessToken: data?.accessToken || '',
         refreshToken: data?.refreshToken || '',
@@ -261,7 +268,7 @@ describe('tokens', () => {
                     access_token: 'default-access',
                     refresh_token: 'default-refresh',
                     expires_at: new Date(),
-                    user: 'default-user',
+                    user: 'suunto-user',
                     token_type: 'Bearer',
                     scope: 'default-scope',
                 }
@@ -341,6 +348,181 @@ describe('tokens', () => {
             const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
 
             expect(result.accessToken).toBe('old-access');
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+        });
+
+        it('omits raw token identifiers from opt-in opaque telemetry', async () => {
+            mockDoc.id = 'raw-provider-account-id';
+            mockToken.expired.mockReturnValue(false);
+
+            await getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                opaqueTelemetry: true,
+            });
+
+            expect(hoisted.logger.info).toHaveBeenCalledWith(
+                '[ServiceAuth] Provider token remains valid.',
+                { serviceName: ServiceNames.SuuntoApp },
+            );
+            expect(JSON.stringify(hoisted.logger.info.mock.calls))
+                .not.toContain('raw-provider-account-id');
+        });
+
+        it('preserves the credential generation on a non-expired COROS token projection', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'coros-access',
+                refreshToken: 'coros-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                activeOAuthCredentialGeneration: 'credential-generation-1',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            const result = await getTokenData(mockDoc, ServiceNames.COROSAPI, false);
+
+            expect(result as COROSAPIAuth2ServiceTokenInterface & {
+                tokenCredentialGeneration?: string;
+            }).toEqual(expect.objectContaining({
+                accessToken: 'coros-access',
+                tokenCredentialGeneration: 'credential-generation-1',
+            }));
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+        });
+
+        it('does not use an orphaned COROS token when its parent root is missing', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'orphan-access',
+                refreshToken: 'orphan-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce(null);
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({
+                    name: 'TokenUseSkippedForPendingDisconnectError',
+                    phase: 'before_return',
+                });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+            expect(JSON.stringify(hoisted.logger.warn.mock.calls)).not.toContain(mockDoc.id);
+        });
+
+        it('does not refresh a COROS token replaced by another root credential generation', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'stale-access',
+                refreshToken: 'stale-refresh',
+                expiresAt: 1_000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-new',
+            });
+            mockToken.expired.mockReturnValue(true);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false))
+                .rejects.toMatchObject({
+                    name: 'TokenUseSkippedForPendingDisconnectError',
+                    phase: 'before_refresh',
+                });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
+        it('fails explicitly fenced Suunto token use after the root credential generation changes', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'stale-suunto-access',
+                refreshToken: 'stale-suunto-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'suunto-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-new',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedActiveOAuthCredentialGeneration: 'credential-generation-old',
+            })).rejects.toMatchObject({
+                name: 'TokenUseSkippedForPendingDisconnectError',
+                phase: 'before_return',
+            });
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
+        it('allows a Suunto account token fenced to the current root revision of another account', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'older-account-access',
+                refreshToken: 'older-account-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.SuuntoApp,
+                userName: 'older-suunto-account',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-account-1',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                activeOAuthCredentialGeneration: 'credential-generation-account-2',
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedActiveOAuthCredentialGeneration: 'credential-generation-account-2',
+            })).resolves.toEqual(expect.objectContaining({
+                accessToken: 'older-account-access',
+                userName: 'older-suunto-account',
+            }));
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(hoisted.claimTokenRefresh).not.toHaveBeenCalled();
+        });
+
+        it('lets the exact disconnect owner use a generated COROS orphan for provider cleanup', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'orphan-access',
+                refreshToken: 'orphan-refresh',
+                expiresAt: Date.now() + 3_600_000,
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-user',
+                dateCreated: 1_000,
+                dateRefreshed: 2_000,
+                tokenCredentialGeneration: 'credential-generation-old',
+            });
+            hoisted.getServiceDisconnectPendingData.mockResolvedValueOnce({
+                disconnectOperationGeneration: 'disconnect-operation-1',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            });
+            mockToken.expired.mockReturnValue(false);
+
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false, {
+                expectedDisconnectOperationGeneration: 'disconnect-operation-1',
+            })).resolves.toEqual(expect.objectContaining({
+                accessToken: 'orphan-access',
+                tokenCredentialGeneration: 'credential-generation-old',
+            }));
+
             expect(mockToken.refresh).not.toHaveBeenCalled();
         });
 
@@ -438,6 +620,57 @@ describe('tokens', () => {
             expect(hoisted.getUserDeletionGuardState).toHaveBeenCalledTimes(3);
         });
 
+        it('persists Suunto identity from the refreshed access-token claim when raw user is absent', async () => {
+            mockToken.expired.mockReturnValue(false);
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'suunto-user' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: accessToken,
+                    refresh_token: 'new-refresh',
+                    expires_at: new Date(Date.now() + 3600000),
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            const result = await getTokenData(mockDoc, ServiceNames.SuuntoApp, true);
+
+            expect(result.userName).toBe('suunto-user');
+            expect(mockDoc.ref.update).toHaveBeenCalledWith(expect.objectContaining({
+                userName: 'suunto-user',
+                accessToken,
+            }));
+        });
+
+        it('does not persist a refreshed Suunto token when raw and claim identities disagree', async () => {
+            mockToken.expired.mockReturnValue(false);
+            const accessToken = [
+                Buffer.from('{}').toString('base64url'),
+                Buffer.from(JSON.stringify({ user: 'suunto-user' })).toString('base64url'),
+                'signature',
+            ].join('.');
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: accessToken,
+                    refresh_token: 'new-refresh',
+                    expires_at: new Date(Date.now() + 3600000),
+                    user: 'different-user',
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, true))
+                .rejects.toMatchObject({ name: 'SuuntoTokenIdentityError' });
+
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(hoisted.releaseTokenRefreshClaim).toHaveBeenCalledOnce();
+        });
+
         it('should not call provider refresh when user deletion is in progress before refresh', async () => {
             mockToken.expired.mockReturnValue(true);
             hoisted.getUserDeletionGuardState.mockResolvedValueOnce({
@@ -527,10 +760,35 @@ describe('tokens', () => {
             mockToken.expired.mockReturnValue(true);
             // The claim transaction is the atomic fence: model disconnect
             // winning after the earlier root check but before this lease.
-            hoisted.claimTokenRefresh.mockResolvedValueOnce({ kind: 'skipped_service_disconnect' });
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({
+                kind: 'skipped_service_disconnect',
+                reason: 'service_disconnect',
+            });
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toBeInstanceOf(TokenUseSkippedForPendingDisconnectError);
+
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it('reports a root-revision race separately from a pending disconnect', async () => {
+            mockToken.expired.mockReturnValue(true);
+            hoisted.getServiceDisconnectPendingData.mockResolvedValue({
+                activeOAuthCredentialGeneration: 'root-generation-1',
+            });
+            hoisted.claimTokenRefresh.mockResolvedValueOnce({
+                kind: 'skipped_service_disconnect',
+                reason: 'inactive_oauth_credential',
+            });
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                expectedActiveOAuthCredentialGeneration: 'root-generation-1',
+            })).rejects.toMatchObject({
+                name: 'TokenUseSkippedForPendingDisconnectError',
+                reason: 'inactive_oauth_credential',
+                phase: 'before_refresh',
+            });
 
             expect(mockToken.refresh).not.toHaveBeenCalled();
             expect(mockDoc.ref.update).not.toHaveBeenCalled();
@@ -865,6 +1123,34 @@ describe('tokens', () => {
                 .rejects.toBeInstanceOf(TerminalServiceAuthError);
 
             expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
+        });
+
+        it('passes opaque telemetry through terminal Suunto refresh handling', async () => {
+            mockDoc.id = 'raw-provider-account-id';
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('sensitive provider response');
+            error.statusCode = 401;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false, {
+                opaqueTelemetry: true,
+            })).rejects.toBeInstanceOf(TerminalServiceAuthError);
+
+            expect(handleTerminalServiceAuthFailure).toHaveBeenCalledWith(
+                expect.any(Object),
+                ServiceNames.SuuntoApp,
+                expect.any(Object),
+                expect.any(Object),
+                error,
+                { opaqueTelemetry: true },
+            );
+            const serializedLogs = JSON.stringify([
+                ...hoisted.logger.info.mock.calls,
+                ...hoisted.logger.warn.mock.calls,
+                ...hoisted.logger.error.mock.calls,
+            ]);
+            expect(serializedLogs).not.toContain('raw-provider-account-id');
+            expect(serializedLogs).not.toContain('sensitive provider response');
         });
 
         it('should treat Suunto 400 invalid_grant refresh errors as retryable while preserving the token', async () => {

@@ -18,7 +18,7 @@ import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 export const getFinancialStats = onAdminCall<void, FinancialStatsResponse>({
     region: FUNCTIONS_MANIFEST.getFinancialStats.region,
     secrets: FUNCTION_SECRET_BINDINGS.getFinancialStats,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async () => {
     try {
         const envCurrency = process.env.GCP_BILLING_CURRENCY?.toLowerCase();

@@ -17,6 +17,7 @@ import { BrowserCompatibilityService } from '../../../services/browser.compatibi
 import { UploadError } from '../../../services/upload-error';
 
 const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
+const ACCOUNT_DELETION_UPLOAD_ERROR_CODE = 'user_deleted_or_deleting';
 
 @Component({
   selector: 'app-upload-activities',
@@ -45,6 +46,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
+  private accountDeletionSignOut: { userID: string; promise: Promise<void> } | null = null;
 
   constructor() {
     super();
@@ -145,6 +147,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
 
       const fileReader = new FileReader();
       fileReader.onload = async () => {
+        let uploadUserID: string | null = null;
         try {
           const payload = fileReader.result;
           if (!(payload instanceof ArrayBuffer)) {
@@ -155,6 +158,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           const originalFilename = file.name && file.name.trim().length > 0
             ? file.name
             : `${file.filename}.${extension}`;
+          uploadUserID = this.authService.currentUser?.uid ?? null;
           const uploadResult = await this.fitUploadService.uploadActivityFile(
             preparedUpload.bytes,
             preparedUpload.extension,
@@ -165,6 +169,10 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           this.logger.log('[UploadActivitiesComponent] Uploaded event', uploadResult.eventId);
           resolve({ eventId: uploadResult.eventId });
         } catch (error: unknown) {
+          if (this.isAccountDeletionUploadError(error)) {
+            await this.clearDeletedAccountSession(uploadUserID);
+          }
+
           const message = this.getUploadErrorMessage(error);
           this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
           reject(error);
@@ -179,6 +187,29 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
 
       fileReader.readAsArrayBuffer(file.file);
     });
+  }
+
+  private isAccountDeletionUploadError(error: unknown): error is UploadError {
+    return error instanceof UploadError
+      && error.status === 409
+      && error.code === ACCOUNT_DELETION_UPLOAD_ERROR_CODE;
+  }
+
+  private async clearDeletedAccountSession(uploadUserID: string | null): Promise<void> {
+    if (!uploadUserID || this.authService.currentUser?.uid !== uploadUserID) {
+      return;
+    }
+
+    if (!this.accountDeletionSignOut || this.accountDeletionSignOut.userID !== uploadUserID) {
+      const promise = Promise.resolve()
+        .then(() => this.authService.signOut())
+        .catch((signOutError: unknown) => {
+          this.logger.warn('[UploadActivitiesComponent] Failed to clear stale session after account deletion response', signOutError);
+        });
+      this.accountDeletionSignOut = { userID: uploadUserID, promise };
+    }
+
+    await this.accountDeletionSignOut.promise;
   }
 
   private getUploadErrorMessage(error: unknown): string {

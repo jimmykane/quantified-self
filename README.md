@@ -201,6 +201,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
+| `adminDashboardSnapshots` | 730 days | `expireAt` | Aggregate-only daily user, authentication-activity, plan, and subscription-cadence history for the Admin Dashboard |
 | `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Deletion guards with TTL fallback cleanup |
 | `mcpOAuthAuthorizationRequests` / `mcpOAuthAuthorizationCodes` | 10 / 5 minutes | `expireAt` | MCP OAuth consent and single-use codes |
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
@@ -212,9 +213,14 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
+Unified health history under `users/{uid}/healthSourceRecords` and `healthSampleChunks` has no time-based TTL. It is bounded per document, atomic replacement, and query; provider disconnect retains imported history, while recursive account deletion removes the complete user-scoped health subtree. See [Unified health data foundation](docs/unified-health-data.md).
+
 ## Architecture documentation
 
+- [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
+- [Unified health data foundation](docs/unified-health-data.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)

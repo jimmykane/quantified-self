@@ -10,6 +10,11 @@ import {
     SLEEP_STAGES,
     resolveSleepSessionEndTimeMs,
 } from '../../../shared/sleep';
+import {
+    COROSDailyRecord,
+    getCOROSDailySleepStartTimeMs,
+    parseCOROSDailyRecord,
+} from '../coros/daily';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -96,53 +101,6 @@ function parseDateMs(value: unknown, timezoneOffsetSeconds?: number | null): num
     }
     const timestamp = Date.parse(normalized);
     return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function parseTimezoneOffsetLabelSeconds(value: unknown): number | null {
-    const stringValue = asString(value);
-    if (!stringValue) {
-        return null;
-    }
-
-    const match = /^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(stringValue.toUpperCase());
-    if (!match) {
-        return null;
-    }
-
-    const [, sign, hours, minutes = '0'] = match;
-    const totalSeconds = ((Number(hours) * 60) + Number(minutes)) * 60;
-    return Number.isFinite(totalSeconds) ? (sign === '-' ? -totalSeconds : totalSeconds) : null;
-}
-
-function parseCorosTimezoneUnitOffsetSeconds(value: unknown): number | null {
-    const numericValue = asNumber(value);
-    if (numericValue === null) {
-        return parseTimezoneOffsetLabelSeconds(value);
-    }
-
-    // COROS documents timezone fields in 15-minute units: 32 means UTC+08:00.
-    return Math.round(numericValue * 15 * 60);
-}
-
-function resolveCorosTimezoneOffsetSeconds(
-    daily: ExternalRecord,
-    timezoneUnitFields: readonly string[],
-): number | null {
-    const explicitOffsetSeconds = asNumber(daily.timezoneOffsetSeconds)
-        ?? asNumber(daily.timeZoneOffsetSeconds);
-    if (explicitOffsetSeconds !== null) {
-        return explicitOffsetSeconds;
-    }
-
-    for (const field of timezoneUnitFields) {
-        const offsetSeconds = parseCorosTimezoneUnitOffsetSeconds(daily[field]);
-        if (offsetSeconds !== null) {
-            return offsetSeconds;
-        }
-    }
-
-    return parseTimezoneOffsetLabelSeconds(daily.timezone)
-        ?? parseTimezoneOffsetLabelSeconds(daily.timeZone);
 }
 
 function localDateFromEpochSeconds(epochSeconds: number, offsetSeconds?: number | null): string {
@@ -486,33 +444,25 @@ export function mapCorosDailySleep(
     providerUserId: string,
     receivedAtMs = Date.now(),
 ): SleepMapperResult | null {
-    const daily = asRecord(dailyInput);
-    const startTimezoneOffsetSeconds = resolveCorosTimezoneOffsetSeconds(daily, ['startTimezone']);
-    const endTimezoneOffsetSeconds = resolveCorosTimezoneOffsetSeconds(daily, ['endTimezone']);
-    const timezoneOffsetSeconds = startTimezoneOffsetSeconds ?? endTimezoneOffsetSeconds;
-    const startTimeMs = parseDateMs(daily.sleepStartTime, startTimezoneOffsetSeconds ?? endTimezoneOffsetSeconds);
-    const endTimeMs = parseDateMs(daily.sleepEndTime, endTimezoneOffsetSeconds ?? startTimezoneOffsetSeconds);
-    if (!startTimeMs || !endTimeMs || endTimeMs <= startTimeMs) {
+    return mapParsedCorosDailySleep(parseCOROSDailyRecord(dailyInput), providerUserId, receivedAtMs);
+}
+
+export function mapParsedCorosDailySleep(
+    daily: COROSDailyRecord,
+    providerUserId: string,
+    receivedAtMs = Date.now(),
+): SleepMapperResult | null {
+    if (getCOROSDailySleepStartTimeMs(daily) === null
+        || daily.sleepStartTimeMs === null
+        || daily.sleepEndTimeMs === null) {
         return null;
     }
 
-    const happenDay = asScalarString(daily.happenDay) || isoDateFromMs(endTimeMs).replace(/-/g, '');
-    const sourceSessionKey = `${happenDay}:${asString(daily.sleepStartTime) || startTimeMs}:${asString(daily.sleepEndTime) || endTimeMs}`;
-    const hrvSamples = asArray(daily.hrvList)
-        .map((value): SleepSamplePoint | null => {
-            const record = asRecord(value);
-            const timestampSeconds = asNumber(record.timestamp);
-            const hrv = asNumber(record.hrv);
-            if (timestampSeconds === null || hrv === null) {
-                return null;
-            }
-            return {
-                timestampMs: timestampSeconds * 1000,
-                value: hrv,
-            };
-        })
-        .filter((point): point is SleepSamplePoint => point !== null)
-        .sort((left, right) => (left.timestampMs || 0) - (right.timestampMs || 0));
+    const startTimeMs = daily.sleepStartTimeMs;
+    const endTimeMs = daily.sleepEndTimeMs;
+    const happenDay = daily.happenDay || isoDateFromMs(endTimeMs).replace(/-/g, '');
+    const sourceSessionKey = `${happenDay}:${daily.rawSleepStartTime || startTimeMs}:${daily.rawSleepEndTime || endTimeMs}`;
+    const timezoneOffsetSeconds = daily.startTimezoneOffsetSeconds ?? daily.endTimezoneOffsetSeconds;
 
     return {
         sourceSessionKey,
@@ -533,21 +483,19 @@ export function mapCorosDailySleep(
                 [SLEEP_STAGES.Unknown]: Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000)),
             },
             vitals: {
-                averageHeartRateBpm: asNumber(daily.sleepAvgHr),
-                restingHeartRateBpm: asNumber(daily.rhr),
-                overnightHrvMs: asNumber(daily.ppgHrv),
+                averageHeartRateBpm: daily.averageSleepHeartRateBpm,
+                restingHeartRateBpm: daily.restingHeartRateBpm,
+                overnightHrvMs: daily.overnightHrvMs,
             },
-            hrvSamples,
+            // Detailed HRV and its optional interval mean heart rate belong to
+            // the normalized Health sample series, not to new Sleep sessions.
+            // Omit rather than clear these fields so an existing legacy copy
+            // remains recoverable until the guarded migration moves it.
             providerFields: {
                 coros: compactProviderFields({
                     happenDay: daily.happenDay,
-                    calorie: daily.calorie,
-                    step: daily.step,
-                    rhr: daily.rhr,
-                    ppgHrv: daily.ppgHrv,
-                    sleepAvgHr: daily.sleepAvgHr,
-                    startTimezone: daily.startTimezone,
-                    endTimezone: daily.endTimezone,
+                    startTimezone: daily.rawStartTimezone,
+                    endTimezone: daily.rawEndTimezone,
                     timezoneOffsetSeconds,
                 }),
             },

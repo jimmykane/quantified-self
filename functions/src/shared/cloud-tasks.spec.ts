@@ -317,5 +317,77 @@ describe('Cloud Tasks Utils', () => {
                 { id: taskId, scheduleDelaySeconds: 1 },
             );
         });
+
+        it('binds Sleep task names and payloads to the exact queue revision', async () => {
+            const { enqueueSleepSyncTask } = await import('./cloud-tasks');
+
+            await expect(enqueueSleepSyncTask('sleep-item-1', 1000, undefined, {
+                queueRevision: 'revision/2',
+                queueDateCreated: 1000,
+            })).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                {
+                    queueItemId: 'sleep-item-1',
+                    queueRevision: 'revision/2',
+                    queueDateCreated: 1000,
+                },
+                {
+                    id: 'sleep-sync-sleep-item-1-1000-revision-revision-2',
+                    scheduleDelaySeconds: 1,
+                },
+            );
+        });
+
+        it('does not collide when two Sleep revisions share a creation millisecond', async () => {
+            const { enqueueSleepSyncTask } = await import('./cloud-tasks');
+
+            await enqueueSleepSyncTask('sleep-item-1', 1000, undefined, {
+                queueRevision: 'revision-1',
+                queueDateCreated: 1000,
+            });
+            await enqueueSleepSyncTask('sleep-item-1', 1000, undefined, {
+                queueRevision: 'revision-2',
+                queueDateCreated: 1000,
+            });
+
+            expect(hoisted.mockTaskQueue.enqueue.mock.calls.map(([, options]) => options.id)).toEqual([
+                'sleep-sync-sleep-item-1-1000-revision-revision-1',
+                'sleep-sync-sleep-item-1-1000-revision-revision-2',
+            ]);
+        });
+
+        it('recovers a reserved Sleep task name when no live task remains', async () => {
+            const { enqueueSleepSyncTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue
+                .mockRejectedValueOnce(Object.assign(new Error('Already exists'), {
+                    code: 'functions/task-already-exists',
+                }))
+                .mockResolvedValueOnce(undefined);
+            hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(
+                Object.assign(new Error('NOT_FOUND'), { code: 5 }),
+            );
+
+            await expect(enqueueSleepSyncTask('sleep-item-1', 1000, undefined, {
+                queueRevision: 'revision-2',
+                queueDateCreated: 1000,
+                recoveryTaskKey: 'lease/123',
+            })).resolves.toBe(true);
+
+            expect(hoisted.mockCloudTasksClient.getTask).toHaveBeenCalledWith({
+                name: 'projects/test-project/locations/test-location/queues/processSleepSyncTask/tasks/sleep-sync-sleep-item-1-1000-revision-revision-2',
+            });
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
+                {
+                    queueItemId: 'sleep-item-1',
+                    queueRevision: 'revision-2',
+                    queueDateCreated: 1000,
+                },
+                {
+                    id: 'sleep-sync-sleep-item-1-1000-revision-revision-2-dedupe-recovery-lease-123',
+                    scheduleDelaySeconds: 1,
+                },
+            );
+        });
     });
 });

@@ -34,7 +34,10 @@ import {
   renderDashboardEChartsTooltipCard,
 } from '../../helpers/dashboard-echarts-style.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
-import { formatDashboardWeekRangeLabel } from '../../helpers/dashboard-chart-data.helper';
+import {
+  formatDashboardWeeklyAxisLabel,
+  formatDashboardWeekRangeLabel,
+} from '../../helpers/dashboard-chart-data.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -178,7 +181,16 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },
-        axisLabel: { color: style.textColor, hideOverlap: true },
+        axisLabel: {
+          color: style.textColor,
+          hideOverlap: true,
+          formatter: (value: number | string) => formatDashboardWeeklyAxisLabel(
+            Number(value),
+            isEChartsMobileTooltipViewport(),
+            undefined,
+            'UTC',
+          ),
+        },
       },
       yAxis: {
         type: 'value',

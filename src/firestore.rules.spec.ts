@@ -127,6 +127,22 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
+        it('allows direct legacy Garmin token documents but denies arbitrary nested descendants', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
+
+            await assertSucceeds(tokenRef.set({ accessToken: 'legacy-client-token' }));
+            await assertSucceeds(tokenRef.update({ accessToken: 'updated-client-token' }));
+
+            await assertFails(db.doc(
+                `garminAPITokens/${userId}/tokens/token-1/subscriptions/forged`,
+            ).set({
+                status: 'active',
+                role: 'pro',
+                items: [{ plan: { interval: 'month' } }],
+            }));
+        });
+
         it('denies client writes to backend-owned disconnect fields', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
 
@@ -246,6 +262,46 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Suunto server-owned OAuth state and token credentials', () => {
+        const userId = 'suunto_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('preserves owner reads while denying root, credential, and provider-identity mutations', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
+                    state: 'server-oauth-state',
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`).set({
+                    accessToken: 'stored-access-token',
+                    refreshToken: 'stored-refresh-token',
+                    serviceName: 'SuuntoApp',
+                    userName: 'suunto-account',
+                });
+            });
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const rootRef = db.doc(`suuntoAppAccessTokens/${userId}`);
+            const tokenRef = db.doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`);
+
+            await assertSucceeds(rootRef.get());
+            await assertSucceeds(tokenRef.get());
+            await assertFails(rootRef.set({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.update({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.delete());
+            await assertFails(db.doc(`suuntoAppAccessTokens/${userId}/tokens/victim-account`).set({
+                accessToken: 'attacker-access-token',
+                refreshToken: 'attacker-refresh-token',
+                serviceName: 'SuuntoApp',
+                userName: 'victim-account',
+            }));
+            await assertFails(tokenRef.update({ userName: 'victim-account' }));
+            await assertFails(tokenRef.delete());
+            const cursorRef = db.doc('providerMaintenanceState/suuntoWebhookBindingVerification');
+            await assertFails(cursorRef.get());
+            await assertFails(cursorRef.set({ nextOffset: 0 }));
+        });
+    });
+
     describe('COROS server-owned token credentials', () => {
         const userId = 'coros_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
@@ -273,6 +329,22 @@ describe('Firestore Security Rules', () => {
                 openId: 'other-id',
                 dateCreated: 2_000,
             }));
+        });
+
+        it('requires server-owned callables for every COROS token-root mutation', async () => {
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const rootRef = db.doc(`COROSAPIAccessTokens/${userId}`);
+
+            await assertFails(rootRef.set({ state: 'client-oauth-state' }));
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`COROSAPIAccessTokens/${userId}`).set({
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+            });
+
+            await assertFails(rootRef.update({ state: 'client-replacement-state' }));
+            await assertFails(rootRef.delete());
         });
     });
 
@@ -1320,6 +1392,73 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Unified Health Source Records and Sync State', () => {
+            it('allows owners to get their own health documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSourceRecords').doc('record-1').get());
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSampleChunks').doc('chunk-1').get());
+                await assertSucceeds(db.collection('users').doc(userId).collection('healthSyncState').doc('GarminAPI').get());
+            });
+
+            it('denies reads from another account and unauthenticated reads', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const anonymousDb = testEnv.unauthenticatedContext().firestore();
+
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSourceRecords').doc('record-1').get());
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSampleChunks').doc('chunk-1').get());
+                await assertFails(ownerDb.collection('users').doc(otherId).collection('healthSyncState').doc('GarminAPI').get());
+                await assertFails(anonymousDb.collection('users').doc(userId).collection('healthSourceRecords').doc('record-1').get());
+            });
+
+            it('allows only explicitly bounded owner list queries', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const userRef = db.collection('users').doc(userId);
+
+                await assertSucceeds(userRef.collection('healthSourceRecords').limit(33).get());
+                await assertFails(userRef.collection('healthSourceRecords').limit(34).get());
+                await assertFails(userRef.collection('healthSourceRecords').get());
+
+                await assertSucceeds(userRef.collection('healthSampleChunks').limit(9).get());
+                await assertFails(userRef.collection('healthSampleChunks').limit(10).get());
+                await assertFails(userRef.collection('healthSampleChunks').get());
+
+                await assertSucceeds(userRef.collection('healthSyncState').limit(6).get());
+                await assertFails(userRef.collection('healthSyncState').limit(7).get());
+                await assertFails(userRef.collection('healthSyncState').get());
+            });
+
+            it('denies all browser writes to server-owned health collections', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const userRef = db.collection('users').doc(userId);
+
+                await assertFails(userRef.collection('healthSourceRecords').doc('record-1').set({ calendarDate: '2026-01-01' }));
+                await assertFails(userRef.collection('healthSampleChunks').doc('chunk-1').set({ offsetMs: [0] }));
+                await assertFails(userRef.collection('healthSyncState').doc('GarminAPI').set({ status: 'ready' }));
+            });
+
+            it('forbids descendants beneath permanent health leaf documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                await assertFails(db.doc(`users/${userId}/healthSampleChunks/chunk-1/children/forbidden`).get());
+                await assertFails(db.doc(`users/${userId}/healthSampleChunks/chunk-1/children/forbidden`).set({ value: 1 }));
+            });
+        });
+
+        describe('Rejected route original cleanup tasks', () => {
+            it('denies owners and other clients all direct access', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+                const ref = ownerDb.doc('routeOriginalFileCleanup/cleanup-1');
+
+                await assertFails(ref.get());
+                await assertFails(ref.set({ path: 'forged' }));
+                await assertFails(ref.delete());
+                await assertFails(otherDb.doc('routeOriginalFileCleanup/cleanup-1').get());
+                await assertFails(ownerDb.doc(`users/${userId}/routeOriginalFileCleanup/legacy-cleanup-1`).get());
+            });
+        });
+
         describe('MCP server-owned credential state', () => {
             it('should deny owners reading or writing MCP connection summaries directly', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -1810,6 +1949,82 @@ describe('Firestore Security Rules', () => {
                 processed: false,
                 provider: 'COROSAPI'
             }));
+        });
+
+        it('should deny all browser access to Suunto Health webhook ingress', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookIngress/ingress-1').set({
+                    processed: false,
+                    providerUserId: 'private-provider-account',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/forged').set({ processed: false }));
+        });
+
+        it('should deny all browser access to Suunto Health webhook account bindings', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookAccountBindings/binding-1').set({
+                    schemaVersion: 1,
+                    userID: 'regular-user',
+                    tokenCredentialGeneration: 'credential-generation-1',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/forged').set({
+                schemaVersion: 1,
+                userID: 'admin-user',
+            }));
+        });
+
+        it('forbids descendants beneath permanent Suunto binding leaf documents', async () => {
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .get());
+            await assertFails(adminDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .set({ value: 1 }));
+        });
+    });
+
+    describe('Admin Dashboard Snapshots', () => {
+        const snapshotPath = 'adminDashboardSnapshots/2026-08-27';
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(snapshotPath).set({
+                    schemaVersion: 1,
+                    snapshotDate: '2026-08-27',
+                });
+            });
+        });
+
+        it('denies direct reads to unauthenticated, regular, and admin clients', async () => {
+            const unauthenticatedDb = testEnv.unauthenticatedContext().firestore();
+            const regularDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+
+            await assertFails(unauthenticatedDb.doc(snapshotPath).get());
+            await assertFails(regularDb.doc(snapshotPath).get());
+            await assertFails(adminDb.doc(snapshotPath).get());
+        });
+
+        it('denies direct creates, updates, and deletes even to admin clients', async () => {
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+
+            await assertFails(adminDb.doc('adminDashboardSnapshots/2026-08-28').set({ schemaVersion: 1 }));
+            await assertFails(adminDb.doc(snapshotPath).update({ schemaVersion: 2 }));
+            await assertFails(adminDb.doc(snapshotPath).delete());
         });
     });
 

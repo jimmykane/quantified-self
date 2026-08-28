@@ -22,6 +22,7 @@ const hoisted = vi.hoisted(() => ({
   tokenRootRef: { path: 'wahooAPIAccessTokens/user-1' },
   tokenRootGet: vi.fn(),
   metaData: {} as Record<string, unknown>,
+  updateHealthSyncState: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -59,6 +60,10 @@ vi.mock('./queue/pending-disconnect-release', () => ({
 
 vi.mock('./queue/sync-route-eligibility', () => ({
   releaseQueueItemsDeferredForRouteRestore: hoisted.releaseQueueItemsDeferredForRouteRestore,
+}));
+
+vi.mock('./health/writer', () => ({
+  updateHealthSyncState: hoisted.updateHealthSyncState,
 }));
 
 vi.mock('./service-token-store', () => ({
@@ -112,6 +117,9 @@ import {
   mirrorServiceDisconnectPendingToUserMeta,
   recordWahooOpaqueRefreshFailure,
   beginPendingDisconnectQueueReleaseRepair,
+  retryPendingHealthLifecycleProjection,
+  retryPendingCOROSHealthLifecycleProjection,
+  supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
   retryPendingDisconnectQueueRelease,
   retryPendingServiceRouteRestore,
   retryWahooReconnectQueueRelease,
@@ -214,6 +222,257 @@ describe('service-connection-meta', () => {
         requiredConnectionState: 'reconnect_required',
       }),
     );
+  });
+
+  it('mirrors COROS terminal auth and reconnect transitions to Health state', async () => {
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+
+    const reconnectGeneration = hoisted.metaData.connectionStateGeneration;
+    expect(reconnectGeneration).toEqual(expect.any(String));
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({
+        authoritativeLifecycleTransition: true,
+        requiredDocumentFieldValues: expect.objectContaining({
+          expectedFields: {
+            connectionState: 'reconnect_required',
+            connectionStateGeneration: reconnectGeneration,
+            healthLifecycleProjectionPending: true,
+            healthLifecycleProjectionConnectionGeneration: reconnectGeneration,
+            healthLifecycleProjectionTransitionAtMs: 123,
+          },
+        }),
+      }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+
+    hoisted.updateHealthSyncState.mockClear();
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'coros-account',
+    )).resolves.toBe(true);
+
+    const connectedGeneration = hoisted.metaData.connectionStateGeneration;
+    expect(connectedGeneration).toEqual(expect.any(String));
+    expect(connectedGeneration).not.toBe(reconnectGeneration);
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'COROSAPI',
+      {
+        status: 'ready',
+        lastErrorCode: null,
+      },
+      expect.any(Number),
+      expect.objectContaining({
+        authoritativeLifecycleTransition: true,
+        requiredDocumentFieldValues: expect.objectContaining({
+          expectedFields: {
+            connectionState: 'connected',
+            connectionStateGeneration: connectedGeneration,
+            healthLifecycleProjectionPending: true,
+            healthLifecycleProjectionConnectionGeneration: connectedGeneration,
+            healthLifecycleProjectionTransitionAtMs: expect.any(Number),
+          },
+        }),
+      }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+  });
+
+  it('does not create Health lifecycle state for providers outside this integration', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.GarminAPI)).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+  });
+
+  it('mirrors Suunto connection and terminal-auth transitions to Health state', async () => {
+    const healthUserID = 'suunto-health-user';
+
+    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      healthUserID,
+      'SuuntoApp',
+      { status: 'ready', lastErrorCode: null },
+      expect.any(Number),
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+
+    hoisted.updateHealthSyncState.mockRejectedValueOnce(new Error('temporary health write failure'));
+    await expect(markServiceReconnectRequired(
+      healthUserID,
+      ServiceNames.SuuntoApp,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+    expect(hoisted.metaData.healthLifecycleProjectionPending).toBe(true);
+
+    await expect(retryPendingHealthLifecycleProjection(
+      healthUserID,
+      ServiceNames.SuuntoApp,
+    )).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith(
+      healthUserID,
+      'SuuntoApp',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+  });
+
+  it('repairs a pending Suunto Health projection for any connected user', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connected-generation',
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'connected-generation',
+      healthLifecycleProjectionTransitionAtMs: 123,
+    };
+
+    await expect(retryPendingHealthLifecycleProjection(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    )).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'SuuntoApp',
+      { status: 'ready', lastErrorCode: null },
+      123,
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionConnectionGeneration');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionTransitionAtMs');
+  });
+
+  it('durably repairs a failed COROS Health lifecycle projection for the exact generation', async () => {
+    hoisted.updateHealthSyncState.mockRejectedValueOnce(new Error('temporary health write failure'));
+
+    await expect(markServiceReconnectRequired(
+      'user-1',
+      ServiceNames.COROSAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+
+    const generation = hoisted.metaData.connectionStateGeneration;
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: generation,
+      healthLifecycleProjectionTransitionAtMs: 123,
+    }));
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ServiceConnectionMeta] Failed to update provider Health lifecycle state.',
+      { serviceName: ServiceNames.COROSAPI, errorName: 'Error' },
+    );
+
+    await expect(retryPendingCOROSHealthLifecycleProjection('user-1')).resolves.toBe(true);
+
+    expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith(
+      'user-1',
+      'COROSAPI',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({
+        authoritativeLifecycleTransition: true,
+        requiredDocumentFieldValues: expect.objectContaining({
+          expectedFields: {
+            connectionState: 'reconnect_required',
+            connectionStateGeneration: generation,
+            healthLifecycleProjectionPending: true,
+            healthLifecycleProjectionConnectionGeneration: generation,
+            healthLifecycleProjectionTransitionAtMs: 123,
+          },
+        }),
+      }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionConnectionGeneration');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionTransitionAtMs');
+  });
+
+  it('clears a superseded COROS Health projection marker without writing stale state', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'current-generation',
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'stale-generation',
+      healthLifecycleProjectionTransitionAtMs: 123,
+    };
+
+    await expect(retryPendingCOROSHealthLifecycleProjection('user-1')).resolves.toBe(false);
+
+    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+    expect(hoisted.metaData.connectionStateGeneration).toBe('current-generation');
+  });
+
+  it('supersedes a connected COROS Health projection marker while the token root is absent', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connected-generation',
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'connected-generation',
+      healthLifecycleProjectionTransitionAtMs: 123,
+    };
+    hoisted.tokenRootGet.mockResolvedValue({ exists: false, data: () => undefined });
+
+    await expect(supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(
+      'user-1',
+    )).resolves.toBe(true);
+
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionConnectionGeneration');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionTransitionAtMs');
+
+    hoisted.updateHealthSyncState.mockClear();
+    await expect(retryPendingCOROSHealthLifecycleProjection('user-1')).resolves.toBe(false);
+    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+  });
+
+  it('does not supersede a COROS Health projection marker after the token root reconnects', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connected-generation',
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'connected-generation',
+      healthLifecycleProjectionTransitionAtMs: 123,
+    };
+    hoisted.tokenRootGet.mockResolvedValue({ exists: true, data: () => ({}) });
+
+    await expect(supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(
+      'user-1',
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaData).toEqual(expect.objectContaining({
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'connected-generation',
+    }));
   });
 
   it('pins the retained provider account while marking reconnect-required', async () => {

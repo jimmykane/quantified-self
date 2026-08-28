@@ -4,6 +4,12 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  HEALTH_PROVIDERS,
+  HEALTH_SYNC_STATUSES,
+  HealthProvider,
+  HealthSyncStatus,
+} from '../../shared/health';
+import {
   isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
   ServiceConnectionMetaFields,
@@ -39,6 +45,7 @@ import {
   isServiceDisconnectPendingData,
   type ServiceDisconnectLifecycleGuard,
 } from './service-disconnect-pending-state';
+import { updateHealthSyncState } from './health/writer';
 
 export const WAHOO_OPAQUE_REFRESH_FAILURE_THRESHOLD = 3;
 const WAHOO_OPAQUE_REFRESH_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -52,6 +59,273 @@ export interface WahooOpaqueRefreshFailureOutcome {
   retryAt: number | null;
   reconnectRequired: boolean;
   stale: boolean;
+}
+
+interface HealthLifecycleProjectionClaim {
+  connectionStateGeneration: string | null;
+  transitionAtMs: number | null;
+}
+
+function healthLifecycleProjectionMarker(
+  connectionStateGeneration: string,
+  transitionAtMs: number,
+): Pick<
+  ServiceConnectionMetaFields,
+  | 'healthLifecycleProjectionPending'
+  | 'healthLifecycleProjectionConnectionGeneration'
+  | 'healthLifecycleProjectionTransitionAtMs'
+> {
+  return {
+    healthLifecycleProjectionPending: true,
+    healthLifecycleProjectionConnectionGeneration: connectionStateGeneration,
+    healthLifecycleProjectionTransitionAtMs: transitionAtMs,
+  };
+}
+
+function healthLifecycleProjectionDeletes(): Record<string, FieldValue> {
+  return {
+    healthLifecycleProjectionPending: FieldValue.delete(),
+    healthLifecycleProjectionConnectionGeneration: FieldValue.delete(),
+    healthLifecycleProjectionTransitionAtMs: FieldValue.delete(),
+  };
+}
+
+function getHealthLifecycleProjectionClaim(
+  meta: ServiceConnectionMetaFields | null | undefined,
+): HealthLifecycleProjectionClaim {
+  const generation = typeof meta?.healthLifecycleProjectionConnectionGeneration === 'string'
+    ? meta.healthLifecycleProjectionConnectionGeneration.trim()
+    : '';
+  const transitionAtMs = meta?.healthLifecycleProjectionTransitionAtMs;
+  return {
+    connectionStateGeneration: generation || null,
+    transitionAtMs: typeof transitionAtMs === 'number'
+      && Number.isSafeInteger(transitionAtMs)
+      && transitionAtMs >= 0
+      ? transitionAtMs
+      : null,
+  };
+}
+
+function healthProviderForService(
+  serviceName: ServiceNames,
+): HealthProvider | null {
+  if (serviceName === ServiceNames.COROSAPI) return HEALTH_PROVIDERS.COROSAPI;
+  if (serviceName === ServiceNames.SuuntoApp) {
+    return HEALTH_PROVIDERS.SuuntoApp;
+  }
+  return null;
+}
+
+function supportsHealthLifecycleProjection(serviceName: ServiceNames): boolean {
+  return serviceName === ServiceNames.COROSAPI || serviceName === ServiceNames.SuuntoApp;
+}
+
+async function clearHealthLifecycleProjectionMarker(
+  userID: string,
+  serviceName: ServiceNames,
+  claim: HealthLifecycleProjectionClaim,
+  expectedLifecycle?: {
+    connectionState: ServiceConnectionMetaFields['connectionState'];
+    connectionStateGeneration: string;
+  },
+): Promise<boolean> {
+  const db = admin.firestore();
+  const ref = serviceMetaRef(db, userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        userID,
+        'health_lifecycle_projection_clear',
+        error,
+      );
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const snapshot = await transaction.get(ref);
+    const meta = snapshot.exists
+      ? snapshot.data() as ServiceConnectionMetaFields | undefined
+      : undefined;
+    const currentClaim = getHealthLifecycleProjectionClaim(meta);
+    if (
+      !meta
+      || meta.healthLifecycleProjectionPending !== true
+      || currentClaim.connectionStateGeneration !== claim.connectionStateGeneration
+      || currentClaim.transitionAtMs !== claim.transitionAtMs
+      || (expectedLifecycle && (
+        meta.connectionState !== expectedLifecycle.connectionState
+        || meta.connectionStateGeneration !== expectedLifecycle.connectionStateGeneration
+      ))
+    ) {
+      return false;
+    }
+
+    transaction.set(ref, healthLifecycleProjectionDeletes(), { merge: true });
+    return true;
+  });
+}
+
+/**
+ * Supersedes any pending provider Health lifecycle projection after token-root
+ * deletion. Reading the missing root and clearing the marker in one
+ * transaction prevents a delayed connected projection from restoring Ready;
+ * a concurrent reconnect conflicts on either the root or metadata read.
+ */
+export async function supersedePendingHealthLifecycleProjectionForTokenRootDelete(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  if (!supportsHealthLifecycleProjection(serviceName)) return false;
+  const db = admin.firestore();
+  const metaRef = serviceMetaRef(db, userID, serviceName);
+  const tokenRootRef = getServiceTokenRootDocumentRef(userID, serviceName);
+  return db.runTransaction(async transaction => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(
+        userID,
+        'health_lifecycle_projection_token_root_delete',
+        error,
+      );
+    }
+    if (deletionGuard.shouldSkip) return false;
+
+    const [metaSnapshot, tokenRootSnapshot] = await Promise.all([
+      transaction.get(metaRef),
+      transaction.get(tokenRootRef),
+    ]);
+    if (tokenRootSnapshot.exists) return false;
+
+    const meta = metaSnapshot.exists
+      ? metaSnapshot.data() as ServiceConnectionMetaFields | undefined
+      : undefined;
+    if (meta && (
+      meta.healthLifecycleProjectionPending !== undefined
+      || meta.healthLifecycleProjectionConnectionGeneration !== undefined
+      || meta.healthLifecycleProjectionTransitionAtMs !== undefined
+    )) {
+      transaction.set(metaRef, healthLifecycleProjectionDeletes(), { merge: true });
+    }
+    return true;
+  });
+}
+
+export function supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(
+  userID: string,
+): Promise<boolean> {
+  return supersedePendingHealthLifecycleProjectionForTokenRootDelete(userID, ServiceNames.COROSAPI);
+}
+
+async function updateHealthLifecycleState(
+  userID: string,
+  serviceName: ServiceNames,
+  healthProvider: HealthProvider,
+  status: HealthSyncStatus,
+  lastErrorCode: string | null,
+  transitionAtMs: number,
+  connectionState: ServiceConnectionMetaFields['connectionState'],
+  connectionStateGeneration: string,
+): Promise<boolean> {
+  try {
+    const written = await updateHealthSyncState(userID, healthProvider, {
+      status,
+      lastErrorCode,
+    }, transitionAtMs, {
+      requiredDocumentFieldValues: {
+        documentRef: serviceMetaRef(admin.firestore(), userID, serviceName),
+        expectedFields: {
+          connectionState,
+          connectionStateGeneration,
+          ...healthLifecycleProjectionMarker(connectionStateGeneration, transitionAtMs),
+        },
+      },
+      authoritativeLifecycleTransition: true,
+    });
+    if (!written) return false;
+
+    const markerCleared = await clearHealthLifecycleProjectionMarker(userID, serviceName, {
+      connectionStateGeneration,
+      transitionAtMs,
+    }, {
+      connectionState,
+      connectionStateGeneration,
+    });
+    return markerCleared;
+  } catch (error) {
+    // Service connection state remains authoritative and must not be rolled
+    // back after a successful guarded transition. The generation-keyed marker
+    // remains durable for the lifecycle repair scheduler.
+    logger.error('[ServiceConnectionMeta] Failed to update provider Health lifecycle state.', {
+      serviceName,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
+    return false;
+  }
+}
+
+/** Retries the exact derived provider Health state left pending by a lifecycle transition. */
+export async function retryPendingHealthLifecycleProjection(
+  userID: string,
+  serviceName: ServiceNames,
+): Promise<boolean> {
+  if (!supportsHealthLifecycleProjection(serviceName)) return false;
+  const meta = await getServiceConnectionMeta(userID, serviceName);
+  if (meta?.healthLifecycleProjectionPending !== true) return false;
+
+  const claim = getHealthLifecycleProjectionClaim(meta);
+  const healthProvider = healthProviderForService(serviceName);
+  if (!healthProvider) {
+    await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
+    return false;
+  }
+  const currentGeneration = typeof meta.connectionStateGeneration === 'string'
+    ? meta.connectionStateGeneration.trim()
+    : '';
+  if (
+    !claim.connectionStateGeneration
+    || claim.transitionAtMs === null
+    || claim.connectionStateGeneration !== currentGeneration
+  ) {
+    await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
+    return false;
+  }
+
+  if (meta.connectionState === SERVICE_CONNECTION_STATES.Connected) {
+    return updateHealthLifecycleState(
+      userID,
+      serviceName,
+      healthProvider,
+      HEALTH_SYNC_STATUSES.Ready,
+      null,
+      claim.transitionAtMs,
+      meta.connectionState,
+      claim.connectionStateGeneration,
+    );
+  }
+  if (meta.connectionState === SERVICE_CONNECTION_STATES.ReconnectRequired) {
+    return updateHealthLifecycleState(
+      userID,
+      serviceName,
+      healthProvider,
+      HEALTH_SYNC_STATUSES.ReconnectRequired,
+      'provider_auth_reconnect_required',
+      claim.transitionAtMs,
+      meta.connectionState,
+      claim.connectionStateGeneration,
+    );
+  }
+
+  await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
+  return false;
+}
+
+export function retryPendingCOROSHealthLifecycleProjection(userID: string): Promise<boolean> {
+  return retryPendingHealthLifecycleProjection(userID, ServiceNames.COROSAPI);
 }
 
 /** The current refresh owner proves an opaque response still applies to this account. */
@@ -665,6 +939,7 @@ export async function markServiceReconnectRequired(
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const guardsConnectionGeneration = Object.prototype.hasOwnProperty.call(
     options,
@@ -737,6 +1012,9 @@ export async function markServiceReconnectRequired(
     transaction.set(ref, {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
       connectionStateGeneration,
+      ...(healthProvider
+        ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
+        : {}),
       routeRestorePending: FieldValue.delete(),
       routeRestoreParkingClosed: FieldValue.delete(),
       routeRestoreConnectionGeneration: FieldValue.delete(),
@@ -751,6 +1029,19 @@ export async function markServiceReconnectRequired(
   });
   if (!didWrite) {
     return false;
+  }
+
+  if (healthProvider) {
+    await updateHealthLifecycleState(
+      userID,
+      serviceName,
+      healthProvider,
+      HEALTH_SYNC_STATUSES.ReconnectRequired,
+      'provider_auth_reconnect_required',
+      nowMs,
+      SERVICE_CONNECTION_STATES.ReconnectRequired,
+      connectionStateGeneration,
+    );
   }
 
   try {
@@ -854,6 +1145,7 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
       connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
       connectionStateGeneration: input.generation,
       disconnectGeneration: input.generation,
+      ...healthLifecycleProjectionDeletes(),
       routeRestorePending: FieldValue.delete(),
       routeRestoreParkingClosed: FieldValue.delete(),
       routeRestoreConnectionGeneration: FieldValue.delete(),
@@ -902,11 +1194,15 @@ export async function markServiceConnected(
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const nowMs = Date.now();
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     connectionStateGeneration,
+    ...(healthProvider
+      ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
+      : {}),
     disconnectGeneration: FieldValue.delete(),
     routeRestorePending: true,
     routeRestoreParkingClosed: false,
@@ -949,6 +1245,19 @@ export async function markServiceConnected(
   }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration);
   if (!didWrite) {
     return didWrite;
+  }
+
+  if (healthProvider) {
+    await updateHealthLifecycleState(
+      userID,
+      serviceName,
+      healthProvider,
+      HEALTH_SYNC_STATUSES.Ready,
+      null,
+      nowMs,
+      SERVICE_CONNECTION_STATES.Connected,
+      connectionStateGeneration,
+    );
   }
 
   if (serviceName === ServiceNames.WahooAPI) {
@@ -1218,6 +1527,7 @@ export async function clearServiceConnectionState(
       connectionState: FieldValue.delete(),
       connectionStateGeneration,
       disconnectGeneration: FieldValue.delete(),
+      ...healthLifecycleProjectionDeletes(),
       ...(options.restorePendingDisconnectActivitySyncRoutes ? {
         routeRestorePending: true,
         routeRestoreParkingClosed: false,

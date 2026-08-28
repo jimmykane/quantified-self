@@ -14,15 +14,30 @@ const {
   mockFailedJobsGet,
   mockIsQueueItemDeletedForUserCleanup,
   mockProcessActivitySyncQueueItem,
+  mockEnqueueActivitySyncTask,
+  mockShouldSkipQueueWorkForDeletedUser,
+  mockLoggerInfo,
+  mockLoggerWarn,
+  mockLoggerError,
+  capturedTaskOptions,
 } = vi.hoisted(() => ({
   mockQueueGet: vi.fn(),
   mockFailedJobsGet: vi.fn(),
   mockIsQueueItemDeletedForUserCleanup: vi.fn(),
   mockProcessActivitySyncQueueItem: vi.fn(),
+  mockEnqueueActivitySyncTask: vi.fn(),
+  mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
+  mockLoggerInfo: vi.fn(),
+  mockLoggerWarn: vi.fn(),
+  mockLoggerError: vi.fn(),
+  capturedTaskOptions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2/tasks', () => ({
-  onTaskDispatched: (_opts: unknown, handler: TaskHandlerMock) => handler,
+  onTaskDispatched: (opts: unknown, handler: TaskHandlerMock) => {
+    capturedTaskOptions.push(opts);
+    return handler;
+  },
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -41,8 +56,16 @@ vi.mock('../activity-sync/process-queue-item', () => ({
   processActivitySyncQueueItem: mockProcessActivitySyncQueueItem,
 }));
 
+vi.mock('../shared/cloud-tasks', () => ({
+  enqueueActivitySyncTask: mockEnqueueActivitySyncTask,
+}));
+
 vi.mock('../queue/cleanup-tombstone', () => ({
   isQueueItemDeletedForUserCleanup: mockIsQueueItemDeletedForUserCleanup,
+}));
+
+vi.mock('../queue/user-deletion-skip', () => ({
+  shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
 vi.mock('../queue-utils', () => ({
@@ -50,6 +73,7 @@ vi.mock('../queue-utils', () => ({
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
+    ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -57,9 +81,9 @@ vi.mock('../queue-utils', () => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
+  info: mockLoggerInfo,
+  warn: mockLoggerWarn,
+  error: mockLoggerError,
 }));
 
 import { processActivitySyncTask } from './activity-sync-worker';
@@ -71,6 +95,16 @@ describe('processActivitySyncTask', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsQueueItemDeletedForUserCleanup.mockResolvedValue(false);
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+  });
+
+  it('registers half-size Cloud Tasks rate limits for activity sync', () => {
+    expect(capturedTaskOptions[0]).toMatchObject({
+      rateLimits: {
+        maxConcurrentDispatches: 500,
+        maxDispatchesPerSecond: 250,
+      },
+    });
   });
 
   it('processes a valid queue item', async () => {
@@ -196,6 +230,219 @@ describe('processActivitySyncTask', () => {
     mockProcessActivitySyncQueueItem.mockResolvedValueOnce('DEFERRED');
 
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+  });
+
+  it('schedules a pending COROS status poll and completes at info level', async () => {
+    const nowMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 1,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async (queueItem: {
+      retryCount?: number;
+      dispatchedToCloudTask?: number | null;
+    }) => {
+      queueItem.retryCount = 2;
+      // Use a due time below the 30-minute retry fallback so this verifies that
+      // the worker honors the durable transaction marker.
+      queueItem.dispatchedToCloudTask = nowMs + (25 * 60 * 1000);
+      return 'PROVIDER_STATUS_PENDING';
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      nowMs + (25 * 60 * 1000),
+      1500,
+    );
+    expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+      'user-1',
+      'corosAPI',
+      'queue-item-1',
+      'before_activity_sync_pending_status_poll_enqueue',
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        queueItemId: 'queue-item-1',
+        providerStatus: 1,
+        pollDelaySeconds: 1500,
+        retryCount: 2,
+        taskEnqueued: true,
+      }),
+    );
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('re-enqueues an already planned COROS status poll without polling early', async () => {
+    const nowMs = 1_700_000_000_000;
+    const scheduledAtMs = nowMs + (25 * 60 * 1000);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: scheduledAtMs,
+      }),
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(false);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+      'user-1',
+      'corosAPI',
+      'queue-item-1',
+      'before_activity_sync_pending_status_poll_enqueue',
+    );
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      scheduledAtMs,
+      1500,
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        taskEnqueued: false,
+        reschedulingExistingPoll: true,
+      }),
+    );
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original COROS poll schedule when the deletion guard spans its due time', async () => {
+    const nowMs = 1_700_000_000_000;
+    const scheduledAtMs = nowMs + (6 * 1000);
+    let currentNowMs = nowMs;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentNowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: scheduledAtMs,
+      }),
+    });
+    mockShouldSkipQueueWorkForDeletedUser.mockImplementationOnce(async () => {
+      currentNowMs = scheduledAtMs + 1;
+      return false;
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      scheduledAtMs,
+      1,
+    );
+  });
+
+  it('processes a COROS status poll once it is within the scheduling grace window', async () => {
+    const nowMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 2,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+        destinationUploadID: 'coros-upload-1',
+        destinationProviderUserID: 'coros-user-1',
+        dispatchedToCloudTask: nowMs + (5 * 1000),
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROCESSED');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).toHaveBeenCalledOnce();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a pending COROS status poll after account deletion starts', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROVIDER_STATUS_PENDING');
+    mockShouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+
+    expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+      'user-1',
+      'corosAPI',
+      'queue-item-1',
+      'before_activity_sync_pending_status_poll_enqueue',
+    );
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Skipping pending COROS status poll for item queue-item-1 because the account is deleted or deleting.',
+    );
+  });
+
+  it('rethrows a pending-poll scheduling failure so Cloud Tasks retries it', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        userID: 'user-1',
+        destinationServiceName: 'corosAPI',
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROVIDER_STATUS_PENDING');
+    const schedulingError = new Error('Cloud Tasks unavailable');
+    mockEnqueueActivitySyncTask.mockRejectedValueOnce(schedulingError);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
+      .rejects
+      .toThrow('Cloud Tasks unavailable');
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Error processing item queue-item-1:',
+      schedulingError,
+    );
   });
 
   it('stops Cloud Task retries when accepted provider work requires manual reconciliation', async () => {

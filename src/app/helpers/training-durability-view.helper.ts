@@ -5,6 +5,8 @@ import type {
   DerivedTrainingDurabilityScope,
   TrainingVisibleDiscipline,
 } from '@shared/derived-metrics';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
+import { formatDashboardDateByInterval } from './dashboard-chart-data.helper';
 import { formatSleepDuration } from './dashboard-sleep-chart.helper';
 
 const CYCLING_POWER_DURABILITY_CONTEXT: DerivedTrainingDurabilityContext = {
@@ -81,6 +83,7 @@ export interface TrainingDurabilityScopeViewModel {
 export function buildTrainingDurabilityScopeViewModels(
   payload: DerivedTrainingDurabilityMetricPayload | null | undefined,
   visibleDisciplines: readonly TrainingVisibleDiscipline[],
+  locale?: string,
 ): TrainingDurabilityScopeViewModel[] {
   if (!payload) return [];
   const visibleScopes = resolveVisibleScopes(visibleDisciplines);
@@ -111,7 +114,9 @@ export function buildTrainingDurabilityScopeViewModels(
         item.weeks,
       ));
     const eligibleWeeks = item.weeks.filter(week => week.coverage.eligibleActivityCount > 0).length;
-    const supportingLabels = item.recentSupportingEvents.slice(0, 3).map(event => event.label || 'Unlabelled activity');
+    const supportingLabels = item.recentSupportingEvents
+      .slice(0, 3)
+      .map(event => formatDashboardDateByInterval(event.startMs, TimeIntervals.Hourly, locale));
     const exclusions = item.current.coverage.exclusions
       .filter(exclusion => exclusion.activityCount > 0)
       .sort((left, right) => right.activityCount - left.activityCount || left.reason.localeCompare(right.reason));

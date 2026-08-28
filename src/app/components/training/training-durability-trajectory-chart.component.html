@@ -21,6 +21,9 @@
         <span>{{ view.exclusionSummary }}</span>
       }
     </div>
+    @if (leadingNoActivityText) {
+      <p class="durability-trajectory-leading-gap">{{ leadingNoActivityText }}</p>
+    }
     <div class="durability-trajectory-scroll">
       <div
         #chartDiv
@@ -29,6 +32,7 @@
         [attr.aria-label]="chartAriaLabel"
       ></div>
     </div>
+    <p class="durability-trajectory-week-note"><strong>W</strong> = Mon–Sun (UTC)</p>
     <footer>
       <span>{{ availabilityText }}</span>
       <span>{{ view.barExplanation }} The line does not bridge weeks without comparable evidence.</span>

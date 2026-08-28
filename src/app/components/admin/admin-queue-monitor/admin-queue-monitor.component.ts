@@ -102,8 +102,8 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         if (this.queueView === 'sleep-sync') {
-            this.pageTitle = 'Sleep Sync Queue';
-            this.pageSubtitle = 'Monitor sleep sync queue depth, provider disablement, retries, and failures';
+            this.pageTitle = 'Sleep & Health Sync Queue';
+            this.pageSubtitle = 'Monitor Sleep and Health sync queue depth, provider disablement, retries, and failures';
             return;
         }
 

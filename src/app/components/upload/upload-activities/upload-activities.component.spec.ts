@@ -38,6 +38,7 @@ describe('UploadActivitiesComponent', () => {
     authServiceMock = {
       getUser: vi.fn().mockResolvedValue({ uid: 'u1' }),
       currentUser: { uid: 'u1' },
+      signOut: vi.fn().mockResolvedValue(undefined),
     };
     eventServiceMock = {
       getEventCount: vi.fn().mockResolvedValue(5),
@@ -398,6 +399,58 @@ describe('UploadActivitiesComponent', () => {
       .rejects.toThrow('Upload failed');
 
     expect(snackBarMock.open).toHaveBeenCalled();
+  });
+
+  it('should clear the matching stale session when account deletion rejects an upload', async () => {
+    component.user = { uid: 'u1' } as any;
+    const deletionError = new UploadError(
+      'Account deletion is in progress. Please sign in again.',
+      409,
+      'user_deleted_or_deleting',
+    );
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(deletionError);
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toBe(deletionError);
+
+    expect(authServiceMock.signOut).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Account deletion is in progress. Please sign in again.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
+
+  it('should not clear a session that changed after an upload started', async () => {
+    component.user = { uid: 'u1' } as any;
+    const deletionError = new UploadError(
+      'Account deletion is in progress. Please sign in again.',
+      409,
+      'user_deleted_or_deleting',
+    );
+    fitUploadServiceMock.uploadActivityFile.mockImplementationOnce(async () => {
+      authServiceMock.currentUser = { uid: 'u2' };
+      throw deletionError;
+    });
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toBe(deletionError);
+
+    expect(authServiceMock.signOut).not.toHaveBeenCalled();
+  });
+
+  it('should not clear the session for an unrelated upload conflict', async () => {
+    component.user = { uid: 'u1' } as any;
+    const conflictError = new UploadError('Upload conflict.', 409, 'conflict');
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(conflictError);
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toBe(conflictError);
+
+    expect(authServiceMock.signOut).not.toHaveBeenCalled();
   });
 
   it('should show snackbar when file reader fails before upload starts', async () => {

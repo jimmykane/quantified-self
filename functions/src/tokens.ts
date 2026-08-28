@@ -32,6 +32,7 @@ import {
   persistTokenRefresh,
   releaseTokenRefreshClaim,
   areTokenCredentialSnapshotsEqual,
+  doesOAuthCredentialGenerationAuthorizeToken,
   TOKEN_REFRESH_REQUEST_TIMEOUT_MS,
 } from './token-refresh-coordinator';
 import {
@@ -40,6 +41,7 @@ import {
   isOpaqueWahooRefreshFailure,
   toWahooRefreshFailureError,
 } from './wahoo/refresh-recovery';
+import { resolveSuuntoProviderUserIdFromTokenResponse } from './suunto/auth/token-identity';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -67,6 +69,7 @@ export class TokenUseSkippedForPendingDisconnectError extends Error {
     public readonly serviceName: ServiceNames,
     public readonly tokenDocumentID: string,
     public readonly phase: 'before_return' | 'before_refresh' | 'before_persist',
+    public readonly reason: 'service_disconnect' | 'inactive_oauth_credential' = 'service_disconnect',
   ) {
     super(`Skipping ${serviceName} token use for ${tokenDocumentID} because service disconnect is pending for user ${firebaseUserID}.`);
   }
@@ -139,6 +142,10 @@ interface GetTokenDataOptions {
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
   allowDisconnectPendingTokenUse?: boolean;
+  /** Omits token/account identifiers and provider response detail from auth telemetry. */
+  opaqueTelemetry?: boolean;
+  /** Fail closed unless the token root retains this captured OAuth lifecycle revision. */
+  expectedActiveOAuthCredentialGeneration?: string | null;
   /** Only the explicit-disconnect owner may use a token while its fence is active. */
   expectedDisconnectOperationGeneration?: string;
 }
@@ -147,41 +154,113 @@ function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | Document
   return doc.ref.parent.parent?.id || null;
 }
 
+function expectedActiveOAuthCredentialGeneration(
+  doc: QueryDocumentSnapshot | DocumentSnapshot,
+  serviceName: ServiceNames,
+  options: Pick<
+    GetTokenDataOptions,
+    'expectedActiveOAuthCredentialGeneration' | 'expectedDisconnectOperationGeneration'
+  >,
+): string | null | undefined {
+  // The exact explicit-disconnect owner must still be able to deauthorize and
+  // delete a historical orphan. Ordinary COROS workers remain bound to their
+  // token generation; multi-account providers may instead supply the root
+  // revision captured when their work began.
+  if (options.expectedDisconnectOperationGeneration) return undefined;
+  if (options.expectedActiveOAuthCredentialGeneration !== undefined) {
+    return options.expectedActiveOAuthCredentialGeneration;
+  }
+  if (serviceName !== ServiceNames.COROSAPI) return undefined;
+  const tokenData = doc.data() as Record<string, unknown> | undefined;
+  return typeof tokenData?.tokenCredentialGeneration === 'string'
+    && tokenData.tokenCredentialGeneration.trim().length > 0
+    ? tokenData.tokenCredentialGeneration.trim()
+    : null;
+}
+
 async function assertTokenUseAllowedForUser(
   doc: QueryDocumentSnapshot | DocumentSnapshot,
   serviceName: ServiceNames,
   phase: 'before_return' | 'before_refresh' | 'before_persist',
-  options: Pick<GetTokenDataOptions, 'allowDisconnectPendingTokenUse' | 'expectedDisconnectOperationGeneration'> = {},
+  options: Pick<
+    GetTokenDataOptions,
+    | 'allowDisconnectPendingTokenUse'
+    | 'expectedActiveOAuthCredentialGeneration'
+    | 'expectedDisconnectOperationGeneration'
+    | 'opaqueTelemetry'
+  > = {},
 ): Promise<void> {
   const firebaseUserID = getFirebaseUserIDForTokenDocument(doc);
   if (!firebaseUserID) {
-    logger.warn(`Skipping deletion guard for ${serviceName} token ${doc.id} during ${phase}; token document has no Firebase user root.`);
+    if (options.opaqueTelemetry) {
+      logger.warn('[ServiceAuth] Provider token has no Firebase user root.', { serviceName, phase });
+    } else {
+      logger.warn(`Skipping deletion guard for ${serviceName} token ${doc.id} during ${phase}; token document has no Firebase user root.`);
+    }
     return;
   }
 
   const deletionGuard = await getUserDeletionGuardState(admin.firestore(), firebaseUserID);
   if (deletionGuard.shouldSkip) {
-    logger.warn(
-      `Skipping ${serviceName} token refresh for ${doc.id} during ${phase} because user ${firebaseUserID} is missing or deletion is in progress.`,
-    );
+    if (options.opaqueTelemetry) {
+      logger.warn('[ServiceAuth] Skipping provider token use because account deletion is in progress.', {
+        serviceName,
+        phase,
+      });
+    } else {
+      logger.warn(
+        `Skipping ${serviceName} token refresh for ${doc.id} during ${phase} because user ${firebaseUserID} is missing or deletion is in progress.`,
+      );
+    }
     throw new TokenRefreshSkippedForDeletedUserError(firebaseUserID, serviceName, doc.id, phase);
   }
 
   const tokenRootData = await getServiceDisconnectPendingData(firebaseUserID, serviceName);
+  const expectedRootGeneration = expectedActiveOAuthCredentialGeneration(doc, serviceName, options);
+  if (expectedRootGeneration !== undefined
+    && !doesOAuthCredentialGenerationAuthorizeToken(
+      tokenRootData as Record<string, unknown> | null,
+      expectedRootGeneration,
+    )) {
+    logger.warn(
+      `Skipping ${serviceName} token use during ${phase} because its active OAuth credential root is missing or changed.`,
+    );
+    throw new TokenUseSkippedForPendingDisconnectError(
+      firebaseUserID,
+      serviceName,
+      doc.id,
+      phase,
+      'inactive_oauth_credential',
+    );
+  }
   if (!doesServiceDisconnectOperationPermitTokenUse(
     tokenRootData,
     options.expectedDisconnectOperationGeneration,
   )) {
-    logger.warn(
-      `Skipping ${serviceName} token use for ${doc.id} during ${phase} because another disconnect lifecycle owns user ${firebaseUserID}.`,
-    );
+    if (options.opaqueTelemetry) {
+      logger.warn('[ServiceAuth] Skipping provider token use because another disconnect lifecycle owns it.', {
+        serviceName,
+        phase,
+      });
+    } else {
+      logger.warn(
+        `Skipping ${serviceName} token use for ${doc.id} during ${phase} because another disconnect lifecycle owns user ${firebaseUserID}.`,
+      );
+    }
     throw new TokenUseSkippedForPendingDisconnectError(firebaseUserID, serviceName, doc.id, phase);
   }
 
   if (options.allowDisconnectPendingTokenUse !== true && isServiceDisconnectPendingData(tokenRootData)) {
-    logger.warn(
-      `Skipping ${serviceName} token use for ${doc.id} during ${phase} because service disconnect is pending for user ${firebaseUserID}.`,
-    );
+    if (options.opaqueTelemetry) {
+      logger.warn('[ServiceAuth] Skipping provider token use because service disconnect is pending.', {
+        serviceName,
+        phase,
+      });
+    } else {
+      logger.warn(
+        `Skipping ${serviceName} token use for ${doc.id} during ${phase} because service disconnect is pending for user ${firebaseUserID}.`,
+      );
+    }
     throw new TokenUseSkippedForPendingDisconnectError(firebaseUserID, serviceName, doc.id, phase);
   }
 
@@ -215,7 +294,9 @@ export async function getTokenData(
   const serviceConfig = getServiceAdapter(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface | undefined>doc.data();
   if (!serviceTokenData) {
-    throw new Error(`Missing ${serviceName} token data for ${doc.id}`);
+    throw new Error(options.opaqueTelemetry
+      ? `Missing ${serviceName} token data.`
+      : `Missing ${serviceName} token data for ${doc.id}`);
   }
   // doc.data() is never undefined for query doc snapshots
   const token = serviceConfig.getOAuth2Client(true).createToken({
@@ -226,12 +307,16 @@ export async function getTokenData(
 
   if (!token.expired() && !forceRefreshAndSave) {
     await assertTokenUseAllowedForUser(doc, serviceName, 'before_return', options);
-    logger.info(`Token is not expired won't refresh ${doc.id}`);
+    if (options.opaqueTelemetry) {
+      logger.info('[ServiceAuth] Provider token remains valid.', { serviceName });
+    } else {
+      logger.info(`Token is not expired won't refresh ${doc.id}`);
+    }
     switch (serviceName) {
       default:
         throw new Error('Not Implemented');
       case ServiceNames.COROSAPI:
-        return <COROSAPIAuth2ServiceTokenInterface>{
+        return <COROSAPIAuth2ServiceTokenInterface><unknown>{
           serviceName: serviceName,
           accessToken: serviceTokenData.accessToken,
           refreshToken: serviceTokenData.refreshToken,
@@ -241,6 +326,13 @@ export async function getTokenData(
           openId: serviceTokenData.openId,
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
+          // Internal callers use this server-owned value to fence work across
+          // same-account OAuth replacement. Keep it on every token projection,
+          // including the ordinary non-refresh path.
+          tokenCredentialGeneration: typeof (serviceTokenData as unknown as Record<string, unknown>)
+            .tokenCredentialGeneration === 'string'
+            ? (serviceTokenData as unknown as Record<string, string>).tokenCredentialGeneration
+            : undefined,
         };
       case ServiceNames.SuuntoApp:
         return <SuuntoAPIAuth2ServiceTokenInterface>{
@@ -284,7 +376,11 @@ export async function getTokenData(
   }
 
   if (token.expired()) {
-    logger.info(`Token ${doc.id} has expired`);
+    if (options.opaqueTelemetry) {
+      logger.info('[ServiceAuth] Provider token has expired.', { serviceName });
+    } else {
+      logger.info(`Token ${doc.id} has expired`);
+    }
   }
 
   await assertTokenUseAllowedForUser(doc, serviceName, 'before_refresh', options);
@@ -294,8 +390,12 @@ export async function getTokenData(
   }
 
   const initialCredential = getTokenCredentialSnapshot(serviceTokenData as unknown as Record<string, unknown>);
+  const expectedRootGeneration = expectedActiveOAuthCredentialGeneration(doc, serviceName, options);
   const claimResult = await claimTokenRefresh(doc.ref, initialCredential, {
     expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+    ...(expectedRootGeneration !== undefined
+      ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
+      : {}),
   });
   if (claimResult.kind === 'skipped_user_deletion') {
     const userID = getFirebaseUserIDForTokenDocument(doc);
@@ -307,7 +407,13 @@ export async function getTokenData(
   if (claimResult.kind === 'skipped_service_disconnect') {
     const userID = getFirebaseUserIDForTokenDocument(doc);
     if (userID) {
-      throw new TokenUseSkippedForPendingDisconnectError(userID, serviceName, doc.id, 'before_refresh');
+      throw new TokenUseSkippedForPendingDisconnectError(
+        userID,
+        serviceName,
+        doc.id,
+        'before_refresh',
+        claimResult.reason,
+      );
     }
     throw new TokenRefreshSupersededError(serviceName, doc.id);
   }
@@ -346,7 +452,11 @@ export async function getTokenData(
       claimResult.credential,
     )
   ) {
-    await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
+    await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
+      ...(expectedRootGeneration !== undefined
+        ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
+        : {}),
+    });
     return retryWithLatestTokenSnapshot(refreshDoc.exists ? refreshDoc : null, serviceName, doc.id, options);
   }
   const refreshToken = serviceConfig.getOAuth2Client(true).createToken({
@@ -374,14 +484,26 @@ export async function getTokenData(
           throw new COROSTokenRefreshRejectedError(resultCode);
         }
       }
-      logger.info(`Successfully refreshed token ${refreshDoc.id}`);
+      if (options.opaqueTelemetry) {
+        logger.info('[ServiceAuth] Successfully refreshed provider token.', { serviceName });
+      } else {
+        logger.info(`Successfully refreshed token ${refreshDoc.id}`);
+      }
     } catch (e: any) {
       const failure = extractRefreshFailureDetails(e);
       const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
       const isTerminalAuthFailure = isTerminalRefreshFailureForService(serviceName, failure);
       const isProviderDowngradedAuthFailure = failure.isTerminalAuthFailure && !isTerminalAuthFailure;
 
-      if (isProviderDowngradedAuthFailure) {
+      if (options.opaqueTelemetry) {
+        logger.warn('[ServiceAuth] Provider token refresh failed during an opaque operation.', {
+          serviceName,
+          phase: 'token_refresh',
+          providerStatus: failure.statusCode || undefined,
+          terminal: isTerminalAuthFailure,
+          outcome: isTerminalAuthFailure ? 'reconnect_required' : 'retry',
+        });
+      } else if (isProviderDowngradedAuthFailure) {
         logger.warn('[ServiceAuth] Provider token refresh rejected with a known non-terminal error.', {
           serviceName,
           phase: 'token_refresh',
@@ -412,15 +534,31 @@ export async function getTokenData(
 
       if (isTerminalAuthFailure) {
         if (recoverTerminalAuthFailure) {
-          const resolution: TerminalServiceAuthFailureResolution = await handleTerminalServiceAuthFailure(
-            refreshDoc,
-            serviceName,
-            refreshTokenData,
-            failure,
-            serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
-          );
+          const terminalOriginalError = serviceName === ServiceNames.WahooAPI
+            ? new Error('Wahoo token refresh failed.')
+            : e;
+          const resolution: TerminalServiceAuthFailureResolution = options.opaqueTelemetry
+            ? await handleTerminalServiceAuthFailure(
+              refreshDoc,
+              serviceName,
+              refreshTokenData,
+              failure,
+              terminalOriginalError,
+              { opaqueTelemetry: true },
+            )
+            : await handleTerminalServiceAuthFailure(
+              refreshDoc,
+              serviceName,
+              refreshTokenData,
+              failure,
+              terminalOriginalError,
+            );
           if (resolution.kind === 'retry_with_latest_snapshot') {
-            logger.info(`Retrying ${serviceName} token ${refreshDoc.id} with a newer stored snapshot after terminal auth failure.`);
+            if (options.opaqueTelemetry) {
+              logger.info('[ServiceAuth] Retrying provider token with a newer stored snapshot.', { serviceName });
+            } else {
+              logger.info(`Retrying ${serviceName} token ${refreshDoc.id} with a newer stored snapshot after terminal auth failure.`);
+            }
             return retryWithLatestTokenSnapshot(resolution.latestSnapshot, serviceName, doc.id, options);
           }
           throw resolution.error;
@@ -444,7 +582,11 @@ export async function getTokenData(
     switch (serviceName) {
       default:
         throw new Error('Not implemented');
-      case ServiceNames.SuuntoApp:
+      case ServiceNames.SuuntoApp: {
+        const refreshedSuuntoProviderUserId = resolveSuuntoProviderUserIdFromTokenResponse(
+          responseToken.token as Record<string, unknown>,
+          typeof refreshTokenData.userName === 'string' ? refreshTokenData.userName : null,
+        );
         newToken = <SuuntoAPIAuth2ServiceTokenInterface>{
           serviceName,
           accessToken: responseToken.token.access_token,
@@ -452,11 +594,12 @@ export async function getTokenData(
           expiresAt: (responseToken.token as any).expires_at.getTime() - 600000,
           scope: responseToken.token.scope,
           tokenType: responseToken.token.token_type,
-          userName: (responseToken.token as any).user,
+          userName: refreshedSuuntoProviderUserId,
           dateRefreshed: date.getTime(),
           dateCreated: refreshTokenData.dateCreated,
         };
         break;
+      }
       case ServiceNames.GarminAPI:
         newToken = <GarminAPIAuth2ServiceTokenInterface>{
           serviceName,
@@ -522,11 +665,18 @@ export async function getTokenData(
           }],
         } : {}),
         expectedDisconnectOperationGeneration: options.expectedDisconnectOperationGeneration,
+        ...(expectedRootGeneration !== undefined
+          ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
+          : {}),
       },
     );
     if (persistResult.kind === 'persisted') {
       releaseClaim = false;
-      logger.info(`Successfully saved refreshed token ${refreshDoc.id}`);
+      if (options.opaqueTelemetry) {
+        logger.info('[ServiceAuth] Successfully saved refreshed provider token.', { serviceName });
+      } else {
+        logger.info(`Successfully saved refreshed token ${refreshDoc.id}`);
+      }
       return newToken;
     }
     if (persistResult.kind === 'skipped_user_deletion') {
@@ -545,11 +695,21 @@ export async function getTokenData(
   } finally {
     if (releaseClaim) {
       try {
-        await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential);
-      } catch (releaseError) {
-        logger.warn(`Could not release ${serviceName} token refresh lease for ${doc.id}.`, {
-          errorName: releaseError instanceof Error ? releaseError.name : 'UnknownError',
+        await releaseTokenRefreshClaim(doc.ref, claimResult.leaseOwner, claimResult.credential, {
+          ...(expectedRootGeneration !== undefined
+            ? { expectedActiveOAuthCredentialGeneration: expectedRootGeneration }
+            : {}),
         });
+      } catch (releaseError) {
+        logger.warn(
+          options.opaqueTelemetry
+            ? '[ServiceAuth] Could not release provider token refresh lease.'
+            : `Could not release ${serviceName} token refresh lease for ${doc.id}.`,
+          {
+            serviceName,
+            errorName: releaseError instanceof Error ? releaseError.name : 'UnknownError',
+          },
+        );
       }
     }
   }

@@ -15,7 +15,10 @@ import {
     cleanupQueueItemAfterUserDeletionGuard,
     QueueItemUserGuardedUpdateResult,
 } from './queue/dispatch-marker';
-import { clearRevisionProcessingLeaseUpdate } from './queue/revision-processing-lease';
+import {
+    clearRevisionProcessingLeaseUpdate,
+    getActiveRevisionProcessingLease,
+} from './queue/revision-processing-lease';
 import {
     isCurrentQueueRevision,
     normalizeQueueRevision,
@@ -23,12 +26,15 @@ import {
 import { isReconnectRequiredServiceConnection } from '../../shared/service-connection';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
+import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
+import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
 
 
 export enum QueueResult {
     Processed = 'PROCESSED',
     Skipped = 'SKIPPED',
     Deferred = 'DEFERRED',
+    ProviderStatusPending = 'PROVIDER_STATUS_PENDING',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',
     Failed = 'FAILED',
@@ -70,22 +76,83 @@ export class ProviderOperationStillInFlightError extends Error {
 
 interface QueueRevisionGuard {
     userID: string;
+    phasePrefix: string;
+    logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
+}
+
+function canTransitionSleepQueueProcessingLease(
+    currentQueueItem: Record<string, unknown>,
+    attemptedQueueItem: QueueItemInterface,
+    nowMs = Date.now(),
+): boolean {
+    const activeLease = getActiveRevisionProcessingLease(currentQueueItem, nowMs);
+    if (!activeLease) return true;
+
+    // A queue snapshot can contain somebody else's lease. The Sleep worker
+    // strips persisted lease fields before processing and adds its own owner
+    // only after a successful claim, so these values are proof of ownership
+    // within the current invocation rather than untrusted snapshot state.
+    const attemptedOwner = typeof attemptedQueueItem.processingOwner === 'string'
+        ? attemptedQueueItem.processingOwner.trim()
+        : '';
+    const attemptedRevision = typeof attemptedQueueItem.processingRevision === 'string'
+        ? attemptedQueueItem.processingRevision.trim()
+        : '';
+    return attemptedOwner === activeLease.processingOwner
+        && attemptedRevision === activeLease.processingRevision;
+}
+
+export function isCurrentSleepQueueTransition(
+    currentQueueItem: Record<string, unknown>,
+    attemptedQueueItem: QueueItemInterface,
+): boolean {
+    const queueRevision = normalizeQueueRevision(attemptedQueueItem.queueRevision);
+    const legacyDateCreated = Number(attemptedQueueItem.dateCreated);
+    return isCurrentQueueRevision({
+        currentQueueItem,
+        attemptedQueueItem,
+        legacyIdentityMatches: !queueRevision
+            && Number.isFinite(legacyDateCreated)
+            && currentQueueItem.dateCreated === legacyDateCreated,
+    }) && canTransitionSleepQueueProcessingLease(currentQueueItem, attemptedQueueItem);
 }
 
 function getQueueRevisionGuard(queueItem: QueueItemInterface): QueueRevisionGuard | null {
     const queueRevision = normalizeQueueRevision(queueItem.queueRevision);
-    const userID = typeof queueItem.firebaseUserID === 'string'
+    const isSleepQueueItem = queueItem.ref?.parent?.id === SLEEP_SYNC_QUEUE_COLLECTION_NAME;
+    const firebaseUserID = typeof queueItem.firebaseUserID === 'string'
         ? queueItem.firebaseUserID.trim()
         : '';
+    const sleepUserID = isSleepQueueItem
+        && typeof (queueItem as QueueItemInterface & { userID?: unknown }).userID === 'string'
+        ? `${(queueItem as QueueItemInterface & { userID?: unknown }).userID}`.trim()
+        : '';
+    // Sleep rows are owned exclusively by their durable `userID`. Generic
+    // queue metadata must never redirect a Sleep transition's deletion guard
+    // to another account. Legacy provider-only Sleep rows intentionally fall
+    // through to the revision+tombstone path until token resolution supplies
+    // their authoritative userID in memory.
+    const userID = isSleepQueueItem ? sleepUserID : firebaseUserID;
     if (!userID) return null;
+    const legacyDateCreated = Number(queueItem.dateCreated);
+    if (isSleepQueueItem) {
+        if (!queueRevision && !Number.isFinite(legacyDateCreated)) return null;
+        return {
+            userID,
+            phasePrefix: 'sleep_queue_revision',
+            logPrefix: 'SleepQueueRevision',
+            isCurrent: current => isCurrentSleepQueueTransition(current, queueItem),
+        };
+    }
     const legacyCOROSOpenId = typeof (queueItem as QueueItemInterface & { openId?: unknown }).openId === 'string'
         ? `${(queueItem as QueueItemInterface & { openId?: unknown }).openId}`.trim()
         : '';
-    const legacyDateCreated = Number(queueItem.dateCreated);
     if (!queueRevision && (!legacyCOROSOpenId || !Number.isFinite(legacyDateCreated))) return null;
     return {
         userID,
+        phasePrefix: 'workout_queue_revision',
+        logPrefix: 'WorkoutQueueRevision',
         isCurrent: current => isCurrentQueueRevision({
             currentQueueItem: current,
             attemptedQueueItem: queueItem,
@@ -155,8 +222,8 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             context,
             bulkWriter,
             userID: revisionGuard.userID,
-            phase: 'workout_queue_revision_dlq',
-            logPrefix: 'WorkoutQueueRevision',
+            phase: `${revisionGuard.phasePrefix}_dlq`,
+            logPrefix: revisionGuard.logPrefix,
             isCurrent: revisionGuard.isCurrent,
         });
     }
@@ -180,6 +247,73 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
         return QueueResult.MovedToDLQ;
     } catch (e) {
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${e}`));
+        return QueueResult.Failed;
+    }
+}
+
+export interface MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams {
+    queueItem: QueueItemInterface;
+    error: Error;
+    context?: string;
+    collectionName: string;
+    logPrefix: string;
+    isCurrent: (queueItem: Record<string, unknown>) => boolean;
+}
+
+/**
+ * Legacy provider-only queue rows have no Firebase uid for the normal user
+ * deletion guard. Bind their DLQ transition to both the exact live revision
+ * and the cleanup tombstone so a paused worker cannot recreate user data
+ * after an account-cleanup sweep has completed.
+ */
+export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
+    params: MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams,
+): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    const queueItemRef = params.queueItem.ref;
+    if (!queueItemRef) {
+        throw new Error(`No document reference supplied for queue item ${params.queueItem.id}`);
+    }
+
+    const db = admin.firestore();
+    const failedDocRef = db.collection('failed_jobs').doc(params.queueItem.id);
+    const tombstoneRef = getQueueCleanupTombstoneDocumentRef(
+        db,
+        params.collectionName,
+        params.queueItem.id,
+    );
+    try {
+        const moved = await db.runTransaction(async transaction => {
+            const [queueSnapshot, tombstoneSnapshot] = await Promise.all([
+                transaction.get(queueItemRef),
+                transaction.get(tombstoneRef),
+            ]);
+            if (tombstoneSnapshot.exists || !queueSnapshot.exists) return false;
+            const currentQueueItem = queueSnapshot.data() as Record<string, unknown>;
+            if (!params.isCurrent(currentQueueItem)
+                || !canTransitionSleepQueueProcessingLease(currentQueueItem, params.queueItem)) return false;
+
+            const currentQueueItemForDLQ = {
+                ...currentQueueItem,
+                id: params.queueItem.id,
+                ref: queueItemRef,
+            } as unknown as QueueItemInterface;
+            transaction.set(
+                failedDocRef,
+                buildFailedQueueItem(currentQueueItemForDLQ, params.error, params.context),
+            );
+            transaction.delete(queueItemRef);
+            return true;
+        });
+        if (!moved) {
+            logger.info(`[${params.logPrefix}] Skipped stale or cleanup-tombstoned DLQ transition for ${params.queueItem.id}.`);
+            return QueueResult.Processed;
+        }
+        logger.info(`[${params.logPrefix}] Moved queue item ${params.queueItem.id} to failed_jobs.`);
+        return QueueResult.MovedToDLQ;
+    } catch (error) {
+        logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
         return QueueResult.Failed;
     }
 }
@@ -355,6 +489,12 @@ export interface IncreaseRetryCountIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /**
+     * An acknowledged delayed retry can retain its planned dispatch time as
+     * the queue marker. This prevents the reconciliation scheduler from
+     * starting a duplicate before that delayed task is overdue.
+     */
+    retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null;
 }
 
 export interface DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams {
@@ -621,6 +761,7 @@ export async function increaseRetryCountIfCurrentUserActive(
     const failedDocRef = db.collection('failed_jobs').doc(params.queueItem.id);
     let nextRetryCount = 0;
     let nextTotalRetryCount = 0;
+    let nextDispatchMarker: number | null = null;
     let movedToDlq = false;
     let nextErrors: QueueItemInterface['errors'] = [];
 
@@ -638,6 +779,11 @@ export async function increaseRetryCountIfCurrentUserActive(
                 : 0;
             nextRetryCount = currentRetryCount + incrementBy;
             nextTotalRetryCount = currentTotalRetryCount + incrementBy;
+            const requestedDispatchMarker = params.retryDispatchMarkerAtMs?.(nextRetryCount);
+            nextDispatchMarker = Number.isFinite(requestedDispatchMarker)
+                && Number(requestedDispatchMarker) > 0
+                ? Math.floor(Number(requestedDispatchMarker))
+                : null;
             const currentErrors = Array.isArray(currentQueueItem.errors)
                 ? currentQueueItem.errors as NonNullable<QueueItemInterface['errors']>
                 : [];
@@ -677,6 +823,8 @@ export async function increaseRetryCountIfCurrentUserActive(
                             params.maxRetryDlqContext,
                             params.manualReconciliation.additionalData,
                         ),
+                        dispatchedToCloudTask: null,
+                        providerOperationStartedAt: null,
                     });
                 } else {
                     transaction.delete(params.queueItem.ref!);
@@ -688,7 +836,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 retryCount: nextRetryCount,
                 totalRetryCount: nextTotalRetryCount,
                 errors: nextErrors,
-                dispatchedToCloudTask: null,
+                dispatchedToCloudTask: nextDispatchMarker,
                 providerOperationStartedAt: null,
                 ...clearRevisionProcessingLeaseUpdate(),
             });
@@ -719,7 +867,7 @@ export async function increaseRetryCountIfCurrentUserActive(
             return QueueResult.MovedToDLQ;
         }
 
-        params.queueItem.dispatchedToCloudTask = null;
+        params.queueItem.dispatchedToCloudTask = nextDispatchMarker;
         params.queueItem.providerOperationStartedAt = null;
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;
@@ -750,8 +898,8 @@ export async function increaseRetryCountForQueueItem(
             maxRetryDlqContext,
             bulkWriter,
             userID: revisionGuard.userID,
-            phase: 'workout_queue_revision_retry',
-            logPrefix: 'WorkoutQueueRevision',
+            phase: `${revisionGuard.phasePrefix}_retry`,
+            logPrefix: revisionGuard.logPrefix,
             isCurrent: revisionGuard.isCurrent,
         });
     }
@@ -805,8 +953,8 @@ async function updateToProcessedIfCurrentUserActive(
         const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
             queueItem,
             userID: revisionGuard.userID,
-            phase: 'workout_queue_revision_completion',
-            logPrefix: 'WorkoutQueueRevision',
+            phase: `${revisionGuard.phasePrefix}_completion`,
+            logPrefix: revisionGuard.logPrefix,
             actionDescription: 'processed-state transition',
             isCurrent: revisionGuard.isCurrent,
         }, transaction => {
@@ -827,6 +975,48 @@ async function updateToProcessedIfCurrentUserActive(
     }
 }
 
+async function updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned(
+    queueItem: QueueItemInterface,
+    additionalData: Record<string, unknown> | undefined,
+): Promise<QueueResult.Processed | QueueResult.Failed> {
+    const queueItemRef = queueItem.ref!;
+    const db = admin.firestore();
+    const tombstoneRef = getQueueCleanupTombstoneDocumentRef(
+        db,
+        SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        queueItem.id,
+    );
+    const nowMs = Date.now();
+    try {
+        const updated = await db.runTransaction(async transaction => {
+            const [queueSnapshot, tombstoneSnapshot] = await Promise.all([
+                transaction.get(queueItemRef),
+                transaction.get(tombstoneRef),
+            ]);
+            if (tombstoneSnapshot.exists || !queueSnapshot.exists) return false;
+            const currentQueueItem = queueSnapshot.data() as Record<string, unknown>;
+            if (!isCurrentSleepQueueTransition(currentQueueItem, queueItem)) return false;
+
+            transaction.update(queueItemRef, {
+                processed: true,
+                processedAt: nowMs,
+                ...additionalData,
+                ...clearRevisionProcessingLeaseUpdate(),
+            });
+            return true;
+        });
+        if (!updated) {
+            logger.info(`Skipping stale, leased, or cleanup-tombstoned legacy Sleep completion for queue item ${queueItem.id}.`);
+        }
+        return QueueResult.Processed;
+    } catch (error) {
+        logger.error(`Could not update guarded legacy Sleep processed state for ${queueItem.id}.`, {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+        return QueueResult.Failed;
+    }
+}
+
 export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: Record<string, unknown>): Promise<QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
@@ -834,6 +1024,12 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
     const revisionGuard = getQueueRevisionGuard(queueItem);
     if (revisionGuard) {
         return updateToProcessedIfCurrentUserActive(queueItem, additionalData, revisionGuard);
+    }
+    if (queueItem.ref.parent?.id === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
+        return updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned(
+            queueItem,
+            additionalData,
+        );
     }
     try {
         const ref = queueItem.ref;
@@ -894,9 +1090,9 @@ export async function deferQueueItemForPendingDisconnect(
         userID: resolvedContext.userID,
         serviceName: resolvedContext.serviceName,
         phase: revisionGuard
-            ? 'workout_queue_revision_pending_disconnect'
+            ? `${revisionGuard.phasePrefix}_pending_disconnect`
             : 'queue_pending_disconnect',
-        logPrefix: revisionGuard ? 'WorkoutQueueRevision' : 'QueuePendingDisconnect',
+        logPrefix: revisionGuard ? revisionGuard.logPrefix : 'QueuePendingDisconnect',
         isCurrent: revisionGuard?.isCurrent || ((currentQueueItem) => (
             currentQueueItem.processed !== true
             && (!Number.isFinite(expectedDateCreated) || currentQueueItem.dateCreated === expectedDateCreated)

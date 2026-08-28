@@ -62,6 +62,7 @@ describe('HistoryImportFormComponent', () => {
         mockUserService = {
             isPro: vi.fn().mockResolvedValue(true),
             importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true),
+            getSuuntoHealthSyncAvailabilityForCurrentUser: vi.fn().mockResolvedValue(false),
             backfillSuuntoSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 135,
                 startDate: '2016-01-01T00:00:00.000Z',
@@ -153,12 +154,127 @@ describe('HistoryImportFormComponent', () => {
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
         expect(text).toContain('Import Sleep History');
         expect(text).toContain('Imports Suunto sleep');
         expect(text).toContain('once every 7 days');
+    });
+
+    it('should render the combined Suunto Sleep and Health action when Health is enabled', async () => {
+        await fixture.whenStable();
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Sleep & Health history');
+        expect(text).toContain('Import Sleep & Health History');
+        expect(text).toContain('Imports Suunto sleep and available 24/7 Health metrics');
+    });
+
+    it('keeps the Suunto action sleep-only when the current rollback signal is disabled', async () => {
+        await fixture.whenStable();
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(false);
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Import Sleep History');
+        expect(text).not.toContain('Import Sleep & Health History');
+        expect(text).not.toContain('available 24/7 Health metrics');
+        const sleepButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
+        expect(sleepButton.disabled).toBe(false);
+    });
+
+    it('keeps Suunto backfill disabled until Health availability resolves', async () => {
+        await fixture.whenStable();
+        let resolveAvailability!: (available: boolean) => void;
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockReturnValueOnce(
+            new Promise<boolean>(resolve => {
+                resolveAvailability = resolve;
+            }),
+        );
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const pendingButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
+        const pendingSection = fixture.nativeElement.querySelector('.sleep-backfill-section') as HTMLElement;
+        expect(pendingButton.disabled).toBe(true);
+        expect(pendingButton.textContent).toContain('Checking Health availability');
+        expect(pendingSection.getAttribute('aria-label')).toBe('Suunto import scope check');
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+        expect(mockUserService.backfillSuuntoSleepForCurrentUser).not.toHaveBeenCalled();
+
+        resolveAvailability(true);
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const resolvedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
+        expect(resolvedButton.disabled).toBe(false);
+        expect(resolvedButton.textContent).toContain('Import Sleep & Health History');
+    });
+
+    it('fails closed on an availability error and recovers through Retry', async () => {
+        await fixture.whenStable();
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser
+            .mockRejectedValueOnce(new Error('availability unavailable'));
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const failedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
+        const failedSection = fixture.nativeElement.querySelector('.sleep-backfill-section') as HTMLElement;
+        expect(failedButton.disabled).toBe(true);
+        expect(failedButton.textContent).toContain('Health availability unavailable');
+        expect(failedButton.textContent).not.toContain('Import Sleep History');
+        expect(failedSection.getAttribute('aria-label')).toBe('Suunto import scope unavailable');
+        expect(fixture.nativeElement.textContent).toContain('Suunto import scope unavailable');
+        expect(fixture.nativeElement.textContent).toContain(
+            'Could not determine whether this import includes Health metrics',
+        );
+        expect(fixture.nativeElement.textContent).toContain('Retry availability check');
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+        expect(mockUserService.backfillSuuntoSleepForCurrentUser).not.toHaveBeenCalled();
+
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(false);
+        component.retrySuuntoHealthRolloutAvailability();
+        expect(component.suuntoHealthAvailabilityState()).toBe('loading');
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser).toHaveBeenCalledTimes(2);
+        expect(component.suuntoHealthAvailabilityState()).toBe('unavailable');
+        const retriedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
+        expect(retriedButton.disabled).toBe(false);
+        expect(retriedButton.textContent).toContain('Import Sleep History');
     });
 
     it('should render Garmin sleep backfill button for connected Pro users', async () => {
@@ -210,18 +326,19 @@ describe('HistoryImportFormComponent', () => {
         expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
     });
 
-    it('should render COROS sleep backfill for connected Pro users within the provider lookback', async () => {
+    it('should render COROS Sleep and Health backfill for connected Pro users within the provider lookback', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep History');
-        expect(text).toContain('Imports available COROS sleep');
+        expect(text).toContain('Import Sleep & Health History');
+        expect(text).toContain('Imports available COROS sleep and daily Health metrics');
         expect(text).toContain('up to three months');
         expect(text).toContain('once every 7 days');
     });
@@ -239,6 +356,7 @@ describe('HistoryImportFormComponent', () => {
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
@@ -254,6 +372,7 @@ describe('HistoryImportFormComponent', () => {
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
 
         await component.onSleepBackfill({
             preventDefault: vi.fn(),
@@ -268,7 +387,37 @@ describe('HistoryImportFormComponent', () => {
         expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
     });
 
-    it('should queue COROS sleep backfill from the separate action', async () => {
+    it('uses the server Health queue count in the Suunto confirmation', async () => {
+        await fixture.whenStable();
+        mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
+        mockUserService.backfillSuuntoSleepForCurrentUser.mockResolvedValueOnce({
+            queued: 270,
+            sleepQueued: 135,
+            healthQueued: 135,
+            startDate: '2016-01-01T00:00:00.000Z',
+            endDate: '2026-04-30T12:00:00.000Z',
+            nextAllowedAtMs: 1_778_244_000_000,
+        });
+        component.serviceName = ServiceNames.SuuntoApp;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'Suunto Sleep & Health history import started for 270 date ranges.',
+            undefined,
+            { duration: 3000 },
+        );
+    });
+
+    it('should queue COROS Sleep and Health backfill from the separate action', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
@@ -286,6 +435,11 @@ describe('HistoryImportFormComponent', () => {
             method: ServiceNames.COROSAPI,
             source: 'history_import',
         });
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'COROS Sleep & Health history import started for 4 date ranges.',
+            undefined,
+            { duration: 3000 },
+        );
         expect(component.pendingSleepBackfillResult()?.queued).toBe(4);
     });
 
@@ -337,6 +491,7 @@ describe('HistoryImportFormComponent', () => {
             throw new Error('analytics unavailable');
         });
         (component as any).processChanges();
+        await fixture.whenStable();
 
         await component.onSleepBackfill({
             preventDefault: vi.fn(),

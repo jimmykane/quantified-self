@@ -74,12 +74,19 @@ describe('Wahoo connected-service policy', () => {
 });
 
 describe('COROS connected-service policy', () => {
-  it('documents the active account, activity and route destinations, and expiring echo protection', () => {
+  it('documents COROS Health collection, retention, active account, destinations, and echo protection', () => {
     const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_COROS_DATA_FRAGMENT);
     const content = topic?.content.join(' ') || '';
 
     expect(topic?.title).toBe('COROS Data');
+    expect(content).toContain('daily Health metrics');
+    expect(content).toContain('detailed HRV samples with an interval mean heart rate');
+    expect(content).toContain('referenced from Health instead of copied');
+    expect(content).toContain('recoverable legacy Sleep copies can remain until the guarded migration completes');
+    expect(content).toContain('calorie field remains provider-native');
+    expect(content).toContain('Disconnecting COROS stops future daily Health and sleep imports');
+    expect(content).toContain('Deleting your Quantified Self account recursively removes');
     expect(content).toContain('active COROS connection');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
     expect(content).toContain('Eligible connected Pro users can also send');
@@ -179,5 +186,19 @@ describe('Garmin and Suunto manual route delivery policy', () => {
     expect(suuntoContent).toContain('selected FIT routes and saved routes are converted to a compatible GPX route in memory');
     expect(suuntoContent).toContain('Direct selected-file route delivery does not create or retain a Quantified Self route');
     expect(suuntoContent).toContain('Eligible connected Pro users can also select COROS');
+  });
+});
+
+describe('Suunto Health policy', () => {
+  it('states the collection, separation, retention, and deletion boundaries', () => {
+    const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(item => item.id === POLICIES_SUUNTO_DATA_FRAGMENT);
+    const content = topic?.content.join(' ') || '';
+
+    expect(content).toContain('Connected accounts can also import available 24/7');
+    expect(content).toContain('separate from workout FIT metrics and Sleep sessions');
+    expect(content).toContain('raw Health webhook samples are not stored');
+    expect(content).toContain('Disconnecting Suunto stops future');
+    expect(content).toContain('Deleting your Quantified Self account removes');
   });
 });

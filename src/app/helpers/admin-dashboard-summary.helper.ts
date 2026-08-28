@@ -2,6 +2,7 @@ import type {
     FinancialStats,
     MaintenanceStatus,
     QueueStats,
+    SubscriptionCadenceTierStats,
     SubscriptionHistoryTrendResponse,
     UserCountStats,
     UserGrowthTrendResponse
@@ -89,6 +90,7 @@ interface QueueRowBase {
 }
 
 const EMPTY_CHIPS: string[] = [];
+const AUTH_ACTIVITY_BASIS = 'Sign-in or ID token refresh';
 
 export function buildAdminDashboardUserKpiCards(
     stats: UserCountStats | null,
@@ -111,15 +113,54 @@ export function buildAdminDashboardUserKpiCards(
     const anyConnectionUsers = connectionStats
         ? distinctConnectedUserCount(connectionStats.serviceUsers, connectionStats.mcpUsers, connectionStats.both)
         : null;
+    const authActivityStats = stats.authActivity;
+    const active24Hours = normalizeOptionalCount(authActivityStats?.last24Hours);
+    const active7Days = normalizeOptionalCount(authActivityStats?.last7Days);
+    const active30Days = normalizeOptionalCount(authActivityStats?.last30Days);
+    const marketingConsent = safeCount(stats.marketingConsent);
 
     return [
+        ...(authActivityStats ? [
+            numberCard('active-24h', 'Active 24h', 'schedule', active24Hours, undefined, AUTH_ACTIVITY_BASIS),
+            numberCard(
+                'active-7d',
+                'Active 7d',
+                'date_range',
+                active7Days,
+                undefined,
+                authActivity7DaySubtitle(active7Days, active30Days)
+            ),
+            numberCard('active-30d', 'Active 30d', 'calendar_view_month', active30Days, undefined, AUTH_ACTIVITY_BASIS),
+        ] : []),
         numberCard('total-users', 'Total Users', 'people', stats.total),
-        numberCard('pro-users', 'Pro Users', 'verified', stats.pro, 'ok'),
-        numberCard('basic-users', 'Basic Users', 'person_outline', stats.basic),
+        numberCard(
+            'pro-users',
+            'Pro Users',
+            'verified',
+            stats.pro,
+            'ok',
+            subscriptionCadenceSubtitle(stats.subscriptionCadence?.pro)
+        ),
+        numberCard(
+            'basic-users',
+            'Basic Users',
+            'person_outline',
+            stats.basic,
+            undefined,
+            subscriptionCadenceSubtitle(stats.subscriptionCadence?.basic)
+        ),
         numberCard('free-users', 'Free Users', 'money_off', stats.free),
         numberCard('monthly-paid', 'Monthly Paid', 'calendar_view_month', stats.monthlyPaid),
         numberCard('yearly-paid', 'Yearly Paid', 'calendar_today', stats.yearlyPaid),
         numberCard('onboarded-users', 'Onboarded', 'how_to_reg', stats.onboardingCompleted, 'ok'),
+        numberCard(
+            'marketing-consent',
+            'Marketing Opt-ins',
+            'mark_email_read',
+            marketingConsent,
+            undefined,
+            userShareSubtitle(marketingConsent, stats.total, 'Consent only')
+        ),
         ...(connectionStats ? [
             numberCard(
                 'service-connected-users',
@@ -135,7 +176,7 @@ export function buildAdminDashboardUserKpiCards(
                 'hub',
                 connectionStats.mcpUsers,
                 connectionCountSeverity(connectionStats.mcpUsers),
-                connectedUserShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
+                userShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
             ),
             numberCard(
                 'any-connected-users',
@@ -143,7 +184,7 @@ export function buildAdminDashboardUserKpiCards(
                 'account_tree',
                 anyConnectionUsers,
                 connectionCountSeverity(anyConnectionUsers),
-                connectedUserShareSubtitle(anyConnectionUsers, stats.total, 'Service or MCP')
+                userShareSubtitle(anyConnectionUsers, stats.total, 'Service or MCP')
             ),
         ] : []),
         compactCard('events', 'Events', 'fitness_center', stats.events.total, countUpdatedSubtitle(stats.events.computedAt)),
@@ -261,7 +302,7 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
         }),
         buildQueueRow({
             id: 'sleep-sync',
-            label: 'Sleep Sync',
+            label: 'Sleep & Health Sync',
             icon: 'hotel',
             route: '/admin/queues/sleep-sync',
             pendingDb: stats.sleepSync?.pending,
@@ -473,29 +514,64 @@ function connectedServiceSubtitle(
         return 'Unavailable';
     }
 
-    const share = connectedUserShareSubtitle(connectedUsers, totalUsers);
+    const share = userShareSubtitle(connectedUsers, totalUsers);
     const providerSummary = ['Garmin', 'Suunto', 'COROS', 'Wahoo']
         .map(provider => `${provider} ${normalizeCount(providers[provider])}`)
         .join(' · ');
     return [share, providerSummary].filter((value): value is string => Boolean(value)).join(' · ') || undefined;
 }
 
-function connectedUserShareSubtitle(
-    connectedUsers: number | null,
+function userShareSubtitle(
+    users: number | null,
     totalUsers: number,
     prefix?: string,
 ): string | undefined {
-    if (connectedUsers === null) {
+    const normalizedUsers = safeCount(users);
+    if (normalizedUsers === null) {
         return 'Unavailable';
     }
 
-    const normalizedTotalUsers = finiteNumber(totalUsers);
+    const normalizedTotalUsers = safeCount(totalUsers);
     if (normalizedTotalUsers === null || normalizedTotalUsers <= 0) {
         return prefix;
     }
 
-    const share = Math.round((connectedUsers / normalizedTotalUsers) * 100);
+    const share = Math.min(100, Math.round((normalizedUsers / normalizedTotalUsers) * 100));
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
+}
+
+function authActivity7DaySubtitle(active7Days: number | null, active30Days: number | null): string {
+    if (active7Days === null || active30Days === null || active30Days <= 0) {
+        return AUTH_ACTIVITY_BASIS;
+    }
+
+    const share = Math.min(100, Math.max(0, Math.round((active7Days / active30Days) * 100)));
+    return `${AUTH_ACTIVITY_BASIS} · ${share}% of 30-day active`;
+}
+
+function subscriptionCadenceSubtitle(stats: SubscriptionCadenceTierStats | undefined): string | undefined {
+    if (!stats) {
+        return undefined;
+    }
+
+    const count = (value: unknown): number | null => (
+        typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+    );
+    const monthly = count(stats.monthly);
+    const yearly = count(stats.yearly);
+    const unknown = count(stats.unknown);
+    if (monthly === null && yearly === null) {
+        return 'Cadence unavailable';
+    }
+
+    const details = [
+        monthly === null ? 'Monthly unavailable' : `Monthly ${monthly}`,
+        yearly === null ? 'Yearly unavailable' : `Yearly ${yearly}`,
+    ];
+    if (unknown !== null && unknown > 0) {
+        details.push(`Unknown ${unknown}`);
+    }
+    return details.join(' · ');
 }
 
 function distinctConnectedUserCount(
@@ -606,6 +682,12 @@ function normalizeNullableCount(value: unknown): number | null {
 
 function normalizeOptionalCount(value: unknown): number | null {
     return finiteNumber(value) === null ? null : normalizeCount(value);
+}
+
+function safeCount(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : null;
 }
 
 function finiteNumber(value: unknown): number | null {

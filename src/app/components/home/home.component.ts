@@ -4,7 +4,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -20,7 +19,6 @@ import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/type
     RouterLink,
     MatButtonModule,
     MatCardModule,
-    MatDividerModule,
     MatIconModule,
     MatTooltipModule,
     TypedPromptRotatorComponent,

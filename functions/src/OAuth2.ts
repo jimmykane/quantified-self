@@ -15,6 +15,7 @@ import { markServiceConnected } from './service-connection-meta';
 import {
   cleanupServiceConnectionForUser,
   cleanupServiceTokenById,
+  buildStoredServiceToken,
   MissingTokensBehavior,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
@@ -44,6 +45,13 @@ import {
   type DocumentGenerationGuard,
 } from './token-refresh-coordinator';
 import { assertWahooOAuthAccountCompatible } from './wahoo/account';
+import {
+  buildSuuntoHealthWebhookAccountBinding,
+  doesSuuntoHealthWebhookBindingMatch,
+  getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding,
+  SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES,
+} from './suunto/health-webhook-binding';
 import {
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
@@ -194,6 +202,12 @@ async function beginOAuthFlowIfUserActive(
       state,
       codeVerifier: FieldValue.delete(),
       [OAUTH_FLOW_GENERATION_FIELD]: generation,
+      // A legacy child can outlive a root that was deleted before recursive
+      // cleanup completed. Recreating that COROS root must not make a
+      // generation-less orphan active while the user is still in OAuth.
+      ...(serviceName === ServiceNames.COROSAPI && !rootSnapshot.exists
+        ? { [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: generation }
+        : {}),
       // A prior process may have died after claiming an explicit disconnect.
       // Starting a new OAuth episode is the safe recovery point for an
       // expired fence and invalidates that old owner.
@@ -452,6 +466,14 @@ async function setOAuthTokenIfUserActive(
     ...tokenData,
     tokenCredentialGeneration: crypto.randomUUID(),
   };
+  const suuntoProviderUserId = serviceName === ServiceNames.SuuntoApp
+    && typeof tokenData.userName === 'string'
+    && tokenData.userName.trim().length > 0
+    ? tokenData.userName.trim()
+    : null;
+  const suuntoBindingRef = suuntoProviderUserId
+    ? getSuuntoHealthWebhookAccountBindingRef(db, suuntoProviderUserId, userID)
+    : null;
   await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -477,6 +499,17 @@ async function setOAuthTokenIfUserActive(
       [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: persistedTokenData.tokenCredentialGeneration,
     }, { merge: true });
     transaction.set(tokenDocRef, persistedTokenData);
+    if (suuntoBindingRef && suuntoProviderUserId) {
+      transaction.set(
+        suuntoBindingRef,
+        buildSuuntoHealthWebhookAccountBinding(
+          userID,
+          suuntoProviderUserId,
+          persistedTokenData.tokenCredentialGeneration,
+          SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.OAuthCallback,
+        ),
+      );
+    }
   });
   return {
     rootGenerationGuard: {
@@ -525,9 +558,15 @@ async function deleteSupersededOAuthCredentialIfCurrent(
       return false;
     }
 
-    const [tokenRootSnapshot, tokenSnapshot] = await Promise.all([
+    const suuntoBindingRef = serviceName === ServiceNames.SuuntoApp
+      && typeof guard.tokenRef.id === 'string'
+      && guard.tokenRef.id.trim().length > 0
+      ? getSuuntoHealthWebhookAccountBindingRef(db, guard.tokenRef.id.trim(), userID)
+      : null;
+    const [tokenRootSnapshot, tokenSnapshot, suuntoBindingSnapshot] = await Promise.all([
       transaction.get(guard.rootGenerationGuard.documentRef),
       transaction.get(guard.tokenRef),
+      suuntoBindingRef ? transaction.get(suuntoBindingRef) : Promise.resolve(null),
     ]);
     if (
       getActiveServiceDisconnectOperationGeneration(
@@ -540,6 +579,19 @@ async function deleteSupersededOAuthCredentialIfCurrent(
     }
 
     transaction.delete(guard.tokenRef);
+    if (suuntoBindingRef
+      && suuntoBindingSnapshot
+      && doesSuuntoHealthWebhookBindingMatch(
+        parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot.data()),
+        userID,
+        guard.tokenRef.id.trim(),
+        guard.tokenCredentialGeneration,
+      )) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // The document-only delete remains atomic with the OAuth lifecycle fence.
+      transaction.delete(suuntoBindingRef);
+    }
     return true;
   });
 }
@@ -596,6 +648,11 @@ async function deauthorizeUnpersistedOAuthToken(
 
 
 export async function removeDuplicateConnections(currentUserID: string, serviceName: ServiceNames, externalUserId: string) {
+  // Suunto explicitly supports the same provider account being connected to
+  // more than one Firebase user. Each owner has an independent credential and
+  // webhook binding, so cross-user cleanup would silently break fan-out.
+  if (serviceName === ServiceNames.SuuntoApp) return;
+
   const adapter = getServiceAdapter(serviceName);
   const query: admin.firestore.Query = adapter.getDuplicateConnectionQuery(externalUserId);
 
@@ -841,8 +898,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     return;
   }
 
-  // Remove any OTHER users connected to this same external account
-  if (uniqueId) {
+  // Providers with single-owner semantics remove OTHER users connected to the
+  // same external account. Suunto preserves independent shared connections.
+  if (uniqueId && serviceName !== ServiceNames.SuuntoApp) {
     try {
       await removeDuplicateConnections(userID, serviceName, uniqueId);
     } catch (e) {
@@ -909,10 +967,30 @@ export async function deauthorizeServiceForSubscriptionEnforcement(
     SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
     {
       missingTokensBehavior: 'ignore',
-      tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
-        recoverTerminalAuthFailure: false,
-        allowDisconnectPendingTokenUse: options.allowDisconnectPendingTokenUse === true,
-      }),
+      tokenResolver: async (doc) => {
+        try {
+          return await getTokenData(doc, serviceName, false, {
+            recoverTerminalAuthFailure: false,
+            allowDisconnectPendingTokenUse: options.allowDisconnectPendingTokenUse === true,
+          });
+        } catch (error) {
+          // An inactive same-user COROS child is intentionally unavailable to
+          // every normal worker, but subscription enforcement must still try
+          // to revoke it. The cleanup coordinator revalidates both its token
+          // snapshot and captured root lifecycle before the provider call and
+          // conditional local delete, so this fallback cannot target a newer
+          // reconnect credential.
+          if (serviceName === ServiceNames.COROSAPI
+            && error instanceof Error
+            && (error as Error & { reason?: unknown }).reason === 'inactive_oauth_credential') {
+            return buildStoredServiceToken(
+              serviceName,
+              doc.data() as Auth2ServiceTokenInterface,
+            );
+          }
+          throw error;
+        }
+      },
     },
   );
 }

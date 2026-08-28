@@ -126,6 +126,32 @@ describe('enqueueRouteSyncQueueItem', () => {
     }));
   });
 
+  it('namespaces shared-account route queue identities by Firebase owner', async () => {
+    await enqueueRouteSyncQueueItem({
+      sourceServiceName: ServiceNames.SuuntoApp,
+      providerUserId: 'shared-suunto-user',
+      providerRouteId: 'route-1',
+      manual: false,
+      firebaseUserID: 'firebase-owner-2',
+    });
+
+    expect(hoisted.generateIDFromParts).toHaveBeenCalledWith([
+      'routeSync',
+      ServiceNames.SuuntoApp,
+      'shared-suunto-user',
+      'route-1',
+      'firebase-owner-2',
+    ]);
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.queueDocRef,
+      expect.objectContaining({
+        firebaseUserID: 'firebase-owner-2',
+        providerUserId: 'shared-suunto-user',
+        providerRouteId: 'route-1',
+      }),
+    );
+  });
+
   it('keeps pending-disconnect deferred route items queued without redispatching', async () => {
     hoisted.state.existingQueueData = {
       id: 'route-sync-queue-id',

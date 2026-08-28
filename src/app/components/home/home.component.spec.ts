@@ -7,7 +7,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -36,7 +35,6 @@ describe('HomeComponent', () => {
                 MatIconTestingModule,
                 MatCardModule,
                 MatButtonModule,
-                MatDividerModule,
                 MatTooltipModule,
                 BrowserAnimationsModule
             ],
@@ -75,18 +73,29 @@ describe('HomeComponent', () => {
         const text = fixture.nativeElement.textContent as string;
         const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
         const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
-        expect(heroText).toContain('Quantify. Analyze. Improve.');
-        expect(heroText).toContain('One Dashboard. Every Activity.');
-        expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activity data into one private training dashboard.');
-        expect(heroText).toContain('Review readiness, load, intensity, durability, and sleep context');
-        expect(heroText).toContain('keep supported activities syncing between connected services');
+        expect(heroText).toContain('Your Training Data, Connected.');
+        expect(heroText).toContain('One Private Dashboard. Every Activity in Context.');
+        expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activities together.');
+        expect(heroText).toContain('Understand readiness, training load, sleep, routes,');
+        expect(heroText).toContain('keep supported activities synced across services');
+        expect(heroText).toContain('Your Data Stays Yours');
+        expect(heroText).toContain('Private by Design');
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
-        expect(aiSectionText).toContain('If you could ask your training history one question, what would it be?');
-        expect(aiSectionText).toContain('Quantified Self Assistant');
-        expect(aiSectionText).toContain('answers grounded in read-only sleep, readiness, Training, measurement, and activity tools');
+        expect(aiSectionText).toContain('Ask about your training. Get answers grounded in your data.');
+        expect(aiSectionText).toContain('Explore sleep, readiness, training, measurements, and recent activities in one conversation.');
+        expect(aiSectionText).toContain('The Assistant answers from your current data');
+        expect(aiSectionText).toContain('not generic fitness advice');
+        expect(aiSectionText).toContain('Ask in Your Own Words');
+        expect(aiSectionText).toContain('Ask follow-up questions without starting over.');
+        expect(aiSectionText).toContain('Bring Your Data Together');
+        expect(aiSectionText).toContain('when your question needs the broader context.');
+        expect(aiSectionText).toContain('Check the Evidence');
+        expect(aiSectionText).toContain('see exactly what supports it.');
+        expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).toContain('Explore the Assistant');
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .feature-icon-container[data-nosnippet]').length).toBe(3);
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });

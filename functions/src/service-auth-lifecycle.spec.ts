@@ -17,6 +17,7 @@ const {
   tokenCollectionRef,
   tokenRootRef,
   serviceMetaRef,
+  suuntoWebhookBindingRef,
 } = vi.hoisted(() => {
   const tokenDocumentGet = vi.fn().mockResolvedValue({
     exists: true,
@@ -53,6 +54,10 @@ const {
     }),
   };
   const serviceMetaRef = { id: 'suuntoApp', path: 'users/firebase-user-123/meta/suuntoApp' };
+  const suuntoWebhookBindingRef = {
+    id: 'binding-digest',
+    get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
+  };
 
   return {
     mockMarkServiceReconnectRequired: vi.fn().mockResolvedValue(true),
@@ -74,6 +79,7 @@ const {
     tokenCollectionRef,
     tokenRootRef,
     serviceMetaRef,
+    suuntoWebhookBindingRef,
   };
 });
 
@@ -82,6 +88,9 @@ vi.mock('firebase-admin', () => {
     runTransaction: mockRunTransaction,
     recursiveDelete: mockRecursiveDelete,
     collection: vi.fn((name: string) => {
+      if (name === 'suuntoHealthWebhookAccountBindings') {
+        return { doc: vi.fn(() => suuntoWebhookBindingRef) };
+      }
       if (name !== 'users') throw new Error(`Unexpected collection ${name}`);
       return {
         doc: vi.fn(() => ({
@@ -287,6 +296,48 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(mockMarkServiceReconnectRequired).not.toHaveBeenCalled();
   });
 
+  it('replaces provider refresh details in opaque terminal-auth resolutions', async () => {
+    const resolution = await handleTerminalServiceAuthFailure(
+      {
+        id: 'raw-provider-account-id',
+        ref: {
+          parent: { parent: undefined },
+        },
+      } as any,
+      ServiceNames.SuuntoApp,
+      {
+        serviceName: ServiceNames.SuuntoApp,
+        accessToken: 'stale-access',
+        refreshToken: 'stale-refresh',
+        expiresAt: 0,
+        userName: 'raw-provider-account-id',
+      } as any,
+      {
+        statusCode: 401,
+        providerErrorCode: 'private-provider-code',
+        providerErrorMessage: 'sensitive provider response',
+        isInvalidGrant: false,
+        isTerminalAuthFailure: true,
+        isTransientError: true,
+        logMessage: 'sensitive provider response',
+      },
+      new Error('sensitive transport detail'),
+      { opaqueTelemetry: true },
+    );
+
+    expect(resolution.kind).toBe('terminal_error');
+    if (resolution.kind !== 'terminal_error') {
+      throw new Error('Expected terminal_error resolution');
+    }
+    expect(resolution.error).toMatchObject({
+      providerErrorCode: 'provider_auth_failed',
+      providerErrorMessage: 'Provider authentication failed.',
+      originalError: expect.objectContaining({ message: 'Provider token refresh failed.' }),
+    });
+    expect(JSON.stringify(resolution.error)).not.toContain('sensitive provider response');
+    expect(JSON.stringify(resolution.error)).not.toContain('sensitive transport detail');
+  });
+
   it('treats a newer token snapshot with the same millisecond value as replaced', async () => {
     const staleTokenSnapshot: any = {
       id: 'suunto-user',
@@ -369,6 +420,9 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         if (ref === serviceMetaRef) {
           return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
         }
+        if (ref === suuntoWebhookBindingRef) {
+          return { exists: false, data: () => undefined };
+        }
         throw new Error('Unexpected transaction get target');
       }),
       delete: transactionDelete,
@@ -449,6 +503,9 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         if (ref === tokenRootRef) return { exists: true, data: () => ({}) };
         if (ref === serviceMetaRef) {
           return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
+        }
+        if (ref === suuntoWebhookBindingRef) {
+          return { exists: false, data: () => undefined };
         }
         throw new Error('Unexpected transaction get target');
       }),
@@ -535,6 +592,9 @@ describe('service-auth-lifecycle terminal auth handling', () => {
         }
         if (ref === serviceMetaRef) {
           return { exists: true, data: () => ({ connectionStateGeneration: 'connection-generation-1' }) };
+        }
+        if (ref === suuntoWebhookBindingRef) {
+          return { exists: false, data: () => undefined };
         }
         throw new Error('Unexpected transaction get target');
       }),

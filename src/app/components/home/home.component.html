@@ -9,17 +9,17 @@
       </div>
 
       <h1 class="hero-title">
-        <p>Quantify. Analyze. Improve.</p>
-        <mat-divider></mat-divider>
-        <p class="highlight-text">One Dashboard. Every Activity.</p>
+        <span>Your Training Data, Connected.</span>
+        <span class="hero-title-divider" aria-hidden="true"></span>
+        <span class="highlight-text">One Private Dashboard. Every Activity in Context.</span>
       </h1>
 
       <p class="hero-subtitle">
-        Bring Garmin, Suunto, COROS, and Wahoo activity data into one private training dashboard.<br>
-        Review readiness, load, intensity, durability, and sleep context, then optionally keep supported activities syncing between connected services.
+        Bring Garmin, Suunto, COROS, and Wahoo activities together. Understand readiness, training load, sleep, routes,
+        and performance trends in context—and keep supported activities synced across services.
       </p>
 
-      <div class="hero-actions">
+      <div class="hero-actions" data-nosnippet>
         <button mat-flat-button class="cta-button primary qs-mat-primary"  (click)="navigateToDashboardOrLogin()">
           Get Started Free
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
@@ -33,12 +33,12 @@
       <!-- Quick Trust Indicators -->
       <div class="trust-indicators">
         <div class="indicator">
-          <mat-icon>check_circle</mat-icon>
-          <span>100% Data Ownership</span>
+          <span data-nosnippet><mat-icon aria-hidden="true">check_circle</mat-icon></span>
+          <span>Your Data Stays Yours</span>
         </div>
         <div class="indicator">
-          <mat-icon>verified_user</mat-icon>
-          <span>Privacy Focused</span>
+          <span data-nosnippet><mat-icon aria-hidden="true">verified_user</mat-icon></span>
+          <span>Private by Design</span>
         </div>
       </div>
     </div>
@@ -453,46 +453,47 @@
   <!-- 4. Assistant Launch Section -->
   <section class="features-section ai-insights-section public-below-fold">
     <div class="ai-insights-header animate-on-scroll">
-      <h2 class="section-title">If you could ask your training history one question, what would it be?</h2>
+      <h2 class="section-title">Ask about your training. Get answers grounded in your data.</h2>
       <p class="section-subtitle">
-        The Quantified Self Assistant gives you answers grounded in read-only sleep, readiness, Training, measurement, and activity tools.
+        Explore sleep, readiness, training, measurements, and recent activities in one conversation. The Assistant
+        answers from your current data—not generic fitness advice.
       </p>
     </div>
 
     <div class="features-grid">
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>chat</mat-icon>
+          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
+            <mat-icon aria-hidden="true">chat</mat-icon>
           </div>
-          <mat-card-title>Ask Naturally</mat-card-title>
+          <mat-card-title>Ask in Your Own Words</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Start with today, a trend, or a recent workout, then follow up without rebuilding the context from scratch.</p>
+          <p>Start with today, a trend, or a recent workout. Ask follow-up questions without starting over.</p>
         </mat-card-content>
       </mat-card>
 
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>hub</mat-icon>
+          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
+            <mat-icon aria-hidden="true">hub</mat-icon>
           </div>
-          <mat-card-title>Use the Right Read-only Tools</mat-card-title>
+          <mat-card-title>Bring Your Data Together</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>The Assistant chooses bounded MCP-backed tools for sleep and HRV, readiness, Training, body measurements, or activities.</p>
+          <p>The Assistant draws from sleep, recovery, training, measurements, and activities when your question needs the broader context.</p>
         </mat-card-content>
       </mat-card>
 
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>fact_check</mat-icon>
+          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
+            <mat-icon aria-hidden="true">fact_check</mat-icon>
           </div>
-          <mat-card-title>See What Grounded the Answer</mat-card-title>
+          <mat-card-title>Check the Evidence</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Each answer must use current account data and includes compact evidence cards, while raw files, routes, and locations stay out.</p>
+          <p>Each answer shows the data behind it, so you can see exactly what supports it.</p>
         </mat-card-content>
       </mat-card>
     </div>

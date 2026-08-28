@@ -2195,6 +2195,22 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('getSuuntoHealthSyncAvailabilityForCurrentUser', () => {
+            it('returns the current server-owned Suunto Health availability', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: { available: true } });
+
+                await expect(service.getSuuntoHealthSyncAvailabilityForCurrentUser()).resolves.toBe(true);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoHealthSyncAvailability');
+            });
+
+            it('fails closed when the callable response does not explicitly enable Health', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({ data: {} });
+
+                await expect(service.getSuuntoHealthSyncAvailabilityForCurrentUser()).resolves.toBe(false);
+            });
+        });
+
         describe('backfillCorosSleepForCurrentUser', () => {
             it('should call cloud function for COROS sleep backfill', async () => {
                 const response = {

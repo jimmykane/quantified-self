@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { TimeIntervals } from '@sports-alliance/sports-lib';
 import type { DerivedTrainingDurabilityMetricPayload } from '@shared/derived-metrics';
+import { formatDashboardDateByInterval } from './dashboard-chart-data.helper';
 import { buildTrainingDurabilityScopeViewModels } from './training-durability-view.helper';
 
+const supportingStartMs = Date.parse('2026-08-25T09:00:39.000Z');
 const context = { contextKey: 'running:speed', scope: 'running' as const, outputSource: 'speed', outputUnit: 'm/s', poolLengthMeters: null, stroke: null };
 const currentSummary = {
   context, sampleCount: 3, medianDurationSeconds: 3600, medianCoverageRatio: 0.8,
@@ -22,7 +25,7 @@ const payload: DerivedTrainingDurabilityMetricPayload = {
     scope: 'running', current: makeWindow(28), baselineBlocks: Array.from({ length: 3 }, () => makeWindow(28)),
     usual: { coverage, summaries: [usualSummary] }, weeks: Array.from({ length: 12 }, () => makeWindow(7)),
     recentSupportingEvents: [{
-      activityId: 'a1', eventId: 'e1', label: 'Long run', startDayMs: 1, contextKey: context.contextKey,
+      activityId: 'a1', eventId: 'e1', label: '2026-08-25T09:00:39.000Z', startDayMs: 1, startMs: supportingStartMs, contextKey: context.contextKey,
       decouplingPercent: 4, outputRetentionPercent: 96, heartRateDriftBpm: 5, paceRetentionPercent: null, swolfChange: null,
     }],
   }],
@@ -30,13 +33,13 @@ const payload: DerivedTrainingDurabilityMetricPayload = {
 
 describe('buildTrainingDurabilityScopeViewModels', () => {
   it('compares current durability with the prior-block median', () => {
-    const views = buildTrainingDurabilityScopeViewModels(payload, ['running']);
+    const views = buildTrainingDurabilityScopeViewModels(payload, ['running'], 'en-GB');
     expect(views[0]).toEqual(expect.objectContaining({
       label: 'Running', evidenceText: '3 eligible of 5 candidate workouts · 1 without processed evidence', coverageText: '60% eligible',
       conclusionText: 'Durability is based on 3 comparable current workouts; read it as a directional signal rather than a verdict.',
       evidenceQualityText: 'Evidence quality: usable — 3 of 4 processed candidate workouts supplied eligible evidence; 1 candidate workout still lacks processed durability evidence.',
       exclusionText: 'Primary exclusions: Too variable 1', trendText: '12 of 12 recent weeks produced comparable workout evidence',
-      supportingEventsText: 'Recent supporting workouts: Long run',
+      supportingEventsText: `Recent supporting workouts: ${formatDashboardDateByInterval(supportingStartMs, TimeIntervals.Hourly, 'en-GB')}`,
     }));
     expect(views[0].contexts[0].metrics).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Aerobic decoupling', deltaText: '−1%', deltaTone: 'positive' }),

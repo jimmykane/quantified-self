@@ -155,10 +155,12 @@
 
                 subgraph Backend["☁️ Backend Services"]
                 DeleteFn["Cloud Function: deleteSelf"]
+                Tombstone["Firestore deletion tombstone"]
                 Auth["Firebase Auth"]
 
                 Service -->|Call| DeleteFn
-                DeleteFn -->|Admin SDK| Auth
+                DeleteFn -->|"1. Write fail-closed marker"| Tombstone
+                Tombstone -->|"2. Marker stored"| Auth
                 end
 
                 subgraph Triggers["⚡ Parallel Cleanup Triggers"]
@@ -194,6 +196,9 @@
                 style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
                 style ExtensionCleanup fill:#161b22,stroke:#238636,stroke-width:2px,stroke-dasharray: 5 5
             </div>
+            <p><code>deleteSelf</code> deletes the Firebase Auth user only after the deletion tombstone is stored. If
+                that write fails, deletion aborts so guarded background writers cannot race recursive cleanup without a
+                deletion signal.</p>
         </div>
 
         <div class="card">
@@ -228,6 +233,12 @@
                         <td>The extension removes saved routes during account deletion; <code>cleanupRouteFiles</code> covers normal route deletes, route metadata, route-scoped original files, and route quota reconciliation while skipping Firestore-owned work when account deletion is already in progress</td>
                     </tr>
                     <tr>
+                        <td><strong>Sleep &amp; Unified Health</strong></td>
+                        <td><code>users/{uid}/sleepSessions/*</code><br><code>users/{uid}/sleepSyncState/*</code><br><code>users/{uid}/healthSourceRecords/*</code><br><code>users/{uid}/healthSampleChunks/*</code><br><code>users/{uid}/healthSyncState/*</code></td>
+                        <td>Extension</td>
+                        <td>All records remain in the recursively deleted user subtree. Provider disconnect retains imported history; account deletion removes it. Deletion-guarded writers cannot recreate records once deletion starts.</td>
+                    </tr>
+                    <tr>
                         <td><strong>Stripe Data</strong></td>
                         <td><code>customers/{uid}</code><br><code>customers/{uid}/subscriptions/*</code></td>
                         <td>Extension</td>
@@ -250,7 +261,7 @@
                         <td><strong>Operational Queues</strong></td>
                         <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccounts</code></td>
-                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including route sync and route reparse jobs</td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>

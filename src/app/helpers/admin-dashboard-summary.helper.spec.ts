@@ -18,11 +18,16 @@ describe('admin-dashboard-summary helper', () => {
             basic: 25,
             free: 65,
             monthlyPaid: 40,
-            yearlyPaid: 15,
+            yearlyPaid: 14,
+            subscriptionCadence: {
+                pro: { monthly: 18, yearly: 11, unknown: 1 },
+                basic: { monthly: 22, yearly: 3, unknown: 0 },
+            },
             everPaid: 70,
             canceled: 15,
             cancelScheduled: 3,
             onboardingCompleted: 90,
+            marketingConsent: 35,
             providers: {},
             events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
             routes: { total: 42 },
@@ -31,6 +36,12 @@ describe('admin-dashboard-summary helper', () => {
                 mcpUsers: 12,
                 both: 9,
                 providers: { Garmin: 30, Suunto: 12, COROS: 8, Wahoo: 5 },
+            },
+            authActivity: {
+                last24Hours: 12,
+                last7Days: 40,
+                last30Days: 50,
+                computedAt: '2026-06-01T10:05:00.000Z',
             },
         };
 
@@ -58,7 +69,26 @@ describe('admin-dashboard-summary helper', () => {
             }
         );
 
+        expect(cards.slice(0, 3).map(card => card.id)).toEqual(['active-24h', 'active-7d', 'active-30d']);
+        expect(cards.find(card => card.id === 'active-24h')).toMatchObject({
+            value: 12,
+            subtitle: 'Sign-in or ID token refresh',
+            severity: undefined,
+        });
+        expect(cards.find(card => card.id === 'active-7d')).toMatchObject({
+            value: 40,
+            subtitle: 'Sign-in or ID token refresh · 80% of 30-day active',
+            severity: undefined,
+        });
+        expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
         expect(cards.find(card => card.id === 'total-users')?.value).toBe(120);
+        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
+            label: 'Marketing Opt-ins',
+            value: 35,
+            subtitle: 'Consent only · 29% of users',
+        });
+        expect(cards.find(card => card.id === 'pro-users')?.subtitle).toBe('Monthly 18 · Yearly 11 · Unknown 1');
+        expect(cards.find(card => card.id === 'basic-users')?.subtitle).toBe('Monthly 22 · Yearly 3');
         expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
         expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBe(6);
@@ -90,6 +120,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 1,
+            marketingConsent: 0,
             providers: {},
             events: { total: 0 },
             routes: { total: 0 },
@@ -99,6 +130,61 @@ describe('admin-dashboard-summary helper', () => {
 
         expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
+        expect(cards.some(card => card.id.startsWith('active-'))).toBe(false);
+    });
+
+    it('caps the marketing consent share for non-atomic count snapshots', () => {
+        const stats: UserCountStats = {
+            total: 10,
+            pro: 0,
+            basic: 0,
+            free: 10,
+            monthlyPaid: 0,
+            yearlyPaid: 0,
+            everPaid: 0,
+            canceled: 0,
+            cancelScheduled: 0,
+            onboardingCompleted: 10,
+            marketingConsent: 11,
+            providers: {},
+            events: { total: 0 },
+            routes: { total: 0 },
+        };
+
+        const card = buildAdminDashboardUserKpiCards(stats, null, null)
+            .find(candidate => candidate.id === 'marketing-consent');
+
+        expect(card?.subtitle).toBe('Consent only · 100% of users');
+    });
+
+    it('omits the activity ratio when the 30-day denominator is zero', () => {
+        const stats: UserCountStats = {
+            total: 1,
+            pro: 0,
+            basic: 0,
+            free: 1,
+            monthlyPaid: 0,
+            yearlyPaid: 0,
+            everPaid: 0,
+            canceled: 0,
+            cancelScheduled: 0,
+            onboardingCompleted: 1,
+            marketingConsent: 0,
+            providers: {},
+            events: { total: 0 },
+            routes: { total: 0 },
+            authActivity: {
+                last24Hours: null,
+                last7Days: 0,
+                last30Days: 0,
+                computedAt: null,
+            },
+        };
+
+        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+
+        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or ID token refresh');
     });
 
     it('does not present unavailable connection counts as successful or zero', () => {
@@ -113,6 +199,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 8,
+            marketingConsent: 3,
             providers: {},
             events: { total: 0 },
             routes: { total: 0 },
@@ -156,6 +243,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: Number.NaN,
             cancelScheduled: 2,
             onboardingCompleted: 1,
+            marketingConsent: Number.NaN,
             providers: {},
             events: { total: Number.NaN },
             routes: { total: 5 },
@@ -170,6 +258,10 @@ describe('admin-dashboard-summary helper', () => {
         );
 
         expect(cards.find(card => card.id === 'total-users')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
+            value: null,
+            subtitle: 'Unavailable',
+        });
         expect(cards.find(card => card.id === 'events')?.value).toBeNull();
         expect(cards.find(card => card.id === 'canceled')?.severity).toBeUndefined();
         expect(cards.find(card => card.id === 'scheduled-cancel')?.severity).toBe('warning');
@@ -386,6 +478,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 0,
+            marketingConsent: 0,
             providers: {},
             events: { total: 10, computedAt: 'not-a-date' },
             routes: { total: 5, computedAt: '2026-06-01T10:00:00.000Z' },

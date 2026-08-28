@@ -23,19 +23,28 @@ describe('getUserCount Cloud Function', () => {
         const mockTotalCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 150 })
         });
-        const mockCountGet = vi.fn()
-            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }) // pro
-            .mockResolvedValueOnce({ data: () => ({ count: 50 }) }); // basic
         const mockOnboardingCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 40 })
         });
         const mockActiveSubscriptionsGet = vi.fn().mockResolvedValue({
             docs: [
-                ...Array.from({ length: 45 }, () => ({
-                    data: () => ({ role: 'pro', items: [{ plan: { interval: 'month' } }] })
+                ...Array.from({ length: 50 }, (_, index) => ({
+                    ref: { path: `customers/pro-${index}/subscriptions/sub-pro-${index}` },
+                    data: () => ({
+                        status: 'active',
+                        role: 'pro',
+                        created: 1_700_000_000 + index,
+                        items: index < 45 ? [{ plan: { interval: 'month' } }] : [],
+                    })
                 })),
-                ...Array.from({ length: 5 }, () => ({
-                    data: () => ({ role: 'basic', items: [{ plan: { interval: 'year' } }] })
+                ...Array.from({ length: 50 }, (_, index) => ({
+                    ref: { path: `customers/basic-${index}/subscriptions/sub-basic-${index}` },
+                    data: () => ({
+                        status: 'active',
+                        role: 'basic',
+                        created: 1_700_001_000 + index,
+                        items: index < 5 ? [{ plan: { interval: 'year' } }] : [],
+                    })
                 }))
             ]
         });
@@ -49,7 +58,6 @@ describe('getUserCount Cloud Function', () => {
         // Mock implementation for chainable queries
         const mockQuery = {
             where: vi.fn().mockReturnThis(),
-            count: vi.fn().mockReturnValue({ get: mockCountGet }),
             select: vi.fn().mockReturnValue({ get: mockActiveSubscriptionsGet })
         };
         const mockEventsQuery = {

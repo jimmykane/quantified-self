@@ -2,6 +2,7 @@ import { ElementRef, SimpleChange } from '@angular/core';
 import { SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import type { DashboardTrainingSwimPerformanceContext } from '../../helpers/dashboard-derived-metrics.helper';
+import { formatDashboardWeeklyAxisLabel } from '../../helpers/dashboard-chart-data.helper';
 import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { TrainingSwimPerformanceChartComponent } from './training-swim-performance-chart.component';
@@ -56,6 +57,11 @@ describe('TrainingSwimPerformanceChartComponent', () => {
     expect(option.yAxis.inverse).toBe(true);
     expect(option.series.map((series: any) => series.name)).toEqual(['Pool', 'Open water']);
     expect(option.series[1].lineStyle.type).toBe('dashed');
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 6, 6))).not.toMatch(/^W\d+$/);
+    expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 6, 6))).toBe(
+      formatDashboardWeeklyAxisLabel(Date.UTC(2026, 6, 6), false, undefined, 'UTC'),
+    );
+    expect(option.tooltip.formatter([{ data: [Date.UTC(2026, 6, 6), 100] }])).toContain('Week 28');
     expect(option.tooltip).toEqual(expect.objectContaining({
       appendTo: getOrCreateEChartsTooltipHost,
       confine: false,
@@ -63,6 +69,24 @@ describe('TrainingSwimPerformanceChartComponent', () => {
       triggerOn: 'mousemove|click',
     }));
     expect(component.view.latestSwolfText).toBe('42');
+  });
+
+  it('uses compact weekly markers on mobile only', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
+
+    try {
+      const component = createComponent();
+      component.performance = performance();
+      component.status = 'ready';
+      component.chartDiv = new ElementRef(document.createElement('div'));
+      await refresh(component);
+
+      const option = (component as any).buildOption();
+      expect(option.xAxis.axisLabel.formatter(Date.UTC(2026, 6, 6))).toBe('W28');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 
   it('distinguishes loading, failed, no-session, and no-explicit-pace states', async () => {

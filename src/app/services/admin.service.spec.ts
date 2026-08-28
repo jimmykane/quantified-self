@@ -94,10 +94,15 @@ describe('AdminService', () => {
             free: 0,
             monthlyPaid: 120,
             yearlyPaid: 60,
+            subscriptionCadence: {
+                pro: { monthly: 35, yearly: 15, unknown: 0 },
+                basic: { monthly: 85, yearly: 45, unknown: 0 },
+            },
             everPaid: 160,
             canceled: 20,
             cancelScheduled: 12,
             onboardingCompleted: 160,
+            marketingConsent: 75,
             events: {
                 total: 1_000_000,
             },
@@ -112,6 +117,12 @@ describe('AdminService', () => {
                 cacheStatus: 'fresh' as const,
                 computedAt: '2026-08-07T13:00:00.000Z',
                 expireAt: '2026-08-07T14:00:00.000Z',
+            },
+            authActivity: {
+                last24Hours: 14,
+                last7Days: 42,
+                last30Days: 60,
+                computedAt: '2026-08-07T13:15:00.000Z',
             },
             providers: {}
         };
@@ -136,6 +147,91 @@ describe('AdminService', () => {
 
         expect(stats.events).toEqual({ total: null });
         expect(stats.routes).toEqual({ total: null });
+        expect(stats.marketingConsent).toBeNull();
+        expect(stats.authActivity).toBeUndefined();
+        expect(stats.subscriptionCadence).toBeUndefined();
+    });
+
+    it('should mark malformed marketing consent counts as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                marketingConsent: -1,
+                providers: {},
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.marketingConsent).toBeNull();
+    });
+
+    it('should mark malformed subscription cadence counts as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 8,
+                providers: {},
+                subscriptionCadence: {
+                    pro: { monthly: 4.5, yearly: -1, unknown: Number.NaN },
+                    basic: { monthly: 3, yearly: 2, unknown: 0 },
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.subscriptionCadence).toEqual({
+            pro: { monthly: null, yearly: null, unknown: null },
+            basic: { monthly: 3, yearly: 2, unknown: 0 },
+        });
+    });
+
+    it('should mark malformed authentication activity counts as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                providers: {},
+                authActivity: {
+                    last24Hours: 4.9,
+                    last7Days: -2,
+                    last30Days: Number.NaN,
+                    computedAt: 'not-a-date',
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.authActivity).toEqual({
+            last24Hours: null,
+            last7Days: null,
+            last30Days: null,
+            computedAt: null,
+        });
+    });
+
+    it('should mark impossible authentication activity window ordering as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 20,
+                providers: {},
+                authActivity: {
+                    last24Hours: 12,
+                    last7Days: 8,
+                    last30Days: 10,
+                    computedAt: '2026-08-07T13:15:00.000Z',
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.authActivity).toEqual({
+            last24Hours: null,
+            last7Days: null,
+            last30Days: null,
+            computedAt: '2026-08-07T13:15:00.000Z',
+        });
     });
 
     it('should request a forced event count refresh when asked', async () => {
@@ -234,5 +330,97 @@ describe('AdminService', () => {
 
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getUserGrowthTrend', { months: 24 });
         expect(result).toEqual(mockTrend);
+    });
+
+    it('should request and map 365 days of aggregate dashboard history by default', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 365,
+                startDate: '2025-08-28',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: '2026-08-27T00:12:00.000Z',
+                        users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        const history = await firstValueFrom(service.getAdminDashboardHistory());
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('getAdminDashboardHistory', { days: 365 });
+        expect(history.snapshots).toHaveLength(1);
+        expect(history.snapshots[0].authActivity.last30Days).toBe(8);
+    });
+
+    it('should reject malformed dashboard history instead of charting inconsistent totals', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: '2026-08-27T00:12:00.000Z',
+                        users: { total: 10, free: 6, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('inconsistent user totals');
+    });
+
+    it('should reject non-canonical history timestamps', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [
+                    {
+                        date: '2026-08-27',
+                        computedAt: 'August 27, 2026 00:12 UTC',
+                        users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+                        subscriptionCadence: {
+                            pro: { monthly: 1, yearly: 1, unknown: 0 },
+                            basic: { monthly: 2, yearly: 1, unknown: 0 },
+                        },
+                    },
+                ],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('must be an ISO timestamp');
+    });
+
+    it('should reject history bounds that do not span the requested number of days', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-01',
+                endDate: '2026-08-27',
+                snapshots: [],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('date range does not match the requested days');
     });
 });

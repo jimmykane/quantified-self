@@ -10,10 +10,12 @@ import {
 } from '@angular/core';
 import {
   ActivityInterface,
+  ActivityTypeGroups,
   ChartCursorBehaviours,
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
+import { AppActivityTypeGroupGradients } from '../../../services/color/app.activity-type-group.gradients';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import {
@@ -24,6 +26,8 @@ import type { EventChartOverlayOption } from '../../../helpers/event-chart-overl
 import type { EventChartPanelModel } from '../../../helpers/event-echarts-data.helper';
 import type { EventChartRange } from '../../../helpers/event-echarts-xaxis.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
+
+const DIVE_PROFILE_COLORS = AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup];
 
 @Component({
   selector: 'app-event-dive-profile',
@@ -64,9 +68,10 @@ export class EventDiveProfileComponent implements OnChanges {
     const value = Number(this.userSettingsQuery.chartSettings()?.strokeWidth);
     return Number.isFinite(value) && value > 0 ? value : AppUserUtilities.getDefaultChartStrokeWidth();
   });
-  public readonly fillOpacity = computed(() => (
-    AppUserUtilities.getResolvedChartFillOpacity(this.userSettingsQuery.chartSettings())
-  ));
+  public readonly fillOpacity = 1;
+  public readonly areaFillOrigin = 'start';
+  public readonly lightThemeAreaFillColor = DIVE_PROFILE_COLORS.end;
+  public readonly darkThemeAreaFillColor = DIVE_PROFILE_COLORS.start;
   public readonly cursorBehaviour = computed<ChartCursorBehaviours>(() => (
     this.userSettingsQuery.chartSettings()?.chartCursorBehaviour
       ?? AppUserUtilities.getDefaultChartCursorBehaviour()

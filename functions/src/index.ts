@@ -119,10 +119,20 @@ export {
 
 export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
-export { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './sleep/webhooks';
+export {
+  receiveGarminAPISleepData,
+  receiveSuunto247Data,
+} from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
-export { scheduleSuuntoSleepSync, scheduleCOROSSleepSync } from './sleep/polling';
+export {
+  scheduleSuuntoSleepSync,
+  scheduleCOROSSleepSync,
+  scheduleSuuntoHealthSync,
+  scheduleSuuntoWebhookBindingVerification,
+} from './sleep/polling';
 export { backfillCorosAPISleep, backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
+export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
+export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
@@ -151,6 +161,10 @@ export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
 export { cleanupRouteFiles } from './routes/cleanup';
+export {
+  cleanupRejectedRouteOriginalFile,
+  redriveRejectedRouteOriginalCleanup,
+} from './routes/rejected-original-cleanup';
 export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';
@@ -164,6 +178,7 @@ export {
   resetAssistantConversation,
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
+export { queryHealthRange } from './health/callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export {
   onDashboardDerivedMetricsActivityWrite,
@@ -189,7 +204,7 @@ export {
   listMcpConnections,
   revokeMcpConnection,
 } from './mcp/callables';
-export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
+export { listUsers, getQueueStats, getUserCount, getAdminDashboardHistory, scheduleAdminDashboardSnapshot, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

@@ -159,7 +159,7 @@ describe('sleep provider mappers', () => {
         expect(nap?.session.timezoneOffsetSeconds).toBe(3 * 60 * 60);
     });
 
-    it('maps COROS daily sleep with unknown-stage duration and daily extras', () => {
+    it('maps COROS sleep aggregates without duplicating detailed Health metrics', () => {
         const result = mapCorosDailySleep({
             happenDay: 20260428,
             sleepStartTime: '2026-04-27 22:15:00',
@@ -182,7 +182,12 @@ describe('sleep provider mappers', () => {
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(58);
         expect(result?.session.vitals?.minimumHeartRateBpm).toBeUndefined();
         expect(result?.session.vitals?.overnightHrvMs).toBe(50);
-        expect(result?.session.hrvSamples?.[0].value).toBe(25);
+        expect(result?.session).not.toHaveProperty('hrvSamples');
+        expect(result?.session.providerFields?.coros).not.toHaveProperty('calorie');
+        expect(result?.session.providerFields?.coros).not.toHaveProperty('step');
+        expect(result?.session.providerFields?.coros).not.toHaveProperty('rhr');
+        expect(result?.session.providerFields?.coros).not.toHaveProperty('ppgHrv');
+        expect(result?.session.providerFields?.coros).not.toHaveProperty('sleepAvgHr');
     });
 
     it('applies COROS timezone offsets when local sleep timestamps include no offset', () => {
@@ -200,5 +205,21 @@ describe('sleep provider mappers', () => {
         expect(result?.session.timezoneOffsetSeconds).toBe(3 * 60 * 60);
         expect(result?.session.sleepDate).toBe('2026-04-28');
         expect(result?.session.durationSeconds).toBe(30600);
+    });
+
+    it('does not persist a multi-day COROS interval as one Sleep session', () => {
+        expect(mapCorosDailySleep({
+            happenDay: 20260428,
+            sleepStartTime: '2026-04-26 22:15:00',
+            sleepEndTime: '2026-04-28 06:45:00',
+        }, 'coros-open-id', 3000)).toBeNull();
+    });
+
+    it('does not persist a COROS interval outside its provider daily window', () => {
+        expect(mapCorosDailySleep({
+            happenDay: 20260428,
+            sleepStartTime: '2025-04-27 22:15:00',
+            sleepEndTime: '2025-04-28 06:45:00',
+        }, 'coros-open-id', 3000)).toBeNull();
     });
 });

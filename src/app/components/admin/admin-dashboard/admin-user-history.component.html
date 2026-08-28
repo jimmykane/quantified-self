@@ -1,0 +1,80 @@
+<div class="history-header">
+    <div>
+        <h3>Daily user history</h3>
+        <p>One aggregate UTC snapshot per day. Missing collection days remain visible as gaps.</p>
+    </div>
+    <mat-button-toggle-group
+        aria-label="Historical user metric range"
+        [value]="selectedDays()"
+        (change)="selectDays($event.value)">
+        @for (range of ranges; track range.days) {
+        <mat-button-toggle [value]="range.days">{{ range.label }}</mat-button-toggle>
+        }
+    </mat-button-toggle-group>
+</div>
+
+@if (loading) {
+<div class="history-state">
+    <mat-spinner diameter="32"></mat-spinner>
+    <span>Loading daily history</span>
+</div>
+} @else if (error) {
+<mat-card class="history-state history-error">
+    <mat-icon>error</mat-icon>
+    <span>{{ error }}</span>
+</mat-card>
+} @else if (historyView().availablePoints < minimumPoints) {
+<mat-card class="history-state history-collecting">
+    <mat-icon>hourglass_top</mat-icon>
+    <div>
+        <strong>Collecting daily history</strong>
+        <span>{{ historyView().availablePoints }} of {{ minimumPoints }} snapshots available for this range.</span>
+    </div>
+</mat-card>
+} @else {
+<div class="history-status" [class.history-stale]="historyView().isStale">
+    <mat-icon>{{ historyView().isStale ? 'schedule' : 'check_circle' }}</mat-icon>
+    <span>
+        {{ historyView().isStale ? 'History is stale' : 'History is current' }}
+        · Last snapshot {{ historyView().latestSnapshot?.computedAt | date:'medium':'UTC' }} UTC
+        @if (historyView().missingDays > 0) {
+        · {{ historyView().missingDays }} missing {{ historyView().missingDays === 1 ? 'day' : 'days' }}
+        }
+    </span>
+</div>
+
+<div class="history-chart-grid">
+    <mat-card class="history-chart-card history-chart-wide">
+        <div class="chart-heading">
+            <div>
+                <h4>Authentication activity</h4>
+                <p>Enabled, non-admin accounts with sign-in or ID token refresh activity.</p>
+            </div>
+        </div>
+        <div #authChart class="history-chart" role="img"
+            aria-label="Line chart of active accounts in rolling 24-hour, 7-day, and 30-day windows"></div>
+    </mat-card>
+
+    <mat-card class="history-chart-card">
+        <div class="chart-heading">
+            <div>
+                <h4>User and plan mix</h4>
+                <p>Daily Free, Basic, and Pro totals with onboarding completion.</p>
+            </div>
+        </div>
+        <div #userMixChart class="history-chart" role="img"
+            aria-label="Stacked area chart of Free, Basic, and Pro users with onboarding completion"></div>
+    </mat-card>
+
+    <mat-card class="history-chart-card">
+        <div class="chart-heading">
+            <div>
+                <h4>Paid subscription cadence</h4>
+                <p>Monthly, yearly, and unclassified paid users split between Pro and Basic.</p>
+            </div>
+        </div>
+        <div #cadenceChart class="history-chart" role="img"
+            aria-label="Stacked area chart of Pro and Basic monthly, yearly, and unclassified paid users"></div>
+    </mat-card>
+</div>
+}

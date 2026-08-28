@@ -55,11 +55,11 @@
                     <mat-icon>people</mat-icon>
                     User KPIs
                 </h2>
-                <p class="section-description">Current account and subscription totals. Growth and subscription change cover the last 12 months.</p>
+                <p class="section-description">Active users are enabled, non-admin accounts with a sign-in or ID token refresh in the rolling 24-hour, 7-day, or 30-day window. Pro and Basic totals show active monthly and yearly subscription cadence. Daily history is stored as aggregate snapshots without user identifiers.</p>
             </div>
             <div class="section-actions">
-                <button mat-icon-button type="button" matTooltip="Refresh user KPIs" aria-label="Refresh user KPIs"
-                    [disabled]="isLoadingUsers()" (click)="fetchUserOverview()">
+                <button mat-icon-button type="button" matTooltip="Refresh user data" aria-label="Refresh user data"
+                    [disabled]="isLoadingUsers() || isLoadingUserHistory()" (click)="fetchUserOverview()">
                     <mat-icon>refresh</mat-icon>
                 </button>
                 <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/users">
@@ -107,6 +107,11 @@
             }
         </div>
         }
+
+        <app-admin-user-history
+            [history]="userHistory()"
+            [loading]="isLoadingUserHistory()"
+            [error]="userHistoryError()" />
     </section>
 
     <section class="dashboard-section">

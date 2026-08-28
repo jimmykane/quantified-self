@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
+import { createHash } from 'node:crypto';
 
 // Define stable mocks first
 const mockDelete = vi.fn().mockResolvedValue({});
@@ -21,6 +22,7 @@ const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 const mockRunTransaction = vi.fn();
 let mockTransactionDocumentData: Record<string, unknown> | undefined;
+let mockTransactionDocumentExists = true;
 const { mockFieldValueDelete } = vi.hoisted(() => ({
     mockFieldValueDelete: vi.fn().mockReturnValue('delete-sentinel'),
 }));
@@ -81,7 +83,7 @@ function installDefaultRunTransactionMock() {
             get: vi.fn(async (target: any) => {
                 if (target === mockDocInstance) {
                     return {
-                        exists: true,
+                        exists: mockTransactionDocumentExists,
                         data: () => mockTransactionDocumentData || {},
                     };
                 }
@@ -120,6 +122,7 @@ function installDefaultRunTransactionMock() {
                     else nextData[key] = value;
                 }
                 mockTransactionDocumentData = nextData;
+                mockTransactionDocumentExists = true;
             }
             if (pendingSet.target && typeof pendingSet.target.set === 'function') {
                 await pendingSet.target.set(pendingSet.data, pendingSet.options);
@@ -313,6 +316,7 @@ vi.mock('simple-oauth2', () => ({
 import {
     getServiceConfig,
     convertAccessTokenResponseToServiceToken,
+    deauthorizeServiceForSubscriptionEnforcement,
     deauthorizeServiceForUser,
     getAndSetServiceOAuth2AccessTokenForUser,
     deleteLocalServiceToken,
@@ -328,6 +332,7 @@ import { clearServiceConnectionState } from './service-connection-meta';
 describe('OAuth2', () => {
     beforeEach(() => {
         mockTransactionDocumentData = undefined;
+        mockTransactionDocumentExists = true;
         mockDelete.mockReset().mockResolvedValue({});
         mockGet.mockReset().mockResolvedValue({
             data: () => ({}),
@@ -680,6 +685,24 @@ describe('OAuth2', () => {
             expect(requestPromise.post).toHaveBeenCalledWith(expect.objectContaining({
                 url: expect.stringContaining('https://open.coros.com/oauth2/deauthorize?token=mock-access')
             }));
+        });
+
+        it('subscription enforcement revokes an inactive COROS child through the guarded stored-token fallback', async () => {
+            const inactiveCredential = new Error('inactive credential') as Error & { reason: string };
+            inactiveCredential.name = 'TokenUseSkippedForPendingDisconnectError';
+            inactiveCredential.reason = 'inactive_oauth_credential';
+            (getTokenData as Mock).mockRejectedValueOnce(inactiveCredential);
+
+            const outcome = await deauthorizeServiceForSubscriptionEnforcement(
+                userID,
+                ServiceNames.COROSAPI,
+            );
+
+            expect(requestPromise.post).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('https://open.coros.com/oauth2/deauthorize?token=mock-access'),
+            }));
+            expect(outcome.partnerDeauthorizeAttempted).toBe(1);
+            expect(outcome.preservedTokenCount).toBe(0);
         });
 
         it('should NOT delete local records if getTokenData fails with 500', async () => {
@@ -1091,6 +1114,38 @@ describe('OAuth2', () => {
             expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
             expect(clearServiceConnectionState).not.toHaveBeenCalled();
         });
+
+        it('deletes the current Suunto webhook account binding with the local token', async () => {
+            mockRunTransaction.mockImplementation(async (callback: any) => callback({
+                get: vi.fn(async (target: unknown) => {
+                    if (target === userDocRef) {
+                        return { exists: true, data: () => ({}) };
+                    }
+                    if (target === tokenCollectionRef) {
+                        return { docs: [{ id: tokenID }] };
+                    }
+                    if (target === mockDocInstance) {
+                        return {
+                            exists: true,
+                            data: () => ({
+                                schemaVersion: 3,
+                                authorizationSource: 'oauth_callback',
+                                userID,
+                                providerAccountDigest: createHash('sha256').update(tokenID).digest('hex'),
+                                tokenCredentialGeneration: 'credential-generation-1',
+                            }),
+                        };
+                    }
+                    throw new Error('Unexpected transaction get target');
+                }),
+                delete: transactionDeleteSpy,
+            }));
+
+            await deleteLocalServiceToken(userID, ServiceNames.SuuntoApp, tokenID);
+
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(tokenDocRef);
+            expect(transactionDeleteSpy).toHaveBeenCalledWith(mockDocInstance);
+        });
     });
 
     describe('getServiceOAuth2CodeRedirectAndSaveStateToUser', () => {
@@ -1205,6 +1260,23 @@ describe('OAuth2', () => {
 
             expect(result).toContain('https://mock-auth-url.com');
             expect(mockCollection).toHaveBeenCalledWith('COROSAPIAccessTokens');
+        });
+
+        it('fences a legacy COROS token child when OAuth recreates a missing root', async () => {
+            mockTransactionDocumentExists = false;
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.COROSAPI,
+                redirectUri,
+            )).resolves.toContain('https://');
+
+            expect(mockTransactionDocumentData).toEqual(expect.objectContaining({
+                oauthFlowGeneration: expect.any(String),
+                activeOAuthCredentialGeneration: expect.any(String),
+            }));
+            expect(mockTransactionDocumentData?.activeOAuthCredentialGeneration)
+                .toBe(mockTransactionDocumentData?.oauthFlowGeneration);
         });
 
         it('should include PKCE codeVerifier for GarminAPI', async () => {
@@ -1722,6 +1794,14 @@ describe('OAuth2', () => {
             expect(mockDocInstance.set).toHaveBeenCalledWith(expect.objectContaining({
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
+            expect(mockDocInstance.set).toHaveBeenCalledWith({
+                schemaVersion: 3,
+                authorizationSource: 'oauth_callback',
+                userID,
+                providerAccountDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+                tokenCredentialGeneration: expect.any(String),
+            }, undefined);
+            expect(mockWhere).not.toHaveBeenCalled();
         });
 
         it('deletes only the stale token document when a newer OAuth callback wins', async () => {
@@ -2470,7 +2550,7 @@ describe('OAuth2', () => {
                 .rejects.toThrow('Auth adapter not implemented for service: UnsupportedService');
         });
 
-        it('should query userName field for Suunto and delete duplicate via deleteLocalServiceToken', async () => {
+        it('preserves another users matching Suunto token for shared-account fan-out', async () => {
             const docWithOtherUser = {
                 id: 'token-id-other-user',
                 ref: {
@@ -2489,13 +2569,11 @@ describe('OAuth2', () => {
 
             await removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId);
 
-            expect(mockWhere).toHaveBeenCalledWith('userName', '==', externalUserId);
-            // Now uses deleteLocalServiceToken instead of batch delete
-            // The token delete and parent check happen via deleteLocalServiceToken
-            expect(mockDelete).toHaveBeenCalled();
+            expect(mockWhere).not.toHaveBeenCalled();
+            expect(mockDelete).not.toHaveBeenCalled();
         });
 
-        it('should propagate duplicate cleanup failure when local token deletion fails', async () => {
+        it('should propagate duplicate cleanup failure for a single-owner provider', async () => {
             const docWithOtherUser = {
                 id: 'token-id-other-user',
                 ref: {
@@ -2503,7 +2581,7 @@ describe('OAuth2', () => {
                         parent: { id: otherUserID },
                     },
                 },
-                data: () => ({ serviceName: ServiceNames.SuuntoApp }),
+                data: () => ({ serviceName: ServiceNames.COROSAPI }),
             };
 
             mockGet.mockResolvedValue({
@@ -2514,8 +2592,8 @@ describe('OAuth2', () => {
             mockDelete.mockRejectedValueOnce(new Error('firestore delete failed'));
 
             await expect(
-                removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId),
-            ).rejects.toThrow('Failed to delete local suuntoApp token token-id-other-user for user other-user-id');
+                removeDuplicateConnections(currentUserID, ServiceNames.COROSAPI, externalUserId),
+            ).rejects.toThrow('Failed to delete local corosAPI token token-id-other-user for user other-user-id');
         });
 
         it('should query openId field for COROS', async () => {

@@ -50,6 +50,8 @@ class EventChartPanelStubComponent {
   @Input() showSwimLengths = true;
   @Input() strokeWidth = 1;
   @Input() fillOpacity = 0;
+  @Input() areaFillOrigin: 'auto' | 'start' | 'end' = 'auto';
+  @Input() areaFillColor: string | null = null;
   @Input() userUnitSettings: unknown;
   @Input() showActivityNamesInTooltip = false;
   @Output() overlayDataTypeChange = new EventEmitter<string | null>();
@@ -134,11 +136,23 @@ describe('EventDiveProfileComponent', () => {
     expect(panel.xAxisType).toBe(XAxisTypes.Duration);
     expect(panel.xDomain).toEqual({ start: 0, end: 3 });
     expect(panel.strokeWidth).toBe(1.5);
+    expect(panel.fillOpacity).toBe(1);
+    expect(panel.areaFillOrigin).toBe('start');
+    expect(panel.areaFillColor).toBe('#0097A7');
     expect(panel.overlayOptions.map((option) => option.dataType)).toEqual([
       DataHeartRate.type,
       DataTemperature.type,
     ]);
     expect(fixture.nativeElement.querySelector('mat-checkbox')).toBeNull();
+  });
+
+  it('uses the lighter diving color in dark theme', () => {
+    fixture.componentRef.setInput('darkTheme', true);
+    fixture.detectChanges();
+
+    const panel = fixture.debugElement.query(By.directive(EventChartPanelStubComponent))
+      .componentInstance as EventChartPanelStubComponent;
+    expect(panel.areaFillColor).toBe('#72E3DE');
   });
 
   it('shows at most one optional overlay using the standard chart overlay picker', () => {

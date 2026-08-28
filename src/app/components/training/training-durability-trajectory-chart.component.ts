@@ -15,7 +15,10 @@ import {
   buildDashboardEChartsTooltipChrome,
   renderDashboardEChartsTooltipCard,
 } from '../../helpers/dashboard-echarts-style.helper';
-import { formatDashboardWeekRangeLabel } from '../../helpers/dashboard-chart-data.helper';
+import {
+  formatDashboardWeeklyAxisLabel,
+  formatDashboardWeekRangeLabel,
+} from '../../helpers/dashboard-chart-data.helper';
 import type { DashboardDerivedMetricStatus } from '../../helpers/derived-metric-status.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
@@ -70,6 +73,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   public isUpdating = true;
   public availabilityText = 'Preparing weekly durability evidence.';
   public chartAriaLabel = 'Twelve-week durability trajectory';
+  public leadingNoActivityText: string | null = null;
 
   private readonly chartHost: EChartsHostController;
   private viewInitialized = false;
@@ -125,14 +129,22 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
     if (!trajectory) {
       this.availabilityText = 'Preparing weekly durability evidence.';
       this.chartAriaLabel = 'Twelve-week durability trajectory';
+      this.leadingNoActivityText = null;
       return;
     }
+    const leadingNoActivityWeekCount = this.getLeadingNoActivityWeekCount(trajectory);
     const evidenceWeekCount = trajectory.points.length - trajectory.noEligibleWeekCount;
     const unavailableMetricText = trajectory.unavailableMetricWeekCount
       ? ` · ${trajectory.unavailableMetricWeekCount} with eligible samples but no ${trajectory.metricLabel.toLowerCase()}`
       : '';
     this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks produced comparable evidence · ${trajectory.noEligibleWeekCount} without an eligible sample${unavailableMetricText}`;
-    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible workout counts, and ${trajectory.metricLabel.toLowerCase()}`;
+    this.leadingNoActivityText = leadingNoActivityWeekCount
+      ? `No workouts in the first ${leadingNoActivityWeekCount} ${leadingNoActivityWeekCount === 1 ? 'week' : 'weeks'}.`
+      : null;
+    const summarizedLeadingWeeks = leadingNoActivityWeekCount
+      ? ` The first ${leadingNoActivityWeekCount} zero-activity ${leadingNoActivityWeekCount === 1 ? 'week is' : 'weeks are'} summarized outside the chart.`
+      : '';
+    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with weekly markers starting Monday in UTC, candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible workout counts, and ${trajectory.metricLabel.toLowerCase()}.${summarizedLeadingWeeks}`;
   }
 
   private buildOption(): ChartOption {
@@ -140,14 +152,10 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
     if (!trajectory?.points.length) {
       return { animation: false, tooltip: { show: false }, xAxis: [], yAxis: [], series: [] };
     }
+    const points = this.getDisplayedPoints(trajectory);
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv.nativeElement.clientWidth || 0);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const weekLabelFormatter = new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    });
-    const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.sourceActivityCount));
+    const maximumSampleCount = Math.max(0, ...points.map(point => point.sourceActivityCount));
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -170,7 +178,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         formatter: (params: TrajectoryTooltipParam | TrajectoryTooltipParam[]) => {
           const entries = Array.isArray(params) ? params : [params];
           const dataIndex = entries.find(entry => Number.isInteger(entry?.dataIndex))?.dataIndex;
-          const point = Number.isInteger(dataIndex) ? trajectory.points[dataIndex as number] : null;
+          const point = Number.isInteger(dataIndex) ? points[dataIndex as number] : null;
           if (!point) {
             return '';
           }
@@ -210,14 +218,19 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       xAxis: {
         type: 'category',
         boundaryGap: true,
-        data: trajectory.points.map(point => point.weekStartDayMs),
+        data: points.map(point => point.weekStartDayMs),
         axisTick: { show: false },
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },
         axisLabel: {
           color: style.textColor,
           interval: 0,
-          formatter: (value: number | string) => weekLabelFormatter.format(new Date(Number(value))),
+          formatter: (value: number | string) => formatDashboardWeeklyAxisLabel(
+            Number(value),
+            isEChartsMobileTooltipViewport(),
+            undefined,
+            'UTC',
+          ),
         },
       },
       yAxis: [{
@@ -244,7 +257,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         yAxisIndex: 1,
         barMaxWidth: 20,
         barMinHeight: 3,
-        data: trajectory.points.map(point => point.sourceActivityCount),
+        data: points.map(point => point.sourceActivityCount),
         itemStyle: { color: style.axisColor, opacity: 0.24 },
         label: {
           show: true,
@@ -253,7 +266,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
           fontSize: 10,
           formatter: (params: { dataIndex?: number }) => {
             const point = Number.isInteger(params.dataIndex)
-              ? trajectory.points[params.dataIndex as number]
+              ? points[params.dataIndex as number]
               : null;
             if (!point) {
               return '';
@@ -287,12 +300,24 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         connectNulls: false,
         showSymbol: true,
         symbolSize: 7,
-        data: trajectory.points.map(point => point.value),
+        data: points.map(point => point.value),
         lineStyle: { width: 2.5, color: style.trendLineColor },
         itemStyle: { color: style.trendLineColor },
         z: 3,
       }],
     };
+  }
+
+  private getDisplayedPoints(
+    trajectory: TrainingDurabilityTrajectoryViewModel,
+  ): readonly TrainingDurabilityTrajectoryViewModel['points'][number][] {
+    const leadingNoActivityWeekCount = this.getLeadingNoActivityWeekCount(trajectory);
+    return leadingNoActivityWeekCount ? trajectory.points.slice(leadingNoActivityWeekCount) : trajectory.points;
+  }
+
+  private getLeadingNoActivityWeekCount(trajectory: TrainingDurabilityTrajectoryViewModel): number {
+    const firstCandidateWeekIndex = trajectory.points.findIndex(point => point.candidateActivityCount > 0);
+    return firstCandidateWeekIndex > 0 ? firstCandidateWeekIndex : 0;
   }
 }
 

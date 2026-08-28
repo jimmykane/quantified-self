@@ -33,6 +33,9 @@ const {
   mockIsWahooReconnectRequiredError,
   MockRouteSendItemError,
   mockFinalizeDisabledSyncRouteIfCurrent,
+  mockParseSourceLifecycleFence,
+  mockRecheckSourceLifecycle,
+  mockRecheckSourceLifecycleInTransaction,
 } = vi.hoisted(() => ({
   mockHasProAccess: vi.fn(),
   mockIsRouteEnabled: vi.fn(),
@@ -71,6 +74,9 @@ const {
     }
   },
   mockFinalizeDisabledSyncRouteIfCurrent: vi.fn(),
+  mockParseSourceLifecycleFence: vi.fn(),
+  mockRecheckSourceLifecycle: vi.fn(),
+  mockRecheckSourceLifecycleInTransaction: vi.fn(),
 }));
 
 vi.mock('../utils', () => ({
@@ -173,6 +179,16 @@ vi.mock('../queue/dispatch-marker', () => ({
   updateQueueItemIfUserActive: (...args: any[]) => mockUpdateQueueItemIfUserActive(...args),
 }));
 
+vi.mock('./source-lifecycle', () => ({
+  parseRouteDeliverySourceLifecycleFence: (...args: any[]) => mockParseSourceLifecycleFence(...args),
+  recheckCurrentSuuntoRouteDeliverySourceLifecycle: (...args: any[]) => (
+    mockRecheckSourceLifecycle(...args)
+  ),
+  recheckSuuntoRouteDeliverySourceLifecycleInTransaction: (...args: any[]) => (
+    mockRecheckSourceLifecycleInTransaction(...args)
+  ),
+}));
+
 vi.mock('../routes/route-send-core', () => ({
   assertRouteSendUserActive: mockAssertRouteSendUserActive,
   getRouteSendAdapter: mockGetRouteSendAdapter,
@@ -232,6 +248,15 @@ const baseQueueItem: RouteDeliverySyncQueueItemInterface = {
   ref: { update: vi.fn(), parent: { id: 'routeDeliverySyncQueue' } } as QueueItemRefMock,
 };
 
+function fencedQueueItem(): RouteDeliverySyncQueueItemInterface {
+  return {
+    ...baseQueueItem,
+    sourceConnectionStateGeneration: 'connection-generation-1',
+    sourceTokenCredentialGeneration: 'token-generation-1',
+    sourceRootOAuthCredentialGeneration: 'root-generation-1',
+  };
+}
+
 function mockSuccessfulPrerequisites(): void {
   mockShouldSkipDeletedUser.mockResolvedValue(false);
   mockAllowlistConfigError.mockReturnValue(null);
@@ -267,6 +292,15 @@ function mockSuccessfulPrerequisites(): void {
   });
   mockPersistRouteDeliveryMetadata.mockResolvedValue(undefined);
   mockUpdateQueueItemIfUserActive.mockReset().mockResolvedValue('updated');
+  mockParseSourceLifecycleFence.mockImplementation((value: Record<string, unknown>) => (
+    value.connectionStateGeneration
+      && value.tokenCredentialGeneration
+      && value.rootOAuthCredentialGeneration
+      ? value
+      : null
+  ));
+  mockRecheckSourceLifecycle.mockResolvedValue({ status: 'active' });
+  mockRecheckSourceLifecycleInTransaction.mockResolvedValue({ status: 'active' });
   mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
   mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
   mockDeferQueueItemForPendingDisconnectIfCurrentUserActive.mockResolvedValue(QueueResult.Deferred);
@@ -856,6 +890,64 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockUpdateToProcessed).not.toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({
       skippedReason: 'route_disabled',
     }));
+  });
+
+  it('skips fenced route delivery when its Suunto source is already disconnected', async () => {
+    mockRecheckSourceLifecycle.mockResolvedValueOnce({ status: 'inactive' });
+
+    const result = await processRouteDeliverySyncQueueItem(fencedQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockRecheckSourceLifecycle).toHaveBeenCalledOnce();
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      {
+        skippedReason: 'source_connection_changed',
+        resultStatus: 'skipped',
+      },
+    );
+    expect(mockCreateContext).not.toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not start delivery when the atomic Suunto source guard loses its lifecycle', async () => {
+    mockRecheckSourceLifecycleInTransaction.mockResolvedValueOnce({ status: 'inactive' });
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => {
+      if (params.phase === 'before_route_delivery_destination_provider_operation') {
+        const authorized = await params.isAuthorizedInTransaction({}, {});
+        return authorized ? 'updated' : 'not_current';
+      }
+      return 'updated';
+    });
+
+    const queueItem = fencedQueueItem();
+    expect(queueItem.sourceProviderUserId).toBe('suunto-user');
+    const result = await processRouteDeliverySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockParseSourceLifecycleFence).toHaveBeenCalled();
+    expect(mockRecheckSourceLifecycleInTransaction).toHaveBeenCalled();
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the fenced Suunto source after claiming and immediately before delivery', async () => {
+    mockRecheckSourceLifecycle
+      .mockResolvedValueOnce({ status: 'active' })
+      .mockResolvedValueOnce({ status: 'inactive' });
+
+    const result = await processRouteDeliverySyncQueueItem(fencedQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockRecheckSourceLifecycle).toHaveBeenCalledTimes(2);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'route_delivery_sync_source_lifecycle_transition',
+      updateData: expect.objectContaining({
+        processed: true,
+        skippedReason: 'source_connection_changed',
+      }),
+    }));
+    expect(mockSendPreparedRoute).not.toHaveBeenCalled();
   });
 
   it('defers a disabled route while atomic route restoration remains pending', async () => {

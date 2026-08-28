@@ -5,6 +5,28 @@ import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/a
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
 
+type MockActivitySyncQueueItemRef = NonNullable<ActivitySyncQueueItemInterface['ref']>;
+
+interface MockActivitySyncRetryParams {
+  queueItem: ActivitySyncQueueItemInterface;
+  error: Error;
+  incrementBy?: number;
+  bulkWriter?: unknown;
+  maxRetryDlqContext?: string;
+  retryDispatchMarkerAtMs?: (nextRetryCount: number) => number | null;
+}
+
+interface MockActivitySyncDlqParams {
+  queueItem: ActivitySyncQueueItemInterface;
+  error: Error;
+  bulkWriter?: unknown;
+  context?: string;
+}
+
+function createMockActivitySyncQueueItemRef(): MockActivitySyncQueueItemRef {
+  return {} as unknown as MockActivitySyncQueueItemRef;
+}
+
 const {
   mockTokenGet,
   mockDownload,
@@ -131,7 +153,7 @@ vi.mock('../queue-utils', () => ({
       super(`Provider operation for queue item ${queueItemId} is still in flight.`);
     }
   },
-  isProviderOperationInFlightLeaseActive: (queueItem: any) => (
+  isProviderOperationInFlightLeaseActive: (queueItem: Pick<ActivitySyncQueueItemInterface, 'dispatchedToCloudTask' | 'providerOperationStartedAt'>) => (
     queueItem.dispatchedToCloudTask === Number.MAX_SAFE_INTEGER - 1
     && Number(queueItem.providerOperationStartedAt) > Date.now() - 12 * 60 * 1000
   ),
@@ -139,6 +161,7 @@ vi.mock('../queue-utils', () => ({
     Processed: 'PROCESSED',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
+    ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -149,7 +172,7 @@ vi.mock('../queue-utils', () => ({
   deferQueueItemForReconnectRequiredIfCurrentUserActive: mockDeferQueueItemForReconnectRequiredIfCurrentUserActive,
   markQueueItemSkipped: mockMarkQueueItemSkipped,
   increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
-  increaseRetryCountIfCurrentUserActive: async (params: any) => {
+  increaseRetryCountIfCurrentUserActive: async (params: MockActivitySyncRetryParams) => {
     mockIncreaseRetryCountIfCurrentParams(params);
     const args = [params.queueItem, params.error, params.incrementBy, params.bulkWriter];
     if (params.maxRetryDlqContext !== undefined) {
@@ -157,13 +180,20 @@ vi.mock('../queue-utils', () => ({
     }
     const result = await mockIncreaseRetryCountForQueueItem(...args);
     if (result === 'RETRY_INCREMENTED') {
+      const currentRetryCount = Number(params.queueItem.retryCount);
+      const nextRetryCount = (Number.isFinite(currentRetryCount)
+        ? Math.max(0, Math.floor(currentRetryCount))
+        : 0) + (params.incrementBy || 1);
       params.queueItem.dispatchedToCloudTask = null;
+      if (params.retryDispatchMarkerAtMs) {
+        params.queueItem.dispatchedToCloudTask = params.retryDispatchMarkerAtMs(nextRetryCount);
+      }
       params.queueItem.providerOperationStartedAt = null;
     }
     return result;
   },
   moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
-  moveToDeadLetterQueueIfCurrentUserActive: (params: any) => {
+  moveToDeadLetterQueueIfCurrentUserActive: (params: MockActivitySyncDlqParams) => {
     mockMoveToDeadLetterQueueIfCurrentParams(params);
     return mockMoveToDeadLetterQueue(
       params.queueItem,
@@ -294,7 +324,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
   totalRetryCount: 0,
   errors: [],
   dispatchedToCloudTask: null,
-  ref: {} as any,
+  ref: createMockActivitySyncQueueItemRef(),
   routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
   sourceServiceName: ServiceNames.GarminAPI,
   destinationServiceName: ServiceNames.SuuntoApp,
@@ -311,7 +341,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
 describe('activity-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    baseQueueItem.ref = {} as any;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef();
     baseQueueItem.dispatchedToCloudTask = null;
     delete baseQueueItem.providerOperationStartedAt;
     delete baseQueueItem.destinationUploadID;
@@ -892,7 +922,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -928,6 +958,8 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('persists COROS async identifiers and resumes status without uploading the FIT file again', async () => {
+    const pollSchedulingStartedAtMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(pollSchedulingStartedAtMs);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
@@ -937,7 +969,9 @@ describe('activity-sync/process-queue-item', () => {
 
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
-    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    dateNowSpy.mockRestore();
+
+    expect(firstResult).toBe(QueueResult.ProviderStatusPending);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_coros_upload_state_persist',
@@ -957,9 +991,22 @@ describe('activity-sync/process-queue-item', () => {
       undefined,
       'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     );
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0] as MockActivitySyncRetryParams | undefined;
+    expect(retryParams?.retryDispatchMarkerAtMs?.(1)).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(queueItem.dispatchedToCloudTask).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure classified.',
+      expect.anything(),
+    );
 
-    await processActivitySyncQueueItem(queueItem);
+    const secondResult = await processActivitySyncQueueItem(queueItem);
 
+    expect(secondResult).toBe(QueueResult.Processed);
     expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledWith(
       'user-1',
       '9223372036854775806',
@@ -968,6 +1015,74 @@ describe('activity-sync/process-queue-item', () => {
     );
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps exhausted COROS pending polling visible as a terminal failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationServiceName: ServiceNames.COROSAPI,
+    }));
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        providerStatus: 1,
+        outcome: 'dlq',
+      }),
+    );
+  });
+
+  it('moves a permanently rejected COROS status poll to DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permanent',
+      code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.',
+      providerStatus: -1,
+      providerUserId: 'coros-user-1',
+      providerOperationId: '9223372036854775806',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        code: 'provider-processing-failed',
+        providerStatus: -1,
+      }),
+      undefined,
+      'COROS_ACTIVITY_UPLOAD_FAILED',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        providerStatus: -1,
+        outcome: 'dlq',
+      }),
+    );
   });
 
   it('retries COROS post-upload writes after the upload count marker is committed', async () => {
@@ -1079,7 +1194,7 @@ describe('activity-sync/process-queue-item', () => {
   it('persists a pending Suunto upload and polls the same provider job on retry', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1128,7 +1243,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1160,7 +1275,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1190,7 +1305,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     const invalidResponseError = Object.assign(
       new Error('Wahoo completed the upload without a token.'),
@@ -1218,7 +1333,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1253,7 +1368,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1277,7 +1392,7 @@ describe('activity-sync/process-queue-item', () => {
   it('persists a resumable Suunto provider error before incrementing retry state', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
@@ -1307,7 +1422,7 @@ describe('activity-sync/process-queue-item', () => {
   it('marks a normalized terminal Suunto auth failure as reconnect-required work instead of DLQ', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.SuuntoApp,
@@ -1344,7 +1459,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed when authentication is lost while polling an accepted upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'accepted-upload-1',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1388,7 +1503,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed on a legacy authentication error while polling an accepted upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'accepted-upload-legacy-auth',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1419,7 +1534,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves partial persisted Suunto resume state to DLQ without downloading or reposting the FIT file', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'suunto-upload-without-user',
     };
 
@@ -1443,7 +1558,7 @@ describe('activity-sync/process-queue-item', () => {
   it('moves a pending Suunto response without resumable identifiers directly to DLQ', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToSuunto.mockResolvedValueOnce({
       status: 'pending',
@@ -1473,7 +1588,7 @@ describe('activity-sync/process-queue-item', () => {
   it('uses persisted Suunto identifiers when a resumable status error omits them', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'suunto-existing-upload',
       destinationProviderUserID: 'suunto-existing-user',
     };
@@ -1501,7 +1616,7 @@ describe('activity-sync/process-queue-item', () => {
   it('preserves persisted Suunto identifiers when a successful status response omits them', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'suunto-existing-upload',
       destinationProviderUserID: 'suunto-existing-user',
       destinationWorkoutKey: 'suunto-existing-workout',
@@ -1534,7 +1649,7 @@ describe('activity-sync/process-queue-item', () => {
   it('does not carry stale job metadata into a fresh successful upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationWorkoutKey: 'stale-workout',
       destinationInfoCode: 'PROCESSING',
     };
@@ -1591,7 +1706,7 @@ describe('activity-sync/process-queue-item', () => {
   it('clears an errored Suunto upload before restarting it on the next retry', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'suunto-failed-1',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -1659,7 +1774,7 @@ describe('activity-sync/process-queue-item', () => {
   it('restarts a provider-confirmed failed Wahoo upload instead of requiring manual reconciliation', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'wahoo-definitively-failed-upload',
@@ -1719,7 +1834,7 @@ describe('activity-sync/process-queue-item', () => {
   it('does not restart a Wahoo status failure without the provider-confirmed restart signal', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'wahoo-status-failure-without-restart-confirmation',
@@ -1745,7 +1860,7 @@ describe('activity-sync/process-queue-item', () => {
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationWorkoutKey: 'stale-workout',
       destinationInfoCode: 'PROCESSING',
     };
@@ -1821,7 +1936,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.WahooAPI,
@@ -1877,7 +1992,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -1900,7 +2015,7 @@ describe('activity-sync/process-queue-item', () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
 
     const result = await processActivitySyncQueueItem(queueItem);
@@ -1927,7 +2042,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
       providerOperationStartedAt: Date.now(),
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
 
     await expect(processActivitySyncQueueItem(queueItem)).rejects.toMatchObject({
@@ -1948,7 +2063,7 @@ describe('activity-sync/process-queue-item', () => {
       providerOperationStartedAt: Date.now(),
       destinationUploadID: 'persisted-upload-1',
       destinationProviderUserID: 'suunto-user-1',
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
 
     await expect(processActivitySyncQueueItem(queueItem)).rejects.toMatchObject({
@@ -2132,7 +2247,7 @@ describe('activity-sync/process-queue-item', () => {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'duplicate',
@@ -2249,7 +2364,7 @@ describe('activity-sync/process-queue-item', () => {
   it('fails closed instead of skipping an accepted upload when the destination now requires reconnect', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'accepted-upload-reconnect-required',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -2311,7 +2426,7 @@ describe('activity-sync/process-queue-item', () => {
   ])('resumes an accepted Suunto upload before %s can skip it', async (_scenario, configureEligibilitySkip) => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       destinationUploadID: 'accepted-upload-before-eligibility-check',
       destinationProviderUserID: 'suunto-user-1',
     };
@@ -2340,7 +2455,7 @@ describe('activity-sync/process-queue-item', () => {
   it('resumes an accepted Wahoo upload before a disabled route can skip it', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
-      ref: {} as any,
+      ref: createMockActivitySyncQueueItemRef(),
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
       destinationUploadID: 'accepted-wahoo-upload-before-eligibility-check',

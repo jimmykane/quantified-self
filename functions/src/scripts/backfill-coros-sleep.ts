@@ -11,7 +11,7 @@ import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 
-const LOG_PREFIX = '[coros-sleep-backfill]';
+const LOG_PREFIX = '[coros-daily-health-backfill]';
 const DEFAULT_TOKEN_LIMIT = 100;
 const MAX_TOKEN_LIMIT = 1_000;
 
@@ -70,7 +70,7 @@ export function createCorosSleepBackfillQueueInput(
         providerUserId: target.providerUserID,
         rangeStartMs: window.startMs,
         rangeEndMs: window.endMs,
-        dedupeKey: `coros-sleep-backfill-v1:${target.userID}:${target.providerUserID}:${window.startMs}:${window.endMs}`,
+        dedupeKey: `coros-daily-health-backfill-v1:${target.userID}:${target.providerUserID}:${window.startMs}:${window.endMs}`,
     };
 }
 
@@ -140,7 +140,7 @@ export function resolveCorosSleepBackfillRange(
     const endMs = Math.min(requestedEndMs, nowMs);
     const requestedStartMs = options.startMs ?? earliestProviderStartMs;
     const startMs = Math.max(requestedStartMs, earliestProviderStartMs);
-    if (endMs <= startMs) {
+    if (endMs < startMs) {
         throw new Error('The requested backfill range is empty after applying the COROS three-month retention limit.');
     }
     return {
@@ -186,7 +186,7 @@ async function getTargetEligibility(userID: string): Promise<TargetEligibility> 
 export async function runCorosSleepBackfillScript(argv: string[]): Promise<CorosSleepBackfillSummary> {
     const options = parseCorosSleepBackfillOptions(argv);
     if (!isSleepProviderEnabled(SLEEP_PROVIDERS.COROSAPI)) {
-        throw new Error('COROS sleep sync is disabled. Enable it before running this backfill.');
+        throw new Error('COROS daily Health sync is disabled. Enable COROS sleep sync before running this backfill.');
     }
     if (!admin.apps.length) {
         admin.initializeApp();
@@ -258,7 +258,7 @@ export async function runCorosSleepBackfillScript(argv: string[]): Promise<Coros
                     incrementSkipped(summary, 'user_deleted_or_deleting_during_enqueue');
                 } else {
                     summary.failed += 1;
-                    logger.error(`${LOG_PREFIX} Failed to enqueue a COROS sleep backfill window.`, {
+                    logger.error(`${LOG_PREFIX} Failed to enqueue a COROS daily Health backfill window.`, {
                         failure: 'queue_enqueue_failed',
                     });
                 }
