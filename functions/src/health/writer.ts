@@ -531,13 +531,10 @@ export async function replaceHealthSourceRecord(
                 chunksDeleted: 0,
             };
         }
-        if (existingSourceRecord
-            && existingSourceRecord.source.revision.order === built.sourceRecord.source.revision.order) {
-            const unchanged = existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
-                && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
-            if (!unchanged) {
-                throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
-            }
+        const unchanged = existingSourceRecord
+            && existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
+            && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
+        if (unchanged) {
             return {
                 sourceRecordId: existingSourceRecord.id,
                 status: 'unchanged' as const,
@@ -545,6 +542,10 @@ export async function replaceHealthSourceRecord(
                 chunksWritten: 0,
                 chunksDeleted: 0,
             };
+        }
+        if (existingSourceRecord
+            && existingSourceRecord.source.revision.order === built.sourceRecord.source.revision.order) {
+            throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
         }
 
         const existingChunkIds = existingSourceRecord?.sampleChunkIds || [];

@@ -175,9 +175,9 @@ Provider adapters must supply a non-negative ordered revision and a bounded stab
 | --- | --- |
 | No stored source record | Write the source record and all chunks atomically |
 | Lower order | Return `stale`; write nothing |
-| Same order, token, and digest | Return `unchanged`; write nothing |
+| Same or higher order with the same token and digest | Return `unchanged`; write nothing |
 | Same order with different token or content | Throw `HealthSourceRecordRevisionConflictError`; write nothing |
-| Higher order | Atomically replace the source record, write current chunks, and delete stale leaf chunks |
+| Higher order with a different token or content | Atomically replace the source record, write current chunks, and delete stale leaf chunks |
 
 Every transaction rechecks the account-deletion tombstone and user root through `getUserDeletionGuardStateInTransaction` before reading or writing feature data.
 

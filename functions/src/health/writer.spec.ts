@@ -333,6 +333,26 @@ describe('health writer', () => {
         expect(fake.deletes).not.toHaveBeenCalled();
     });
 
+    it('does not rewrite identical content received at a later provider revision order', async () => {
+        const fake = fakeDatabase();
+        const existingInput = validInput();
+        const built = await buildHealthSourceRecordWrite('user-1', existingInput, 9_000, fakeId);
+        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
+        const repeatedInput = validInput();
+        (repeatedInput.revision as Record<string, unknown>).order = 2;
+        repeatedInput.receivedAtMs = Date.parse('2026-01-02T01:00:00.000Z');
+
+        const result = await replaceHealthSourceRecord('user-1', repeatedInput, 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        });
+
+        expect(result.status).toBe('unchanged');
+        expect(result.sourceRecord?.source.revision.order).toBe(1);
+        expect(fake.sets).not.toHaveBeenCalled();
+        expect(fake.deletes).not.toHaveBeenCalled();
+    });
+
     it('ignores a stale lower provider revision', async () => {
         const fake = fakeDatabase();
         const built = await buildHealthSourceRecordWrite('user-1', validInput(), 9_000, fakeId);
