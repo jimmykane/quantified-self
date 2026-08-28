@@ -1,0 +1,21 @@
+ADDITIONAL PERMISSION FOR MAPBOX GL JS UNDER GNU AGPL VERSION 3 SECTION 7
+
+For each portion of the original Quantified Self frontend source code whose
+copyright holder has authorized this exception (the "Covered Quantified Self
+Code"), if you modify the Covered Quantified Self Code, or any covered work
+based on it, by linking or combining it with Mapbox GL JS (including a
+modified version), the licensors of the Covered Quantified Self Code grant you
+additional permission to convey the resulting work.
+
+This exception is limited to linking or combining the Covered Quantified Self
+Code with Mapbox GL JS. It does not grant any license or other right to Mapbox
+GL JS, Mapbox services, map data, styles, APIs, trademarks, or other Mapbox
+materials. Anyone using the combination must obtain and maintain any required
+Mapbox account and access token and comply with the applicable Mapbox license
+and terms.
+
+The GNU Affero General Public License version 3 continues to govern the
+Covered Quantified Self Code. Mapbox GL JS and other Mapbox materials remain
+governed by their respective Mapbox terms. No permission is granted for
+third-party code or contributions whose copyright holders have not authorized
+this exception.

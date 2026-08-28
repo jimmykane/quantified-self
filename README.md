@@ -258,6 +258,10 @@ backend—is licensed under the [GNU Affero General Public License v3.0 only](LI
 packages and assets remain under their respective licenses. Release tags retain versioned source, and the hosted
 interfaces link directly to the source repository and license.
 
+Original frontend code whose copyright holders have authorized it also carries a narrow
+[AGPL section 7 exception for linking or combining with Mapbox GL JS](LICENSE-MAPBOX-EXCEPTION). The exception does
+not license Mapbox materials: users must obtain any required Mapbox account and access token and follow Mapbox's terms.
+
 ---
 
 *Icons by Alessandro.*
