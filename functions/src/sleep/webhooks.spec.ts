@@ -63,7 +63,6 @@ vi.mock('./provider-flags', () => ({
 import {
     receiveGarminAPISleepData,
     receiveSuunto247Data,
-    receiveSuuntoAppSleepData,
     suuntoWebhookTestInternals,
 } from './webhooks';
 
@@ -471,13 +470,10 @@ describe('sleep webhooks', () => {
         expect(queuedPayload.dedupeKey).toMatch(/^test-user-uid:suunto-user-1:sample-[a-f0-9]{32}:sample-[a-f0-9]{32}$/);
     });
 
-    it.each([
-        ['canonical 24/7 endpoint', receiveSuunto247Data],
-        ['legacy Sleep-named compatibility endpoint', receiveSuuntoAppSleepData],
-    ])('rejects Suunto webhook payloads with invalid HMAC through the %s', async (_name, handler) => {
+    it('rejects Suunto webhook payloads with invalid HMAC', async () => {
         const response = createResponse();
 
-        await handler({
+        await receiveSuunto247Data({
             rawBody: Buffer.from('{}'),
             body: { type: 'SUUNTO_247_SLEEP_CREATED', username: 'suunto-user-1', samples: [{}] },
             get: vi.fn(() => 'bad-signature'),

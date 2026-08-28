@@ -122,7 +122,6 @@ export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export {
   receiveGarminAPISleepData,
   receiveSuunto247Data,
-  receiveSuuntoAppSleepData,
 } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
 export {

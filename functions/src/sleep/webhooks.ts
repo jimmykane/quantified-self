@@ -437,15 +437,6 @@ export const receiveSuunto247Data = createSuunto247DataWebhook(
     FUNCTION_SECRET_BINDINGS.receiveSuunto247Data,
 );
 
-/**
- * @deprecated Temporary compatibility endpoint for the existing Suunto Sleep
- * webhook registration. Remove only after all 24/7 notifications have been
- * switched to receiveSuunto247Data and production delivery has been verified.
- */
-export const receiveSuuntoAppSleepData = createSuunto247DataWebhook(
-    FUNCTION_SECRET_BINDINGS.receiveSuuntoAppSleepData,
-);
-
 export const suuntoWebhookTestInternals = {
     buildSuuntoHealthWebhookWindows,
     parseSuuntoWebhookLocalDayBounds,
