@@ -157,7 +157,8 @@ queue row permanently stuck.
    `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
    source-record types.
 
-The Garmin history control calls `backfillGarminAPIHealth`. It requests Sleep for every eligible connected
+The Garmin history control calls `backfillGarminAPIHealth`. The legacy `backfillGarminAPISleep` callable is a
+temporary alias for cached clients, with removal tracked by #625. The canonical callable requests Sleep for every eligible connected
 Pro user and, for a UID in the staged Health rollout, adds one durable cursor for all ten Health families.
 The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
 completion from the server response. Sleep-only users retain the prior behavior.

@@ -242,6 +242,7 @@ vi.mock('../request-helper', () => ({
 import {
     backfillCorosAPISleep,
     backfillGarminAPIHealth,
+    backfillGarminAPISleep,
     backfillSuuntoAppSleep,
     chunkSleepBackfillRange,
 } from './backfill';
@@ -746,6 +747,10 @@ describe('backfillCorosAPISleep', () => {
 });
 
 describe('backfillGarminAPIHealth', () => {
+    it('keeps the legacy Sleep callable as the same compatibility handler', () => {
+        expect(backfillGarminAPISleep).toBe(backfillGarminAPIHealth);
+    });
+
     const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
     const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
     const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI) || 0;

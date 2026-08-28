@@ -61,6 +61,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   backfillCorosAPISleep: COROS,
   backfillGarminAPIActivities: GARMIN,
   backfillGarminAPIHealth: GARMIN,
+  backfillGarminAPISleep: GARMIN,
   backfillSuuntoAppSleep: SUUNTO,
   cleanupStripeCustomer: [SECRET_PARAMS.STRIPE_SECRET_KEY],
   cleanupUserAccounts: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],

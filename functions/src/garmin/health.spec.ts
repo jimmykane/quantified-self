@@ -7,6 +7,7 @@ import {
 } from '../../../shared/health';
 import { validateHealthSourceRecordInput } from '../health/validation';
 import {
+  GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK,
   GarminHealthValidationError,
   mapGarminHealthSummaries,
 } from './health';
@@ -28,6 +29,16 @@ function map(type: Parameters<typeof mapGarminHealthSummaries>[0], payload: unkn
 }
 
 describe('Garmin Health API summary mapping', () => {
+  it('rejects callback batches that cannot fit the worker write budget', () => {
+    expect(() => mapGarminHealthSummaries(
+      'dailies',
+      Array.from({ length: GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK + 1 }, () => ({})),
+      PROVIDER_ACCOUNT_ID,
+      REVISION_ORDER,
+      RECEIVED_AT_MS,
+    )).toThrow('dailies response exceeds the bounded summary count.');
+  });
+
   it('maps Daily summaries without treating the rolling seven-day heart rate as a daily average', () => {
     const [result] = map('dailies', [{
       summaryId: 'daily-summary-1',

@@ -19,6 +19,7 @@ import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import { clearRevisionProcessingLeaseUpdate } from '../queue/revision-processing-lease';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import {
   areTokenCredentialSnapshotsEqual,
@@ -298,13 +299,102 @@ async function advanceCursorTransaction(
   });
 }
 
-async function markLifecycleSkipped(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
-  return markQueueItemSkipped(
-    queueItem,
-    undefined,
-    'user_or_provider_lifecycle_changed',
-    { skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD' },
-  );
+function stateBelongsToBackfillQueue(
+  state: Record<string, unknown>,
+  rangeEndMs: number,
+  total: number,
+): boolean {
+  const status = state.healthBackfillStatus;
+  const queuedAtMs = state.lastBackfillQueuedAtMs;
+  const endMs = state.lastBackfillEndMs;
+  const windowsTotal = state.healthBackfillWindowsTotal;
+  return state.provider === SLEEP_PROVIDERS.GarminAPI
+    && (status === 'queued' || status === 'running')
+    && typeof queuedAtMs === 'number'
+    && Number.isSafeInteger(queuedAtMs)
+    && Math.floor(queuedAtMs / 1_000) * 1_000 === rangeEndMs
+    && typeof endMs === 'number'
+    && Number.isSafeInteger(endMs)
+    && Math.floor(endMs / 1_000) * 1_000 === rangeEndMs
+    && windowsTotal === total;
+}
+
+async function markLifecycleSkipped(
+  queueItem: SleepSyncQueueItemInterface,
+  total: number,
+): Promise<QueueResult> {
+  const db = admin.firestore();
+  const stateRef = db.collection('users').doc(queueItem.userID!)
+    .collection('sleepSyncState').doc(SLEEP_PROVIDERS.GarminAPI);
+  const nowMs = Date.now();
+  try {
+    const transition = await db.runTransaction(async transaction => {
+      let deletionGuard;
+      try {
+        deletionGuard = await getUserDeletionGuardStateInTransaction(
+          db,
+          transaction,
+          queueItem.userID!,
+        );
+      } catch (error) {
+        throw new UserDeletionGuardReadError(
+          queueItem.userID!,
+          'garmin_health_backfill_lifecycle_skip',
+          error,
+        );
+      }
+      if (deletionGuard.shouldSkip) return 'deleted';
+
+      const [queueSnapshot, stateSnapshot] = await Promise.all([
+        transaction.get(queueItem.ref!),
+        transaction.get(stateRef),
+      ]);
+      if (!queueSnapshot.exists) return 'superseded';
+      const current = queueSnapshot.data() as SleepSyncQueueItemInterface;
+      if (current.processed
+        || current.userID !== queueItem.userID
+        || current.type !== 'garmin_health_backfill'
+        || current.garminHealthBackfillWindowsTotal !== total
+        || !isCurrentSleepQueueTransition(current as unknown as Record<string, unknown>, queueItem)) {
+        return 'superseded';
+      }
+
+      transaction.update(queueItem.ref!, {
+        processed: true,
+        processedAt: nowMs,
+        resultStatus: 'skipped',
+        skippedReason: 'user_or_provider_lifecycle_changed',
+        skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+        ...clearRevisionProcessingLeaseUpdate(),
+      });
+      const state = stateSnapshot.exists
+        ? stateSnapshot.data() as Record<string, unknown>
+        : null;
+      if (state && stateBelongsToBackfillQueue(state, Number(current.rangeEndMs), total)) {
+        transaction.set(stateRef, {
+          provider: SLEEP_PROVIDERS.GarminAPI,
+          healthBackfillStatus: 'skipped',
+          healthBackfillSummaryType: null,
+          updatedAtMs: nowMs,
+        }, { merge: true });
+      }
+      return 'skipped';
+    });
+    if (transition === 'deleted') {
+      return markQueueItemSkipped(
+        queueItem,
+        undefined,
+        QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+        { skippedContext: 'USER_DELETION_GUARD' },
+      );
+    }
+    return QueueResult.Processed;
+  } catch (error) {
+    logger.error('[GarminHealthBackfill] Could not persist lifecycle-aborted progress.', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
+    return QueueResult.Failed;
+  }
 }
 
 async function moveToDlq(
@@ -403,9 +493,9 @@ export async function processGarminHealthBackfillQueueItem(
   }
 
   const tokenSnapshot = await findExactToken(queueItem.userID!, queueItem.providerUserId);
-  if (!tokenSnapshot) return markLifecycleSkipped(queueItem);
+  if (!tokenSnapshot) return markLifecycleSkipped(queueItem, parsed.total);
   const initialGuards = await captureFencedGuards(queueItem, tokenSnapshot);
-  if (!initialGuards) return markLifecycleSkipped(queueItem);
+  if (!initialGuards) return markLifecycleSkipped(queueItem, parsed.total);
 
   let refreshed;
   try {
@@ -416,7 +506,7 @@ export async function processGarminHealthBackfillQueueItem(
       initialGuards,
     );
     if (!queueFenceMatches(queueItem, refreshed.lifecycleGuards)) {
-      return markLifecycleSkipped(queueItem);
+      return markLifecycleSkipped(queueItem, parsed.total);
     }
     assertGarminHealthPermission(refreshed.tokenData, queueItem.userID!);
     if (!refreshed.lifecycleGuards.providerIdentityPinned) {
@@ -450,7 +540,7 @@ export async function processGarminHealthBackfillQueueItem(
       );
     }
     if (error instanceof GarminHealthAccountValidationError) {
-      return markLifecycleSkipped(queueItem);
+      return markLifecycleSkipped(queueItem, parsed.total);
     }
     const statusCode = getGarminBackfillStatusCode(error);
     if (statusCode === 401 || statusCode === 403 || statusCode === 412) {
@@ -515,7 +605,7 @@ export async function processGarminHealthBackfillQueueItem(
         currentGuards,
       )
       || !doesGarminHealthTokenDataMatchGuard(refreshed.tokenData, currentGuards)) {
-      return markLifecycleSkipped(queueItem);
+      return markLifecycleSkipped(queueItem, parsed.total);
     }
     const beforeRequestGuard = await getUserDeletionGuardState(
       admin.firestore(),
@@ -623,7 +713,7 @@ export async function processGarminHealthBackfillQueueItem(
         { skippedContext: 'USER_DELETION_GUARD' },
       );
     }
-    if (transition === 'lifecycle_changed') return markLifecycleSkipped(queueItem);
+    if (transition === 'lifecycle_changed') return markLifecycleSkipped(queueItem, parsed.total);
     if (transition === 'superseded') return QueueResult.Processed;
     cursor = nextCursor;
   }

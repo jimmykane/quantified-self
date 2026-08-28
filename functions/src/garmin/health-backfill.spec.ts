@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => ({
   updateHealthState: vi.fn(),
   transactionSet: vi.fn(),
   queueData: {} as Record<string, unknown>,
+  sleepStateData: {} as Record<string, unknown>,
 }));
 
 const tokenData = {
@@ -106,6 +107,9 @@ vi.mock('firebase-admin', () => {
         if (ref === tokenRef) return tokenRef.get();
         if (ref === metaRef) return metaRef.get();
         if (ref === rootRef) return rootRef.get();
+        if ((ref as { id?: unknown })?.id === 'state-ref') {
+          return { exists: true, data: () => ({ ...hoisted.sleepStateData }) };
+        }
         return { exists: true, data: () => ({}) };
       },
       update: (_ref, data) => Object.assign(hoisted.queueData, data),
@@ -211,6 +215,13 @@ describe('Garmin Health backfill processor', () => {
     hoisted.updateSleepState.mockResolvedValue(true);
     hoisted.updateHealthState.mockResolvedValue(true);
     hoisted.queueData = { ...createQueueItem() };
+    hoisted.sleepStateData = {
+      provider: 'GarminAPI',
+      healthBackfillStatus: 'running',
+      healthBackfillWindowsTotal: 10,
+      lastBackfillQueuedAtMs: 0,
+      lastBackfillEndMs: 0,
+    };
   });
 
   it('requests every family through the documented endpoint aliases and completes durably', async () => {
@@ -354,13 +365,30 @@ describe('Garmin Health backfill processor', () => {
     await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
       .resolves.toBe(QueueResult.Processed);
 
-    expect(hoisted.markSkipped).toHaveBeenCalledWith(
-      expect.anything(),
-      undefined,
-      'user_or_provider_lifecycle_changed',
-      { skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD' },
-    );
+    expect(hoisted.queueData).toEqual(expect.objectContaining({
+      processed: true,
+      resultStatus: 'skipped',
+      skippedReason: 'user_or_provider_lifecycle_changed',
+    }));
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.objectContaining({
+      healthBackfillStatus: 'skipped',
+      healthBackfillSummaryType: null,
+    }), { merge: true });
     expect(hoisted.increaseRetry).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite progress owned by a newer Garmin backfill', async () => {
+    hoisted.sleepStateData.lastBackfillQueuedAtMs = 1_000;
+    hoisted.refreshGuards.mockRejectedValueOnce(new GarminHealthAccountValidationError());
+
+    await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
+      .resolves.toBe(QueueResult.Processed);
+
+    expect(hoisted.queueData).toEqual(expect.objectContaining({
+      processed: true,
+      resultStatus: 'skipped',
+    }));
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
   it('uses the refreshed credential guard when recording missing Health permission', async () => {

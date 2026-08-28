@@ -131,7 +131,12 @@ export {
   scheduleSuuntoHealthSync,
   scheduleSuuntoWebhookBindingVerification,
 } from './sleep/polling';
-export { backfillCorosAPISleep, backfillGarminAPIHealth, backfillSuuntoAppSleep } from './sleep/backfill';
+export {
+  backfillCorosAPISleep,
+  backfillGarminAPIHealth,
+  backfillGarminAPISleep,
+  backfillSuuntoAppSleep,
+} from './sleep/backfill';
 export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
 export { getGarminHealthSyncAvailability } from './garmin/health-availability';
 export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
