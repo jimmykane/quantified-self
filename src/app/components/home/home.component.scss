@@ -224,6 +224,15 @@
         font-weight: 800;
         letter-spacing: -0.02em;
         margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.45em;
+
+        .hero-title-divider {
+            width: min(100%, 720px);
+            border-top: 1px solid var(--mat-sys-outline-variant);
+        }
     }
 
     .hero-subtitle {

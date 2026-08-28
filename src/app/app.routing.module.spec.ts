@@ -550,9 +550,10 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.canMatch).toBeUndefined();
     expect(homeRoute?.pathMatch).toBe('full');
     expect(homeRoute?.data).toMatchObject({
+      title: 'Private Training Dashboard',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.');
+    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS, and Wahoo in one private training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',
