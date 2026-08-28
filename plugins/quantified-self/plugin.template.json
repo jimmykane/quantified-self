@@ -9,7 +9,7 @@
   },
   "homepage": "https://quantified-self.io/features/mcp-server",
   "repository": "https://github.com/jimmykane/quantified-self",
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "keywords": [
     "fitness",
     "health",

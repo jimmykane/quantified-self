@@ -173,10 +173,15 @@
 
   <!-- Compact Footer -->
   <div class="sidenav-footer">
-    <button mat-stroked-button class="help-cta-button" routerLink="/help" (click)="closeSideNav()">
+    <button mat-stroked-button class="sidenav-cta-button" routerLink="/help" (click)="closeSideNav()">
       <mat-icon>help</mat-icon>
       <span>Help &amp; Support</span>
     </button>
+    <a mat-stroked-button class="sidenav-cta-button source-code-cta" [href]="sourceCodeUrl" target="_blank"
+      rel="noopener noreferrer">
+      <mat-icon>code</mat-icon>
+      <span>Source code &amp; {{ openSourceLicense }}</span>
+    </a>
 
     <div class="sidenav-footer-links">
       <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="closeSideNav()">

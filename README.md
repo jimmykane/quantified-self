@@ -253,7 +253,10 @@ Security-related guidance is available in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Quantified Self is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Unless a file or directory states otherwise, original Quantified Self source code—including the Firebase Functions
+backend—is licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Third-party
+packages and assets remain under their respective licenses. Release tags retain versioned source, and the hosted
+interfaces link directly to the source repository and license.
 
 ---
 

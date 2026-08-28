@@ -20,6 +20,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 export const PLUGIN_NAME = 'quantified-self';
 export const MARKETPLACE_NAME = 'quantified-self-local';
+export const PLUGIN_LICENSE = 'AGPL-3.0-only';
 export const BUNDLED_SKILL_NAMES = Object.freeze([
   'analyze-quantified-self',
   'analyze-quantified-self-activity',
@@ -268,6 +269,9 @@ export async function buildPlugin({
     || template.name !== PLUGIN_NAME
   ) {
     throw new Error('Plugin manifest template identity is invalid.');
+  }
+  if (template.license !== PLUGIN_LICENSE) {
+    throw new Error(`Plugin manifest template license must be ${PLUGIN_LICENSE}.`);
   }
 
   const resolvedCachebuster =
