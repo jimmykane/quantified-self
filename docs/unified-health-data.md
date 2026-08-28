@@ -1,8 +1,8 @@
 # Unified Health Data Foundation
 
-This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion.
+This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion; issue #613 adds staged Garmin Health API 1.2.4 ingestion.
 
-Garmin provider mapping remains in issue #613. The Health Hub product surface remains in #614. COROS and Suunto ingestion do not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate.
+The Health Hub product surface remains in #614. COROS, Suunto, and Garmin ingestion do not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate.
 
 ## Goals
 
@@ -16,7 +16,7 @@ Garmin provider mapping remains in issue #613. The Health Hub product surface re
 
 ## Non-goals
 
-- No Garmin or Wahoo health adapter is wired yet. COROS daily Health and Suunto 24/7 Health are production-wide for eligible connected accounts.
+- No Wahoo health adapter is wired yet. COROS daily Health and Suunto 24/7 Health are production-wide; Garmin Health remains restricted by its independent deny-all-when-empty UID allowlist.
 - No cross-provider deduplication, ranking, or source-preference policy is applied.
 - No medical interpretation or diagnosis is produced.
 - No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
@@ -26,7 +26,7 @@ Garmin provider mapping remains in issue #613. The Health Hub product surface re
 ## Architecture
 
 ```text
-provider adapter (#611–#613; COROS and Suunto active)
+provider adapter (#611–#613; COROS/Suunto active, Garmin staged)
         │
         ├─ exact provider/native semantics
         ├─ canonical conversion only when defensible
@@ -86,6 +86,8 @@ COROS connect and terminal-auth transitions mirror safe `ready` or `reconnect_re
 Suunto Health uses distinct `suunto_247_activity`, `suunto_247_daily_activity_statistics`, and `suunto_247_recovery` source records. It maps heart rate averages/minimums/maximums, HRV, SpO2, altitude, accumulated steps and energy, daily steps and energy, recovery Balance, and StressState without mixing them with workout FIT or Sleep values. Ratios become canonical percentages, joules become kilocalories, and documented StressState codes become categories while invalid sentinel `0` remains missing. Complementary or corrected Activity/Recovery rows sharing a timestamp merge per metric: the later non-null provider occurrence wins, while a later missing/sentinel value cannot erase an available measurement. Activity and Recovery retain bounded sample series by local date and offset; daily statistics retain multiple device sources behind one-way device identifiers. Historical completeness is unknown and the current local date is partial.
 
 Suunto uses a production-wide rolling seven-day reconciliation sweep that advances a bounded account page every 30 minutes and pauses for 24 hours after a completed sweep, plus signed Activity/Recovery webhooks. Before persistence, each valid notification is resolved through one-way-keyed, server-owned per-user OAuth account bindings to every active Firebase connection and transactionally rechecked against each exact account token, the current token-root lifecycle revision, authoritative connection metadata, and account deletion. Retained Suunto account tokens may predate the root's newest OAuth revision; the binding matches the token generation while the current root revision is captured separately so later work cannot adopt a replacement lifecycle. Unknown, disconnected, deleting, malformed, and oversized signed deliveries are acknowledged as permanent drops without retained ingress; authentication failures remain rejected, while transient binding or durable-write failures return retryable errors. Accepted notifications durably stage one compact local-day ingress per active connection and acknowledge before retryable asynchronous queue fan-out. Queue creation and processing remain fenced to the captured token, root, and connection generations. Raw webhook samples are not retained, and the worker deletes any ingress that later becomes non-retryable. Suunto Sleep history requests also enqueue matching Health ranges of at most 28 days while the independent Health kill switch is enabled. Each response is bounded to 4 MiB, provider errors are made opaque before telemetry, and one provider 401 receives one guarded token-refresh retry. Connect, terminal-auth, disconnect, deletion, and scheduled derived-state repair reuse the same generation-fenced lifecycle contract as COROS. See [Suunto 24/7 Health integration](suunto-integration.md) for the complete provider mapping, delivery, rollback, and operations contract.
+
+Staged Garmin Health uses Ping/Pull callbacks for Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration, Blood Pressure, Skin Temperature, and Health Snapshot summaries. The callback URL is treated as a short-lived credential: the public endpoint validates the exact Garmin host, family, token shape, and 24-hour upload window, writes bounded queue work before acknowledging, and performs the authenticated pull asynchronously. The pull response is capped at 10 MiB and normalized into daily/interval/point/profile records and bounded sample series. Queue admission and every provider/Health write are fenced to the current token credential, token-root OAuth generation, provider identity, connection generation, rollout, and deletion state. New OAuth connections pin the provider identity; active legacy connections are verified against Garmin's authenticated user-ID endpoint before their first staged callback pull. Callback URLs are removed on every terminal queue outcome and stripped from failed-job copies. Historical Health replay uses Garmin Summary Resender rather than the existing Sleep-only history picker. See [Garmin Health integration](garmin-integration.md) for the exact family mapping, exclusions, delivery contract, and rollout procedure.
 
 ## Stable metric catalog
 

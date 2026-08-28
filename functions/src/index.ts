@@ -120,6 +120,7 @@ export {
 export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export {
+  receiveGarminAPIHealthData,
   receiveGarminAPISleepData,
   receiveSuunto247Data,
 } from './sleep/webhooks';

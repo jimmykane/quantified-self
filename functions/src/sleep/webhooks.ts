@@ -15,6 +15,12 @@ import {
     SLEEP_SYNC_DISABLED_PROVIDERS,
 } from './provider-flags';
 import { normalizeTrustedGarminCallbackURL } from './garmin-callback-url';
+import {
+    GARMIN_SUPPORTED_SUMMARY_TYPES,
+    isGarminHealthSummaryType,
+    type GarminSupportedSummaryType,
+} from '../garmin/health-summary-types';
+import { isGarminHealthSyncEnabled } from '../garmin/health-rollout';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
@@ -36,6 +42,13 @@ import { resolveActiveSuuntoWebhookUserIDs } from '../suunto/health-webhook-bind
 type ExternalRecord = Record<string, unknown>;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_HEALTH_WEBHOOK_MAX_BYTES = 1024 * 1024;
+const GARMIN_HEALTH_WEBHOOK_MAX_BYTES = 10 * 1024 * 1024;
+const GARMIN_HEALTH_WEBHOOK_MAX_PINGS = 10_000;
+// Garmin requires asynchronous acknowledgement within 30 seconds. Admission
+// remains bounded, but parallel guarded writes keep large valid Ping batches
+// inside that response budget without following callbacks in the HTTP path.
+const GARMIN_HEALTH_WEBHOOK_QUEUE_CONCURRENCY = 64;
+const GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH = 512;
 const SUUNTO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/;
 
 function asRecord(value: unknown): ExternalRecord {
@@ -118,11 +131,6 @@ function buildSuuntoSleepDedupeKey(providerUserId: string, samples: unknown[]): 
     return `${providerUserId}:${sampleKeys.join(':')}`;
 }
 
-function hasNumberField(record: ExternalRecord, fieldName: string): boolean {
-    const value = Number(record[fieldName]);
-    return Number.isFinite(value);
-}
-
 async function resolveScopedSuuntoWebhookUserIDs(providerUserId: string): Promise<string[]> {
     return resolveActiveSuuntoWebhookUserIDs(
         admin.firestore(),
@@ -203,82 +211,132 @@ function buildSuuntoHealthWebhookWindows(samples: unknown[]): SuuntoHealthWebhoo
     return windows;
 }
 
-export const receiveGarminAPISleepData = functions.region('europe-west2').runWith({
-    timeoutSeconds: 60,
-    memory: '256MB',
-}).https.onRequest(async (req, res) => {
-    if (!isSleepProviderEnabled(SLEEP_PROVIDERS.GarminAPI)) {
-        logger.info(`[SleepSync][Garmin] Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS=${SLEEP_SYNC_DISABLED_PROVIDERS.join(',')}; ignoring sleep webhook`);
-        res.status(200).send();
-        return;
-    }
-
-    const sleeps = asArray(asRecord(req.body).sleeps);
-    if (!sleeps.length) {
-        logger.warn('[SleepSync][Garmin] Received payload without sleeps');
-        res.status(200).send();
-        return;
-    }
-
-    try {
-        const queueItems: Parameters<typeof addSleepSyncQueueItem>[0][] = [];
-        for (const sleepValue of sleeps) {
-            const sleep = asRecord(sleepValue);
-            const providerUserId = asString(sleep.userId) || asString(sleep.userID);
-            if (!providerUserId) {
-                logger.warn('[SleepSync][Garmin] Skipping sleep payload without userId');
-                continue;
+async function runWithConcurrency<T>(
+    values: readonly T[],
+    concurrency: number,
+    worker: (value: T) => Promise<void>,
+): Promise<void> {
+    let nextIndex = 0;
+    await Promise.all(Array.from(
+        { length: Math.min(concurrency, values.length) },
+        async () => {
+            while (nextIndex < values.length) {
+                const value = values[nextIndex];
+                nextIndex += 1;
+                await worker(value);
             }
-            const callbackURL = asString(sleep.callbackURL);
-            const hasPushSummaryFields = hasNumberField(sleep, 'startTimeInSeconds') || !!asString(sleep.summaryId);
-            const trustedCallbackURL = normalizeTrustedGarminCallbackURL(callbackURL);
-            if (!trustedCallbackURL) {
-                logger.warn(hasPushSummaryFields
-                    ? '[SleepSync][Garmin] Rejected unauthenticated push payload'
-                    : '[SleepSync][Garmin] Rejected ping payload with untrusted callbackURL');
-                res.status(400).send();
+        },
+    ));
+}
+
+async function handleGarminAPIHealthData(
+    req: functions.https.Request,
+    res: functions.Response,
+): Promise<void> {
+    if (req.method && req.method !== 'POST') {
+        res.status(405).send();
+        return;
+    }
+    if (req.rawBody && req.rawBody.length > GARMIN_HEALTH_WEBHOOK_MAX_BYTES) {
+        logger.warn('[HealthSync][Garmin] Dropped oversized webhook payload');
+        res.status(200).send();
+        return;
+    }
+
+    const sleepEnabled = isSleepProviderEnabled(SLEEP_PROVIDERS.GarminAPI);
+    const healthEnabled = isGarminHealthSyncEnabled();
+    if (!sleepEnabled && !healthEnabled) {
+        logger.info('[HealthSync][Garmin] Sleep and Health ingestion are disabled; ignoring webhook');
+        res.status(200).send();
+        return;
+    }
+
+    const body = asRecord(req.body);
+    const queueItems: Parameters<typeof addSleepSyncQueueItem>[0][] = [];
+    let malformedCount = 0;
+    let disabledCount = 0;
+    for (const summaryType of GARMIN_SUPPORTED_SUMMARY_TYPES) {
+        const isHealthSummary = isGarminHealthSummaryType(summaryType);
+        if ((isHealthSummary && !healthEnabled) || (!isHealthSummary && !sleepEnabled)) {
+            disabledCount += asArray(body[summaryType]).length;
+            continue;
+        }
+        for (const pingValue of asArray(body[summaryType])) {
+            if (queueItems.length >= GARMIN_HEALTH_WEBHOOK_MAX_PINGS) {
+                logger.warn('[HealthSync][Garmin] Dropped webhook with excessive callback fan-out');
+                res.status(200).send();
                 return;
             }
-
+            const ping = asRecord(pingValue);
+            const providerUserId = asString(ping.userId) || asString(ping.userID);
+            const trustedCallbackURL = normalizeTrustedGarminCallbackURL(
+                asString(ping.callbackURL),
+                summaryType,
+            );
+            if (!providerUserId
+                || providerUserId.length > GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH
+                || !trustedCallbackURL) {
+                malformedCount += 1;
+                continue;
+            }
             queueItems.push({
                 type: 'garmin_ping',
                 provider: SLEEP_PROVIDERS.GarminAPI,
                 providerUserId,
                 callbackURL: trustedCallbackURL,
-                dedupeKey: trustedCallbackURL,
-                dispatchImmediately: true,
+                garminSummaryType: summaryType as GarminSupportedSummaryType,
+                dedupeKey: `${summaryType}:${trustedCallbackURL}`,
+                // The queue row is the durable acknowledgement boundary. The
+                // dispatcher performs Cloud Tasks fan-out asynchronously.
+                dispatchImmediately: false,
             });
         }
-        const queueResults = await Promise.allSettled(queueItems.map(async (queueItem) => {
-            try {
-                await addSleepSyncQueueItem(queueItem);
-                return 'queued' as const;
-            } catch (error) {
-                if (isProviderQueueSkippedWithoutRetryError(error)) {
-                    logger.info('[SleepSync][Garmin] Ignoring sleep payload because the provider user is not connected or is being deleted', error);
-                    return 'skipped' as const;
+    }
+
+    let queuedCount = 0;
+    let skippedCount = 0;
+    try {
+        await runWithConcurrency(
+            queueItems,
+            GARMIN_HEALTH_WEBHOOK_QUEUE_CONCURRENCY,
+            async queueItem => {
+                try {
+                    await addSleepSyncQueueItem(queueItem);
+                    queuedCount += 1;
+                } catch (error) {
+                    if (isProviderQueueSkippedWithoutRetryError(error)) {
+                        skippedCount += 1;
+                        return;
+                    }
+                    throw error;
                 }
-                throw error;
-            }
-        }));
-        const failedResult = queueResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-        if (failedResult) {
-            throw failedResult.reason;
-        }
-        const queuedCount = queueResults.filter((result) => result.status === 'fulfilled' && result.value === 'queued').length;
-        const skippedCount = queueResults.filter((result) => result.status === 'fulfilled' && result.value === 'skipped').length;
-        logger.info(`[SleepSync][Garmin] Queued ${queuedCount} sleep payloads and skipped ${skippedCount}`);
+            },
+        );
+        logger.info('[HealthSync][Garmin] Webhook accepted', {
+            queuedCount,
+            skippedCount,
+            malformedCount,
+            disabledCount,
+        });
         res.status(200).send();
     } catch (error) {
-        if (isProviderQueueSkippedWithoutRetryError(error)) {
-            logger.info('[SleepSync][Garmin] Ignoring sleep payload because the provider user is not connected or is being deleted', error);
-            res.status(200).send();
-            return;
-        }
-        logger.error('[SleepSync][Garmin] Failed to queue sleep payload', error);
+        logger.error('[HealthSync][Garmin] Failed to durably queue webhook payload', {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
         res.status(500).send();
     }
-});
+}
+
+export const receiveGarminAPIHealthData = functions.region('europe-west2').runWith({
+    timeoutSeconds: 60,
+    memory: '1GB',
+}).https.onRequest(handleGarminAPIHealthData);
+
+/** Temporary compatibility alias while Garmin is moved to the canonical URL. */
+export const receiveGarminAPISleepData = functions.region('europe-west2').runWith({
+    timeoutSeconds: 60,
+    memory: '1GB',
+}).https.onRequest(handleGarminAPIHealthData);
 
 async function handleSuunto247DataWebhook(
     req: functions.https.Request,

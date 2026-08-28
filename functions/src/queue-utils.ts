@@ -202,6 +202,9 @@ function buildFailedQueueItem(
     // Signed provider continuation URLs are short-lived credentials. They are
     // needed only while the live queue item can retry the exact same request.
     delete failedItem.destinationUploadContinuation;
+    // Garmin Ping/Pull callback URLs contain a short-lived pull token. Keep
+    // them only on a retryable live queue row, never in the longer-lived DLQ.
+    delete failedItem.callbackURL;
     delete failedItem.processingOwner;
     delete failedItem.processingRevision;
     delete failedItem.processingLeaseExpiresAt;
@@ -962,6 +965,7 @@ async function updateToProcessedIfCurrentUserActive(
                 processed: true,
                 processedAt: nowMs,
                 ...additionalData,
+                ...clearTerminalProviderCredentialUpdate(queueItem),
                 ...clearRevisionProcessingLeaseUpdate(),
             });
         });
@@ -1001,6 +1005,7 @@ async function updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned
                 processed: true,
                 processedAt: nowMs,
                 ...additionalData,
+                ...clearTerminalProviderCredentialUpdate(queueItem),
                 ...clearRevisionProcessingLeaseUpdate(),
             });
             return true;
@@ -1037,7 +1042,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         const updateData = Object.assign({
             'processed': true,
             'processedAt': (new Date()).getTime(),
-        }, additionalData);
+        }, additionalData, clearTerminalProviderCredentialUpdate(queueItem));
         if (bulkWriter) {
             void bulkWriter.update(ref, updateData);
         } else {
@@ -1050,6 +1055,17 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         logger.error(new Error(`Could not update processed state for ${queueItem.id}`));
         return QueueResult.Failed;
     }
+}
+
+function clearTerminalProviderCredentialUpdate(
+    queueItem: QueueItemInterface,
+): Record<string, unknown> {
+    // Garmin callback URLs embed a short-lived pull token. Preserve that
+    // credential only while the live row can retry; every terminal outcome
+    // (success, skip, or provider-disabled) must remove it.
+    return typeof (queueItem as QueueItemInterface & { callbackURL?: unknown }).callbackURL === 'string'
+        ? { callbackURL: FieldValue.delete() }
+        : {};
 }
 
 export async function markQueueItemSkipped(

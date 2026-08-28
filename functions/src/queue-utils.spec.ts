@@ -222,6 +222,7 @@ describe('queue-utils', () => {
                     uploadUrl: 'https://blob.example/signed',
                     uploadHeaders: { Authorization: 'secret' },
                 },
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=secret',
             };
             hoisted.transaction.get.mockResolvedValue({
                 exists: true,
@@ -241,8 +242,11 @@ describe('queue-utils', () => {
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(hoisted.transaction.set).toHaveBeenCalledWith(
                 expect.objectContaining({ id: 'guarded-q1' }),
-                expect.not.objectContaining({ destinationUploadContinuation: expect.anything() }),
+                expect.any(Object),
             );
+            const failedPayload = hoisted.transaction.set.mock.calls[0][1];
+            expect(failedPayload).not.toHaveProperty('destinationUploadContinuation');
+            expect(failedPayload).not.toHaveProperty('callbackURL');
             expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
             expect(hoisted.batch.commit).not.toHaveBeenCalled();
         });
@@ -677,6 +681,7 @@ describe('queue-utils', () => {
                 userID: 'user-1',
                 queueRevision: 'revision-2',
                 dateCreated: 200,
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=secret',
             };
             hoisted.transaction.get.mockResolvedValue({
                 exists: true,
@@ -692,6 +697,7 @@ describe('queue-utils', () => {
             expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
                 processed: true,
                 resultStatus: 'success',
+                callbackURL: hoisted.fieldValueDelete,
             }));
         });
 
@@ -875,6 +881,7 @@ describe('queue-utils', () => {
             const queueItem: any = {
                 id: 'q4',
                 ref: { id: 'ref' },
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=secret',
             };
 
             const bulkWriter = { update: vi.fn() };
@@ -883,7 +890,11 @@ describe('queue-utils', () => {
             expect(res).toBe(QueueResult.Processed);
             expect(bulkWriter.update).toHaveBeenCalledWith(
                 { id: 'ref' },
-                expect.objectContaining({ processed: true, extra: true })
+                expect.objectContaining({
+                    processed: true,
+                    extra: true,
+                    callbackURL: hoisted.fieldValueDelete,
+                })
             );
         });
 

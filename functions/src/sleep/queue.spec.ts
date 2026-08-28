@@ -50,6 +50,8 @@ const hoisted = vi.hoisted(() => ({
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
     areSuuntoWebhookWriteLifecycleGuardsContinuous: vi.fn(),
     getSuuntoWebhookWriteLifecycleAuthorityDigest: vi.fn(),
+    captureActiveGarminHealthWriteLifecycleGuards: vi.fn(),
+    processGarminHealthQueueItem: vi.fn(),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -140,6 +142,9 @@ vi.mock('firebase-admin', () => {
         recursiveDelete: hoisted.recursiveDelete,
     }));
     Object.assign(firestoreFn, {
+        FieldValue: {
+            delete: vi.fn(() => 'DELETE_SENTINEL'),
+        },
         Timestamp: {
             fromDate: (date: Date) => ({ date }),
         },
@@ -303,6 +308,35 @@ vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
         hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest,
 }));
 
+vi.mock('../garmin/health-rollout', () => ({
+    isGarminHealthSyncEnabled: vi.fn(() => true),
+    isGarminHealthSyncUserAllowed: vi.fn((userID: string | null | undefined) => (
+        typeof userID === 'string' && hoisted.allowedUserIDs.includes(userID)
+    )),
+}));
+
+vi.mock('../garmin/health-lifecycle', () => ({
+    captureActiveGarminHealthWriteLifecycleGuards:
+        hoisted.captureActiveGarminHealthWriteLifecycleGuards,
+    GarminHealthAccountValidationError: class GarminHealthAccountValidationError extends Error {
+        readonly name = 'GarminHealthAccountValidationError';
+        readonly code = 'garmin_health_account_invalid';
+    },
+}));
+
+vi.mock('../garmin/health-sync', () => ({
+    processGarminHealthQueueItem: hoisted.processGarminHealthQueueItem,
+    sanitizeGarminHealthErrorForTelemetry: vi.fn(() => new Error('Garmin Health callback request failed.')),
+    GarminHealthPermissionError: class GarminHealthPermissionError extends Error {
+        readonly name = 'GarminHealthPermissionError';
+        readonly code = 'garmin_health_permission_missing';
+
+        constructor(public readonly userID: string) {
+            super('Garmin Health permission is unavailable for this summary family.');
+        }
+    },
+}));
+
 import { addSleepSyncQueueItem, processSleepSyncQueueItem } from './queue';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
@@ -403,6 +437,37 @@ describe('sleep queue', () => {
         hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest.mockReturnValue('a'.repeat(64));
         hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mockResolvedValue('current');
         hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous.mockReturnValue(true);
+        const garminHealthGuards = {
+            requiredExistingDocumentRef: { path: 'garmin-token' },
+            requiredExistingTokenCredential: {
+                accessToken: 'garmin-access-token',
+                credentialGeneration: 'garmin-token-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'garmin-meta' },
+                expectedFields: {
+                    connectionState: 'connected',
+                    connectionStateGeneration: 'garmin-connection-generation-1',
+                },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: { path: 'garmin-root' },
+                expectedFields: {
+                    activeOAuthCredentialGeneration: 'garmin-root-generation-1',
+                },
+            }],
+            providerUserId: 'garmin-user-1',
+            providerIdentityPinned: true,
+            tokenCredentialGeneration: 'garmin-token-generation-1',
+            rootOAuthCredentialGeneration: 'garmin-root-generation-1',
+            connectionStateGeneration: 'garmin-connection-generation-1',
+        };
+        hoisted.captureActiveGarminHealthWriteLifecycleGuards
+            .mockResolvedValue(garminHealthGuards);
+        hoisted.processGarminHealthQueueItem.mockResolvedValue({
+            healthResults: [],
+            lifecycleGuards: garminHealthGuards,
+        });
     });
 
     it('uses deterministic queue ids for duplicated webhook or poll payloads', async () => {
@@ -1095,7 +1160,7 @@ describe('sleep queue', () => {
                 empty: false,
             });
             const update = vi.fn().mockResolvedValue(undefined);
-            const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1777424400';
+            const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token';
 
             const result = await processSleepSyncQueueItem({
                 id: 'garmin-sleep-ping',
@@ -1120,6 +1185,8 @@ describe('sleep queue', () => {
                     Authorization: 'Bearer garmin-access-token',
                 },
                 json: true,
+                maxResponseBytes: 10 * 1024 * 1024,
+                timeout: 30_000,
             }));
             expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('test-user-uid', 'GarminAPI', {
                 status: 'ready',
@@ -1137,6 +1204,175 @@ describe('sleep queue', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('keeps Garmin Sleep callback credentials out of retry error telemetry and logs', async () => {
+        hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'COROSAPI');
+        hoisted.requestGet.mockRejectedValue(new Error(
+            'request failed for https://apis.garmin.com/wellness-api/rest/sleeps?token=secret-token',
+        ));
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'garmin-token-1',
+                data: () => ({
+                    serviceName: 'GarminAPI',
+                    userID: 'garmin-user-1',
+                }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+        const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=secret-token';
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-sleep-failed-ping',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'GarminAPI',
+            userID: 'test-user-uid',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_ping',
+            callbackURL,
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.RetryIncremented);
+        const retryUpdate = update.mock.calls
+            .map(call => call[0] as Record<string, unknown>)
+            .find(value => Array.isArray(value.errors));
+        expect(retryUpdate).toBeDefined();
+        expect(JSON.stringify(retryUpdate?.errors)).toContain('Garmin sleep callback request failed.');
+        expect(JSON.stringify(retryUpdate?.errors)).not.toContain('secret-token');
+        // The live retryable row intentionally retains the callback credential
+        // so the exact provider pull can be retried.
+        expect(retryUpdate?.callbackURL).toBe(callbackURL);
+        expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('secret-token');
+    });
+
+    it('writes Garmin Health records with lifecycle guards and never writes Sleep state', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-29T06:00:00.000Z'));
+        try {
+            const tokenRef = {
+                get: vi.fn(),
+                parent: { parent: { id: 'test-user-uid' } },
+            };
+            hoisted.tokenRootGet.mockResolvedValue({
+                docs: [{
+                    id: 'garmin-token-1',
+                    data: () => ({ serviceName: 'GarminAPI', userID: 'garmin-user-1' }),
+                    ref: tokenRef,
+                }],
+                empty: false,
+            });
+            const healthInput = {
+                provider: 'GarminAPI',
+                providerAccountId: 'garmin-user-1',
+                sourceRecordKey: 'source-key',
+                sourceRecordKind: 'daily_summary',
+                calendarDate: '2026-04-29',
+                startTimeMs: 1_777_424_400_000,
+                endTimeMs: 1_777_510_800_000,
+                observedAtMs: 1_777_424_400_000,
+                timezoneOffsetSeconds: 0,
+                metrics: [],
+                sourceRevision: { order: 1, token: 'revision' },
+            };
+            hoisted.processGarminHealthQueueItem.mockResolvedValue({
+                healthResults: [{ input: healthInput, observedAtMs: 1_777_424_400_000 }],
+                lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
+            });
+            const update = vi.fn().mockResolvedValue(undefined);
+
+            const result = await processSleepSyncQueueItem({
+                id: 'garmin-health-ping',
+                dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500,
+                processed: false,
+                provider: 'GarminAPI',
+                userID: 'test-user-uid',
+                providerUserId: 'garmin-user-1',
+                retryCount: 0,
+                type: 'garmin_ping',
+                garminSummaryType: 'dailies',
+                garminHealthTokenCredentialGeneration: 'garmin-token-generation-1',
+                garminHealthRootOAuthCredentialGeneration: 'garmin-root-generation-1',
+                garminHealthConnectionStateGeneration: 'garmin-connection-generation-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+
+            expect(result).toBe(QueueResult.Processed);
+            expect(hoisted.processGarminHealthQueueItem).toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledWith(
+                'test-user-uid',
+                healthInput,
+                Date.now(),
+                expect.objectContaining({ providerUserId: 'garmin-user-1' }),
+            );
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+                'test-user-uid',
+                'GarminAPI',
+                expect.objectContaining({
+                    status: 'ready',
+                    lastWebhookAtMs: Date.now(),
+                }),
+                Date.now(),
+                expect.objectContaining({ providerUserId: 'garmin-user-1' }),
+            );
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true,
+                resultStatus: 'success',
+                sessionsWritten: 0,
+                healthRecordsWritten: 1,
+                callbackURL: 'DELETE_SENTINEL',
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('skips stale Garmin Health queue fences before provider I/O', async () => {
+        hoisted.captureActiveGarminHealthWriteLifecycleGuards.mockResolvedValueOnce({
+            ...(await hoisted.captureActiveGarminHealthWriteLifecycleGuards()),
+            connectionStateGeneration: 'new-connection-generation',
+        });
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'garmin-token-1',
+                data: () => ({ serviceName: 'GarminAPI', userID: 'garmin-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }],
+            empty: false,
+        });
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'stale-garmin-health-ping',
+            dateCreated: 1_700_000_000_000,
+            processed: false,
+            provider: 'GarminAPI',
+            userID: 'test-user-uid',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_ping',
+            garminSummaryType: 'dailies',
+            garminHealthConnectionStateGeneration: 'old-connection-generation',
+            callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.processGarminHealthQueueItem).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+        }));
     });
 
     it('prefixes Suunto sleep poll access tokens with Bearer', async () => {

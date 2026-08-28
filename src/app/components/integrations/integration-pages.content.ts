@@ -81,11 +81,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Garmin',
     serviceName: ServiceNames.GarminAPI,
     h1: 'Garmin Integration and Private Training Dashboard',
-    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities in a private training dashboard, send saved or selected GPX/FIT routes to Garmin Connect, sync new Garmin activities to Suunto, Wahoo, or COROS, and bring every connected workout into one view.',
+    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities and Sleep in a private dashboard, receive supported source-attributed Health summaries during the staged rollout, send saved or selected GPX/FIT routes to Garmin Connect, and sync new Garmin activities to Suunto, Wahoo, or COROS.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use Quantified Self as a private dashboard for Garmin data, with Garmin history imports, direct and saved GPX/FIT routes sent to Garmin Connect, opt-in Garmin activity delivery to Suunto, Wahoo, or COROS, and multi-service workout history.',
+    summary: 'Use Quantified Self as a private dashboard for Garmin activities, Sleep, and staged Health summaries, with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, opt-in activity delivery, and multi-service workout history.',
     highlights: [
       'Private Garmin training dashboard',
+      'Garmin Sleep and staged Health summaries',
       'Send saved routes to Garmin Connect',
       'Send selected GPX/FIT routes to Garmin',
       'Garmin to Suunto automatic activity sync',
@@ -93,13 +94,18 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       'Garmin, Suunto, and COROS in one dashboard',
     ],
     syncEyebrow: 'Garmin Workflows',
-    syncTitle: 'Garmin data, routes, and activity sync',
-    syncCopy: 'Connect Garmin once, keep permissions active, and choose whether to import Garmin data, send saved or selected routes to Garmin Connect, or deliver Garmin activities to Suunto, Wahoo, or COROS.',
+    syncTitle: 'Garmin activities, Sleep, Health, routes, and sync',
+    syncCopy: 'Connect Garmin once, keep permissions active, and choose whether to import Garmin history, receive supported staged Health summaries, send routes to Garmin Connect, or deliver Garmin activities to Suunto, Wahoo, or COROS.',
     syncFlows: [
       {
         icon: 'history',
         title: 'Garmin history import',
         copy: 'Import activities from Garmin\'s latest rolling five-year history window. Garmin limits how often a new history import can be started, as documented in Help.',
+      },
+      {
+        icon: 'monitor_heart',
+        title: 'Sleep and staged Health summaries',
+        copy: 'Import normalized Garmin Sleep sessions. During the limited Health rollout, supported Daily, Stress, HRV, body, respiration, blood-pressure, skin-temperature, and Health Snapshot summaries stay source-attributed and separate from workouts and Sleep.',
       },
       {
         icon: 'route',

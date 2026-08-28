@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { SleepProvider } from '../../../shared/sleep';
+import type { GarminSupportedSummaryType } from '../garmin/health-summary-types';
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
@@ -170,6 +171,12 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   providerUserId: string;
   payload?: unknown;
   callbackURL?: string;
+  /** Garmin Ping/Pull family; absent legacy rows are Sleep. */
+  garminSummaryType?: GarminSupportedSummaryType;
+  /** Garmin Health lifecycle fences captured at durable queue admission. */
+  garminHealthTokenCredentialGeneration?: string | null;
+  garminHealthRootOAuthCredentialGeneration?: string | null;
+  garminHealthConnectionStateGeneration?: string | null;
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
