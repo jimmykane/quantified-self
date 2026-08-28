@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { createHash } from 'node:crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import * as requestPromise from '../request-helper';
@@ -22,6 +23,25 @@ type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.Doc
 
 export const GARMIN_HEALTH_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 export const GARMIN_HEALTH_REQUEST_TIMEOUT_MS = 30_000;
+
+function getGarminHealthPayloadDigest(
+  summaryType: string,
+  healthResults: readonly GarminHealthResult[],
+): string {
+  const hash = createHash('sha256');
+  hash.update('garmin-health-callback-v1\0');
+  hash.update(summaryType);
+  for (const result of healthResults) {
+    hash.update('\0');
+    hash.update(JSON.stringify([
+      result.input.sourceRecordType,
+      result.input.sourceRecordKey,
+      result.input.revision.order,
+      result.input.revision.token,
+    ]));
+  }
+  return hash.digest('hex');
+}
 
 export class GarminHealthPermissionError extends Error {
   public readonly name = 'GarminHealthPermissionError';
@@ -132,6 +152,14 @@ export async function processGarminHealthQueueItem(
 ): Promise<{
   healthResults: GarminHealthResult[];
   lifecycleGuards: GarminHealthWriteLifecycleGuards;
+  continuation: {
+    payloadDigest: string;
+    receivedAtMs: number;
+    startIndex: number;
+    recordsWritten: number;
+    recordsUnchanged: number;
+    recordsStale: number;
+  };
 }> {
   if (!isGarminHealthSummaryType(queueItem.garminSummaryType)) {
     throw new GarminHealthValidationError('Garmin Health queue item has an unsupported summary family.');
@@ -178,13 +206,33 @@ export async function processGarminHealthQueueItem(
     throw new GarminHealthRequestError(statusCode);
   }
 
+  const storedReceivedAtMs = queueItem.garminHealthReceivedAtMs;
+  const receivedAtMs = typeof storedReceivedAtMs === 'number'
+    && Number.isSafeInteger(storedReceivedAtMs)
+    && storedReceivedAtMs >= 0
+    ? storedReceivedAtMs
+    : Date.now();
   const healthResults = mapGarminHealthSummaries(
     queueItem.garminSummaryType,
     payload,
     queueItem.providerUserId,
     callback.uploadEndTimeMs,
-    Date.now(),
+    receivedAtMs,
   );
+  const payloadDigest = getGarminHealthPayloadDigest(
+    queueItem.garminSummaryType,
+    healthResults,
+  );
+  const storedCursor = queueItem.garminHealthWriteCursor;
+  const resumesStoredPayload = queueItem.garminHealthPayloadDigest === payloadDigest;
+  if (resumesStoredPayload
+    && (typeof storedCursor !== 'number'
+      || !Number.isSafeInteger(storedCursor)
+      || storedCursor < 0
+      || storedCursor > healthResults.length)) {
+    throw new GarminHealthValidationError('Garmin Health callback cursor exceeds the normalized response.');
+  }
+  const startIndex = resumesStoredPayload ? storedCursor ?? 0 : 0;
   const finalTokenSnapshot = await refreshed.tokenSnapshot.ref.get();
   const finalLifecycleGuards = await captureActiveGarminHealthWriteLifecycleGuards(
     admin.firestore(),
@@ -199,5 +247,16 @@ export async function processGarminHealthQueueItem(
     )) {
     throw new GarminHealthAccountValidationError();
   }
-  return { healthResults, lifecycleGuards: finalLifecycleGuards };
+  return {
+    healthResults,
+    lifecycleGuards: finalLifecycleGuards,
+    continuation: {
+      payloadDigest,
+      receivedAtMs,
+      startIndex,
+      recordsWritten: resumesStoredPayload ? queueItem.garminHealthRecordsWritten ?? 0 : 0,
+      recordsUnchanged: resumesStoredPayload ? queueItem.garminHealthRecordsUnchanged ?? 0 : 0,
+      recordsStale: resumesStoredPayload ? queueItem.garminHealthRecordsStale ?? 0 : 0,
+    },
+  };
 }

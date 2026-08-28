@@ -143,9 +143,79 @@ describe('Garmin Health callback synchronization', () => {
       expect(result.lifecycleGuards).toMatchObject({
         connectionStateGeneration: 'connection-generation-1',
       });
+      expect(result.continuation).toMatchObject({
+        receivedAtMs: Date.now(),
+        startIndex: 0,
+        recordsWritten: 0,
+        recordsUnchanged: 0,
+        recordsStale: 0,
+      });
+      expect(result.continuation.payloadDigest).toMatch(/^[a-f0-9]{64}$/);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('resumes a digest-bound callback with its stable receipt time and counters', async () => {
+    const mappedResults = [
+      {
+        input: {
+          sourceRecordType: 'garmin_daily',
+          sourceRecordKey: 'daily-1',
+          revision: { order: 1_777_424_460_000, token: 'a'.repeat(64) },
+        },
+        observedAtMs: 1_777_424_400_000,
+      },
+      {
+        input: {
+          sourceRecordType: 'garmin_daily',
+          sourceRecordKey: 'daily-2',
+          revision: { order: 1_777_424_460_000, token: 'b'.repeat(64) },
+        },
+        observedAtMs: 1_777_424_460_000,
+      },
+    ];
+    hoisted.mapGarminHealthSummaries.mockReturnValue(mappedResults);
+
+    const first = await processGarminHealthQueueItem(
+      queueItem(),
+      tokenSnapshot(),
+      'test-user',
+      lifecycleGuards(),
+    );
+    const receivedAtMs = first.continuation.receivedAtMs;
+    const resumedQueueItem = {
+      ...queueItem(),
+      garminHealthWriteCursor: 1,
+      garminHealthPayloadDigest: first.continuation.payloadDigest,
+      garminHealthReceivedAtMs: receivedAtMs,
+      garminHealthRecordsWritten: 1,
+      garminHealthRecordsUnchanged: 0,
+      garminHealthRecordsStale: 0,
+    };
+
+    const resumed = await processGarminHealthQueueItem(
+      resumedQueueItem,
+      tokenSnapshot(),
+      'test-user',
+      lifecycleGuards(),
+    );
+
+    expect(hoisted.mapGarminHealthSummaries).toHaveBeenLastCalledWith(
+      'dailies',
+      [{ summaryId: 'summary-1' }],
+      'garmin-user-1',
+      1_777_424_460_000,
+      receivedAtMs,
+    );
+    expect(resumed.continuation).toEqual({
+      payloadDigest: first.continuation.payloadDigest,
+      receivedAtMs,
+      startIndex: 1,
+      recordsWritten: 1,
+      recordsUnchanged: 0,
+      recordsStale: 0,
+    });
   });
 
   it('provider-verifies legacy account identity before following its callback', async () => {

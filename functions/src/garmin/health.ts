@@ -25,10 +25,9 @@ type ExternalRecord = Record<string, unknown>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_STRING_LENGTH = 512;
-// Health records are persisted with one guarded Firestore transaction per
-// normalized summary. Keep a single callback comfortably inside the 9-minute
-// task budget; Garmin backfill requests are already bounded to 90 days.
-export const GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK = 128;
+// Bound provider-controlled collection growth independently from the 10 MiB
+// HTTP response limit. Queue processing checkpoints smaller write batches.
+export const GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK = 10_000;
 const MAX_SAMPLES_PER_SUMMARY = 20_000;
 const MAX_EVENTS_PER_SUMMARY = 256;
 const MAX_DURATION_SECONDS = 7 * 24 * 60 * 60;

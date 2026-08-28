@@ -29,7 +29,17 @@ function map(type: Parameters<typeof mapGarminHealthSummaries>[0], payload: unkn
 }
 
 describe('Garmin Health API summary mapping', () => {
-  it('rejects callback batches that cannot fit the worker write budget', () => {
+  it('accepts more than one worker write batch without truncating the callback', () => {
+    const results = map('bodyComps', Array.from({ length: 129 }, (_, index) => ({
+      summaryId: `body-${index}`,
+      measurementTimeInSeconds: 1_760_000_000 + index,
+      weightInGrams: 70_000 + index,
+    })));
+
+    expect(results).toHaveLength(129);
+  });
+
+  it('rejects callback collections above the provider-response count bound', () => {
     expect(() => mapGarminHealthSummaries(
       'dailies',
       Array.from({ length: GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK + 1 }, () => ({})),

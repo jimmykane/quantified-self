@@ -181,6 +181,16 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   garminHealthTokenCredentialGeneration?: string | null;
   garminHealthRootOAuthCredentialGeneration?: string | null;
   garminHealthConnectionStateGeneration?: string | null;
+  /** Resumable cursor for bounded writes from one immutable Garmin callback. */
+  garminHealthWriteCursor?: number;
+  /** Opaque digest binding the cursor to the normalized callback ordering. */
+  garminHealthPayloadDigest?: string;
+  /** Stable first-receipt timestamp reused when a callback continuation refetches. */
+  garminHealthReceivedAtMs?: number;
+  /** Cumulative callback write outcomes committed before the cursor. */
+  garminHealthRecordsWritten?: number;
+  garminHealthRecordsUnchanged?: number;
+  garminHealthRecordsStale?: number;
   /** Durable Garmin Summary Backfill cursor. */
   garminHealthBackfillSummaryIndex?: number;
   garminHealthBackfillNextStartMs?: number;

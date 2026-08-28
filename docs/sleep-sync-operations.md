@@ -48,7 +48,9 @@ They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the
 `receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
 validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
 UID-scoped callback batches before acknowledging. The existing dispatcher expands each batch, then the
-worker pulls and writes with OAuth and connection lifecycle guards. See [Garmin Health integration](garmin-integration.md).
+worker pulls and writes with OAuth and connection lifecycle guards. Large callback responses are written
+in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose
+digest-bound cursor resumes without retaining raw provider data. See [Garmin Health integration](garmin-integration.md).
 
 ## Provider Kill Switch
 
