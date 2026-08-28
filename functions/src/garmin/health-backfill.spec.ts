@@ -201,6 +201,7 @@ describe('Garmin Health backfill processor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    tokenRef.get.mockReset().mockResolvedValue({ exists: true, data: () => tokenData });
     hoisted.getDeletionGuard.mockResolvedValue({ shouldSkip: false });
     hoisted.getDeletionGuardInTransaction.mockResolvedValue({ shouldSkip: false });
     hoisted.captureGuards.mockResolvedValue(guards);
@@ -272,7 +273,51 @@ describe('Garmin Health backfill processor', () => {
       1,
       undefined,
       'GARMIN_HEALTH_BACKFILL_RETRIES_EXHAUSTED',
+      expect.any(Function),
     );
+  });
+
+  it('refreshes the fenced credential before every provider window', async () => {
+    const refreshedTokenData = {
+      ...tokenData,
+      accessToken: 'refreshed-access-token',
+    };
+    const refreshedGuards = {
+      ...guards,
+      requiredExistingTokenCredential: {
+        ...guards.requiredExistingTokenCredential,
+        accessToken: 'refreshed-access-token',
+      },
+    };
+    const refreshedTokenSnapshot = {
+      exists: true,
+      ref: tokenRef,
+      data: () => refreshedTokenData,
+    };
+    tokenRef.get
+      .mockResolvedValueOnce({ exists: true, data: () => tokenData })
+      .mockResolvedValueOnce({ exists: true, data: () => tokenData })
+      .mockResolvedValue({ exists: true, data: () => refreshedTokenData });
+    hoisted.refreshGuards
+      .mockResolvedValueOnce({ tokenData, tokenSnapshot, lifecycleGuards: guards })
+      .mockResolvedValueOnce({ tokenData, tokenSnapshot, lifecycleGuards: guards })
+      .mockResolvedValue({
+        tokenData: refreshedTokenData,
+        tokenSnapshot: refreshedTokenSnapshot,
+        lifecycleGuards: refreshedGuards,
+      });
+
+    const processing = processGarminHealthBackfillQueueItem(createQueueItem());
+    await vi.runAllTimersAsync();
+
+    await expect(processing).resolves.toBe(QueueResult.Processed);
+    expect(hoisted.refreshGuards).toHaveBeenCalledTimes(11);
+    expect(hoisted.requestGet.mock.calls[0][0].headers).toEqual({
+      Authorization: 'Bearer access-token',
+    });
+    expect(hoisted.requestGet.mock.calls[1][0].headers).toEqual({
+      Authorization: 'Bearer refreshed-access-token',
+    });
   });
 
   it('does not call Garmin after the queue cursor is superseded', async () => {
@@ -337,8 +382,69 @@ describe('Garmin Health backfill processor', () => {
       1,
       undefined,
       'GARMIN_HEALTH_BACKFILL_RETRIES_EXHAUSTED',
+      expect.any(Function),
     );
     expect(JSON.stringify(hoisted.increaseRetry.mock.calls)).not.toContain('secret refresh response');
+  });
+
+  it('marks the matching backfill state failed when transient retries are exhausted', async () => {
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('unavailable'), {
+      statusCode: 503,
+    }));
+    hoisted.increaseRetry.mockImplementationOnce(async (...args: unknown[]) => {
+      const onRetryExhausted = args[5] as (
+        transaction: unknown,
+        currentQueueItem: Record<string, unknown>,
+      ) => Promise<void>;
+      await onRetryExhausted({
+        get: vi.fn(async () => ({
+          exists: true,
+          data: () => ({ ...hoisted.sleepStateData }),
+        })),
+        set: (_ref: unknown, data: Record<string, unknown>, options: unknown) => {
+          hoisted.transactionSet(data, options);
+        },
+      }, { ...hoisted.queueData });
+      return QueueResult.MovedToDLQ;
+    });
+
+    await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
+      .resolves.toBe(QueueResult.MovedToDLQ);
+
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'GarminAPI',
+      healthBackfillStatus: 'failed',
+      healthBackfillSummaryType: null,
+      lastError: 'Garmin Health backfill exhausted automatic retries.',
+    }), { merge: true });
+  });
+
+  it('does not fail progress owned by a newer backfill when stale retries are exhausted', async () => {
+    hoisted.sleepStateData.lastBackfillQueuedAtMs = 1_000;
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('unavailable'), {
+      statusCode: 503,
+    }));
+    hoisted.increaseRetry.mockImplementationOnce(async (...args: unknown[]) => {
+      const onRetryExhausted = args[5] as (
+        transaction: unknown,
+        currentQueueItem: Record<string, unknown>,
+      ) => Promise<void>;
+      await onRetryExhausted({
+        get: vi.fn(async () => ({
+          exists: true,
+          data: () => ({ ...hoisted.sleepStateData }),
+        })),
+        set: (_ref: unknown, data: Record<string, unknown>, options: unknown) => {
+          hoisted.transactionSet(data, options);
+        },
+      }, { ...hoisted.queueData });
+      return QueueResult.MovedToDLQ;
+    });
+
+    await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
+      .resolves.toBe(QueueResult.MovedToDLQ);
+
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
   it('records reconnect-required when preflight account verification returns unauthorized', async () => {

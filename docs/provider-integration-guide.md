@@ -174,6 +174,8 @@ For every new persistent write path:
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.
 - Record enough cursor/range state to make failures observable without exposing provider data.
+- For a multi-minute import, re-read and expiry-refresh the exact credential before every provider request while proving the original provider identity, credential generation, OAuth root generation, connection generation, and deletion state still own the work. Do not treat expiration of a token cached at worker startup as evidence that the user must reconnect.
+- When retry exhaustion removes a durable cursor, mark only its matching observable progress state terminal in the same guarded transaction as the DLQ move. Never leave progress running after its final queue row is gone or overwrite progress owned by a newer import.
 - Confirm the partner pagination order. For descending history, include both selected date boundaries and stop only once records are older than the start boundary. Do not assume API ordering without tests.
 - Confirm whether a provider range is made of calendar dates or instants and whether both ends are inclusive. Use one canonical representation end to end, split by the provider's maximum number of included dates, and make adjacent windows non-overlapping. Test timezone boundaries plus one-day, exact-limit, and limit-plus-one ranges.
 - Classify provider 429 responses separately and surface reset metadata where available. Do not convert rate limits into rapid retries.

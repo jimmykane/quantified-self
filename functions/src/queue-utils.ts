@@ -354,7 +354,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
     transition: (
         transaction: admin.firestore.Transaction,
         currentQueueItem: Record<string, unknown>,
-    ) => void,
+    ) => void | Promise<void>,
 ): Promise<QueueItemUserGuardedUpdateResult> {
     const queueItemRef = params.queueItem.ref;
     if (!queueItemRef) {
@@ -386,7 +386,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
             return QueueItemUserGuardedUpdateResult.NotCurrent;
         }
 
-        transition(transaction, currentQueueItem);
+        await transition(transaction, currentQueueItem);
         return QueueItemUserGuardedUpdateResult.Updated;
     });
 
@@ -493,6 +493,11 @@ export interface IncreaseRetryCountIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /** Adds provider-owned state to the same transaction as retry-exhausted DLQ movement. */
+    onRetryExhaustedInTransaction?: (
+        transaction: admin.firestore.Transaction,
+        currentQueueItem: Record<string, unknown>,
+    ) => void | Promise<void>;
     /**
      * An acknowledged delayed retry can retain its planned dispatch time as
      * the queue marker. This prevents the reconciliation scheduler from
@@ -773,7 +778,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
             ...params,
             actionDescription: 'retry-state transition',
-        }, (transaction, currentQueueItem) => {
+        }, async (transaction, currentQueueItem) => {
             movedToDlq = false;
             const currentRetryCount = Number.isFinite(Number(currentQueueItem.retryCount))
                 ? Math.max(0, Math.floor(Number(currentQueueItem.retryCount)))
@@ -802,6 +807,10 @@ export async function increaseRetryCountIfCurrentUserActive(
 
             if (nextRetryCount >= MAX_RETRY_COUNT) {
                 movedToDlq = true;
+                await params.onRetryExhaustedInTransaction?.(
+                    transaction,
+                    currentQueueItem,
+                );
                 const currentQueueItemForDlq = {
                     ...currentQueueItem,
                     id: params.queueItem.id,
@@ -888,6 +897,9 @@ export async function increaseRetryCountForQueueItem(
     incrementBy = 1,
     bulkWriter?: admin.firestore.BulkWriter,
     maxRetryDlqContext?: string,
+    onRetryExhaustedInTransaction?: IncreaseRetryCountIfCurrentUserActiveParams[
+        'onRetryExhaustedInTransaction'
+    ],
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
@@ -901,6 +913,7 @@ export async function increaseRetryCountForQueueItem(
             incrementBy,
             maxRetryDlqContext,
             bulkWriter,
+            onRetryExhaustedInTransaction,
             userID: revisionGuard.userID,
             phase: `${revisionGuard.phasePrefix}_retry`,
             logPrefix: revisionGuard.logPrefix,

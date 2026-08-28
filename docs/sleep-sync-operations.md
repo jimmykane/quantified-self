@@ -169,9 +169,11 @@ Historical Health requests use inclusive windows of at most 90 days from January
 time. `processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
 at least 1.5 seconds between Garmin requests. It advances its Firestore cursor after each accepted or
 already-requested window, clips a family when Garmin reports its minimum start, retries network/`429`/`5xx`
-failures, and treats permanent authorization/permission/request errors as terminal. It rechecks queue
-revision, account deletion, rollout, token credentials, root OAuth generation, provider identity, and
-connection generation before every provider request and transactionally before progress. Sleep and Health
+failures, and treats permanent authorization/permission/request errors as terminal. It re-reads and
+expiry-refreshes the exact token before every provider request while retaining the original OAuth and
+connection-generation fence, then rechecks queue revision, account deletion, rollout, provider identity,
+and lifecycle transactionally before progress. Retry exhaustion atomically marks the matching progress
+failed while moving the queue item to the DLQ. Sleep and Health
 share the 30-day user cooldown, while each Health family can independently establish its provider minimum.
 Garmin Summary Resender is retained for bounded operational recovery rather than the normal user backfill.
 
