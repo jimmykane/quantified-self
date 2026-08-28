@@ -159,6 +159,7 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
 export type SleepSyncQueueItemType =
   | 'garmin_push'
   | 'garmin_ping'
+  | 'garmin_ping_batch'
   | 'suunto_webhook'
   | 'suunto_poll'
   | 'suunto_health_poll'
@@ -171,6 +172,8 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   providerUserId: string;
   payload?: unknown;
   callbackURL?: string;
+  /** Bounded live-only callback credentials on a compact Garmin ingress batch. */
+  garminCallbackURLs?: string[];
   /** Garmin Ping/Pull family; absent legacy rows are Sleep. */
   garminSummaryType?: GarminSupportedSummaryType;
   /** Garmin Health lifecycle fences captured at durable queue admission. */

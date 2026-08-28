@@ -43,9 +43,10 @@ See [Suunto 24/7 Health integration](suunto-integration.md).
 Garmin Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration,
 Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise separate Health records.
 They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
-`receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler durably queues
-validated Garmin callback URLs before acknowledging, then the worker pulls and writes with OAuth and
-connection lifecycle guards. See [Garmin Health integration](garmin-integration.md).
+`receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
+validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
+UID-scoped callback batches before acknowledging. The existing dispatcher expands each batch, then the
+worker pulls and writes with OAuth and connection lifecycle guards. See [Garmin Health integration](garmin-integration.md).
 
 ## Provider Kill Switch
 

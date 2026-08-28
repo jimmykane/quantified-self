@@ -159,9 +159,11 @@ function optionalTimezoneOffsetSeconds(record: ExternalRecord, field: string): n
 }
 
 function timestampMs(value: unknown, field: string): number {
-  const milliseconds = requiredNumber(value, field, 0, MAX_TIMESTAMP_SECONDS) * 1000;
+  const milliseconds = Math.round(
+    requiredNumber(value, field, 0, MAX_TIMESTAMP_SECONDS) * 1000,
+  );
   if (!Number.isSafeInteger(milliseconds)) {
-    throw new GarminHealthValidationError(`${field} must resolve to millisecond precision.`);
+    throw new GarminHealthValidationError(`${field} is outside the supported timestamp range.`);
   }
   return milliseconds;
 }
@@ -177,9 +179,9 @@ function stableStringify(value: unknown): string {
   return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
 }
 
-function contentToken(summaryId: string, content: unknown): string {
+function contentToken(content: unknown): string {
   return createHash('sha256')
-    .update(stableStringify({ summaryId, content }))
+    .update(stableStringify(content))
     .digest('hex');
 }
 
@@ -462,7 +464,7 @@ function finalizeResult(options: {
     sourceRecordKey: options.sourceRecordKey,
     revision: {
       order: options.revisionOrder,
-      token: contentToken(options.summaryId, options.content),
+      token: contentToken(options.content),
     },
     receivedAtMs: options.receivedAtMs,
     ...options.content,

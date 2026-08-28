@@ -7,6 +7,9 @@ import {
 } from '../../../shared/sleep';
 import {
     addSleepSyncQueueItem,
+    GARMIN_PING_BATCH_MAX_CALLBACK_BYTES,
+    GARMIN_PING_BATCH_MAX_CALLBACKS,
+    resolveGarminPingFirebaseUserIDs,
 } from './queue';
 import { verifySuuntoWebhookSignature } from '../suunto/webhook-signature';
 import {
@@ -43,7 +46,7 @@ type ExternalRecord = Record<string, unknown>;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_HEALTH_WEBHOOK_MAX_BYTES = 1024 * 1024;
 const GARMIN_HEALTH_WEBHOOK_MAX_BYTES = 10 * 1024 * 1024;
-const GARMIN_HEALTH_WEBHOOK_MAX_PINGS = 10_000;
+const GARMIN_HEALTH_WEBHOOK_MAX_DESCRIPTORS = 10_000;
 // Garmin requires asynchronous acknowledgement within 30 seconds. Admission
 // remains bounded, but parallel guarded writes keep large valid Ping batches
 // inside that response budget without following callbacks in the HTTP path.
@@ -252,7 +255,13 @@ async function handleGarminAPIHealthData(
     }
 
     const body = asRecord(req.body);
-    const queueItems: Parameters<typeof addSleepSyncQueueItem>[0][] = [];
+    const pingDescriptors: Array<{
+        summaryType: GarminSupportedSummaryType;
+        providerUserId: string;
+        callbackURL: string;
+    }> = [];
+    const descriptorKeys = new Set<string>();
+    let descriptorCount = 0;
     let malformedCount = 0;
     let disabledCount = 0;
     for (const summaryType of GARMIN_SUPPORTED_SUMMARY_TYPES) {
@@ -262,8 +271,9 @@ async function handleGarminAPIHealthData(
             continue;
         }
         for (const pingValue of asArray(body[summaryType])) {
-            if (queueItems.length >= GARMIN_HEALTH_WEBHOOK_MAX_PINGS) {
-                logger.warn('[HealthSync][Garmin] Dropped webhook with excessive callback fan-out');
+            descriptorCount += 1;
+            if (descriptorCount > GARMIN_HEALTH_WEBHOOK_MAX_DESCRIPTORS) {
+                logger.warn('[HealthSync][Garmin] Dropped webhook with excessive descriptor count');
                 res.status(200).send();
                 return;
             }
@@ -279,16 +289,17 @@ async function handleGarminAPIHealthData(
                 malformedCount += 1;
                 continue;
             }
-            queueItems.push({
-                type: 'garmin_ping',
-                provider: SLEEP_PROVIDERS.GarminAPI,
+            const descriptorKey = JSON.stringify([
+                summaryType,
+                providerUserId,
+                trustedCallbackURL,
+            ]);
+            if (descriptorKeys.has(descriptorKey)) continue;
+            descriptorKeys.add(descriptorKey);
+            pingDescriptors.push({
+                summaryType: summaryType as GarminSupportedSummaryType,
                 providerUserId,
                 callbackURL: trustedCallbackURL,
-                garminSummaryType: summaryType as GarminSupportedSummaryType,
-                dedupeKey: `${summaryType}:${trustedCallbackURL}`,
-                // The queue row is the durable acknowledgement boundary. The
-                // dispatcher performs Cloud Tasks fan-out asynchronously.
-                dispatchImmediately: false,
             });
         }
     }
@@ -296,16 +307,91 @@ async function handleGarminAPIHealthData(
     let queuedCount = 0;
     let skippedCount = 0;
     try {
+        const firebaseUserIDs = await resolveGarminPingFirebaseUserIDs(
+            pingDescriptors.map(descriptor => descriptor.providerUserId),
+        );
+        const groupedCallbacks = new Map<string, {
+            firebaseUserID: string;
+            providerUserId: string;
+            summaryType: GarminSupportedSummaryType;
+            callbackURLs: string[];
+        }>();
+        for (const descriptor of pingDescriptors) {
+            const firebaseUserID = firebaseUserIDs.get(descriptor.providerUserId);
+            if (!firebaseUserID) {
+                skippedCount += 1;
+                continue;
+            }
+            const groupKey = JSON.stringify([
+                firebaseUserID,
+                descriptor.providerUserId,
+                descriptor.summaryType,
+            ]);
+            const group = groupedCallbacks.get(groupKey) || {
+                firebaseUserID,
+                providerUserId: descriptor.providerUserId,
+                summaryType: descriptor.summaryType,
+                callbackURLs: [],
+            };
+            group.callbackURLs.push(descriptor.callbackURL);
+            groupedCallbacks.set(groupKey, group);
+        }
+
+        const queueBatches: Array<{
+            input: Parameters<typeof addSleepSyncQueueItem>[0];
+            callbackCount: number;
+        }> = [];
+        for (const group of groupedCallbacks.values()) {
+            let callbacks: string[] = [];
+            let serializedBytes = 2;
+            const flush = () => {
+                if (callbacks.length === 0) return;
+                const serializedCallbacks = JSON.stringify(callbacks);
+                queueBatches.push({
+                    input: {
+                        type: 'garmin_ping_batch',
+                        provider: SLEEP_PROVIDERS.GarminAPI,
+                        providerUserId: group.providerUserId,
+                        userID: group.firebaseUserID,
+                        garminCallbackURLs: callbacks,
+                        garminSummaryType: group.summaryType,
+                        dedupeKey: crypto.createHash('sha256')
+                            .update(`${group.summaryType}:${serializedCallbacks}`)
+                            .digest('hex'),
+                        // This compact row is the durable acknowledgement
+                        // boundary. The dispatcher expands it asynchronously.
+                        dispatchImmediately: false,
+                    },
+                    callbackCount: callbacks.length,
+                });
+                callbacks = [];
+                serializedBytes = 2;
+            };
+            for (const callbackURL of group.callbackURLs) {
+                const callbackBytes = Buffer.byteLength(JSON.stringify(callbackURL), 'utf8');
+                const delimiterBytes = callbacks.length === 0 ? 0 : 1;
+                if (callbacks.length > 0
+                    && (callbacks.length >= GARMIN_PING_BATCH_MAX_CALLBACKS
+                        || serializedBytes + delimiterBytes + callbackBytes
+                            > GARMIN_PING_BATCH_MAX_CALLBACK_BYTES)) {
+                    flush();
+                }
+                callbacks.push(callbackURL);
+                serializedBytes += (callbacks.length === 1 ? 0 : 1) + callbackBytes;
+            }
+            flush();
+        }
+
         await runWithConcurrency(
-            queueItems,
+            queueBatches,
             GARMIN_HEALTH_WEBHOOK_QUEUE_CONCURRENCY,
-            async queueItem => {
+            async queueBatch => {
                 try {
-                    await addSleepSyncQueueItem(queueItem);
-                    queuedCount += 1;
+                    await addSleepSyncQueueItem(queueBatch.input);
+                    queuedCount += queueBatch.callbackCount;
                 } catch (error) {
                     if (isProviderQueueSkippedWithoutRetryError(error)) {
-                        skippedCount += 1;
+                        skippedCount += queueBatch.callbackCount;
                         return;
                     }
                     throw error;

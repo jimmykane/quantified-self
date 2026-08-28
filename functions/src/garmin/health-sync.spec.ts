@@ -199,6 +199,29 @@ describe('Garmin Health callback synchronization', () => {
     )).rejects.toBeInstanceOf(GarminHealthPermissionError);
   });
 
+  it('publishes refreshed lifecycle guards before a callback request can fail', async () => {
+    const refreshedGuards = lifecycleGuards();
+    refreshedGuards.requiredExistingTokenCredential = {
+      ...refreshedGuards.requiredExistingTokenCredential,
+      accessToken: 'refreshed-garmin-access-token',
+    };
+    hoisted.captureGuards.mockResolvedValueOnce(refreshedGuards);
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('provider body'), {
+      statusCode: 412,
+    }));
+    const onLifecycleGuardsCaptured = vi.fn();
+
+    await expect(processGarminHealthQueueItem(
+      queueItem(),
+      tokenSnapshot(),
+      'test-user',
+      lifecycleGuards(),
+      onLifecycleGuardsCaptured,
+    )).rejects.toBeInstanceOf(GarminHealthPermissionError);
+
+    expect(onLifecycleGuardsCaptured).toHaveBeenCalledWith(refreshedGuards);
+  });
+
   it('rejects a lifecycle change observed after provider I/O', async () => {
     hoisted.guardsContinuous.mockReturnValueOnce(true).mockReturnValueOnce(false);
 

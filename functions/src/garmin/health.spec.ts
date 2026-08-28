@@ -338,6 +338,29 @@ describe('Garmin Health API summary mapping', () => {
     expect(results[0].input.metrics[0]).toMatchObject({ canonical: { value: 49, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute } });
   });
 
+  it('keeps revision tokens stable when Garmin replaces only the summary ID', () => {
+    const first = map('userMetrics', [{
+      summaryId: 'metrics-original', calendarDate: '2025-10-09', vo2Max: 49,
+    }])[0];
+    const replacement = map('userMetrics', [{
+      summaryId: 'metrics-replacement', calendarDate: '2025-10-09', vo2Max: 49,
+    }])[0];
+
+    expect(replacement.input.sourceRecordKey).toBe(first.input.sourceRecordKey);
+    expect(replacement.input.revision.token).toBe(first.input.revision.token);
+  });
+
+  it('rounds documented fractional-second timestamps to model millisecond precision', () => {
+    const [result] = map('healthSnapshot', [{
+      summaryId: 'snapshot-1', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000.0001, startTimeOffsetInSeconds: 0,
+      durationInSeconds: 120,
+      summaries: [{ summaryType: 'heart_rate', avgValue: 70 }],
+    }]);
+
+    expect(result.input.startTimeMs).toBe(1_760_000_000_000);
+  });
+
   it.each([
     ['mismatched account', 'dailies', [{
       summaryId: 'daily-1', userId: 'other-account', calendarDate: '2025-10-09',
@@ -354,11 +377,6 @@ describe('Garmin Health API summary mapping', () => {
     ['nonzero on-demand duration', 'pulseox', [{
       summaryId: 'pulse-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
       durationInSeconds: 60, onDemand: true, timeOffsetSpo2Values: { 0: 96 },
-    }]],
-    ['sub-millisecond timestamp', 'healthSnapshot', [{
-      summaryId: 'snapshot-1', calendarDate: '2025-10-09',
-      startTimeInSeconds: 1_760_000_000.0001, startTimeOffsetInSeconds: 0,
-      durationInSeconds: 120, summaries: [],
     }]],
   ] as const)('rejects %s', (_caseName, type, payload) => {
     expect(() => mapGarminHealthSummaries(

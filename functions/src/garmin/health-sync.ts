@@ -128,6 +128,7 @@ export async function processGarminHealthQueueItem(
   tokenSnapshot: TokenSnapshot,
   firebaseUserID: string,
   initialGuards: GarminHealthWriteLifecycleGuards,
+  onLifecycleGuardsCaptured?: (guards: GarminHealthWriteLifecycleGuards) => void,
 ): Promise<{
   healthResults: GarminHealthResult[];
   lifecycleGuards: GarminHealthWriteLifecycleGuards;
@@ -149,6 +150,7 @@ export async function processGarminHealthQueueItem(
     firebaseUserID,
     initialGuards,
   );
+  onLifecycleGuardsCaptured?.(refreshed.lifecycleGuards);
   assertGarminHealthPermission(refreshed.tokenData, firebaseUserID);
   if (!refreshed.lifecycleGuards.providerIdentityPinned) {
     await verifyLegacyGarminProviderIdentity(

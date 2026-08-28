@@ -27,9 +27,9 @@ Garmin Body Battery is retained as provider-native because the provider score is
 
 - Configure Garmin for **Ping/Pull**, not Push. Garmin's ping has no local request signature, so the public request is only an availability hint.
 - `receiveGarminAPIHealthData` is the canonical endpoint. `receiveGarminAPISleepData` remains a temporary Sleep-compatible alias while the Garmin portal configuration moves.
-- The handler accepts at most 10 MiB, validates exact Garmin HTTPS callback hosts and family paths, validates one bounded pull token and an upload window of at most 24 hours, and durably stores queue work before returning `200`.
+- The handler accepts at most 10 MiB, validates exact Garmin HTTPS callback hosts and family paths, validates one bounded pull token and an upload window of at most 24 hours, deduplicates exact descriptors, and resolves unique provider accounts with bounded batched lookups. It stores at most 250 callbacks and 700 KiB per UID-scoped live batch row before returning `200`; the existing dispatcher expands those batches into the ordinary per-callback queue asynchronously.
 - Direct Push summaries, malformed callbacks, unsupported `epochs`, disabled families, and connections outside the staged rollout are acknowledged and dropped. Only a durable queue-write outage returns `5xx` so Garmin can retry.
-- Cloud Tasks fan-out happens asynchronously through the existing dispatcher. The worker follows the Garmin callback with the connected user's OAuth bearer token, a 30-second timeout, and a 10 MiB response bound.
+- Cloud Tasks fan-out happens asynchronously through the existing dispatcher. Ambiguous provider-account bindings are dropped instead of choosing one Firebase user. The worker follows each Garmin callback with the connected user's OAuth bearer token, a 30-second timeout, and a 10 MiB response bound.
 - Callback URLs contain short-lived pull credentials. They exist only on live retryable queue rows, are removed on every terminal outcome, and are stripped from failed-job copies. They are never written to Health records or logs.
 
 ## Identity and lifecycle
@@ -44,7 +44,7 @@ Disconnecting Garmin stops future imports and retains imported Sleep and Health 
 
 ## Revision and replacement rules
 
-The callback `uploadEndTimeInSeconds` is the ordered revision watermark. Source identities use the stable provider interval, calendar date, or measurement timestamp rather than `summaryId`, because Garmin can update a record with a new summary ID. Recognized normalized content is hashed into the revision token. A higher identical delivery advances the maximum-observed watermark; a later distinct but older delivery is stale and cannot overwrite it.
+The callback `uploadEndTimeInSeconds` is the ordered revision watermark. Source identities use the stable provider interval, calendar date, or measurement timestamp rather than `summaryId`, because Garmin can update a record with a new summary ID. Recognized normalized content alone is hashed into the revision token, so replacing only the summary ID remains unchanged. Fractional provider timestamps are rounded to the Health model's millisecond precision. A higher identical delivery advances the maximum-observed watermark; a later distinct but older delivery is stale and cannot overwrite it.
 
 ## Rollout and history
 

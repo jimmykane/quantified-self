@@ -205,6 +205,7 @@ function buildFailedQueueItem(
     // Garmin Ping/Pull callback URLs contain a short-lived pull token. Keep
     // them only on a retryable live queue row, never in the longer-lived DLQ.
     delete failedItem.callbackURL;
+    delete failedItem.garminCallbackURLs;
     delete failedItem.processingOwner;
     delete failedItem.processingRevision;
     delete failedItem.processingLeaseExpiresAt;
@@ -1063,9 +1064,18 @@ function clearTerminalProviderCredentialUpdate(
     // Garmin callback URLs embed a short-lived pull token. Preserve that
     // credential only while the live row can retry; every terminal outcome
     // (success, skip, or provider-disabled) must remove it.
-    return typeof (queueItem as QueueItemInterface & { callbackURL?: unknown }).callbackURL === 'string'
-        ? { callbackURL: FieldValue.delete() }
-        : {};
+    const credentialFields: Record<string, unknown> = {};
+    const providerQueueItem = queueItem as QueueItemInterface & {
+        callbackURL?: unknown;
+        garminCallbackURLs?: unknown;
+    };
+    if (typeof providerQueueItem.callbackURL === 'string') {
+        credentialFields.callbackURL = FieldValue.delete();
+    }
+    if (Array.isArray(providerQueueItem.garminCallbackURLs)) {
+        credentialFields.garminCallbackURLs = FieldValue.delete();
+    }
+    return credentialFields;
 }
 
 export async function markQueueItemSkipped(

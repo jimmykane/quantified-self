@@ -223,6 +223,9 @@ describe('queue-utils', () => {
                     uploadHeaders: { Authorization: 'secret' },
                 },
                 callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=secret',
+                garminCallbackURLs: [
+                    'https://apis.garmin.com/wellness-api/rest/dailies?token=batch-secret',
+                ],
             };
             hoisted.transaction.get.mockResolvedValue({
                 exists: true,
@@ -247,6 +250,7 @@ describe('queue-utils', () => {
             const failedPayload = hoisted.transaction.set.mock.calls[0][1];
             expect(failedPayload).not.toHaveProperty('destinationUploadContinuation');
             expect(failedPayload).not.toHaveProperty('callbackURL');
+            expect(failedPayload).not.toHaveProperty('garminCallbackURLs');
             expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
             expect(hoisted.batch.commit).not.toHaveBeenCalled();
         });
@@ -682,6 +686,9 @@ describe('queue-utils', () => {
                 queueRevision: 'revision-2',
                 dateCreated: 200,
                 callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=secret',
+                garminCallbackURLs: [
+                    'https://apis.garmin.com/wellness-api/rest/dailies?token=batch-secret',
+                ],
             };
             hoisted.transaction.get.mockResolvedValue({
                 exists: true,
@@ -698,6 +705,7 @@ describe('queue-utils', () => {
                 processed: true,
                 resultStatus: 'success',
                 callbackURL: hoisted.fieldValueDelete,
+                garminCallbackURLs: hoisted.fieldValueDelete,
             }));
         });
 
