@@ -27,6 +27,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 15,
             cancelScheduled: 3,
             onboardingCompleted: 90,
+            marketingConsent: 35,
             providers: {},
             events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
             routes: { total: 42 },
@@ -81,6 +82,11 @@ describe('admin-dashboard-summary helper', () => {
         });
         expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
         expect(cards.find(card => card.id === 'total-users')?.value).toBe(120);
+        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
+            label: 'Marketing Opt-ins',
+            value: 35,
+            subtitle: 'Explicit consent · 29% of users',
+        });
         expect(cards.find(card => card.id === 'pro-users')?.subtitle).toBe('Monthly 18 · Yearly 11 · Unknown 1');
         expect(cards.find(card => card.id === 'basic-users')?.subtitle).toBe('Monthly 22 · Yearly 3');
         expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
@@ -114,6 +120,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 1,
+            marketingConsent: 0,
             providers: {},
             events: { total: 0 },
             routes: { total: 0 },
@@ -138,6 +145,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 1,
+            marketingConsent: 0,
             providers: {},
             events: { total: 0 },
             routes: { total: 0 },
@@ -167,6 +175,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 8,
+            marketingConsent: 3,
             providers: {},
             events: { total: 0 },
             routes: { total: 0 },
@@ -210,6 +219,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: Number.NaN,
             cancelScheduled: 2,
             onboardingCompleted: 1,
+            marketingConsent: Number.NaN,
             providers: {},
             events: { total: Number.NaN },
             routes: { total: 5 },
@@ -440,6 +450,7 @@ describe('admin-dashboard-summary helper', () => {
             canceled: 0,
             cancelScheduled: 0,
             onboardingCompleted: 0,
+            marketingConsent: 0,
             providers: {},
             events: { total: 10, computedAt: 'not-a-date' },
             routes: { total: 5, computedAt: '2026-06-01T10:00:00.000Z' },

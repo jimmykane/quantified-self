@@ -151,6 +151,7 @@ export interface UserCountStats {
     canceled: number;
     cancelScheduled: number;
     onboardingCompleted: number;
+    marketingConsent: number;
     providers: Record<string, number>;
     events: EventCountStats;
     routes: RouteCountStats;
@@ -171,6 +172,7 @@ interface UserCountFunctionResponse {
     canceled?: number;
     cancelScheduled?: number;
     onboardingCompleted?: number;
+    marketingConsent?: number;
     providers: Record<string, number>;
     events?: Partial<EventCountStats>;
     routes?: Partial<RouteCountStats>;
@@ -330,6 +332,7 @@ export class AdminService {
                     canceled: result.data.canceled ?? 0,
                     cancelScheduled: result.data.cancelScheduled ?? 0,
                     onboardingCompleted: result.data.onboardingCompleted ?? 0,
+                    marketingConsent: result.data.marketingConsent ?? 0,
                     providers: result.data.providers || {},
                     events,
                     routes,

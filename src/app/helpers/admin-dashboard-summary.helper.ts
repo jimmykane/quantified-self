@@ -152,6 +152,14 @@ export function buildAdminDashboardUserKpiCards(
         numberCard('monthly-paid', 'Monthly Paid', 'calendar_view_month', stats.monthlyPaid),
         numberCard('yearly-paid', 'Yearly Paid', 'calendar_today', stats.yearlyPaid),
         numberCard('onboarded-users', 'Onboarded', 'how_to_reg', stats.onboardingCompleted, 'ok'),
+        numberCard(
+            'marketing-consent',
+            'Marketing Opt-ins',
+            'mark_email_read',
+            stats.marketingConsent,
+            undefined,
+            userShareSubtitle(stats.marketingConsent, stats.total, 'Explicit consent')
+        ),
         ...(connectionStats ? [
             numberCard(
                 'service-connected-users',
@@ -167,7 +175,7 @@ export function buildAdminDashboardUserKpiCards(
                 'hub',
                 connectionStats.mcpUsers,
                 connectionCountSeverity(connectionStats.mcpUsers),
-                connectedUserShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
+                userShareSubtitle(connectionStats.mcpUsers, stats.total, 'Active authorization')
             ),
             numberCard(
                 'any-connected-users',
@@ -175,7 +183,7 @@ export function buildAdminDashboardUserKpiCards(
                 'account_tree',
                 anyConnectionUsers,
                 connectionCountSeverity(anyConnectionUsers),
-                connectedUserShareSubtitle(anyConnectionUsers, stats.total, 'Service or MCP')
+                userShareSubtitle(anyConnectionUsers, stats.total, 'Service or MCP')
             ),
         ] : []),
         compactCard('events', 'Events', 'fitness_center', stats.events.total, countUpdatedSubtitle(stats.events.computedAt)),
@@ -505,19 +513,19 @@ function connectedServiceSubtitle(
         return 'Unavailable';
     }
 
-    const share = connectedUserShareSubtitle(connectedUsers, totalUsers);
+    const share = userShareSubtitle(connectedUsers, totalUsers);
     const providerSummary = ['Garmin', 'Suunto', 'COROS', 'Wahoo']
         .map(provider => `${provider} ${normalizeCount(providers[provider])}`)
         .join(' · ');
     return [share, providerSummary].filter((value): value is string => Boolean(value)).join(' · ') || undefined;
 }
 
-function connectedUserShareSubtitle(
-    connectedUsers: number | null,
+function userShareSubtitle(
+    users: number | null,
     totalUsers: number,
     prefix?: string,
 ): string | undefined {
-    if (connectedUsers === null) {
+    if (users === null) {
         return 'Unavailable';
     }
 
@@ -526,7 +534,7 @@ function connectedUserShareSubtitle(
         return prefix;
     }
 
-    const share = Math.round((connectedUsers / normalizedTotalUsers) * 100);
+    const share = Math.round((users / normalizedTotalUsers) * 100);
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
 }
 

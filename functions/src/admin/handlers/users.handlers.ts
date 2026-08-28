@@ -753,17 +753,22 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
         const computedAt = new Date();
+        const marketingConsentQuery = db.collection('users')
+            .where('acceptedMarketingPolicy', '==', true)
+            .count();
         const paidLifecycleQuery = db.collectionGroup('subscriptions')
             .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
             .select('role', 'status');
         const [
             userPlanActivityMetrics,
+            marketingConsentSnapshot,
             paidSubscriptionHistorySnapshot,
             eventStats,
             routeStats,
             connectionStats,
         ] = await Promise.all([
             collectUserPlanActivityMetrics(db, admin.auth(), computedAt),
+            marketingConsentQuery.get(),
             paidLifecycleQuery.get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
@@ -789,6 +794,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             authActivity,
             providers,
         } = userPlanActivityMetrics;
+        const marketingConsent = marketingConsentSnapshot.data().count;
         const activePaid = pro + basic;
         const everPaid = Math.max(activePaid, countDistinctPaidSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
         const canceled = Math.max(0, everPaid - activePaid);
@@ -806,6 +812,7 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             canceled,
             cancelScheduled,
             onboardingCompleted,
+            marketingConsent,
             events: eventStats,
             routes: routeStats,
             connections: connectionStats,

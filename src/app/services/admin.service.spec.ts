@@ -102,6 +102,7 @@ describe('AdminService', () => {
             canceled: 20,
             cancelScheduled: 12,
             onboardingCompleted: 160,
+            marketingConsent: 75,
             events: {
                 total: 1_000_000,
             },

@@ -116,6 +116,7 @@ export interface UserCountResponse {
     canceled: number;
     cancelScheduled: number;
     onboardingCompleted: number;
+    marketingConsent: number;
     events: EventCountStats;
     routes: RouteCountStats;
     connections: ConnectionCountStats;

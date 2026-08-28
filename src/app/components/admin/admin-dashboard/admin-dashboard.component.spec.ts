@@ -69,6 +69,7 @@ describe('AdminDashboardComponent', () => {
         canceled: 15,
         cancelScheduled: 3,
         onboardingCompleted: 90,
+        marketingConsent: 35,
         providers: { 'google.com': 80 },
         events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
         routes: { total: 42 },
@@ -315,6 +316,7 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('aggregate snapshots without user identifiers');
         expect(text).toContain('Collecting daily history');
         expect(text).toContain('Total Users');
+        expect(text).toContain('Marketing Opt-ins');
         expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');
         expect(text).toContain('Service Connected');
