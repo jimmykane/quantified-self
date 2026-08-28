@@ -280,11 +280,10 @@ export const receiveGarminAPISleepData = functions.region('europe-west2').runWit
     }
 });
 
-export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWith({
-    timeoutSeconds: 60,
-    memory: '256MB',
-    secrets: FUNCTION_SECRET_BINDINGS.receiveSuuntoAppSleepData,
-}).https.onRequest(async (req, res) => {
+async function handleSuunto247DataWebhook(
+    req: functions.https.Request,
+    res: functions.Response,
+): Promise<void> {
     const signature = asString(req.get('X-HMAC-SHA256-Signature'));
     if (!verifySuuntoWebhookSignature(req.rawBody, signature)) {
         logger.warn('[SleepSync][Suunto] Invalid webhook signature');
@@ -421,7 +420,31 @@ export const receiveSuuntoAppSleepData = functions.region('europe-west2').runWit
         }
         res.status(500).send();
     }
-});
+}
+
+function createSuunto247DataWebhook(
+    secrets: typeof FUNCTION_SECRET_BINDINGS.receiveSuunto247Data,
+) {
+    return functions.region('europe-west2').runWith({
+        timeoutSeconds: 60,
+        memory: '256MB',
+        secrets,
+    }).https.onRequest(handleSuunto247DataWebhook);
+}
+
+/** Canonical Suunto 24/7 Sleep, Activity, and Recovery webhook endpoint. */
+export const receiveSuunto247Data = createSuunto247DataWebhook(
+    FUNCTION_SECRET_BINDINGS.receiveSuunto247Data,
+);
+
+/**
+ * @deprecated Temporary compatibility endpoint for the existing Suunto Sleep
+ * webhook registration. Remove only after all 24/7 notifications have been
+ * switched to receiveSuunto247Data and production delivery has been verified.
+ */
+export const receiveSuuntoAppSleepData = createSuunto247DataWebhook(
+    FUNCTION_SECRET_BINDINGS.receiveSuuntoAppSleepData,
+);
 
 export const suuntoWebhookTestInternals = {
     buildSuuntoHealthWebhookWindows,

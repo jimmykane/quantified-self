@@ -62,6 +62,7 @@ vi.mock('./provider-flags', () => ({
 
 import {
     receiveGarminAPISleepData,
+    receiveSuunto247Data,
     receiveSuuntoAppSleepData,
     suuntoWebhookTestInternals,
 } from './webhooks';
@@ -234,7 +235,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -265,7 +266,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -287,7 +288,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -310,7 +311,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -350,7 +351,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -380,7 +381,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -403,7 +404,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -424,7 +425,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -453,7 +454,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body: {
                 type: 'SUUNTO_247_SLEEP_CREATED',
@@ -470,10 +471,13 @@ describe('sleep webhooks', () => {
         expect(queuedPayload.dedupeKey).toMatch(/^test-user-uid:suunto-user-1:sample-[a-f0-9]{32}:sample-[a-f0-9]{32}$/);
     });
 
-    it('rejects Suunto webhook payloads with invalid HMAC', async () => {
+    it.each([
+        ['canonical 24/7 endpoint', receiveSuunto247Data],
+        ['legacy Sleep-named compatibility endpoint', receiveSuuntoAppSleepData],
+    ])('rejects Suunto webhook payloads with invalid HMAC through the %s', async (_name, handler) => {
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await handler({
             rawBody: Buffer.from('{}'),
             body: { type: 'SUUNTO_247_SLEEP_CREATED', username: 'suunto-user-1', samples: [{}] },
             get: vi.fn(() => 'bad-signature'),
@@ -502,7 +506,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body,
             get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
@@ -534,7 +538,7 @@ describe('sleep webhooks', () => {
             const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
                 .update(rawBody)
                 .digest('hex');
-            await receiveSuuntoAppSleepData({
+            await receiveSuunto247Data({
                 rawBody,
                 body,
                 get: vi.fn(() => signature),
@@ -565,7 +569,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body,
             get: vi.fn(() => signature),
@@ -589,7 +593,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const response = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody,
             body,
             get: vi.fn(() => signature),
@@ -642,7 +646,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const malformedResponse = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody: malformedRawBody,
             body: malformedBody,
             get: vi.fn(() => malformedSignature),
@@ -663,7 +667,7 @@ describe('sleep webhooks', () => {
             .digest('hex');
         const invalidAccountResponse = createResponse();
 
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody: invalidAccountRawBody,
             body: invalidAccountBody,
             get: vi.fn(() => invalidAccountSignature),
@@ -678,7 +682,7 @@ describe('sleep webhooks', () => {
             .update(oversizedRawBody)
             .digest('hex');
         const oversizedResponse = createResponse();
-        await receiveSuuntoAppSleepData({
+        await receiveSuunto247Data({
             rawBody: oversizedRawBody,
             body: {
                 type: 'SUUNTO_247_ACTIVITY_CREATED',

@@ -59,6 +59,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   processRouteSyncTask: SUUNTO_API,
   processSleepSyncTask: [...COROS, ...GARMIN, ...SUUNTO_API],
   processWorkoutTask: [...COROS, ...GARMIN, ...SUUNTO_API, 'WAHOOAPI_ALLOWED_FILE_HOSTS'],
+  receiveSuunto247Data: ['SUUNTOAPP_NOTIFICATION_SECRET'],
   receiveSuuntoAppSleepData: ['SUUNTOAPP_NOTIFICATION_SECRET'],
   refreshCOROSAPIRefreshTokens: COROS,
   refreshGarminAPIRefreshTokens: GARMIN,
