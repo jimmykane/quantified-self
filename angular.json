@@ -32,6 +32,11 @@
                 "output": "assets/mapbox-gl"
               },
               {
+                "glob": "LICENSE.txt",
+                "input": "node_modules/mapbox-gl",
+                "output": "assets/mapbox-gl"
+              },
+              {
                 "glob": "favicon.ico",
                 "input": "src/assets/favicons",
                 "output": "/"

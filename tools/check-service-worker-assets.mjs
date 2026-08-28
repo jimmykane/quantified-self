@@ -18,4 +18,13 @@ if (missingAssets.length > 0) {
   );
 }
 
+const mapboxLicenseSourcePath = resolve('node_modules/mapbox-gl/LICENSE.txt');
+const mapboxLicenseOutputPath = resolve(outputDirectory, 'assets/mapbox-gl/LICENSE.txt');
+if (!existsSync(mapboxLicenseSourcePath) || !existsSync(mapboxLicenseOutputPath)) {
+  throw new Error('The Mapbox SDK license notice is missing from the source package or browser output.');
+}
+if (readFileSync(mapboxLicenseSourcePath).compare(readFileSync(mapboxLicenseOutputPath)) !== 0) {
+  throw new Error('The browser output does not contain the exact Mapbox SDK license notice.');
+}
+
 console.log(`Verified ${assetPaths.length} service worker assets in ${outputDirectory}.`);
