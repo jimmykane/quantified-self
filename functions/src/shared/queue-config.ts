@@ -19,6 +19,14 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxDoublings: 4,
 } as const;
 
+// Keep shared activity-sync bursts below provider-side rate limits. These are
+// half of the queue's previous deployed limits while provider-specific
+// throttling is investigated.
+export const ACTIVITY_SYNC_TASK_RATE_LIMITS = {
+    maxConcurrentDispatches: 500,
+    maxDispatchesPerSecond: 250,
+} as const;
+
 /**
  * Return the configured delay after a completed retry-state transition. A
  * retry count of one is the first retry and therefore uses the minimum delay.

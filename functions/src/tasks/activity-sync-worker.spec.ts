@@ -19,6 +19,7 @@ const {
   mockLoggerInfo,
   mockLoggerWarn,
   mockLoggerError,
+  capturedTaskOptions,
 } = vi.hoisted(() => ({
   mockQueueGet: vi.fn(),
   mockFailedJobsGet: vi.fn(),
@@ -29,10 +30,14 @@ const {
   mockLoggerInfo: vi.fn(),
   mockLoggerWarn: vi.fn(),
   mockLoggerError: vi.fn(),
+  capturedTaskOptions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2/tasks', () => ({
-  onTaskDispatched: (_opts: unknown, handler: TaskHandlerMock) => handler,
+  onTaskDispatched: (opts: unknown, handler: TaskHandlerMock) => {
+    capturedTaskOptions.push(opts);
+    return handler;
+  },
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -91,6 +96,15 @@ describe('processActivitySyncTask', () => {
     vi.clearAllMocks();
     mockIsQueueItemDeletedForUserCleanup.mockResolvedValue(false);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+  });
+
+  it('registers half-size Cloud Tasks rate limits for activity sync', () => {
+    expect(capturedTaskOptions[0]).toMatchObject({
+      rateLimits: {
+        maxConcurrentDispatches: 500,
+        maxDispatchesPerSecond: 250,
+      },
+    });
   });
 
   it('processes a valid queue item', async () => {
