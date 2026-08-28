@@ -73,9 +73,11 @@ vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
 
 import {
   processSuuntoHealthQueueItem,
+  sanitizeSuuntoHealthErrorForTelemetry,
   suuntoHealthSyncTestInternals,
   SuuntoHealthRequestError,
 } from './health-sync';
+import { SuuntoHealthValidationError } from './health';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
@@ -165,6 +167,20 @@ function queueItem(): SleepSyncQueueItemInterface {
 }
 
 describe('Suunto Health provider sync', () => {
+  it('reports only an allowlisted validation code without provider field detail', () => {
+    const telemetryError = sanitizeSuuntoHealthErrorForTelemetry(
+      new SuuntoHealthValidationError('activity[42].entryData.HR is outside the supported numeric range.'),
+    );
+
+    expect(telemetryError.message).toBe(
+      'Suunto Health response validation failed [numeric_value_out_of_range].',
+    );
+    expect(telemetryError.message).not.toContain('activity[42]');
+    expect(sanitizeSuuntoHealthErrorForTelemetry(
+      new SuuntoHealthValidationError('private-provider-detail'),
+    ).message).toBe('Suunto Health response validation failed [unclassified_validation].');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.tokenData = tokenProjection('initial-access-token');

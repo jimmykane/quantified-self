@@ -113,11 +113,28 @@ describe('Suunto activity Health mapping', () => {
     )).toThrow('bounded source-record count');
   });
 
-  it('rejects conflicting duplicate timestamps and invalid documented ranges', () => {
-    expect(() => parseSuuntoActivitySamples([
-      { timestamp: '2026-08-26T12:00:00Z', entryData: { HR: 60 } },
+  it('merges duplicate timestamps with the final non-null value per field', () => {
+    expect(parseSuuntoActivitySamples([
+      { timestamp: '2026-08-26T12:00:00Z', entryData: { HR: 60, HRV: 42 } },
       { timestamp: '2026-08-26T12:00:00Z', entryData: { HR: 61 } },
-    ])).toThrow(SuuntoHealthValidationError);
+    ])).toEqual([expect.objectContaining({
+      heartRateBpm: 61,
+      heartRateVariabilityMs: 42,
+    })]);
+    expect(parseSuuntoRecoverySamples([
+      { timestamp: '2026-08-26T12:00:00Z', entryData: { Balance: 0.9, StressState: 3 } },
+      { timestamp: '2026-08-26T12:00:00Z', entryData: { Balance: 0.8, StressState: 0 } },
+    ])).toEqual([expect.objectContaining({
+      balanceRatio: 0.8,
+      stressState: 3,
+    })]);
+    expect(() => parseSuuntoActivitySamples([
+      { timestamp: '2026-08-26T12:00:00Z', entryData: { HRExt: { Min: 60, Max: 80 } } },
+      { timestamp: '2026-08-26T12:00:00Z', entryData: { HRExt: { Min: 90 } } },
+    ])).toThrow('minimum exceeds maximum');
+  });
+
+  it('rejects invalid documented ranges', () => {
     expect(() => parseSuuntoActivitySamples([
       { timestamp: '2026-08-26T12:00:00Z', entryData: { SpO2: 1.1 } },
     ])).toThrow(SuuntoHealthValidationError);

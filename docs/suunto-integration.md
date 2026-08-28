@@ -40,7 +40,7 @@ Suunto Health data is kept separate from workout FIT metrics and normalized Slee
 | recovery `Balance` | `body_energy` | Provider ratio multiplied by 100 to canonical percent |
 | recovery `StressState` | `stress_state` category | `1 relaxing`, `2 active`, `3 passive`, `4 stressful`; invalid sentinel `0` is omitted |
 
-Missing values remain missing. Exact duplicate timestamps collapse; conflicting duplicates fail the queue attempt. Daily statistic nulls are ignored when a non-null value exists, while conflicting non-null values fail validation. Activity and recovery records are grouped by provider-local calendar date and UTC offset. A daylight-saving offset change therefore creates separate source records rather than pretending the whole local date used one offset.
+Missing values remain missing. Suunto can return complementary or corrected Activity/Recovery rows at one timestamp. Those rows merge per metric in provider response order: a later non-null value wins, while a later missing value or the Recovery `StressState` sentinel `0` cannot erase an earlier available measurement. Daily statistic nulls are ignored when a non-null value exists, while conflicting non-null values fail validation. Activity and recovery records are grouped by provider-local calendar date and UTC offset. A daylight-saving offset change therefore creates separate source records rather than pretending the whole local date used one offset.
 
 Historical coverage is `unknown` because the provider does not assert completeness. The current provider-local date is `partial`. Activity and recovery observation freshness follows the latest accepted sample; daily statistics use the end of their bounded day. The expected refresh interval is 48 hours.
 
