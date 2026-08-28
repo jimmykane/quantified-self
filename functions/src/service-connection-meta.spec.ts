@@ -295,17 +295,17 @@ describe('service-connection-meta', () => {
   });
 
   it('does not create Health lifecycle state for providers outside this integration', async () => {
-    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+    await expect(markServiceConnected('user-1', ServiceNames.GarminAPI)).resolves.toBe(true);
 
     expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
-  it('mirrors staged Suunto connection and terminal-auth transitions to Health state', async () => {
-    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+  it('mirrors Suunto connection and terminal-auth transitions to Health state', async () => {
+    const healthUserID = 'suunto-health-user';
 
-    await expect(markServiceConnected(stagedUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
+    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
-      stagedUserID,
+      healthUserID,
       'SuuntoApp',
       { status: 'ready', lastErrorCode: null },
       expect.any(Number),
@@ -315,7 +315,7 @@ describe('service-connection-meta', () => {
 
     hoisted.updateHealthSyncState.mockRejectedValueOnce(new Error('temporary health write failure'));
     await expect(markServiceReconnectRequired(
-      stagedUserID,
+      healthUserID,
       ServiceNames.SuuntoApp,
       'invalid_grant',
       'Reconnect required',
@@ -324,11 +324,11 @@ describe('service-connection-meta', () => {
     expect(hoisted.metaData.healthLifecycleProjectionPending).toBe(true);
 
     await expect(retryPendingHealthLifecycleProjection(
-      stagedUserID,
+      healthUserID,
       ServiceNames.SuuntoApp,
     )).resolves.toBe(true);
     expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith(
-      stagedUserID,
+      healthUserID,
       'SuuntoApp',
       {
         status: 'reconnect_required',
@@ -340,7 +340,7 @@ describe('service-connection-meta', () => {
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
   });
 
-  it('clears a pending Suunto Health projection when the user leaves the rollout', async () => {
+  it('repairs a pending Suunto Health projection for any connected user', async () => {
     hoisted.metaData = {
       connectionState: 'connected',
       connectionStateGeneration: 'connected-generation',
@@ -352,9 +352,15 @@ describe('service-connection-meta', () => {
     await expect(retryPendingHealthLifecycleProjection(
       'user-1',
       ServiceNames.SuuntoApp,
-    )).resolves.toBe(false);
+    )).resolves.toBe(true);
 
-    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      'user-1',
+      'SuuntoApp',
+      { status: 'ready', lastErrorCode: null },
+      123,
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionConnectionGeneration');
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionTransitionAtMs');

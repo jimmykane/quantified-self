@@ -1,6 +1,6 @@
 # Unified Health Data Foundation
 
-This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds staged Suunto 24/7 Activity, daily-statistics, and Recovery ingestion.
+This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion.
 
 Garmin provider mapping remains in issue #613. The Health Hub product surface remains in #614. COROS and Suunto ingestion do not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate.
 
@@ -16,7 +16,7 @@ Garmin provider mapping remains in issue #613. The Health Hub product surface re
 
 ## Non-goals
 
-- No Garmin or Wahoo health adapter is wired yet. COROS daily Health is production-wide; Suunto 24/7 Health is restricted by its independent deny-all-when-empty UID allowlist.
+- No Garmin or Wahoo health adapter is wired yet. COROS daily Health and Suunto 24/7 Health are production-wide for eligible connected accounts.
 - No cross-provider deduplication, ranking, or source-preference policy is applied.
 - No medical interpretation or diagnosis is produced.
 - No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
@@ -26,7 +26,7 @@ Garmin provider mapping remains in issue #613. The Health Hub product surface re
 ## Architecture
 
 ```text
-provider adapter (#611–#613; COROS active, Suunto staged)
+provider adapter (#611–#613; COROS and Suunto active)
         │
         ├─ exact provider/native semantics
         ├─ canonical conversion only when defensible
@@ -83,9 +83,9 @@ The adapter bounds the decoded response to 4 MiB, accepts at most 30 daily rows 
 
 COROS connect and terminal-auth transitions mirror safe `ready` or `reconnect_required` Health sync state only while the exact service-connection generation and pending projection claim remain current. The authoritative transition atomically stores a generation-keyed pending marker before the derived write; a bounded scheduled repair retries failed mirrors and clears only the exact marker after success. Browser clients retain compatibility reads but cannot create, update, or delete the COROS token root; server-owned OAuth and disconnect callables own all mutations and remove token children first. Token-root deletion transactionally supersedes pending claims only while the root remains absent, then updates Health and atomically preserves `reconnect_required` when current service metadata owns that state. The root credential-generation guard also blocks an in-flight daily write after deletion or recreation. This ordering invalidates an already-running stale projection and prevents an empty client-created root from reviving a legacy orphan. Imported Health and Sleep history is retained. Recursive account deletion removes the user-owned source records, sample chunks, sync state, Sleep sessions, and operational queues, while deletion-aware queue transitions cannot recreate a failed-job copy after cleanup has started.
 
-Staged Suunto Health uses distinct `suunto_247_activity`, `suunto_247_daily_activity_statistics`, and `suunto_247_recovery` source records. It maps heart rate averages/minimums/maximums, HRV, SpO2, altitude, accumulated steps and energy, daily steps and energy, recovery Balance, and StressState without mixing them with workout FIT or Sleep values. Ratios become canonical percentages, joules become kilocalories, and documented StressState codes become categories while invalid sentinel `0` remains missing. Activity and Recovery retain bounded sample series by local date and offset; daily statistics retain multiple device sources behind one-way device identifiers. Historical completeness is unknown and the current local date is partial.
+Suunto Health uses distinct `suunto_247_activity`, `suunto_247_daily_activity_statistics`, and `suunto_247_recovery` source records. It maps heart rate averages/minimums/maximums, HRV, SpO2, altitude, accumulated steps and energy, daily steps and energy, recovery Balance, and StressState without mixing them with workout FIT or Sleep values. Ratios become canonical percentages, joules become kilocalories, and documented StressState codes become categories while invalid sentinel `0` remains missing. Activity and Recovery retain bounded sample series by local date and offset; daily statistics retain multiple device sources behind one-way device identifiers. Historical completeness is unknown and the current local date is partial.
 
-Suunto uses a dedicated daily seven-day reconciliation schedule plus signed Activity/Recovery webhooks. Before persistence, each valid notification is resolved through one-way-keyed, server-owned per-user OAuth account bindings to every active staged Firebase connection and transactionally rechecked against each exact account token, the current token-root lifecycle revision, authoritative connection metadata, rollout, and account deletion. Retained Suunto account tokens may predate the root's newest OAuth revision; the binding matches the token generation while the current root revision is captured separately so later work cannot adopt a replacement lifecycle. Unknown, ineligible, deleting, malformed, and oversized signed deliveries are acknowledged as permanent drops without retained ingress; authentication failures remain rejected, while transient binding or durable-write failures return retryable errors. Accepted notifications durably stage one compact local-day ingress per eligible connection and acknowledge before retryable asynchronous queue fan-out. Queue creation and processing remain fenced to the captured token, root, and connection generations. Raw webhook samples are not retained, and the worker recursively deletes any ingress that later becomes non-retryable. Staged Sleep history requests also enqueue matching Health ranges of at most 28 days. Each response is bounded to 4 MiB, provider errors are made opaque before telemetry, and one provider 401 receives one guarded token-refresh retry. Connect, terminal-auth, disconnect, deletion, and scheduled derived-state repair reuse the same generation-fenced lifecycle contract as COROS. See [Suunto 24/7 Health integration](suunto-integration.md) for the complete provider mapping, delivery, rollout, and operations contract.
+Suunto uses a dedicated daily seven-day reconciliation schedule plus signed Activity/Recovery webhooks. Before persistence, each valid notification is resolved through one-way-keyed, server-owned per-user OAuth account bindings to every active Firebase connection and transactionally rechecked against each exact account token, the current token-root lifecycle revision, authoritative connection metadata, and account deletion. Retained Suunto account tokens may predate the root's newest OAuth revision; the binding matches the token generation while the current root revision is captured separately so later work cannot adopt a replacement lifecycle. Unknown, disconnected, deleting, malformed, and oversized signed deliveries are acknowledged as permanent drops without retained ingress; authentication failures remain rejected, while transient binding or durable-write failures return retryable errors. Accepted notifications durably stage one compact local-day ingress per active connection and acknowledge before retryable asynchronous queue fan-out. Queue creation and processing remain fenced to the captured token, root, and connection generations. Raw webhook samples are not retained, and the worker deletes any ingress that later becomes non-retryable. Suunto Sleep history requests also enqueue matching Health ranges of at most 28 days while the independent Health kill switch is enabled. Each response is bounded to 4 MiB, provider errors are made opaque before telemetry, and one provider 401 receives one guarded token-refresh retry. Connect, terminal-auth, disconnect, deletion, and scheduled derived-state repair reuse the same generation-fenced lifecycle contract as COROS. See [Suunto 24/7 Health integration](suunto-integration.md) for the complete provider mapping, delivery, rollback, and operations contract.
 
 ## Stable metric catalog
 
@@ -270,7 +270,7 @@ Issues #611–#613 should implement each provider independently against this fou
 
 ## Operational and release notes
 
-The Health foundation now receives production COROS and staged Suunto records. The Health Hub remains future work; `AppHealthService` already provides the bounded shared query boundary. COROS and Suunto backfills use their existing provider history controls rather than a foundation-wide migration.
+The Health foundation now receives production COROS and Suunto records. The Health Hub remains future work; `AppHealthService` already provides the bounded shared query boundary. COROS and Suunto backfills use their existing provider history controls rather than a foundation-wide migration.
 
 A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health Hub reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. This implementation does not deploy or mutate production infrastructure.
 
@@ -284,4 +284,4 @@ npm --prefix functions run build
 npm run build
 ```
 
-The in-app Help, Suunto integration page, provider privacy copy, and shared Sleep/Health operations documentation describe the staged Suunto behavior without presenting it as production-wide availability.
+The in-app Help, Suunto integration page, provider privacy copy, and shared Sleep/Health operations documentation describe production-wide Suunto availability and its independent rollback switch.

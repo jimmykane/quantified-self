@@ -720,7 +720,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Garmin and Suunto Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. During the limited Suunto 24/7 Health rollout, eligible users instead see **Sleep & Health history**; the same control queues separate bounded Health records for available heart rate, HRV, SpO2, altitude, steps, energy, Body Energy Balance, and StressState. These values stay separate from workout FIT metrics and Sleep sessions, and missing values remain missing. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown. COROS Pro users can select **Sleep & Health history**, then choose **Import Sleep & Health History** to import the available last three months in 30-day windows with a 7-day cooldown. The same daily COROS sync stores source-attributed steps, the provider calorie value, resting and sleep heart rate, overnight HRV, and available detailed HRV samples in the unified Health model. Aggregate sleep values stay on the Sleep session and are referenced rather than copied; missing values stay missing. The COROS API does not expose sleep stages.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Garmin and Suunto Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Connected Suunto users see **Sleep & Health history** while Suunto Health is enabled; the same control queues separate bounded Health records for available heart rate, HRV, SpO2, altitude, steps, energy, Body Energy Balance, and StressState. These values stay separate from workout FIT metrics and Sleep sessions, and missing values remain missing. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown. COROS Pro users can select **Sleep & Health history**, then choose **Import Sleep & Health History** to import the available last three months in 30-day windows with a 7-day cooldown. The same daily COROS sync stores source-attributed steps, the provider calorie value, resting and sleep heart rate, overnight HRV, and available detailed HRV samples in the unified Health model. Aggregate sleep values stay on the Sleep session and are referenced rather than copied; missing values stay missing. The COROS API does not expose sleep stages.
 
 ## Suunto
 
@@ -728,8 +728,8 @@ Suunto tools currently include:
 
 - connecting your account,
 - syncing recent sleep samples,
-- importing sleep history from Jan 1, 2016, with combined Sleep & Health history for eligible accounts in the limited 24/7 Health rollout,
-- importing separate source-attributed 24/7 Activity, daily-statistics, and Recovery Health records during that rollout,
+- importing sleep history from Jan 1, 2016, with combined Sleep & Health history while Suunto Health is enabled,
+- importing separate source-attributed 24/7 Activity, daily-statistics, and Recovery Health records,
 - importing history,
 - automatically importing saved Suunto routes,
 - importing existing Suunto routes,
@@ -748,7 +748,7 @@ Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row actio
 
 Suunto 24/7 Health notifications are signature-checked and used to refetch bounded local-day ranges. Quantified Self stores normalized, source-attributed Health records rather than raw webhook samples. Repeated polls, notifications, and history ranges update the same source identities instead of creating duplicates. Disconnecting stops future imports but retains imported Sleep and Health history; deleting the account removes both plus associated queue work.
 
-See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, Sleep and staged 24/7 Health sync, route imports, and sending routes or activities to connected destinations.
+See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, Sleep and 24/7 Health sync, route imports, and sending routes or activities to connected destinations.
 
 ## Garmin
 

@@ -3,7 +3,6 @@ import {
   HEALTH_METRIC_IDS,
   HEALTH_NORMALIZATION_STATUSES,
 } from '../../../shared/health';
-import { isSuuntoHealthSyncUserAllowed } from './health-rollout';
 import { buildHealthSourceRecordWrite } from '../health/writer';
 import { validateHealthSourceRecordInput } from '../health/validation';
 import {
@@ -21,14 +20,6 @@ import {
 
 const ACCOUNT_ID = 'private-suunto-account';
 const RECEIVED_AT_MS = Date.parse('2026-08-27T12:00:00.000Z');
-
-describe('Suunto Health rollout', () => {
-  it('allows only the staged account and treats an empty UID as denied', () => {
-    expect(isSuuntoHealthSyncUserAllowed('xcsAolLDDTWTgtRN9eYF3lW2YKL2')).toBe(true);
-    expect(isSuuntoHealthSyncUserAllowed('different-user')).toBe(false);
-    expect(isSuuntoHealthSyncUserAllowed('')).toBe(false);
-  });
-});
 
 describe('Suunto activity Health mapping', () => {
   it('maps all documented measurements with provider-local day boundaries and canonical units', () => {

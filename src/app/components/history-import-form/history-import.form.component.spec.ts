@@ -163,7 +163,7 @@ describe('HistoryImportFormComponent', () => {
         expect(text).toContain('once every 7 days');
     });
 
-    it('should render the combined Suunto Sleep and Health action for the staged account', async () => {
+    it('should render the combined Suunto Sleep and Health action when Health is enabled', async () => {
         await fixture.whenStable();
         mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
         component.serviceName = ServiceNames.SuuntoApp;

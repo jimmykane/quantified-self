@@ -64,9 +64,9 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('GPX and FIT route upload');
     expect(text).toContain('FIT sources are converted to GPX for Suunto');
     expect(text).toContain('Can Quantified Self sync routes with Suunto?');
-    expect(text).toContain('source-attributed 24/7 Health for eligible rollout accounts');
+    expect(text).toContain('source-attributed 24/7 Health');
     expect(text).toContain('Does the Suunto connection import 24/7 Health metrics?');
-    expect(text).toContain('not yet available to every connected Suunto account');
+    expect(text).toContain('Connected Suunto accounts can import available 24/7 Activity');
     expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
       .toContain('/guides/import-activities-to-suunto');
   });

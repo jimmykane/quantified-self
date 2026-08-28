@@ -9,7 +9,6 @@ import {
   HealthProvider,
   HealthSyncStatus,
 } from '../../shared/health';
-import { isSuuntoHealthSyncUserAllowed } from './suunto/health-rollout';
 import {
   isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
@@ -109,11 +108,10 @@ function getHealthLifecycleProjectionClaim(
 }
 
 function healthProviderForService(
-  userID: string,
   serviceName: ServiceNames,
 ): HealthProvider | null {
   if (serviceName === ServiceNames.COROSAPI) return HEALTH_PROVIDERS.COROSAPI;
-  if (serviceName === ServiceNames.SuuntoApp && isSuuntoHealthSyncUserAllowed(userID)) {
+  if (serviceName === ServiceNames.SuuntoApp) {
     return HEALTH_PROVIDERS.SuuntoApp;
   }
   return null;
@@ -280,7 +278,7 @@ export async function retryPendingHealthLifecycleProjection(
   if (meta?.healthLifecycleProjectionPending !== true) return false;
 
   const claim = getHealthLifecycleProjectionClaim(meta);
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   if (!healthProvider) {
     await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
     return false;
@@ -941,7 +939,7 @@ export async function markServiceReconnectRequired(
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const guardsConnectionGeneration = Object.prototype.hasOwnProperty.call(
     options,
@@ -1196,7 +1194,7 @@ export async function markServiceConnected(
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const nowMs = Date.now();
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {

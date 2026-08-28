@@ -189,13 +189,13 @@ describe('Garmin and Suunto manual route delivery policy', () => {
   });
 });
 
-describe('Suunto staged Health policy', () => {
+describe('Suunto Health policy', () => {
   it('states the collection, separation, retention, and deletion boundaries', () => {
     const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(item => item.id === POLICIES_SUUNTO_DATA_FRAGMENT);
     const content = topic?.content.join(' ') || '';
 
-    expect(content).toContain('limited 24/7 Health rollout');
+    expect(content).toContain('Connected accounts can also import available 24/7');
     expect(content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(content).toContain('raw Health webhook samples are not stored');
     expect(content).toContain('Disconnecting Suunto stops future');

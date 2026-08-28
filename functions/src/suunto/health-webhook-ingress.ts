@@ -28,13 +28,10 @@ import {
   SUUNTO_HEALTH_MAX_WINDOW_DAYS,
 } from './health';
 import { isSuuntoHealthSyncEnabled } from './health-flags';
-import {
-  isSuuntoHealthSyncUserAllowed,
-  SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
-} from './health-rollout';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import {
   doesSuuntoHealthWebhookBindingMatch,
+  findSuuntoWebhookAccountBindingUserIDs,
   getSuuntoHealthWebhookAccountBindingRef,
   normalizeSuuntoTokenCredentialGeneration,
   parseSuuntoHealthWebhookAccountBinding,
@@ -80,14 +77,13 @@ interface SuuntoHealthWebhookIngressRecord {
 type IngressDiscardReason =
   | 'invalid_ingress'
   | 'provider_disabled'
-  | 'user_not_allowed_or_disconnected'
+  | 'binding_inactive_or_disconnected'
   | 'user_deleted_or_deleting'
   | 'queue_skipped';
 
 export interface PersistSuuntoHealthWebhookIngressDependencies {
   candidateUserIDs?: readonly string[];
   db?: admin.firestore.Firestore;
-  isUserAllowed?: (uid: string) => boolean;
   nowMs?: () => number;
 }
 
@@ -95,7 +91,6 @@ export interface SuuntoHealthWebhookIngressDependencies {
   addQueueItem?: typeof addSleepSyncQueueItem;
   db?: admin.firestore.Firestore;
   isHealthEnabled?: () => boolean;
-  isUserAllowed?: (uid: string) => boolean;
   nowMs?: () => number;
 }
 
@@ -261,10 +256,8 @@ async function getActiveIngressBindingInTransaction(
   transaction: admin.firestore.Transaction,
   providerUserId: string,
   userID: string,
-  isUserAllowed: (uid: string) => boolean,
   nowMs: number,
 ): Promise<ActiveIngressBinding | null> {
-  if (!isUserAllowed(userID)) return null;
   const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const bindingSnapshot = await transaction.get(bindingRef);
   const binding = parseSuuntoHealthWebhookAccountBinding(bindingSnapshot.data());
@@ -349,13 +342,11 @@ function getIngressDocumentID(notificationDigest: string, userID: string): strin
 
 function getCandidateUserIDs(
   values: readonly string[],
-  isUserAllowed: (uid: string) => boolean,
 ): string[] {
   const candidateUserIDs = new Set<string>();
   for (const value of values) {
     const userID = typeof value === 'string' ? value.trim() : '';
-    if (userID && userID === value && userID.length <= FIREBASE_UID_MAX_LENGTH
-      && isUserAllowed(userID)) {
+    if (userID && userID === value && userID.length <= FIREBASE_UID_MAX_LENGTH) {
       candidateUserIDs.add(userID);
     }
   }
@@ -381,20 +372,18 @@ export async function persistSuuntoHealthWebhookIngress(
   }
 
   const db = dependencies.db || admin.firestore();
-  const isUserAllowed = dependencies.isUserAllowed || isSuuntoHealthSyncUserAllowed;
+  const candidateUserIDs = getCandidateUserIDs(
+    dependencies.candidateUserIDs
+      ?? await findSuuntoWebhookAccountBindingUserIDs(db, providerUserId),
+  );
   const expireAt = getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS);
   return db.runTransaction(async transaction => {
-    const candidateUserIDs = getCandidateUserIDs(
-      dependencies.candidateUserIDs || SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
-      isUserAllowed,
-    );
     const resolvedBindings = await Promise.all(
       candidateUserIDs.map(userID => getActiveIngressBindingInTransaction(
         db,
         transaction,
         providerUserId,
         userID,
-        isUserAllowed,
         nowMs,
       )),
     );
@@ -520,14 +509,12 @@ export async function processSuuntoHealthWebhookIngressDocument(
     return;
   }
 
-  const isUserAllowed = dependencies.isUserAllowed || isSuuntoHealthSyncUserAllowed;
   const activeBinding = await db.runTransaction(transaction =>
     getActiveIngressBindingInTransaction(
       db,
       transaction,
       ingress.providerUserId,
       ingress.userID,
-      isUserAllowed,
       nowMs,
     ));
   if (!activeBinding
@@ -540,7 +527,7 @@ export async function processSuuntoHealthWebhookIngressDocument(
     await discardIngressIfCurrent(
       eventSnapshot.ref,
       expectedUpdateTime,
-      'user_not_allowed_or_disconnected',
+      'binding_inactive_or_disconnected',
     );
     return;
   }

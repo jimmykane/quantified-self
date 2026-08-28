@@ -252,22 +252,22 @@ describe('activity-sync/disconnect-routes', () => {
         },
       },
     }, { merge: true });
-    expect(mockUpdateHealthSyncState).not.toHaveBeenCalled();
+    expect(mockUpdateHealthSyncState).toHaveBeenCalledOnce();
     expect(mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete)
       .toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
   });
 
-  it('projects staged Suunto Health as disconnected when its token root is deleted', async () => {
-    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+  it('projects Suunto Health as disconnected for every user whose token root is deleted', async () => {
+    const healthUserID = 'suunto-health-user';
     await (disableActivitySyncRoutesOnSuuntoTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
-      params: { uid: stagedUserID },
+      params: { uid: healthUserID },
       time: '2026-04-28T12:34:56.789Z',
     });
 
     expect(mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete)
-      .toHaveBeenCalledWith(stagedUserID, ServiceNames.SuuntoApp);
+      .toHaveBeenCalledWith(healthUserID, ServiceNames.SuuntoApp);
     expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
-      stagedUserID,
+      healthUserID,
       'SuuntoApp',
       { status: 'disconnected', lastErrorCode: null },
       Date.parse('2026-04-28T12:34:56.789Z'),

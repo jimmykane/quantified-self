@@ -4,7 +4,6 @@ import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES, HealthProvider } from '../../../shared/health';
 import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
-import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -69,7 +68,7 @@ export async function handleServiceTokenRootDisconnected(
 
   const healthProvider = serviceName === ServiceNames.COROSAPI
     ? HEALTH_PROVIDERS.COROSAPI
-    : serviceName === ServiceNames.SuuntoApp && isSuuntoHealthSyncUserAllowed(userID)
+    : serviceName === ServiceNames.SuuntoApp
       ? HEALTH_PROVIDERS.SuuntoApp
       : null;
 

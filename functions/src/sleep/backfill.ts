@@ -34,9 +34,11 @@ import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
-import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
-import { SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH } from '../suunto/health';
+import {
+    SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS,
+    SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
+} from '../suunto/health';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -99,12 +101,23 @@ export function chunkSleepBackfillRange(startMs: number, endMs: number, windowDa
     return windows;
 }
 
-async function getSuuntoSleepBackfillTokens(userID: string): Promise<SuuntoSleepBackfillToken[]> {
-    const tokenSnapshot = await admin.firestore()
+async function getSuuntoSleepBackfillTokens(
+    userID: string,
+    maxAccounts?: number,
+): Promise<SuuntoSleepBackfillToken[]> {
+    const tokenCollection = admin.firestore()
         .collection('suuntoAppAccessTokens')
         .doc(userID)
-        .collection('tokens')
-        .get();
+        .collection('tokens');
+    const tokenSnapshot = await (maxAccounts
+        ? tokenCollection.limit(maxAccounts + 1).get()
+        : tokenCollection.get());
+    if (maxAccounts && tokenSnapshot.docs.length > maxAccounts) {
+        throw new HttpsError(
+            'resource-exhausted',
+            `Suunto Health history supports at most ${maxAccounts} connected accounts per request.`,
+        );
+    }
 
     const tokens: SuuntoSleepBackfillToken[] = [];
     for (const tokenDoc of tokenSnapshot.docs) {
@@ -588,7 +601,11 @@ export const backfillSuuntoAppSleep = onCall({
     const nowMs = Date.now();
     await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.SuuntoApp, nowMs);
 
-    const tokens = await getSuuntoSleepBackfillTokens(userID);
+    const includeHealth = isSuuntoHealthSyncEnabled();
+    const tokens = await getSuuntoSleepBackfillTokens(
+        userID,
+        includeHealth ? SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS : undefined,
+    );
     const sleepToken = tokens[0];
     const startMs = getSharedSleepBackfillStartMs();
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
@@ -603,7 +620,6 @@ export const backfillSuuntoAppSleep = onCall({
     let queued = 0;
     let sleepQueued = 0;
     let healthQueued = 0;
-    const includeHealth = isSuuntoHealthSyncEnabled() && isSuuntoHealthSyncUserAllowed(userID);
     const healthTokens = includeHealth
         ? tokens.filter((healthToken) => {
             if (healthToken.providerUserId.length <= SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
@@ -649,7 +665,7 @@ export const backfillSuuntoAppSleep = onCall({
             ? 'Could not queue Suunto Sleep and Health history.'
             : error instanceof Error ? error.message : `${error}`;
         if (includeHealth) {
-            logger.error('[SleepBackfill] Failed to queue staged Suunto Sleep and Health history.', {
+            logger.error('[SleepBackfill] Failed to queue Suunto Sleep and Health history.', {
                 userID,
                 queued,
                 sleepQueued,

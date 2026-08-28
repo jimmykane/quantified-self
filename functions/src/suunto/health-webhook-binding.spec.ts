@@ -152,7 +152,7 @@ describe('Suunto webhook account bindings', () => {
     );
   });
 
-  it('uses direct binding reads for a configured rollout and ignores missing candidates', async () => {
+  it('uses direct binding reads for explicit candidates and ignores missing candidates', async () => {
     store.setBinding('suunto-account-1', 'firebase-user-2');
 
     await expect(findSuuntoWebhookAccountBindingUserIDs(
@@ -163,7 +163,7 @@ describe('Suunto webhook account bindings', () => {
     expect(store.queryWhere).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a configured rollout contains no valid Firebase UIDs', async () => {
+  it('fails closed when an explicit candidate list contains no valid Firebase UIDs', async () => {
     store.setQuerySnapshots([
       store.setBinding('suunto-account-1', 'firebase-user-1'),
     ]);

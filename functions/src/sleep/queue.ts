@@ -13,7 +13,6 @@ import {
     HEALTH_PROVIDERS,
     HEALTH_SYNC_STATUSES,
 } from '../../../shared/health';
-import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
 import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
 import {
     SleepSyncQueueItemInterface,
@@ -1481,9 +1480,7 @@ function isSuuntoHealthQueueItem(queueItem: SleepSyncQueueItemInterface): boolea
 }
 
 function isQueueUserAllowed(queueItem: SleepSyncQueueItemInterface, userID: string): boolean {
-    return isSuuntoHealthQueueItem(queueItem)
-        ? isSuuntoHealthSyncUserAllowed(userID)
-        : isSleepSyncUserAllowed(userID);
+    return isSuuntoHealthQueueItem(queueItem) || isSleepSyncUserAllowed(userID);
 }
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {

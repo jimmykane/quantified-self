@@ -848,7 +848,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Import Sleep & Health History');
     expect(serviceConnectionsSection?.content).toContain('available detailed HRV samples in the unified Health model');
-    expect(serviceConnectionsSection?.content).toContain('limited Suunto 24/7 Health rollout');
+    expect(serviceConnectionsSection?.content).toContain('Connected Suunto users see **Sleep & Health history**');
     expect(serviceConnectionsSection?.content).toContain('Body Energy Balance');
     expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(serviceConnectionsSection?.content).toContain('raw webhook samples');

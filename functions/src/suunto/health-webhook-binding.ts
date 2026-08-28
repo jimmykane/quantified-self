@@ -137,10 +137,11 @@ function normalizeCandidateUserIDs(values: readonly string[]): string[] {
 }
 
 /**
- * Resolves bounded candidate owners from the server-only binding index. A
- * configured rollout list uses direct document reads; production-wide Sleep
- * sync uses the indexed provider digest and never trusts client-writable token
- * documents as the webhook identity authority.
+ * Resolves bounded candidate owners from the server-only binding index. Tests
+ * and tightly scoped maintenance callers may provide exact candidate UIDs for
+ * direct document reads. Production-wide Sleep and Health delivery use the
+ * indexed provider digest and never trust client-writable token documents as
+ * the webhook identity authority.
  */
 export async function findSuuntoWebhookAccountBindingUserIDs(
   db: admin.firestore.Firestore,

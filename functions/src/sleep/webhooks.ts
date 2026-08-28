@@ -351,7 +351,7 @@ async function handleSuunto247DataWebhook(
                 windows,
             });
             if (ingressResult === 'permanent_skip') {
-                logger.info('[HealthSync][Suunto] Dropped signed webhook without an active staged binding.');
+                logger.info('[HealthSync][Suunto] Dropped signed webhook without an active binding.');
             } else {
                 logger.info('[HealthSync][Suunto] Durably accepted webhook ingress', {
                     ingressResult,

@@ -211,7 +211,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
     h1: 'Suunto Integration for Activity and Route Sync',
-    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload GPX or FIT routes, and access staged 24/7 Health ingestion when eligible.',
+    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload GPX or FIT routes, and import source-attributed 24/7 Health data.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX/FIT routes, import existing Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, import Suunto history, and keep training data centralized.',
     highlights: [
@@ -223,7 +223,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       'Send Suunto routes to Wahoo',
       'Suunto route delivery to COROS',
       'FIT activity and GPX/FIT route upload to Suunto',
-      'Limited rollout for source-attributed Suunto 24/7 Health',
+      'Source-attributed Suunto 24/7 Health',
     ],
     syncEyebrow: 'Automatic Sync',
     syncTitle: 'How to sync activities to Suunto and send Suunto routes to Garmin, Wahoo, or COROS',
@@ -271,8 +271,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     toolsEyebrow: 'Suunto Tools',
-    toolsTitle: 'Activity, route, history, Sleep, and staged Health workflows',
-    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports uploads, automatic and existing route imports, sending routes to Garmin, Wahoo, or COROS, history imports, Sleep, and source-attributed 24/7 Health for eligible rollout accounts.',
+    toolsTitle: 'Activity, route, history, Sleep, and Health workflows',
+    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports uploads, automatic and existing route imports, sending routes to Garmin, Wahoo, or COROS, history imports, Sleep, and source-attributed 24/7 Health.',
     tools: [
       {
         icon: 'upload_file',
@@ -306,8 +306,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'bedtime',
-        title: 'Suunto history, Sleep, and staged Health imports',
-        copy: 'Use Suunto activity and Sleep history imports when your Suunto account is the source of historical training or recovery data. Eligible limited-rollout accounts can queue separate 24/7 Activity, daily-statistics, and Recovery Health records through the combined Sleep & Health history control.',
+        title: 'Suunto history, Sleep, and Health imports',
+        copy: 'Use Suunto activity and Sleep history imports when your Suunto account is the source of historical training or recovery data. Connected accounts can queue separate 24/7 Activity, daily-statistics, and Recovery Health records through the combined Sleep & Health history control while Suunto Health is enabled.',
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
@@ -357,7 +357,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Does the Suunto connection import 24/7 Health metrics?',
-        answer: 'A limited rollout imports available Suunto 24/7 Activity, daily-statistics, and Recovery values as source-attributed Health records. It stays separate from workout FIT data and Sleep, and is not yet available to every connected Suunto account.',
+        answer: 'Yes. Connected Suunto accounts can import available 24/7 Activity, daily-statistics, and Recovery values as source-attributed Health records. They stay separate from workout FIT data and Sleep sessions.',
       },
     ],
     closingTitle: 'Connect once, then keep your services aligned',
@@ -672,7 +672,7 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     serviceName: ServiceNames.SuuntoApp,
     subtitle: 'Activity sync, route imports, and multi-provider route delivery',
-    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, keep Suunto history in one private dashboard, and access source-attributed 24/7 Health ingestion during the limited rollout.',
+    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, keep Suunto history in one private dashboard, and import source-attributed 24/7 Health data.',
     highlights: [
       'Receive Garmin activities automatically',
       'Receive COROS activities automatically',

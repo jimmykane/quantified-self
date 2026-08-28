@@ -5,8 +5,14 @@ import { createHash } from 'node:crypto';
 
 const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
-  const bindingRef = { path: 'suuntoHealthWebhookAccountBindings/digest' };
-  const bindingRef2 = { path: 'suuntoHealthWebhookAccountBindings/digest-2' };
+  const bindingRef = {
+    id: '5f6b7c7853b2a887e9f022132d3e157a169a2a4f3184f0ac7afd4743230cd211',
+    path: 'suuntoHealthWebhookAccountBindings/digest',
+  };
+  const bindingRef2 = {
+    id: 'ccf4ef38d2a13e51ac427ffce2d71e2ec690fef05753ed5f6f112a8e832287ed',
+    path: 'suuntoHealthWebhookAccountBindings/digest-2',
+  };
   const ingressRef = { path: `suuntoHealthWebhookIngress/${'a'.repeat(64)}` };
   const ingressRef2 = { path: `suuntoHealthWebhookIngress/${'b'.repeat(64)}` };
   const tokenRef = { path: 'suuntoAppAccessTokens/firebase-user-1/tokens/suunto-account-1' };
@@ -30,7 +36,19 @@ const hoisted = vi.hoisted(() => {
   const collectionGroup = vi.fn(() => {
     throw new Error('Webhook binding must not use collection-group token lookup.');
   });
+  const bindingWhere = vi.fn();
+  const bindingLimit = vi.fn();
+  const bindingGet = vi.fn(async () => ({
+    docs: [
+      state.binding ? { id: bindingRef.id, data: () => state.binding } : null,
+      state.binding2 ? { id: bindingRef2.id, data: () => state.binding2 } : null,
+    ].filter(Boolean),
+  }));
+  const bindingQuery = { where: bindingWhere, limit: bindingLimit, get: bindingGet };
+  bindingWhere.mockReturnValue(bindingQuery);
+  bindingLimit.mockReturnValue(bindingQuery);
   const collection = vi.fn((name: string) => ({
+    ...(name === 'suuntoHealthWebhookAccountBindings' ? { where: bindingWhere } : {}),
     doc: vi.fn((id: string) => {
       if (name === 'suuntoHealthWebhookAccountBindings') {
         return id === 'ccf4ef38d2a13e51ac427ffce2d71e2ec690fef05753ed5f6f112a8e832287ed'
@@ -75,6 +93,8 @@ const hoisted = vi.hoisted(() => {
   let registeredTriggerOptions: unknown;
   return {
     addQueueItem: vi.fn(),
+    bindingGet,
+    bindingWhere,
     bindingRef,
     bindingRef2,
     collectionGroup,
@@ -184,7 +204,6 @@ function activeDependencies(overrides: Record<string, unknown> = {}) {
     addQueueItem: hoisted.addQueueItem,
     db: hoisted.db as any,
     isHealthEnabled: vi.fn(() => true),
-    isUserAllowed: vi.fn(() => true),
     nowMs: vi.fn(() => PROCESSED_AT_MS),
     ...overrides,
   };
@@ -200,10 +219,9 @@ function persistInput() {
   };
 }
 
-function persistDependencies(isAllowed = true) {
+function persistDependencies() {
   return {
     candidateUserIDs: ['firebase-user-1'],
-    isUserAllowed: vi.fn(() => isAllowed),
   };
 }
 
@@ -249,7 +267,7 @@ describe('Suunto Health webhook ingress', () => {
     }));
   });
 
-  it('binds a retained staged account and captures schema-v5 root lifecycle state', async () => {
+  it('binds a retained account and captures schema-v5 root lifecycle state', async () => {
     await expect(persistSuuntoHealthWebhookIngress(
       persistInput(),
       persistDependencies(),
@@ -282,7 +300,7 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.transactionCreate).not.toHaveBeenCalled();
   });
 
-  it('creates independent durable ingress for every active staged connection', async () => {
+  it('resolves the server-only index and creates ingress for every active connection', async () => {
     hoisted.state.binding2 = {
       schemaVersion: 3,
       authorizationSource: 'provider_refresh',
@@ -303,11 +321,14 @@ describe('Suunto Health webhook ingress', () => {
       connectionStateGeneration: 'connection-generation-2',
     };
 
-    await expect(persistSuuntoHealthWebhookIngress(persistInput(), {
-      candidateUserIDs: ['firebase-user-1', 'firebase-user-2'],
-      isUserAllowed: () => true,
-    })).resolves.toBe('created');
+    await expect(persistSuuntoHealthWebhookIngress(persistInput()))
+      .resolves.toBe('created');
 
+    expect(hoisted.bindingWhere).toHaveBeenCalledWith(
+      'providerAccountDigest',
+      '==',
+      PROVIDER_ACCOUNT_DIGEST,
+    );
     expect(hoisted.transactionCreate).toHaveBeenCalledTimes(2);
     expect(hoisted.transactionCreate).toHaveBeenCalledWith(
       hoisted.ingressRef,
@@ -324,23 +345,11 @@ describe('Suunto Health webhook ingress', () => {
     );
   });
 
-  it('does not persist ingress for unknown or non-rollout bindings', async () => {
+  it('does not persist ingress for an unknown binding', async () => {
     hoisted.state.binding = undefined;
     await expect(persistSuuntoHealthWebhookIngress(
       persistInput(),
-      persistDependencies(),
-    )).resolves.toBe('permanent_skip');
-
-    hoisted.state.binding = {
-      schemaVersion: 3,
-      authorizationSource: 'oauth_callback',
-      userID: 'firebase-user-1',
-      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
-      tokenCredentialGeneration: TOKEN_GENERATION,
-    };
-    await expect(persistSuuntoHealthWebhookIngress(
-      persistInput(),
-      persistDependencies(false),
+      { db: hoisted.db as any },
     )).resolves.toBe('permanent_skip');
     expect(hoisted.transactionCreate).not.toHaveBeenCalled();
   });
@@ -376,8 +385,9 @@ describe('Suunto Health webhook ingress', () => {
   it('cannot be poisoned by similarly named client-writable token documents', async () => {
     await expect(persistSuuntoHealthWebhookIngress(
       persistInput(),
-      persistDependencies(),
+      { db: hoisted.db as any },
     )).resolves.toBe('created');
+    expect(hoisted.bindingGet).toHaveBeenCalledOnce();
     expect(hoisted.collectionGroup).not.toHaveBeenCalled();
   });
 

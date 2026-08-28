@@ -3,7 +3,6 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { SuuntoHealthSyncAvailabilityResponse } from '../../../shared/sleep-backfill';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { isSuuntoHealthSyncEnabled } from './health-flags';
-import { isSuuntoHealthSyncUserAllowed } from './health-rollout';
 
 export const getSuuntoHealthSyncAvailability = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoHealthSyncAvailability.region,
@@ -18,7 +17,6 @@ export const getSuuntoHealthSyncAvailability = onCall({
   enforceAppCheck(request);
 
   return {
-    available: isSuuntoHealthSyncEnabled()
-      && isSuuntoHealthSyncUserAllowed(request.auth.uid),
+    available: isSuuntoHealthSyncEnabled(),
   };
 });

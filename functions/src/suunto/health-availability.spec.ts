@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
   enforceAppCheck: vi.fn(),
   isEnabled: vi.fn(),
-  isAllowed: vi.fn(),
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -24,9 +23,6 @@ vi.mock('../utils', () => ({
 vi.mock('./health-flags', () => ({
   isSuuntoHealthSyncEnabled: hoisted.isEnabled,
 }));
-vi.mock('./health-rollout', () => ({
-  isSuuntoHealthSyncUserAllowed: hoisted.isAllowed,
-}));
 
 import { getSuuntoHealthSyncAvailability } from './health-availability';
 
@@ -36,34 +32,30 @@ describe('getSuuntoHealthSyncAvailability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.isEnabled.mockReturnValue(true);
-    hoisted.isAllowed.mockReturnValue(true);
   });
 
-  it('requires authentication before checking App Check or rollout membership', async () => {
+  it('requires authentication before checking App Check or availability', async () => {
     await expect((getSuuntoHealthSyncAvailability as never as AvailabilityHandler)({ data: {} }))
       .rejects.toMatchObject({ code: 'unauthenticated' });
     expect(hoisted.enforceAppCheck).not.toHaveBeenCalled();
-    expect(hoisted.isAllowed).not.toHaveBeenCalled();
   });
 
-  it('returns current server rollout availability for the authenticated user', async () => {
+  it('returns current server availability for every authenticated user', async () => {
     await expect((getSuuntoHealthSyncAvailability as never as AvailabilityHandler)({
-      auth: { uid: 'staged-user' },
+      auth: { uid: 'health-user' },
       app: { appId: 'test-app' },
       data: {},
     })).resolves.toEqual({ available: true });
     expect(hoisted.enforceAppCheck).toHaveBeenCalledOnce();
-    expect(hoisted.isAllowed).toHaveBeenCalledWith('staged-user');
   });
 
-  it('returns unavailable when the rollback switch is off even for an allowlisted user', async () => {
+  it('returns unavailable when the rollback switch is off', async () => {
     hoisted.isEnabled.mockReturnValue(false);
 
     await expect((getSuuntoHealthSyncAvailability as never as AvailabilityHandler)({
-      auth: { uid: 'staged-user' },
+      auth: { uid: 'health-user' },
       app: { appId: 'test-app' },
       data: {},
     })).resolves.toEqual({ available: false });
-    expect(hoisted.isAllowed).not.toHaveBeenCalled();
   });
 });

@@ -719,24 +719,41 @@ describe('sleep polling', () => {
         );
     });
 
-    it('queues staged Suunto Health polls without changing production-wide Sleep polling', async () => {
-        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+    it('queues production-wide Suunto Health polls from canonical account roots', async () => {
+        const userID = 'health-user-1';
         const nowMs = Date.UTC(2026, 7, 27, 12);
         installCollectionGroupTokenMock([
             createTokenDoc(userID, {
                 serviceName: ServiceNames.SuuntoApp,
                 userName: 'private-suunto-account',
             }),
-            createTokenDoc('non-staged-user', {
+            createTokenDoc('health-user-2', {
                 serviceName: ServiceNames.SuuntoApp,
                 userName: 'other-suunto-account',
             }),
         ]);
+        hoisted.bindingCursorGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                lastCompletedUserID: userID,
+                lastCompletedSweepAtMs: nowMs,
+            }),
+        });
 
         const queued = await sleepPollingTestInternals.enqueueSuuntoHealthPolls(nowMs);
 
-        expect(queued).toBe(1);
-        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(queued).toBe(2);
+        expect(hoisted.suuntoRootLimit).toHaveBeenCalledWith(
+            sleepPollingTestInternals.SUUNTO_HEALTH_POLL_ROOT_PAGE_SIZE + 1,
+        );
+        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(
+            expect.objectContaining({
+                cursorScope: 'global-v1',
+                lastCompletedSweepAtMs: nowMs,
+            }),
+            { merge: false },
+        );
+        expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
         expect(addSleepSyncQueueItem).toHaveBeenCalledWith({
             type: 'suunto_health_poll',
             provider: SLEEP_PROVIDERS.SuuntoApp,
@@ -747,11 +764,15 @@ describe('sleep polling', () => {
             healthTrigger: 'poll',
             dedupeKey: `suunto-health-poll:${userID}:private-suunto-account:${nowMs - (7 * 24 * 60 * 60 * 1000)}:${nowMs}`,
         });
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            userID: 'health-user-2',
+            providerUserId: 'other-suunto-account',
+        }));
         expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken).not.toHaveBeenCalled();
     });
 
-    it('resumes staged Health polling after the first retained-account page', async () => {
-        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+    it('resumes production-wide Health polling after the first retained-account page', async () => {
+        const userID = 'health-user-1';
         const nowMs = Date.UTC(2026, 7, 27, 12);
         installCollectionGroupTokenMock(Array.from(
             { length: sleepPollingTestInternals.SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT + 1 },

@@ -25,10 +25,6 @@ import {
 } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
-import {
-    SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
-    isSuuntoHealthSyncUserAllowed,
-} from '../suunto/health-rollout';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
@@ -47,6 +43,7 @@ interface PollWindow {
 const COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY = 20;
 const SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE = 4;
 const SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE = 100;
+const SUUNTO_HEALTH_POLL_ROOT_PAGE_SIZE = 25;
 const SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT = 8;
 const SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_SLEEP_POLL_MAX_SWEEP_AGE_MS = 6 * 24 * 60 * 60 * 1000;
@@ -56,6 +53,7 @@ const SUUNTO_BINDING_VERIFICATION_STATE_COLLECTION = 'providerMaintenanceState';
 const SUUNTO_BINDING_VERIFICATION_CURSOR_DOCUMENT = 'suuntoWebhookBindingVerification';
 const SUUNTO_SLEEP_POLL_CURSOR_DOCUMENT = 'suuntoSleepPolling';
 const SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT = 'suuntoHealthPolling';
+const SUUNTO_HEALTH_POLL_CURSOR_SCOPE = 'global-v1';
 const SUUNTO_BINDING_VERIFICATION_FAILURE_COUNT_FIELD =
     'suuntoWebhookBindingVerificationFailureCount';
 const SUUNTO_BINDING_VERIFICATION_NEXT_ATTEMPT_FIELD =
@@ -124,12 +122,16 @@ async function getPagedSuuntoTokenSnapshots(
     nowMs = Date.now(),
     minimumSweepIntervalMs = 0,
     allowedUserIDs: readonly string[] = [],
+    cursorScope?: string,
 ): Promise<ProviderTokenSnapshotPage & { commitCursor: () => Promise<void> }> {
     const db = admin.firestore();
     const cursorRef = db.collection(SUUNTO_BINDING_VERIFICATION_STATE_COLLECTION)
         .doc(cursorDocumentID);
     const cursorSnapshot = await cursorRef.get();
-    const cursorData = cursorSnapshot.data() as Record<string, unknown> | undefined;
+    const storedCursorData = cursorSnapshot.data() as Record<string, unknown> | undefined;
+    const cursorData = cursorScope === undefined || storedCursorData?.cursorScope === cursorScope
+        ? storedCursorData
+        : undefined;
     let verificationEpoch = typeof cursorData?.verificationEpoch === 'string'
         && cursorData.verificationEpoch.length === 36
         ? cursorData.verificationEpoch
@@ -251,6 +253,7 @@ async function getPagedSuuntoTokenSnapshots(
         commitCursor: async () => {
             await cursorRef.set({
                 ...(verificationEpoch ? { verificationEpoch } : {}),
+                ...(cursorScope ? { cursorScope } : {}),
                 lastCompletedUserID: hasMoreWork ? completedUserID : null,
                 currentUserID: partialUserID,
                 // This short-lived keyset stays in a backend-only maintenance
@@ -601,11 +604,6 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
         logger.info('[HealthSync][Suunto] Health ingestion is disabled; skipping polling');
         return 0;
     }
-    if (SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS.length === 0) {
-        logger.info('[HealthSync][Suunto] No staged users are configured; skipping polling');
-        return 0;
-    }
-
     const windows = chunkRecentWindow(
         nowMs,
         SLEEP_SYNC_RECENT_WINDOW_DAYS,
@@ -613,10 +611,11 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
     );
     const tokenPage = await getPagedSuuntoTokenSnapshots(
         SUUNTO_HEALTH_POLL_CURSOR_DOCUMENT,
-        SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
+        SUUNTO_HEALTH_POLL_ROOT_PAGE_SIZE,
         nowMs,
         SUUNTO_SLEEP_POLL_MIN_SWEEP_INTERVAL_MS,
-        SUUNTO_HEALTH_SYNC_ALLOWED_USER_IDS,
+        [],
+        SUUNTO_HEALTH_POLL_CURSOR_SCOPE,
     );
     const deletionGuardCache = new Map<string, Promise<boolean>>();
     const unavailableForSyncCache = new Map<string, Promise<boolean>>();
@@ -624,7 +623,7 @@ async function enqueueSuuntoHealthPolls(nowMs = Date.now()): Promise<number> {
     for (const tokenSnapshot of tokenPage.snapshots) {
         const userID = getFirebaseUserID(tokenSnapshot);
         const providerUserId = getProviderUserId(SLEEP_PROVIDERS.SuuntoApp, tokenSnapshot);
-        if (!userID || !providerUserId || !isSuuntoHealthSyncUserAllowed(userID)) continue;
+        if (!userID || !providerUserId) continue;
         if (providerUserId.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
             logger.warn('[HealthSync][Suunto] Skipping token with an invalid provider account identifier.', {
                 userID,
@@ -728,7 +727,7 @@ export const scheduleCOROSSleepSync = onSchedule({
 export const scheduleSuuntoHealthSync = onSchedule({
     region: 'europe-west2',
     // Advance bounded retained-account pages promptly, then pause for 24h
-    // once the staged Health sweep completes.
+    // once the production-wide Health sweep completes.
     schedule: 'every 30 minutes',
     timeoutSeconds: 300,
     memory: '512MiB',
@@ -757,6 +756,7 @@ export const sleepPollingTestInternals = {
     resolveActiveCOROSTokenSnapshots,
     COROS_ACTIVE_ACCOUNT_LOOKUP_CONCURRENCY,
     SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE,
+    SUUNTO_HEALTH_POLL_ROOT_PAGE_SIZE,
     SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE,
     SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT,
 };

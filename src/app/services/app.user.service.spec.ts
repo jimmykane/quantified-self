@@ -2196,7 +2196,7 @@ describe('AppUserService', () => {
         });
 
         describe('getSuuntoHealthSyncAvailabilityForCurrentUser', () => {
-            it('returns the current server-owned Suunto Health rollout state', async () => {
+            it('returns the current server-owned Suunto Health availability', async () => {
                 mockFunctionsService.call.mockResolvedValueOnce({ data: { available: true } });
 
                 await expect(service.getSuuntoHealthSyncAvailabilityForCurrentUser()).resolves.toBe(true);

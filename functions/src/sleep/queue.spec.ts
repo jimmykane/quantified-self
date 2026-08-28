@@ -1845,7 +1845,7 @@ describe('sleep queue', () => {
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'suunto-health-user',
             ref: queueRef as unknown as admin.firestore.DocumentReference,
         });
 
@@ -1872,7 +1872,7 @@ describe('sleep queue', () => {
             healthTrigger: 'poll',
             rangeStartMs: 1_700_000_000_000,
             rangeEndMs: 1_700_000_000_000,
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'suunto-health-user',
             ref: queueRef as unknown as admin.firestore.DocumentReference,
         });
 
@@ -1900,7 +1900,7 @@ describe('sleep queue', () => {
             healthTrigger: 'poll',
             rangeStartMs: 1_700_000_000_000,
             rangeEndMs: 1_700_086_400_000,
-            userID: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            userID: 'suunto-health-user',
             ref: queueRef as unknown as admin.firestore.DocumentReference,
         });
 
@@ -3997,15 +3997,15 @@ describe('sleep queue', () => {
             expectedLastPollAtMs: undefined,
             expectedLastWebhookAtMs: undefined,
         },
-    ])('writes staged Suunto Health for a $healthTrigger trigger without creating or updating Sleep records', async ({
+    ])('writes Suunto Health for a $healthTrigger trigger without creating or updating Sleep records', async ({
         healthTrigger,
         expectedLastPollAtMs,
         expectedLastWebhookAtMs,
     }) => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         const tokenSnapshot = {
             id: 'suunto-user-1',
@@ -4029,7 +4029,7 @@ describe('sleep queue', () => {
                 expectedFields: {
                     schemaVersion: 3,
                     authorizationSource: 'oauth_callback',
-                    userID: stagedUserID,
+                    userID: healthUserID,
                     providerAccountDigest: 'opaque-account-digest',
                     tokenCredentialGeneration: 'suunto-credential-generation-1',
                 },
@@ -4042,14 +4042,14 @@ describe('sleep queue', () => {
                     tokenCredentialGeneration: 'suunto-credential-generation-1',
                 },
             }, {
-                documentRef: { path: `suuntoAppAccessTokens/${stagedUserID}` },
+                documentRef: { path: `suuntoAppAccessTokens/${healthUserID}` },
                 expectedFields: {
                     activeOAuthCredentialGeneration: 'root-generation-1',
                     disconnectState: undefined,
                     disconnectOperationGeneration: undefined,
                 },
             }, {
-                documentRef: { path: `users/${stagedUserID}/meta/${ServiceNames.SuuntoApp}` },
+                documentRef: { path: `users/${healthUserID}/meta/${ServiceNames.SuuntoApp}` },
                 expectedFields: {
                     connectionState: 'connected',
                     connectionStateGeneration: 'suunto-generation-1',
@@ -4076,7 +4076,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
@@ -4089,13 +4089,13 @@ describe('sleep queue', () => {
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenCalled();
         expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledWith(
-            stagedUserID,
+            healthUserID,
             expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
             expect.any(Number),
             lifecycleGuards,
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
-            stagedUserID,
+            healthUserID,
             'SuuntoApp',
             expect.objectContaining({
                 status: 'ready',
@@ -4116,10 +4116,10 @@ describe('sleep queue', () => {
     });
 
     it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         const tokenSnapshot = {
             id: 'suunto-user-1',
@@ -4165,7 +4165,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
@@ -4179,7 +4179,7 @@ describe('sleep queue', () => {
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             1,
-            stagedUserID,
+            healthUserID,
             'SuuntoApp',
             expect.objectContaining({
                 status: 'failed',
@@ -4190,7 +4190,7 @@ describe('sleep queue', () => {
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             2,
-            stagedUserID,
+            healthUserID,
             'SuuntoApp',
             expect.objectContaining({
                 status: 'failed',
@@ -4206,10 +4206,10 @@ describe('sleep queue', () => {
     });
 
     it('skips a failed Suunto Health item when rebasing finds changed account authority', async () => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         const tokenSnapshot = {
             id: 'suunto-user-1',
@@ -4246,7 +4246,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
@@ -4267,10 +4267,10 @@ describe('sleep queue', () => {
     });
 
     it('skips a webhook queue item before provider I/O when its captured connection generation changed', async () => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
@@ -4303,7 +4303,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
@@ -4324,10 +4324,10 @@ describe('sleep queue', () => {
     });
 
     it('skips webhook work before provider I/O when its captured token-root revision changed', async () => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
@@ -4362,7 +4362,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
@@ -4384,10 +4384,10 @@ describe('sleep queue', () => {
     });
 
     it('skips stale Suunto Health work when its OAuth root generation is no longer active', async () => {
-        const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const healthUserID = 'suunto-health-user';
         const tokenRef = {
-            path: `suuntoAppAccessTokens/${stagedUserID}/tokens/suunto-user-1`,
-            parent: { parent: { id: stagedUserID } },
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
         };
         const tokenSnapshot = {
             id: 'suunto-user-1',
@@ -4408,7 +4408,7 @@ describe('sleep queue', () => {
         };
         const inactiveCredentialError = Object.assign(new Error('Inactive credential.'), {
             name: 'TokenUseSkippedForPendingDisconnectError',
-            firebaseUserID: stagedUserID,
+            firebaseUserID: healthUserID,
             serviceName: ServiceNames.SuuntoApp,
             reason: 'inactive_oauth_credential',
         });
@@ -4423,7 +4423,7 @@ describe('sleep queue', () => {
             dispatchedToCloudTask: 1_700_000_000_500,
             processed: false,
             provider: 'SuuntoApp',
-            userID: stagedUserID,
+            userID: healthUserID,
             providerUserId: 'suunto-user-1',
             retryCount: 0,
             type: 'suunto_health_poll',
