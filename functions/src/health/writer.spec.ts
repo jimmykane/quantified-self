@@ -62,6 +62,7 @@ interface FakeCollectionReference {
 function fakeDatabase() {
     const stored = new Map<string, unknown>();
     const sets = vi.fn();
+    const updates = vi.fn();
     const deletes = vi.fn();
     const document = (path: string): FakeDocumentReference => ({
         id: path.split('/').at(-1) || '',
@@ -77,13 +78,14 @@ function fakeDatabase() {
             data: () => stored.get(reference.path),
         })),
         set: sets,
+        update: updates,
         delete: deletes,
     };
     const db = {
         collection,
         runTransaction: vi.fn(async (runner: (value: typeof transaction) => unknown) => runner(transaction)),
     };
-    return { db, stored, sets, deletes, transaction };
+    return { db, stored, sets, updates, deletes, transaction };
 }
 
 function fakeId(parts: string[]): Promise<string> {
@@ -333,22 +335,55 @@ describe('health writer', () => {
         expect(fake.deletes).not.toHaveBeenCalled();
     });
 
-    it('does not rewrite identical content received at a later provider revision order', async () => {
+    it('advances the watermark for A@10 -> A@30 and rejects delayed distinct B@20 as stale', async () => {
         const fake = fakeDatabase();
         const existingInput = validInput();
+        (existingInput.revision as Record<string, unknown>).order = 10;
+        (existingInput.revision as Record<string, unknown>).token = 'revision-a';
         const built = await buildHealthSourceRecordWrite('user-1', existingInput, 9_000, fakeId);
-        fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
+        const path = sourceRecordPath(built.sourceRecord.id);
+        fake.stored.set(path, built.sourceRecord);
         const repeatedInput = validInput();
-        (repeatedInput.revision as Record<string, unknown>).order = 2;
+        (repeatedInput.revision as Record<string, unknown>).order = 30;
+        (repeatedInput.revision as Record<string, unknown>).token = 'revision-a';
         repeatedInput.receivedAtMs = Date.parse('2026-01-02T01:00:00.000Z');
 
-        const result = await replaceHealthSourceRecord('user-1', repeatedInput, 10_000, {
+        const repeatedResult = await replaceHealthSourceRecord('user-1', repeatedInput, 10_000, {
             db: fake.db as never,
             generateId: fakeId,
         });
 
-        expect(result.status).toBe('unchanged');
-        expect(result.sourceRecord?.source.revision.order).toBe(1);
+        expect(repeatedResult.status).toBe('unchanged');
+        expect(repeatedResult.sourceRecord?.source).toMatchObject({
+            revision: { order: 10 },
+            maxObservedRevisionOrder: 30,
+        });
+        expect(fake.updates).toHaveBeenCalledWith(
+            expect.objectContaining({ path }),
+            { 'source.maxObservedRevisionOrder': 30 },
+        );
+        expect(fake.sets).not.toHaveBeenCalled();
+        expect(fake.deletes).not.toHaveBeenCalled();
+
+        fake.stored.set(path, repeatedResult.sourceRecord);
+        const delayedDistinctInput = validInput();
+        (delayedDistinctInput.revision as Record<string, unknown>).order = 20;
+        (delayedDistinctInput.revision as Record<string, unknown>).token = 'revision-b';
+        const delayedMetrics = delayedDistinctInput.metrics as Array<Record<string, unknown>>;
+        delayedMetrics[0] = {
+            ...delayedMetrics[0],
+            native: { ...(delayedMetrics[0].native as Record<string, unknown>), value: 200 },
+            canonical: { ...(delayedMetrics[0].canonical as Record<string, unknown>), value: 200 },
+        };
+
+        const delayedResult = await replaceHealthSourceRecord('user-1', delayedDistinctInput, 11_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        });
+
+        expect(delayedResult.status).toBe('stale');
+        expect(delayedResult.sourceRecord?.source.maxObservedRevisionOrder).toBe(30);
+        expect(fake.updates).toHaveBeenCalledTimes(1);
         expect(fake.sets).not.toHaveBeenCalled();
         expect(fake.deletes).not.toHaveBeenCalled();
     });
@@ -357,6 +392,7 @@ describe('health writer', () => {
         const fake = fakeDatabase();
         const built = await buildHealthSourceRecordWrite('user-1', validInput(), 9_000, fakeId);
         built.sourceRecord.source.revision.order = 2;
+        built.sourceRecord.source.maxObservedRevisionOrder = 2;
         fake.stored.set(sourceRecordPath(built.sourceRecord.id), built.sourceRecord);
 
         const result = await replaceHealthSourceRecord('user-1', validInput(), 10_000, {

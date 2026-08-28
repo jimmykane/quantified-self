@@ -122,7 +122,7 @@ Every value or reference includes:
 
 ### Source records
 
-`users/{uid}/healthSourceRecords/{sourceRecordId}` stores one provider source record. A source record contains its calendar date and interval, source type, opaque source key, opaque account key, ordered revision, coverage, device, metric entries, searchable `metricIds`, and sample-chunk IDs.
+`users/{uid}/healthSourceRecords/{sourceRecordId}` stores one provider source record. A source record contains its calendar date and interval, source type, opaque source key, opaque account key, ordered content revision, maximum observed revision-order watermark, coverage, device, metric entries, searchable `metricIds`, and sample-chunk IDs. Legacy records without the optional watermark use their content revision order as the initial watermark; no schema-version migration is required.
 
 The source-record ID is a deterministic SHA-256 identifier derived from the Firebase UID, provider, raw provider account ID, provider record type, and provider record key. The account key is a separate deterministic hash. The persisted source key is another account-scoped deterministic hash of the provider record key, and the persisted revision token is a source-record-scoped hash of the adapter token. Raw provider account IDs, record keys, and revision tokens remain in writer memory only for identity, revision, and digest calculation; none is persisted or logged.
 
@@ -169,15 +169,16 @@ Sample projection never splits a stored chunk to fit a point budget. It returns 
 
 ## Revision and replacement contract
 
-Provider adapters must supply a non-negative ordered revision and a bounded stable token. The writer hashes that token before persistence and calculates the content digest itself, excluding receipt/write timestamps so an exact redelivery remains idempotent.
+Provider adapters must supply a non-negative ordered revision and a bounded stable token. The writer hashes that token before persistence and calculates the content digest itself, excluding receipt/write timestamps so an exact redelivery remains idempotent. The source record separately stores `maxObservedRevisionOrder`; advancing that watermark for identical later content does not change the content revision shared with its sample chunks.
 
 | Incoming revision | Result |
 | --- | --- |
 | No stored source record | Write the source record and all chunks atomically |
-| Lower order | Return `stale`; write nothing |
-| Same or higher order with the same token and digest | Return `unchanged`; write nothing |
-| Same order with different token or content | Throw `HealthSourceRecordRevisionConflictError`; write nothing |
-| Higher order with a different token or content | Atomically replace the source record, write current chunks, and delete stale leaf chunks |
+| Lower than `maxObservedRevisionOrder` | Return `stale`; write nothing |
+| Same token and digest at the current watermark | Return `unchanged`; write nothing |
+| Same token and digest above the current watermark | Advance only `maxObservedRevisionOrder`; return `unchanged` without rewriting chunks |
+| At the current watermark with different token or content | Throw `HealthSourceRecordRevisionConflictError`; write nothing |
+| Above the current watermark with different token or content | Atomically replace the source record, write current chunks, and delete stale leaf chunks |
 
 Every transaction rechecks the account-deletion tombstone and user root through `getUserDeletionGuardStateInTransaction` before reading or writing feature data.
 

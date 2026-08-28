@@ -147,6 +147,7 @@ For every new persistent write path:
 - Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
 - Use the shared health writer's deterministic opaque provider-account ID, source-record ID, account-scoped source-key hash, and hashed revision token. Never persist the raw provider account ID, raw provider record key or revision token, free-form provider error, or raw provider payload in the unified health collections.
+- Let the shared Health writer maintain `maxObservedRevisionOrder` separately from the content revision copied to sample chunks. An identical higher-order delivery advances only that source-record watermark; delayed distinct content below it remains stale, while source/chunk revision identity stays aligned.
 - Keep health sample documents and reads strictly bounded. Time-based retention is intentionally uncapped until product/privacy policy explicitly changes it; do not add ad hoc TTL in a provider adapter.
 
 ## 6. Ingestion: webhooks, history, and idempotent queues
