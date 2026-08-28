@@ -36,6 +36,7 @@ import {
 } from '../orphaned-service-tokens';
 import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { cleanupRejectedRouteOriginalFilesForUser } from '../routes/rejected-original-cleanup';
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -995,6 +996,15 @@ export const cleanupUserAccounts = functions
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
 
     await cleanupUserScopedGeneratedState(uid);
+    let routeOriginalCleanupFailed = false;
+    let routeOriginalCleanupError: unknown = null;
+    try {
+        await cleanupRejectedRouteOriginalFilesForUser(uid);
+    } catch (error) {
+        routeOriginalCleanupFailed = true;
+        routeOriginalCleanupError = error;
+        logger.error('[Cleanup] Rejected route-original cleanup did not complete; continuing remaining account cleanup before retry.', error);
+    }
     let mcpOAuthCleanupFailed = false;
     let mcpOAuthCleanupError: unknown = null;
     try {
@@ -1064,5 +1074,10 @@ export const cleanupUserAccounts = functions
         throw mcpOAuthCleanupError instanceof Error
             ? mcpOAuthCleanupError
             : new Error('MCP OAuth cleanup did not complete.');
+    }
+    if (routeOriginalCleanupFailed) {
+        throw routeOriginalCleanupError instanceof Error
+            ? routeOriginalCleanupError
+            : new Error('Rejected route-original cleanup did not complete.');
     }
 });

@@ -25,6 +25,7 @@ const {
     collectionGroupWhereMock,
     markQueueItemDeletedForUserCleanupMock,
     cleanupMcpOAuthStateForUserMock,
+    cleanupRejectedRouteOriginalFilesForUserMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -158,6 +159,7 @@ const {
         collectionGroupWhereMock,
         markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true),
         cleanupMcpOAuthStateForUserMock: vi.fn().mockResolvedValue(undefined),
+        cleanupRejectedRouteOriginalFilesForUserMock: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -197,6 +199,10 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 
 vi.mock('../mcp/oauth.service', () => ({
     cleanupMcpOAuthStateForUser: cleanupMcpOAuthStateForUserMock,
+}));
+
+vi.mock('../routes/rejected-original-cleanup', () => ({
+    cleanupRejectedRouteOriginalFilesForUser: cleanupRejectedRouteOriginalFilesForUserMock,
 }));
 
 
@@ -304,6 +310,7 @@ describe('cleanupUserAccounts', () => {
         }));
         markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
         cleanupMcpOAuthStateForUserMock.mockReset().mockResolvedValue(undefined);
+        cleanupRejectedRouteOriginalFilesForUserMock.mockReset().mockResolvedValue(undefined);
         transactionDeleteMock.mockReset();
         runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
             get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
@@ -350,6 +357,7 @@ describe('cleanupUserAccounts', () => {
             { missingTokensBehavior: 'ignore' },
         );
         expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupRejectedRouteOriginalFilesForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.COROSAPI,
@@ -413,6 +421,23 @@ describe('cleanupUserAccounts', () => {
             wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
         ).rejects.toThrow('MCP OAuth cleanup did not complete.');
 
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
+    });
+
+    it('continues account cleanup and requests a retry when route-original cleanup fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        cleanupRejectedRouteOriginalFilesForUserMock.mockRejectedValueOnce(
+            new Error('Storage cleanup unavailable'),
+        );
+
+        await expect(
+            wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
+        ).rejects.toThrow('Storage cleanup unavailable');
+
+        expect(cleanupRejectedRouteOriginalFilesForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
         expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
         expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
     });

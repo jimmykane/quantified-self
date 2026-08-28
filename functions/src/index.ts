@@ -158,7 +158,10 @@ export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
 export { cleanupRouteFiles } from './routes/cleanup';
-export { cleanupRejectedRouteOriginalFile } from './routes/rejected-original-cleanup';
+export {
+  cleanupRejectedRouteOriginalFile,
+  redriveRejectedRouteOriginalCleanup,
+} from './routes/rejected-original-cleanup';
 export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';

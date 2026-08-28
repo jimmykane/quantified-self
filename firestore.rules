@@ -388,6 +388,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Pre-upload route-original reservations must survive account-subtree
+    // deletion until their exact Storage object has been reconciled.
+    match /routeOriginalFileCleanup/{cleanupID} {
+      allow read, write: if false;
+    }
+
     match /mcpOAuthRateLimits/{document=**} {
       allow read, write: if false;
     }

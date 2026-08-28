@@ -33,6 +33,15 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps unresolved route-original reservations queryable and out of TTL cleanup', () => {
+        const config = loadFirestoreIndexes();
+        const cleanupOverrides = config.fieldOverrides.filter(field => (
+            field.collectionGroup === 'routeOriginalFileCleanup'
+        ));
+
+        expect(cleanupOverrides).toEqual([]);
+    });
+
     it('expires durable Suunto Health webhook ingress envelopes', () => {
         const config = loadFirestoreIndexes();
 

@@ -8,7 +8,9 @@ const hoisted = vi.hoisted(() => {
   const mockBuildRouteDocumentForWrite = vi.fn();
   const mockGetUserDeletionGuardStateInTransaction = vi.fn();
   const mockCreateRouteProcessingMetadataPayload = vi.fn();
-  const mockEnqueueRejectedRouteOriginalCleanup = vi.fn();
+  const mockReserveRejectedRouteOriginalCleanup = vi.fn();
+  const mockRequestRejectedRouteOriginalCleanup = vi.fn();
+  const mockReleaseRejectedRouteOriginalCleanup = vi.fn();
   const mockTransactionGet = vi.fn();
   const mockTransactionSet = vi.fn();
   const mockRunTransaction = vi.fn(async (handler: unknown) => (
@@ -37,7 +39,9 @@ const hoisted = vi.hoisted(() => {
     mockBuildRouteDocumentForWrite,
     mockGetUserDeletionGuardStateInTransaction,
     mockCreateRouteProcessingMetadataPayload,
-    mockEnqueueRejectedRouteOriginalCleanup,
+    mockReserveRejectedRouteOriginalCleanup,
+    mockRequestRejectedRouteOriginalCleanup,
+    mockReleaseRejectedRouteOriginalCleanup,
     mockTransactionGet,
     mockTransactionSet,
     mockRunTransaction,
@@ -91,8 +95,14 @@ vi.mock('./route-processing', () => ({
 }));
 
 vi.mock('./rejected-original-cleanup', () => ({
-  enqueueRejectedRouteOriginalCleanup: (...args: unknown[]) => (
-    hoisted.mockEnqueueRejectedRouteOriginalCleanup(...args)
+  reserveRejectedRouteOriginalCleanupInTransaction: (...args: unknown[]) => (
+    hoisted.mockReserveRejectedRouteOriginalCleanup(...args)
+  ),
+  requestRejectedRouteOriginalCleanup: (...args: unknown[]) => (
+    hoisted.mockRequestRejectedRouteOriginalCleanup(...args)
+  ),
+  releaseRejectedRouteOriginalCleanupReservation: (...args: unknown[]) => (
+    hoisted.mockReleaseRejectedRouteOriginalCleanup(...args)
   ),
 }));
 
@@ -119,6 +129,7 @@ vi.mock('../shared/user-deletion-guard', () => {
 
 import {
   SyncedRouteProAccessRequiredError,
+  SyncedRouteSkippedForDeletedUserError,
   upsertSyncedRoute,
 } from './upsert-synced-route';
 
@@ -178,7 +189,12 @@ describe('upsertSyncedRoute', () => {
     hoisted.mockCreateRouteProcessingMetadataPayload.mockReturnValue({
       processingEntity: 'route',
     });
-    hoisted.mockEnqueueRejectedRouteOriginalCleanup.mockResolvedValue(undefined);
+    hoisted.mockReserveRejectedRouteOriginalCleanup.mockReturnValue({
+      cleanupID: 'cleanup-1',
+      ref: { path: 'routeOriginalFileCleanup/cleanup-1' },
+    });
+    hoisted.mockRequestRejectedRouteOriginalCleanup.mockResolvedValue(undefined);
+    hoisted.mockReleaseRejectedRouteOriginalCleanup.mockResolvedValue(undefined);
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
       if (ref.path === 'users/user-1/routes/route-1') {
         return makeSnapshot(true, makeExistingRouteDocument());
@@ -225,16 +241,24 @@ describe('upsertSyncedRoute', () => {
       'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
       { ignoreNotFound: true },
     );
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.mockStorageSave.mock.invocationCallOrder[0]);
+    expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).toHaveBeenCalledWith({
+      cleanupID: 'cleanup-1',
+      ref: { path: 'routeOriginalFileCleanup/cleanup-1' },
+    });
   });
 
-  it('keeps the existing original file when the transaction fails after uploading a replacement', async () => {
-    hoisted.mockRunTransaction.mockImplementationOnce(async (handler: unknown) => {
-      await (handler as (transaction: unknown) => Promise<unknown>)({
+  it('keeps the existing original file when a known pre-commit failure rejects the replacement', async () => {
+    hoisted.mockRunTransaction
+      .mockImplementationOnce(async (handler: unknown) => (
+        handler as (transaction: unknown) => Promise<unknown>
+      )({
         get: hoisted.mockTransactionGet,
         set: hoisted.mockTransactionSet,
-      });
-      throw new Error('transient failure');
-    });
+      }))
+      .mockRejectedValueOnce(new Error('transient failure'));
 
     await expect(upsertSyncedRoute({
       userID: 'user-1',
@@ -260,9 +284,45 @@ describe('upsertSyncedRoute', () => {
       'users/user-1/routes/route-1/uploads/provider-sync/original-old.gpx',
       { ignoreNotFound: true },
     );
+    expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
   });
 
-  it('removes only the new original and writes nothing when source authority changes before persistence', async () => {
+  it('does not delete a potentially committed original after an ambiguous transaction error', async () => {
+    hoisted.mockRunTransaction
+      .mockImplementationOnce(async (handler: unknown) => (
+        handler as (transaction: unknown) => Promise<unknown>
+      )({
+        get: hoisted.mockTransactionGet,
+        set: hoisted.mockTransactionSet,
+      }))
+      .mockImplementationOnce(async (handler: unknown) => {
+        await (handler as (transaction: unknown) => Promise<unknown>)({
+          get: hoisted.mockTransactionGet,
+          set: hoisted.mockTransactionSet,
+        });
+        throw new Error('commit response timed out');
+      });
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+    })).rejects.toThrow('commit response timed out');
+
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
+    expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+    expect(hoisted.mockRequestRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+  });
+
+  it('does not upload or write an intent when source authority is already inactive', async () => {
     const sourceLifecycleError = new Error('Suunto source lifecycle changed.');
     const assertSourceAuthorizedInTransaction = vi.fn().mockRejectedValue(sourceLifecycleError);
 
@@ -282,6 +342,7 @@ describe('upsertSyncedRoute', () => {
       assertSourceAuthorizedInTransaction,
     })).rejects.toBe(sourceLifecycleError);
 
+    expect(assertSourceAuthorizedInTransaction).toHaveBeenCalledOnce();
     expect(assertSourceAuthorizedInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ runTransaction: hoisted.mockRunTransaction }),
       expect.objectContaining({
@@ -290,21 +351,17 @@ describe('upsertSyncedRoute', () => {
       }),
     );
     expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
-    expect(hoisted.mockStorageDelete).toHaveBeenCalledTimes(1);
-    expect(hoisted.mockStorageDelete).toHaveBeenCalledWith(
-      'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
-      { ignoreNotFound: true },
-    );
-    expect(hoisted.mockStorageDelete).not.toHaveBeenCalledWith(
-      'users/user-1/routes/route-1/uploads/provider-sync/original-old.gpx',
-      { ignoreNotFound: true },
-    );
-    expect(hoisted.mockEnqueueRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
   });
 
-  it('durably queues cleanup when deleting a lifecycle-rejected original fails', async () => {
+  it('accelerates the pre-upload reservation when deleting a lifecycle-rejected original fails', async () => {
     const sourceLifecycleError = new Error('Suunto source lifecycle changed.');
     hoisted.mockStorageDelete.mockRejectedValue(new Error('Storage unavailable.'));
+    const assertSourceAuthorizedInTransaction = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(sourceLifecycleError);
 
     await expect(upsertSyncedRoute({
       userID: 'user-1',
@@ -319,18 +376,126 @@ describe('upsertSyncedRoute', () => {
         extension: 'gpx',
         originalFilename: 'Updated Route.gpx',
       },
-      assertSourceAuthorizedInTransaction: vi.fn().mockRejectedValue(sourceLifecycleError),
+      assertSourceAuthorizedInTransaction,
     })).rejects.toBe(sourceLifecycleError);
 
-    expect(hoisted.mockEnqueueRejectedRouteOriginalCleanup).toHaveBeenCalledWith({
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).toHaveBeenCalledWith({
+      db: expect.objectContaining({ runTransaction: hoisted.mockRunTransaction }),
+      transaction: expect.objectContaining({ set: hoisted.mockTransactionSet }),
       userID: 'user-1',
       routeID: 'route-1',
       originalFile: expect.objectContaining({
-        bucket: 'test-bucket',
         path: 'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
       }),
     });
+    expect(hoisted.mockRequestRejectedRouteOriginalCleanup).toHaveBeenCalledWith({
+      cleanupID: 'cleanup-1',
+      ref: { path: 'routeOriginalFileCleanup/cleanup-1' },
+    });
     expect(hoisted.mockStorageDelete).toHaveBeenCalledTimes(3);
+  });
+
+  it('never uploads when the durable pre-upload reservation cannot be persisted', async () => {
+    const intentError = new Error('Firestore unavailable.');
+    hoisted.mockReserveRejectedRouteOriginalCleanup.mockImplementationOnce(() => {
+      throw intentError;
+    });
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+    })).rejects.toBe(intentError);
+
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not create a reservation or upload after account deletion begins', async () => {
+    hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+    })).rejects.toBeInstanceOf(SyncedRouteSkippedForDeletedUserError);
+
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+  });
+
+  it('leaves a committed original intact when reservation release fails', async () => {
+    hoisted.mockReleaseRejectedRouteOriginalCleanup.mockRejectedValueOnce(
+      new Error('Firestore unavailable.'),
+    );
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+    })).resolves.toMatchObject({ status: 'updated' });
+
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalledWith(
+      'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
+      { ignoreNotFound: true },
+    );
+    expect(hoisted.mockRequestRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+  });
+
+  it('keeps the exact reservation recoverable when cleanup acceleration also fails', async () => {
+    const sourceLifecycleError = new Error('Suunto source lifecycle changed.');
+    hoisted.mockStorageDelete.mockRejectedValue(new Error('Storage unavailable.'));
+    hoisted.mockRequestRejectedRouteOriginalCleanup.mockRejectedValueOnce(new Error('Firestore unavailable.'));
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+      assertSourceAuthorizedInTransaction: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(sourceLifecycleError),
+    })).rejects.toBe(sourceLifecycleError);
+
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
+    expect(hoisted.mockRequestRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
+    expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
   });
 
   it('blocks synced route upserts for non-pro users before uploading or writing', async () => {

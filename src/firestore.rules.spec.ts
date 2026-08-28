@@ -1433,12 +1433,13 @@ describe('Firestore Security Rules', () => {
             it('denies owners and other clients all direct access', async () => {
                 const ownerDb = testEnv.authenticatedContext(userId).firestore();
                 const otherDb = testEnv.authenticatedContext(otherId).firestore();
-                const ref = ownerDb.doc(`users/${userId}/routeOriginalFileCleanup/cleanup-1`);
+                const ref = ownerDb.doc('routeOriginalFileCleanup/cleanup-1');
 
                 await assertFails(ref.get());
                 await assertFails(ref.set({ path: 'forged' }));
                 await assertFails(ref.delete());
-                await assertFails(otherDb.doc(`users/${userId}/routeOriginalFileCleanup/cleanup-1`).get());
+                await assertFails(otherDb.doc('routeOriginalFileCleanup/cleanup-1').get());
+                await assertFails(ownerDb.doc(`users/${userId}/routeOriginalFileCleanup/legacy-cleanup-1`).get());
             });
         });
 
