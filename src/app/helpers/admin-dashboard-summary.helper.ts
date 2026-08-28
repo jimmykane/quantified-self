@@ -117,6 +117,7 @@ export function buildAdminDashboardUserKpiCards(
     const active24Hours = normalizeOptionalCount(authActivityStats?.last24Hours);
     const active7Days = normalizeOptionalCount(authActivityStats?.last7Days);
     const active30Days = normalizeOptionalCount(authActivityStats?.last30Days);
+    const marketingConsent = safeCount(stats.marketingConsent);
 
     return [
         ...(authActivityStats ? [
@@ -156,9 +157,9 @@ export function buildAdminDashboardUserKpiCards(
             'marketing-consent',
             'Marketing Opt-ins',
             'mark_email_read',
-            stats.marketingConsent,
+            marketingConsent,
             undefined,
-            userShareSubtitle(stats.marketingConsent, stats.total, 'Explicit consent')
+            userShareSubtitle(marketingConsent, stats.total, 'Consent only')
         ),
         ...(connectionStats ? [
             numberCard(
@@ -525,16 +526,17 @@ function userShareSubtitle(
     totalUsers: number,
     prefix?: string,
 ): string | undefined {
-    if (users === null) {
+    const normalizedUsers = safeCount(users);
+    if (normalizedUsers === null) {
         return 'Unavailable';
     }
 
-    const normalizedTotalUsers = finiteNumber(totalUsers);
+    const normalizedTotalUsers = safeCount(totalUsers);
     if (normalizedTotalUsers === null || normalizedTotalUsers <= 0) {
         return prefix;
     }
 
-    const share = Math.round((users / normalizedTotalUsers) * 100);
+    const share = Math.min(100, Math.round((normalizedUsers / normalizedTotalUsers) * 100));
     return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
 }
 
@@ -680,6 +682,12 @@ function normalizeNullableCount(value: unknown): number | null {
 
 function normalizeOptionalCount(value: unknown): number | null {
     return finiteNumber(value) === null ? null : normalizeCount(value);
+}
+
+function safeCount(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : null;
 }
 
 function finiteNumber(value: unknown): number | null {

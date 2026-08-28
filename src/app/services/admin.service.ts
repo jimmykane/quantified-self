@@ -151,7 +151,7 @@ export interface UserCountStats {
     canceled: number;
     cancelScheduled: number;
     onboardingCompleted: number;
-    marketingConsent: number;
+    marketingConsent: number | null;
     providers: Record<string, number>;
     events: EventCountStats;
     routes: RouteCountStats;
@@ -332,7 +332,7 @@ export class AdminService {
                     canceled: result.data.canceled ?? 0,
                     cancelScheduled: result.data.cancelScheduled ?? 0,
                     onboardingCompleted: result.data.onboardingCompleted ?? 0,
-                    marketingConsent: result.data.marketingConsent ?? 0,
+                    marketingConsent: this.mapNonNegativeInteger(result.data.marketingConsent),
                     providers: result.data.providers || {},
                     events,
                     routes,
@@ -375,6 +375,12 @@ export class AdminService {
             mapped.expireAt = stats.expireAt ?? null;
         }
         return mapped;
+    }
+
+    private mapNonNegativeInteger(value: unknown): number | null {
+        return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+            ? value
+            : null;
     }
 
     private mapConnectionCountStats(stats: Partial<ConnectionCountStats>): ConnectionCountStats {

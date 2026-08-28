@@ -147,8 +147,23 @@ describe('AdminService', () => {
 
         expect(stats.events).toEqual({ total: null });
         expect(stats.routes).toEqual({ total: null });
+        expect(stats.marketingConsent).toBeNull();
         expect(stats.authActivity).toBeUndefined();
         expect(stats.subscriptionCadence).toBeUndefined();
+    });
+
+    it('should mark malformed marketing consent counts as unavailable', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 2,
+                marketingConsent: -1,
+                providers: {},
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.marketingConsent).toBeNull();
     });
 
     it('should mark malformed subscription cadence counts as unavailable', async () => {

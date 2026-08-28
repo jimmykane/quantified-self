@@ -85,7 +85,7 @@ describe('admin-dashboard-summary helper', () => {
         expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
             label: 'Marketing Opt-ins',
             value: 35,
-            subtitle: 'Explicit consent · 29% of users',
+            subtitle: 'Consent only · 29% of users',
         });
         expect(cards.find(card => card.id === 'pro-users')?.subtitle).toBe('Monthly 18 · Yearly 11 · Unknown 1');
         expect(cards.find(card => card.id === 'basic-users')?.subtitle).toBe('Monthly 22 · Yearly 3');
@@ -131,6 +131,30 @@ describe('admin-dashboard-summary helper', () => {
         expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
         expect(cards.some(card => card.id.startsWith('active-'))).toBe(false);
+    });
+
+    it('caps the marketing consent share for non-atomic count snapshots', () => {
+        const stats: UserCountStats = {
+            total: 10,
+            pro: 0,
+            basic: 0,
+            free: 10,
+            monthlyPaid: 0,
+            yearlyPaid: 0,
+            everPaid: 0,
+            canceled: 0,
+            cancelScheduled: 0,
+            onboardingCompleted: 10,
+            marketingConsent: 11,
+            providers: {},
+            events: { total: 0 },
+            routes: { total: 0 },
+        };
+
+        const card = buildAdminDashboardUserKpiCards(stats, null, null)
+            .find(candidate => candidate.id === 'marketing-consent');
+
+        expect(card?.subtitle).toBe('Consent only · 100% of users');
     });
 
     it('omits the activity ratio when the 30-day denominator is zero', () => {
@@ -234,6 +258,10 @@ describe('admin-dashboard-summary helper', () => {
         );
 
         expect(cards.find(card => card.id === 'total-users')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
+            value: null,
+            subtitle: 'Unavailable',
+        });
         expect(cards.find(card => card.id === 'events')?.value).toBeNull();
         expect(cards.find(card => card.id === 'canceled')?.severity).toBeUndefined();
         expect(cards.find(card => card.id === 'scheduled-cancel')?.severity).toBe('warning');
