@@ -33,7 +33,7 @@ interface EnqueueRouteSyncQueueItemParams {
     providerRouteCreatedAt?: number | null;
     providerRouteModifiedAt?: number | null;
     manual: boolean;
-    firebaseUserID?: string | null;
+    firebaseUserID: string;
 }
 
 export interface EnqueueRouteSyncQueueItemResult {
@@ -65,18 +65,11 @@ async function resolveFirebaseUserIDForRouteSync(
     }
 
     const providerUserId = normalizeNonEmptyString(params.providerUserId) || 'unknown';
-    const tokenSnapshot = await admin.firestore()
-        .collectionGroup('tokens')
-        .where('userName', '==', providerUserId)
-        .where('serviceName', '==', params.sourceServiceName)
-        .limit(1)
-        .get();
-    const firebaseUserID = tokenSnapshot.docs[0]?.ref.parent.parent?.id || null;
-    if (!firebaseUserID) {
-        throw new ProviderQueueUserNotConnectedError(params.sourceServiceName, providerUserId, queueItemId);
-    }
-
-    return firebaseUserID;
+    throw new ProviderQueueUserNotConnectedError(
+        params.sourceServiceName,
+        providerUserId,
+        queueItemId,
+    );
 }
 
 async function deleteQueueDocAfterDeletionGuard(
@@ -145,8 +138,16 @@ export async function buildRouteSyncQueueItemId(
     sourceServiceName: ServiceNames,
     providerUserId: string,
     providerRouteId: string,
+    firebaseUserID: string,
 ): Promise<string> {
-    return generateIDFromParts(['routeSync', sourceServiceName, providerUserId, providerRouteId]);
+    const normalizedFirebaseUserID = normalizeNonEmptyString(firebaseUserID);
+    return generateIDFromParts([
+        'routeSync',
+        sourceServiceName,
+        providerUserId,
+        providerRouteId,
+        ...(normalizedFirebaseUserID ? [normalizedFirebaseUserID] : []),
+    ]);
 }
 
 export async function enqueueRouteSyncQueueItem(
@@ -158,7 +159,12 @@ export async function enqueueRouteSyncQueueItem(
         throw new Error('providerUserId and providerRouteId are required for route sync queue items.');
     }
 
-    const queueItemId = await buildRouteSyncQueueItemId(params.sourceServiceName, providerUserId, providerRouteId);
+    const queueItemId = await buildRouteSyncQueueItemId(
+        params.sourceServiceName,
+        providerUserId,
+        providerRouteId,
+        params.firebaseUserID,
+    );
     const firebaseUserID = await resolveFirebaseUserIDForRouteSync(params, queueItemId);
     const db = admin.firestore();
     const queueDocRef = db.collection(ROUTE_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);

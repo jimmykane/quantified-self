@@ -180,6 +180,37 @@ describe('queue dispatch marker guarded updates', () => {
         expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 
+    it('does not update a current queue item after its server-owned authority changes', async () => {
+        mockTransactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ revision: 'expected' }),
+        });
+        const queueItemDocument = {
+            parent: { id: 'routeDeliverySyncQueue' },
+            update: vi.fn(),
+        };
+        const isAuthorizedInTransaction = vi.fn().mockResolvedValue(false);
+
+        const result = await updateQueueItemIfUserActive({
+            queueItemDocument: queueItemDocument as any,
+            queueItemId: 'route-delivery-1',
+            userID: 'active-user',
+            phase: 'route_delivery_source_guard',
+            updateData: { dispatchedToCloudTask: 123 },
+            logPrefix: 'RouteDeliverySync',
+            actionDescription: 'provider operation claim',
+            isCurrent: queueItem => queueItem.revision === 'expected',
+            isAuthorizedInTransaction,
+        });
+
+        expect(result).toBe(QueueItemUserGuardedUpdateResult.NotCurrent);
+        expect(isAuthorizedInTransaction).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+        );
+        expect(mockTransactionUpdate).not.toHaveBeenCalled();
+    });
+
     it('reports a stale dispatch-marker write as not current rather than user deletion', async () => {
         mockTransactionGet.mockResolvedValueOnce({
             exists: true,

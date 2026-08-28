@@ -1,9 +1,9 @@
 # Sleep Sync Operations
 
-Sleep sync is controlled independently from activity sync. The v1 sleep pipeline supports
-Garmin, Suunto, and COROS. All three providers are enabled for every connected user. COROS
-daily responses now also feed the unified Health writer; no separate COROS Health scheduler or
-webhook is required.
+Sleep sync is controlled independently from activity sync. The shared Sleep & Health queue supports
+Garmin, Suunto, and COROS Sleep for every connected user. COROS daily responses also feed the unified
+Health writer. Suunto 24/7 Health uses the same queue and worker but has a separate scheduler, kill switch,
+and deny-all-when-empty UID allowlist; enabling or disabling it does not change Suunto Sleep.
 
 COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
@@ -32,6 +32,13 @@ The reference validator requires the stable health metric ID to match the refere
 Provider disconnect retains both normalized Sleep sessions and imported unified health history.
 Account deletion recursively removes both because they remain below `users/{uid}`.
 
+Suunto Activity, daily-statistics, and Recovery values are separate Health source records. They do not
+modify `sleepSessions`, workout events, FIT activity metrics, readiness, Training, or MCP output. Signed
+Suunto Activity/Recovery notifications bind to one active staged UID before compact ingress persistence and
+enqueue bounded refetches asynchronously; the raw notification samples are not persisted. Signed permanent
+rejects are acknowledged without retained ingress, and later non-retryable ingress is recursively deleted.
+See [Suunto 24/7 Health integration](suunto-integration.md).
+
 ## Provider Kill Switch
 
 Sleep provider disablement is source controlled in:
@@ -47,7 +54,12 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
 ```
 
 This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
-and COROS is unchanged.
+and COROS is unchanged. It also does not disable staged Suunto 24/7 Health.
+
+Suunto Health has an independent source-controlled switch in
+`functions/src/suunto/health-flags.ts`. When false, scheduled and webhook ingress stop creating
+Health work, and queued `suunto_health_poll` rows are acknowledged as provider-disabled without
+calling Suunto. Existing Sleep work continues.
 
 ## User Rollout
 
@@ -65,6 +77,11 @@ export const SLEEP_SYNC_ALLOWED_USER_IDS: readonly string[] = [];
 
 An empty allowlist means all users. To scope sleep sync again, add Firebase UIDs to this
 constant and deploy/restart the Functions runtime.
+
+Suunto Health rollout is separate in the server-only `functions/src/suunto/health-rollout.ts`. Its allowlist has the
+opposite empty-list rule: an empty list disables Health ingestion for everyone. Only explicitly
+listed UIDs are queried by `scheduleSuuntoHealthSync`, resolved for Health webhooks, offered the
+combined Sleep & Health history control, and allowed through the worker.
 
 ## What Disabled Means
 
@@ -112,6 +129,11 @@ queue row permanently stuck.
    Push sleep summaries are rejected in v1 because Garmin does not provide an authenticated
    push signature in the local docs; the worker only persists Garmin sleep data after pulling
    it from a Garmin-owned callback URL with the user's stored token.
+6. For staged Suunto Health, verify `scheduleSuuntoHealthSync` creates `suunto_health_poll`
+   rows for the rolling seven-day range, and verify signed Activity/Recovery notifications create
+   immediate local-day refetches. Confirm `healthSyncState/SuuntoApp` advances without changing
+   `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
+   source-record types.
 
 Garmin sleep ingestion stores average respiration from positive samples and derives the
 normalized maximum SpO₂ aggregate from valid recorded samples. MCP and other aggregate
@@ -157,6 +179,15 @@ connections whose token root and selected token both predate credential-generati
 remain eligible when both fields are absent; no credential migration or reconnect is required
 solely for that legacy pair. A missing root, one-sided generation, or generation mismatch still
 fails closed.
+
+## Staged Suunto Sleep and Health Backfill
+
+The existing Suunto history callable, cooldown, and public Function name remain stable. For users in the
+Suunto Health rollout, **Import Sleep & Health History** queues one Sleep item and one Health item for every
+non-overlapping range of at most 28 days for every connected Suunto account. The response reports the shared range count plus separate
+`sleepQueued` and `healthQueued` counts. Users outside the Health rollout retain the existing Sleep-only copy
+and behavior. A partial enqueue failure clears the cooldown claim so the user can retry immediately;
+deterministic queue identities make already accepted ranges duplicate-safe.
 
 ## Legacy COROS Sleep Sample Migration
 

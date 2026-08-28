@@ -848,6 +848,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Import Sleep & Health History');
     expect(serviceConnectionsSection?.content).toContain('available detailed HRV samples in the unified Health model');
+    expect(serviceConnectionsSection?.content).toContain('limited Suunto 24/7 Health rollout');
+    expect(serviceConnectionsSection?.content).toContain('Body Energy Balance');
+    expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
+    expect(serviceConnectionsSection?.content).toContain('raw webhook samples');
     expect(serviceConnectionsSection?.content).toContain('import the available last three months');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');

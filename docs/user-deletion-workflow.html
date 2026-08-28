@@ -261,7 +261,7 @@
                         <td><strong>Operational Queues</strong></td>
                         <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccounts</code></td>
-                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including route sync and route reparse jobs</td>
+                        <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including Sleep and Suunto <code>suunto_health_poll</code> work in <code>sleepSyncQueue</code>, route sync, and route reparse jobs</td>
                     </tr>
                     <tr>
                         <td><strong>Email Logs</strong></td>

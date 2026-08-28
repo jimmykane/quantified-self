@@ -59,6 +59,7 @@ export const FUNCTIONS_MANIFEST = {
     addSuuntoAppRoutesToQueue: { name: 'addSuuntoAppRoutesToQueue', region: 'europe-west2' },
     backfillRouteDeliverySyncRoute: { name: 'backfillRouteDeliverySyncRoute', region: 'europe-west2' },
     backfillSuuntoAppSleep: { name: 'backfillSuuntoAppSleep', region: 'europe-west2' },
+    getSuuntoHealthSyncAvailability: { name: 'getSuuntoHealthSyncAvailability', region: 'europe-west2' },
     importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
     sendRoutesToService: { name: 'sendRoutesToService', region: 'europe-west2' },
     importActivityToSuuntoApp: { name: 'importActivityToSuuntoApp', region: 'europe-west2' },

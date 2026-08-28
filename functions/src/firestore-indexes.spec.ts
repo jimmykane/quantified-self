@@ -44,6 +44,26 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('keeps unresolved route-original reservations queryable and out of TTL cleanup', () => {
+        const config = loadFirestoreIndexes();
+        const cleanupOverrides = config.fieldOverrides.filter(field => (
+            field.collectionGroup === 'routeOriginalFileCleanup'
+        ));
+
+        expect(cleanupOverrides).toEqual([]);
+    });
+
+    it('expires durable Suunto Health webhook ingress envelopes', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'suuntoHealthWebhookIngress',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
     it('keeps outbound activity echo fingerprints short-lived and unindexed', () => {
         const config = loadFirestoreIndexes();
 

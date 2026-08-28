@@ -6,8 +6,10 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   HEALTH_PROVIDERS,
   HEALTH_SYNC_STATUSES,
+  HealthProvider,
   HealthSyncStatus,
 } from '../../shared/health';
+import { isSuuntoHealthSyncUserAllowed } from './suunto/health-rollout';
 import {
   isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
@@ -60,12 +62,12 @@ export interface WahooOpaqueRefreshFailureOutcome {
   stale: boolean;
 }
 
-interface COROSHealthLifecycleProjectionClaim {
+interface HealthLifecycleProjectionClaim {
   connectionStateGeneration: string | null;
   transitionAtMs: number | null;
 }
 
-function corosHealthLifecycleProjectionMarker(
+function healthLifecycleProjectionMarker(
   connectionStateGeneration: string,
   transitionAtMs: number,
 ): Pick<
@@ -81,7 +83,7 @@ function corosHealthLifecycleProjectionMarker(
   };
 }
 
-function corosHealthLifecycleProjectionDeletes(): Record<string, FieldValue> {
+function healthLifecycleProjectionDeletes(): Record<string, FieldValue> {
   return {
     healthLifecycleProjectionPending: FieldValue.delete(),
     healthLifecycleProjectionConnectionGeneration: FieldValue.delete(),
@@ -89,9 +91,9 @@ function corosHealthLifecycleProjectionDeletes(): Record<string, FieldValue> {
   };
 }
 
-function getCOROSHealthLifecycleProjectionClaim(
+function getHealthLifecycleProjectionClaim(
   meta: ServiceConnectionMetaFields | null | undefined,
-): COROSHealthLifecycleProjectionClaim {
+): HealthLifecycleProjectionClaim {
   const generation = typeof meta?.healthLifecycleProjectionConnectionGeneration === 'string'
     ? meta.healthLifecycleProjectionConnectionGeneration.trim()
     : '';
@@ -106,16 +108,32 @@ function getCOROSHealthLifecycleProjectionClaim(
   };
 }
 
-async function clearCOROSHealthLifecycleProjectionMarker(
+function healthProviderForService(
   userID: string,
-  claim: COROSHealthLifecycleProjectionClaim,
+  serviceName: ServiceNames,
+): HealthProvider | null {
+  if (serviceName === ServiceNames.COROSAPI) return HEALTH_PROVIDERS.COROSAPI;
+  if (serviceName === ServiceNames.SuuntoApp && isSuuntoHealthSyncUserAllowed(userID)) {
+    return HEALTH_PROVIDERS.SuuntoApp;
+  }
+  return null;
+}
+
+function supportsHealthLifecycleProjection(serviceName: ServiceNames): boolean {
+  return serviceName === ServiceNames.COROSAPI || serviceName === ServiceNames.SuuntoApp;
+}
+
+async function clearHealthLifecycleProjectionMarker(
+  userID: string,
+  serviceName: ServiceNames,
+  claim: HealthLifecycleProjectionClaim,
   expectedLifecycle?: {
     connectionState: ServiceConnectionMetaFields['connectionState'];
     connectionStateGeneration: string;
   },
 ): Promise<boolean> {
   const db = admin.firestore();
-  const ref = serviceMetaRef(db, userID, ServiceNames.COROSAPI);
+  const ref = serviceMetaRef(db, userID, serviceName);
   return db.runTransaction(async transaction => {
     let deletionGuard;
     try {
@@ -123,7 +141,7 @@ async function clearCOROSHealthLifecycleProjectionMarker(
     } catch (error) {
       throw new UserDeletionGuardReadError(
         userID,
-        'coros_health_lifecycle_projection_clear',
+        'health_lifecycle_projection_clear',
         error,
       );
     }
@@ -133,7 +151,7 @@ async function clearCOROSHealthLifecycleProjectionMarker(
     const meta = snapshot.exists
       ? snapshot.data() as ServiceConnectionMetaFields | undefined
       : undefined;
-    const currentClaim = getCOROSHealthLifecycleProjectionClaim(meta);
+    const currentClaim = getHealthLifecycleProjectionClaim(meta);
     if (
       !meta
       || meta.healthLifecycleProjectionPending !== true
@@ -147,23 +165,25 @@ async function clearCOROSHealthLifecycleProjectionMarker(
       return false;
     }
 
-    transaction.set(ref, corosHealthLifecycleProjectionDeletes(), { merge: true });
+    transaction.set(ref, healthLifecycleProjectionDeletes(), { merge: true });
     return true;
   });
 }
 
 /**
- * Supersedes any pending COROS Health lifecycle projection after token-root
+ * Supersedes any pending provider Health lifecycle projection after token-root
  * deletion. Reading the missing root and clearing the marker in one
  * transaction prevents a delayed connected projection from restoring Ready;
  * a concurrent reconnect conflicts on either the root or metadata read.
  */
-export async function supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(
+export async function supersedePendingHealthLifecycleProjectionForTokenRootDelete(
   userID: string,
+  serviceName: ServiceNames,
 ): Promise<boolean> {
+  if (!supportsHealthLifecycleProjection(serviceName)) return false;
   const db = admin.firestore();
-  const metaRef = serviceMetaRef(db, userID, ServiceNames.COROSAPI);
-  const tokenRootRef = getServiceTokenRootDocumentRef(userID, ServiceNames.COROSAPI);
+  const metaRef = serviceMetaRef(db, userID, serviceName);
+  const tokenRootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   return db.runTransaction(async transaction => {
     let deletionGuard;
     try {
@@ -171,7 +191,7 @@ export async function supersedePendingCOROSHealthLifecycleProjectionForTokenRoot
     } catch (error) {
       throw new UserDeletionGuardReadError(
         userID,
-        'coros_health_lifecycle_projection_token_root_delete',
+        'health_lifecycle_projection_token_root_delete',
         error,
       );
     }
@@ -191,14 +211,22 @@ export async function supersedePendingCOROSHealthLifecycleProjectionForTokenRoot
       || meta.healthLifecycleProjectionConnectionGeneration !== undefined
       || meta.healthLifecycleProjectionTransitionAtMs !== undefined
     )) {
-      transaction.set(metaRef, corosHealthLifecycleProjectionDeletes(), { merge: true });
+      transaction.set(metaRef, healthLifecycleProjectionDeletes(), { merge: true });
     }
     return true;
   });
 }
 
-async function updateCOROSHealthLifecycleState(
+export function supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(
   userID: string,
+): Promise<boolean> {
+  return supersedePendingHealthLifecycleProjectionForTokenRootDelete(userID, ServiceNames.COROSAPI);
+}
+
+async function updateHealthLifecycleState(
+  userID: string,
+  serviceName: ServiceNames,
+  healthProvider: HealthProvider,
   status: HealthSyncStatus,
   lastErrorCode: string | null,
   transitionAtMs: number,
@@ -206,23 +234,23 @@ async function updateCOROSHealthLifecycleState(
   connectionStateGeneration: string,
 ): Promise<boolean> {
   try {
-    const written = await updateHealthSyncState(userID, HEALTH_PROVIDERS.COROSAPI, {
+    const written = await updateHealthSyncState(userID, healthProvider, {
       status,
       lastErrorCode,
     }, transitionAtMs, {
       requiredDocumentFieldValues: {
-        documentRef: serviceMetaRef(admin.firestore(), userID, ServiceNames.COROSAPI),
+        documentRef: serviceMetaRef(admin.firestore(), userID, serviceName),
         expectedFields: {
           connectionState,
           connectionStateGeneration,
-          ...corosHealthLifecycleProjectionMarker(connectionStateGeneration, transitionAtMs),
+          ...healthLifecycleProjectionMarker(connectionStateGeneration, transitionAtMs),
         },
       },
       authoritativeLifecycleTransition: true,
     });
     if (!written) return false;
 
-    const markerCleared = await clearCOROSHealthLifecycleProjectionMarker(userID, {
+    const markerCleared = await clearHealthLifecycleProjectionMarker(userID, serviceName, {
       connectionStateGeneration,
       transitionAtMs,
     }, {
@@ -234,21 +262,29 @@ async function updateCOROSHealthLifecycleState(
     // Service connection state remains authoritative and must not be rolled
     // back after a successful guarded transition. The generation-keyed marker
     // remains durable for the lifecycle repair scheduler.
-    logger.error(`[ServiceConnectionMeta] Failed to update COROS Health lifecycle state for user ${userID}.`, {
+    logger.error('[ServiceConnectionMeta] Failed to update provider Health lifecycle state.', {
+      serviceName,
       errorName: error instanceof Error ? error.name : 'UnknownError',
     });
     return false;
   }
 }
 
-/** Retries the exact derived COROS Health state left pending by a lifecycle transition. */
-export async function retryPendingCOROSHealthLifecycleProjection(
+/** Retries the exact derived provider Health state left pending by a lifecycle transition. */
+export async function retryPendingHealthLifecycleProjection(
   userID: string,
+  serviceName: ServiceNames,
 ): Promise<boolean> {
-  const meta = await getServiceConnectionMeta(userID, ServiceNames.COROSAPI);
+  if (!supportsHealthLifecycleProjection(serviceName)) return false;
+  const meta = await getServiceConnectionMeta(userID, serviceName);
   if (meta?.healthLifecycleProjectionPending !== true) return false;
 
-  const claim = getCOROSHealthLifecycleProjectionClaim(meta);
+  const claim = getHealthLifecycleProjectionClaim(meta);
+  const healthProvider = healthProviderForService(userID, serviceName);
+  if (!healthProvider) {
+    await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
+    return false;
+  }
   const currentGeneration = typeof meta.connectionStateGeneration === 'string'
     ? meta.connectionStateGeneration.trim()
     : '';
@@ -257,13 +293,15 @@ export async function retryPendingCOROSHealthLifecycleProjection(
     || claim.transitionAtMs === null
     || claim.connectionStateGeneration !== currentGeneration
   ) {
-    await clearCOROSHealthLifecycleProjectionMarker(userID, claim);
+    await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
     return false;
   }
 
   if (meta.connectionState === SERVICE_CONNECTION_STATES.Connected) {
-    return updateCOROSHealthLifecycleState(
+    return updateHealthLifecycleState(
       userID,
+      serviceName,
+      healthProvider,
       HEALTH_SYNC_STATUSES.Ready,
       null,
       claim.transitionAtMs,
@@ -272,8 +310,10 @@ export async function retryPendingCOROSHealthLifecycleProjection(
     );
   }
   if (meta.connectionState === SERVICE_CONNECTION_STATES.ReconnectRequired) {
-    return updateCOROSHealthLifecycleState(
+    return updateHealthLifecycleState(
       userID,
+      serviceName,
+      healthProvider,
       HEALTH_SYNC_STATUSES.ReconnectRequired,
       'provider_auth_reconnect_required',
       claim.transitionAtMs,
@@ -282,8 +322,12 @@ export async function retryPendingCOROSHealthLifecycleProjection(
     );
   }
 
-  await clearCOROSHealthLifecycleProjectionMarker(userID, claim);
+  await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
   return false;
+}
+
+export function retryPendingCOROSHealthLifecycleProjection(userID: string): Promise<boolean> {
+  return retryPendingHealthLifecycleProjection(userID, ServiceNames.COROSAPI);
 }
 
 /** The current refresh owner proves an opaque response still applies to this account. */
@@ -897,6 +941,7 @@ export async function markServiceReconnectRequired(
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
+  const healthProvider = healthProviderForService(userID, serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const guardsConnectionGeneration = Object.prototype.hasOwnProperty.call(
     options,
@@ -969,8 +1014,8 @@ export async function markServiceReconnectRequired(
     transaction.set(ref, {
       connectionState: SERVICE_CONNECTION_STATES.ReconnectRequired,
       connectionStateGeneration,
-      ...(serviceName === ServiceNames.COROSAPI
-        ? corosHealthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
+      ...(healthProvider
+        ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
         : {}),
       routeRestorePending: FieldValue.delete(),
       routeRestoreParkingClosed: FieldValue.delete(),
@@ -988,9 +1033,11 @@ export async function markServiceReconnectRequired(
     return false;
   }
 
-  if (serviceName === ServiceNames.COROSAPI) {
-    await updateCOROSHealthLifecycleState(
+  if (healthProvider) {
+    await updateHealthLifecycleState(
       userID,
+      serviceName,
+      healthProvider,
       HEALTH_SYNC_STATUSES.ReconnectRequired,
       'provider_auth_reconnect_required',
       nowMs,
@@ -1100,7 +1147,7 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
       connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
       connectionStateGeneration: input.generation,
       disconnectGeneration: input.generation,
-      ...corosHealthLifecycleProjectionDeletes(),
+      ...healthLifecycleProjectionDeletes(),
       routeRestorePending: FieldValue.delete(),
       routeRestoreParkingClosed: FieldValue.delete(),
       routeRestoreConnectionGeneration: FieldValue.delete(),
@@ -1149,13 +1196,14 @@ export async function markServiceConnected(
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+  const healthProvider = healthProviderForService(userID, serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const nowMs = Date.now();
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
     connectionStateGeneration,
-    ...(serviceName === ServiceNames.COROSAPI
-      ? corosHealthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
+    ...(healthProvider
+      ? healthLifecycleProjectionMarker(connectionStateGeneration, nowMs)
       : {}),
     disconnectGeneration: FieldValue.delete(),
     routeRestorePending: true,
@@ -1201,9 +1249,11 @@ export async function markServiceConnected(
     return didWrite;
   }
 
-  if (serviceName === ServiceNames.COROSAPI) {
-    await updateCOROSHealthLifecycleState(
+  if (healthProvider) {
+    await updateHealthLifecycleState(
       userID,
+      serviceName,
+      healthProvider,
       HEALTH_SYNC_STATUSES.Ready,
       null,
       nowMs,
@@ -1479,7 +1529,7 @@ export async function clearServiceConnectionState(
       connectionState: FieldValue.delete(),
       connectionStateGeneration,
       disconnectGeneration: FieldValue.delete(),
-      ...corosHealthLifecycleProjectionDeletes(),
+      ...healthLifecycleProjectionDeletes(),
       ...(options.restorePendingDisconnectActivitySyncRoutes ? {
         routeRestorePending: true,
         routeRestoreParkingClosed: false,

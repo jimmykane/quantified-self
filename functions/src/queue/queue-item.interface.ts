@@ -135,6 +135,10 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
   sourceRevisionKey: string;
   sourceProviderRouteId?: string;
   sourceProviderUserId?: string;
+  /** Suunto source lifecycle captured atomically at queue admission. */
+  sourceConnectionStateGeneration?: string;
+  sourceTokenCredentialGeneration?: string;
+  sourceRootOAuthCredentialGeneration?: string;
   manual: boolean;
   skippedReason?: string;
   successProcessedAt?: number;
@@ -156,6 +160,7 @@ export type SleepSyncQueueItemType =
   | 'garmin_ping'
   | 'suunto_webhook'
   | 'suunto_poll'
+  | 'suunto_health_poll'
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
@@ -167,6 +172,15 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   callbackURL?: string;
   rangeStartMs?: number;
   rangeEndMs?: number;
+  healthTrigger?: 'poll' | 'webhook' | 'backfill';
+  /** Webhook-only fence captured from the server-owned Suunto account binding. */
+  suuntoHealthTokenCredentialGeneration?: string | null;
+  /** Webhook-only fence captured from the current Suunto token-root OAuth revision. */
+  suuntoHealthRootOAuthCredentialGeneration?: string | null;
+  /** Webhook-only fence captured from the authoritative service connection metadata. */
+  suuntoHealthConnectionStateGeneration?: string | null;
+  /** Opaque binding/token/root/connection authority fence for signed Suunto Sleep payloads. */
+  suuntoWebhookAuthorityDigest?: string;
 }
 
 export interface QueueItemError {

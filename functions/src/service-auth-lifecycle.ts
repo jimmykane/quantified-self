@@ -30,6 +30,11 @@ import {
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 import {
+  doesSuuntoHealthWebhookBindingMatch,
+  getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding,
+} from './suunto/health-webhook-binding';
+import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
   getTokenCredentialSnapshot,
@@ -766,8 +771,37 @@ async function deleteCurrentTerminalAuthToken(
     const connectionStateGeneration = typeof serviceMetaSnapshot.data()?.connectionStateGeneration === 'string'
       ? `${serviceMetaSnapshot.data()?.connectionStateGeneration}`
       : null;
+    const currentTokenData = currentTokenSnapshot.data() as Record<string, unknown> | undefined;
+    const suuntoProviderUserId = serviceName === ServiceNames.SuuntoApp
+      ? `${currentTokenData?.userName || tokenSnapshot.id}`.trim()
+      : '';
+    const suuntoBindingRef = suuntoProviderUserId
+      ? getSuuntoHealthWebhookAccountBindingRef(
+        admin.firestore(),
+        suuntoProviderUserId,
+        userID,
+      )
+      : null;
+    const suuntoBindingSnapshot = suuntoBindingRef
+      ? await transaction.get(suuntoBindingRef)
+      : null;
 
     transaction.delete(tokenSnapshot.ref);
+    if (suuntoBindingRef
+      && doesSuuntoHealthWebhookBindingMatch(
+        parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data()),
+        userID,
+        suuntoProviderUserId,
+        typeof currentTokenData?.tokenCredentialGeneration === 'string'
+          ? currentTokenData.tokenCredentialGeneration
+          : null,
+      )) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // Keep this transaction-fenced document delete to avoid erasing a
+      // binding recreated concurrently by a reconnect.
+      transaction.delete(suuntoBindingRef);
+    }
     if (remainingTokenCount === 0 && !preserveTokenRootForOAuthFlow) {
       // Service token roots only store fields on the root document plus the `tokens` subcollection.
       // If no reconnect flow is in progress, deleting the final token doc leaves no descendant data to preserve.
@@ -847,6 +881,7 @@ async function cleanupTerminalAuthToken(
   tokenSnapshot: DocumentSnapshot,
   serviceName: ServiceNames,
   terminalAuthFailure: TerminalAuthFailureInput,
+  options: { opaqueTelemetry?: boolean } = {},
 ): Promise<{
   latestSnapshot: DocumentSnapshot | null;
   outcome: ServiceAuthCleanupOutcome;
@@ -900,7 +935,14 @@ async function cleanupTerminalAuthToken(
           tokenDataForOperationalCleanup,
         );
       } catch (operationalCleanupError) {
-        logger.error(`Failed to clean provider-keyed operational docs after terminal auth cleanup for ${serviceName} user ${userID}`, operationalCleanupError);
+        if (options.opaqueTelemetry) {
+          logger.error('[ServiceAuth] Failed to clean provider-keyed operational data after terminal auth cleanup.', {
+            serviceName,
+            errorName: operationalCleanupError instanceof Error ? operationalCleanupError.name : 'UnknownError',
+          });
+        } else {
+          logger.error(`Failed to clean provider-keyed operational docs after terminal auth cleanup for ${serviceName} user ${userID}`, operationalCleanupError);
+        }
       }
     }
 
@@ -929,7 +971,14 @@ async function cleanupTerminalAuthToken(
           outcome.connectionStateUpdate = 'reconnect_required';
         }
       } catch (metaError) {
-        logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
+        if (options.opaqueTelemetry) {
+          logger.error('[ServiceAuth] Failed to persist reconnect-required state after terminal auth cleanup.', {
+            serviceName,
+            errorName: metaError instanceof Error ? metaError.name : 'UnknownError',
+          });
+        } else {
+          logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
+        }
       }
     }
 
@@ -939,7 +988,14 @@ async function cleanupTerminalAuthToken(
       skippedBecauseTokenChanged: false,
     };
   } catch (error) {
-    logger.error(`Failed to delete terminal auth token ${tokenSnapshot.id} for ${serviceName} user ${userID}`, error);
+    if (options.opaqueTelemetry) {
+      logger.error('[ServiceAuth] Failed to delete terminal-auth provider token.', {
+        serviceName,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+    } else {
+      logger.error(`Failed to delete terminal auth token ${tokenSnapshot.id} for ${serviceName} user ${userID}`, error);
+    }
     outcome.localCleanupStatus = 'partial';
     try {
       if (!deleteResult && !tokenDataAtFailure) {
@@ -978,7 +1034,14 @@ async function cleanupTerminalAuthToken(
         outcome.connectionStateUpdate = 'reconnect_required';
       }
     } catch (metaError) {
-      logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
+      if (options.opaqueTelemetry) {
+        logger.error('[ServiceAuth] Failed to persist reconnect-required state after terminal-auth deletion failure.', {
+          serviceName,
+          errorName: metaError instanceof Error ? metaError.name : 'UnknownError',
+        });
+      } else {
+        logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${userID}`, metaError);
+      }
     }
     return {
       latestSnapshot: tokenSnapshot,
@@ -1354,20 +1417,45 @@ export async function handleTerminalServiceAuthFailure(
   serviceTokenData: Auth2ServiceTokenInterface,
   failure: RefreshFailureDetails,
   originalError: unknown,
+  options: { opaqueTelemetry?: boolean } = {},
 ): Promise<TerminalServiceAuthFailureResolution> {
   const firebaseUserID = doc.ref.parent.parent?.id || null;
   const providerUserId = resolveProviderUserId(serviceName, serviceTokenData, doc.id);
+  const lifecycleFailure: RefreshFailureDetails = options.opaqueTelemetry
+    ? {
+      ...failure,
+      providerErrorCode: failure.isInvalidGrant ? 'invalid_grant' : 'provider_auth_failed',
+      providerErrorMessage: 'Provider authentication failed.',
+      logMessage: 'Provider authentication failed.',
+    }
+    : failure;
+  const lifecycleOriginalError = options.opaqueTelemetry
+    ? new Error('Provider token refresh failed.')
+    : originalError;
 
   if (!firebaseUserID) {
     let localCleanupStatus: ServiceAuthCleanupOutcome['localCleanupStatus'] = 'completed';
     let deletedTokenCount = 1;
     try {
       await admin.firestore().recursiveDelete(doc.ref);
-      logger.warn(`Recursively deleted token ${doc.id} after terminal auth failure because the user root could not be resolved.`);
+      if (options.opaqueTelemetry) {
+        logger.warn('[ServiceAuth] Recursively deleted a terminal-auth token without a Firebase user root.', {
+          serviceName,
+        });
+      } else {
+        logger.warn(`Recursively deleted token ${doc.id} after terminal auth failure because the user root could not be resolved.`);
+      }
     } catch (deleteError) {
       localCleanupStatus = 'partial';
       deletedTokenCount = 0;
-      logger.error(`Could not delete token ${doc.id} after terminal auth failure`, deleteError);
+      if (options.opaqueTelemetry) {
+        logger.error('[ServiceAuth] Could not delete terminal-auth token without a Firebase user root.', {
+          serviceName,
+          errorName: deleteError instanceof Error ? deleteError.name : 'UnknownError',
+        });
+      } else {
+        logger.error(`Could not delete token ${doc.id} after terminal auth failure`, deleteError);
+      }
     }
 
     return {
@@ -1376,10 +1464,10 @@ export async function handleTerminalServiceAuthFailure(
         serviceName,
         null,
         providerUserId,
-        failure.statusCode,
-        failure.providerErrorCode,
-        failure.providerErrorMessage,
-        originalError,
+        lifecycleFailure.statusCode,
+        lifecycleFailure.providerErrorCode,
+        lifecycleFailure.providerErrorMessage,
+        lifecycleOriginalError,
         {
           reason: SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure,
           tokenCount: 1,
@@ -1403,23 +1491,37 @@ export async function handleTerminalServiceAuthFailure(
       serviceName,
       {
         providerUserId,
-        statusCode: failure.statusCode,
-        providerErrorCode: failure.providerErrorCode,
-        providerErrorMessage: failure.providerErrorMessage,
+        statusCode: lifecycleFailure.statusCode,
+        providerErrorCode: lifecycleFailure.providerErrorCode,
+        providerErrorMessage: lifecycleFailure.providerErrorMessage,
       },
+      options,
     );
     cleanupOutcome = cleanupResult.outcome;
     latestSnapshot = cleanupResult.latestSnapshot;
 
     if (cleanupResult.skippedBecauseTokenChanged && latestSnapshot) {
-      logger.info(`Skipping terminal auth cleanup for ${serviceName} token ${doc.id} because a newer token snapshot already exists.`);
+      if (options.opaqueTelemetry) {
+        logger.info('[ServiceAuth] Skipping terminal-auth cleanup because a newer token snapshot exists.', {
+          serviceName,
+        });
+      } else {
+        logger.info(`Skipping terminal auth cleanup for ${serviceName} token ${doc.id} because a newer token snapshot already exists.`);
+      }
       return {
         kind: 'retry_with_latest_snapshot',
         latestSnapshot,
       };
     }
   } catch (cleanupError) {
-    logger.error(`Failed to clean up ${serviceName} token ${doc.id} after terminal auth failure. Preserving any newer reconnect state and returning a terminal auth error.`, cleanupError);
+    if (options.opaqueTelemetry) {
+      logger.error('[ServiceAuth] Failed to clean up provider token after terminal auth failure.', {
+        serviceName,
+        errorName: cleanupError instanceof Error ? cleanupError.name : 'UnknownError',
+      });
+    } else {
+      logger.error(`Failed to clean up ${serviceName} token ${doc.id} after terminal auth failure. Preserving any newer reconnect state and returning a terminal auth error.`, cleanupError);
+    }
     cleanupOutcome = {
       reason: SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure,
       tokenCount: 1,
@@ -1435,8 +1537,8 @@ export async function handleTerminalServiceAuthFailure(
       const didMarkReconnectRequired = await markServiceReconnectRequired(
         firebaseUserID,
         serviceName,
-        failure.providerErrorCode,
-        failure.providerErrorMessage,
+        lifecycleFailure.providerErrorCode,
+        lifecycleFailure.providerErrorMessage,
         Date.now(),
         {
           providerUserId,
@@ -1452,7 +1554,14 @@ export async function handleTerminalServiceAuthFailure(
         cleanupOutcome.connectionStateUpdate = 'reconnect_required';
       }
     } catch (metaError) {
-      logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${firebaseUserID}`, metaError);
+      if (options.opaqueTelemetry) {
+        logger.error('[ServiceAuth] Failed to persist reconnect-required state after terminal auth failure.', {
+          serviceName,
+          errorName: metaError instanceof Error ? metaError.name : 'UnknownError',
+        });
+      } else {
+        logger.error(`Failed to persist reconnect-required state for ${serviceName} user ${firebaseUserID}`, metaError);
+      }
     }
   }
 
@@ -1460,23 +1569,31 @@ export async function handleTerminalServiceAuthFailure(
     serviceName,
     firebaseUserID,
     providerUserId,
-    failure.statusCode,
-    failure.providerErrorCode,
-    failure.providerErrorMessage,
-    originalError,
+    lifecycleFailure.statusCode,
+    lifecycleFailure.providerErrorCode,
+    lifecycleFailure.providerErrorMessage,
+    lifecycleOriginalError,
     cleanupOutcome,
   );
 
-  logger.warn('Service auth failure requires reconnect', {
-    serviceName,
-    firebaseUserID,
-    providerUserId,
-    statusCode: failure.statusCode,
-    providerErrorCode: failure.providerErrorCode,
-    providerErrorMessage: failure.providerErrorMessage,
-    dlqContext: terminalError.dlqContext,
-    cleanupOutcome,
-  });
+  logger.warn('Service auth failure requires reconnect', options.opaqueTelemetry
+    ? {
+      serviceName,
+      statusCode: lifecycleFailure.statusCode,
+      providerErrorCode: lifecycleFailure.providerErrorCode,
+      dlqContext: terminalError.dlqContext,
+      cleanupOutcome,
+    }
+    : {
+      serviceName,
+      firebaseUserID,
+      providerUserId,
+      statusCode: lifecycleFailure.statusCode,
+      providerErrorCode: lifecycleFailure.providerErrorCode,
+      providerErrorMessage: lifecycleFailure.providerErrorMessage,
+      dlqContext: terminalError.dlqContext,
+      cleanupOutcome,
+    });
 
   return {
     kind: 'terminal_error',

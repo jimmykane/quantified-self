@@ -2,8 +2,9 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
-import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES } from '../../../shared/health';
+import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES, HealthProvider } from '../../../shared/health';
 import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
+import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -11,7 +12,10 @@ import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { disableActivitySyncRoutesForDisconnectedService } from './route-cleanup';
 import { updateHealthSyncState } from '../health/writer';
 import { getServiceTokenRootDocumentRef } from '../service-token-store';
-import { supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete } from '../service-connection-meta';
+import {
+  supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
+  supersedePendingHealthLifecycleProjectionForTokenRootDelete,
+} from '../service-connection-meta';
 
 const REGION = 'europe-west2';
 
@@ -22,18 +26,24 @@ function deletedEventTimeMs(value: unknown): number {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : Date.now();
 }
 
-async function updateCOROSHealthStateAfterTokenRootDelete(
+async function updateHealthStateAfterTokenRootDelete(
   userID: string,
+  serviceName: ServiceNames,
+  healthProvider: HealthProvider,
   transitionAtMs: number,
 ): Promise<boolean> {
-  await supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(userID);
+  if (serviceName === ServiceNames.COROSAPI) {
+    await supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete(userID);
+  } else {
+    await supersedePendingHealthLifecycleProjectionForTokenRootDelete(userID, serviceName);
+  }
   const db = admin.firestore();
-  const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.COROSAPI);
-  return updateHealthSyncState(userID, HEALTH_PROVIDERS.COROSAPI, {
+  const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(serviceName);
+  return updateHealthSyncState(userID, healthProvider, {
     status: HEALTH_SYNC_STATUSES.Disconnected,
     lastErrorCode: null,
   }, transitionAtMs, {
-    requiredMissingDocumentRef: getServiceTokenRootDocumentRef(userID, ServiceNames.COROSAPI),
+    requiredMissingDocumentRef: getServiceTokenRootDocumentRef(userID, serviceName),
     authoritativeLifecycleTransition: true,
     updateWhenDocumentFieldEquals: {
       documentRef: serviceMetaRef,
@@ -57,13 +67,21 @@ export async function handleServiceTokenRootDisconnected(
     return;
   }
 
+  const healthProvider = serviceName === ServiceNames.COROSAPI
+    ? HEALTH_PROVIDERS.COROSAPI
+    : serviceName === ServiceNames.SuuntoApp && isSuuntoHealthSyncUserAllowed(userID)
+      ? HEALTH_PROVIDERS.SuuntoApp
+      : null;
+
   await Promise.all([
     disableActivitySyncRoutesForDisconnectedService(userID, serviceName, {
       requireServiceTokenRootMissing: true,
     }),
-    serviceName === ServiceNames.COROSAPI
-      ? updateCOROSHealthStateAfterTokenRootDelete(userID, transitionAtMs)
-      : Promise.resolve(true),
+    healthProvider
+      ? updateHealthStateAfterTokenRootDelete(userID, serviceName, healthProvider, transitionAtMs)
+      : serviceName === ServiceNames.SuuntoApp
+        ? supersedePendingHealthLifecycleProjectionForTokenRootDelete(userID, serviceName)
+        : Promise.resolve(true),
   ]);
 }
 
@@ -81,6 +99,7 @@ export const disableActivitySyncRoutesOnGarminTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDeleted({
   document: `${SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,

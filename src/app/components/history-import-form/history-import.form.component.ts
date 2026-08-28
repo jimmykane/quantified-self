@@ -44,6 +44,8 @@ export interface HistoryImportResult {
   failedBatches: number;
 }
 
+type SuuntoHealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
+
 
 @Component({
   selector: 'app-history-import-form',
@@ -81,6 +83,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
   public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
+  public suuntoHealthAvailabilityState = signal<SuuntoHealthAvailabilityState>('idle');
+  public isSleepAndHealthBackfill = false;
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -96,6 +100,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
+  private suuntoHealthAvailabilityRequestKey: string | null = null;
+  private suuntoHealthAvailabilityRequestGeneration = 0;
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -156,6 +162,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
+    this.syncSuuntoHealthRolloutAvailability();
+    this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
 
@@ -298,6 +306,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
     this.sleepSyncStateSubscription?.unsubscribe();
+    this.suuntoHealthAvailabilityRequestGeneration += 1;
   }
 
   get cooldownDays(): number {
@@ -402,12 +411,16 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   get canSubmitSleepBackfill(): boolean {
+    const suuntoAvailabilityResolved = this.serviceName !== ServiceNames.SuuntoApp
+      || this.suuntoHealthAvailabilityState() === 'available'
+      || this.suuntoHealthAvailabilityState() === 'unavailable';
     return this.isSleepBackfillVisible
       && !this.isSubmitting
       && !this.isLoadingParent
       && !this.isSleepBackfillSubmitting()
       && !this.isSleepBackfillCooldownActive
-      && !this.isMissingGarminSleepBackfillPermissions;
+      && !this.isMissingGarminSleepBackfillPermissions
+      && suuntoAvailabilityResolved;
   }
 
   async onSleepBackfill(event: Event) {
@@ -417,7 +430,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!provider || !this.canSubmitSleepBackfill) {
       return;
     }
-    const historyName = provider === SLEEP_PROVIDERS.COROSAPI
+    const historyName = this.isSleepAndHealthBackfill
       ? 'Sleep & Health history'
       : 'sleep history';
 
@@ -440,7 +453,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           ? await this.userService.backfillCorosSleepForCurrentUser()
           : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
-      this.snackBar.open(`${this.sleepBackfillProviderLabel} ${historyName} import started for ${result.queued} date ranges.`, undefined, {
+      const startedHistoryName = provider === SLEEP_PROVIDERS.SuuntoApp
+        && typeof result.healthQueued === 'number'
+        ? (result.healthQueued > 0 ? 'Sleep & Health history' : 'sleep history')
+        : historyName;
+      this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${result.queued} date ranges.`, undefined, {
         duration: 3000,
       });
     } catch (e: any) {
@@ -486,6 +503,55 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           this.changeDetectorRef.markForCheck();
         },
       });
+  }
+
+  private syncSuuntoHealthRolloutAvailability(): void {
+    const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
+      ? this.currentUserID
+      : null;
+    if (this.suuntoHealthAvailabilityRequestKey === key) {
+      return;
+    }
+
+    this.suuntoHealthAvailabilityRequestKey = key;
+    const requestGeneration = ++this.suuntoHealthAvailabilityRequestGeneration;
+    this.suuntoHealthAvailabilityState.set(key ? 'loading' : 'idle');
+    this.updateSleepAndHealthBackfillAvailability();
+
+    if (!key) {
+      return;
+    }
+
+    void this.userService.getSuuntoHealthSyncAvailabilityForCurrentUser()
+      .then((available) => {
+        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
+          || this.suuntoHealthAvailabilityRequestKey !== key) return;
+        this.suuntoHealthAvailabilityState.set(available ? 'available' : 'unavailable');
+        this.updateSleepAndHealthBackfillAvailability();
+        this.changeDetectorRef.markForCheck();
+      })
+      .catch((error) => {
+        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
+          || this.suuntoHealthAvailabilityRequestKey !== key) return;
+        this.logger.error(error);
+        this.suuntoHealthAvailabilityState.set('error');
+        this.updateSleepAndHealthBackfillAvailability();
+        this.changeDetectorRef.markForCheck();
+      });
+  }
+
+  public retrySuuntoHealthRolloutAvailability(): void {
+    if (this.serviceName !== ServiceNames.SuuntoApp
+      || !this.currentUserID
+      || this.suuntoHealthAvailabilityState() === 'loading') return;
+    this.suuntoHealthAvailabilityRequestKey = null;
+    this.syncSuuntoHealthRolloutAvailability();
+  }
+
+  private updateSleepAndHealthBackfillAvailability(): void {
+    this.isSleepAndHealthBackfill = this.serviceName === ServiceNames.COROSAPI
+      || (this.serviceName === ServiceNames.SuuntoApp
+        && this.suuntoHealthAvailabilityState() === 'available');
   }
 
   private coerceUserID(user: User | null | undefined): string | null {

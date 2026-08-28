@@ -214,6 +214,7 @@ import {
     backfillSuuntoAppSleep,
     chunkSleepBackfillRange,
 } from './backfill';
+import * as logger from 'firebase-functions/logger';
 
 function createRequest(overrides: Partial<{
     app: object | null;
@@ -285,6 +286,8 @@ describe('backfillSuuntoAppSleep', () => {
 
         expect(result).toEqual({
             queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: 0,
             startDate: SLEEP_BACKFILL_START_DATE_ISO,
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
@@ -321,6 +324,108 @@ describe('backfillSuuntoAppSleep', () => {
             nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
             lastError: null,
         }, nowMs);
+    });
+
+    it('queues paired Sleep and Health windows for the staged Suunto account', async () => {
+        seedSuuntoToken();
+        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }) as any);
+
+        expect(result).toMatchObject({
+            queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: expectedWindows.length,
+        });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length * 2);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            type: 'suunto_poll',
+            userID,
+            rangeStartMs: expectedWindows[0].startMs,
+            rangeEndMs: expectedWindows[0].endMs,
+        }));
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, {
+            type: 'suunto_health_poll',
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            userID,
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: expectedWindows[0].startMs,
+            rangeEndMs: expectedWindows[0].endMs,
+            healthTrigger: 'backfill',
+            dedupeKey: `health-backfill:${userID}:suunto-user-1:${expectedWindows[0].startMs}:${expectedWindows[0].endMs}`,
+        });
+    });
+
+    it('queues staged Health history for every connected Suunto account', async () => {
+        seedSuuntoToken();
+        hoisted.tokenDocs.push({
+            id: 'suunto-token-2',
+            data: () => ({}),
+        });
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => ({
+            userName: tokenDoc.id === 'suunto-token-2' ? 'suunto-user-2' : 'suunto-user-1',
+        }));
+        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }) as any);
+
+        expect(result).toMatchObject({
+            queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: expectedWindows.length * 2,
+        });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length * 3);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(3, expect.objectContaining({
+            type: 'suunto_health_poll',
+            providerUserId: 'suunto-user-2',
+            rangeStartMs: expectedWindows[0].startMs,
+            rangeEndMs: expectedWindows[0].endMs,
+        }));
+    });
+
+    it('keeps Sleep backfill while excluding an invalid account identifier from staged Health', async () => {
+        seedSuuntoToken();
+        hoisted.tokenDocs.push({ id: 'suunto-token-2', data: () => ({}) });
+        hoisted.getTokenData.mockImplementation(async (tokenDoc: { id: string }) => ({
+            userName: tokenDoc.id === 'suunto-token-2' ? 'a'.repeat(513) : 'suunto-user-1',
+        }));
+        const userID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }) as any);
+
+        expect(result).toMatchObject({
+            sleepQueued: expectedWindows.length,
+            healthQueued: expectedWindows.length,
+        });
+        expect(logger.warn).toHaveBeenCalledWith(
+            '[SleepBackfill] Skipping Suunto Health for a token with an invalid provider account identifier.',
+            { userID },
+        );
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not attach raw Suunto token identifiers or exception details to warning logs', async () => {
+        hoisted.tokenDocs.push(
+            { id: 'raw-provider-account-id', data: () => ({}) },
+            { id: 'usable-token', data: () => ({}) },
+        );
+        hoisted.getTokenData
+            .mockRejectedValueOnce(new Error('sensitive token read detail'))
+            .mockResolvedValueOnce({ userName: 'suunto-user-1' });
+
+        await backfillSuuntoAppSleep(createRequest() as any);
+
+        expect(logger.warn).toHaveBeenCalledWith(
+            '[SleepBackfill] Could not use a connected Suunto token.',
+            { userID: 'user-1', errorName: 'Error' },
+        );
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls))
+            .not.toContain('raw-provider-account-id');
+        expect(JSON.stringify(vi.mocked(logger.warn).mock.calls))
+            .not.toContain('sensitive token read detail');
     });
 
     it('rejects requests without App Check', async () => {

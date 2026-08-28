@@ -127,22 +127,20 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('allows direct legacy token documents but denies arbitrary nested descendants', async () => {
+        it('allows direct legacy Garmin token documents but denies arbitrary nested descendants', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
 
-            for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
-                const tokenRef = db.doc(`${collectionName}/${userId}/tokens/token-1`);
-                await assertSucceeds(tokenRef.set({ accessToken: 'legacy-client-token' }));
-                await assertSucceeds(tokenRef.update({ accessToken: 'updated-client-token' }));
+            await assertSucceeds(tokenRef.set({ accessToken: 'legacy-client-token' }));
+            await assertSucceeds(tokenRef.update({ accessToken: 'updated-client-token' }));
 
-                await assertFails(db.doc(
-                    `${collectionName}/${userId}/tokens/token-1/subscriptions/forged`,
-                ).set({
-                    status: 'active',
-                    role: 'pro',
-                    items: [{ plan: { interval: 'month' } }],
-                }));
-            }
+            await assertFails(db.doc(
+                `garminAPITokens/${userId}/tokens/token-1/subscriptions/forged`,
+            ).set({
+                status: 'active',
+                role: 'pro',
+                items: [{ plan: { interval: 'month' } }],
+            }));
         });
 
         it('denies client writes to backend-owned disconnect fields', async () => {
@@ -261,6 +259,46 @@ describe('Firestore Security Rules', () => {
                 await assertFails(rootRef.update({ state: 'new-oauth-state' }));
                 await assertFails(rootRef.delete());
             }
+        });
+    });
+
+    describe('Suunto server-owned OAuth state and token credentials', () => {
+        const userId = 'suunto_user';
+        const authClaims = { firebase: { sign_in_provider: 'password' } };
+
+        it('preserves owner reads while denying root, credential, and provider-identity mutations', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
+                    state: 'server-oauth-state',
+                    activeOAuthCredentialGeneration: 'server-generation',
+                });
+                await context.firestore().doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`).set({
+                    accessToken: 'stored-access-token',
+                    refreshToken: 'stored-refresh-token',
+                    serviceName: 'SuuntoApp',
+                    userName: 'suunto-account',
+                });
+            });
+            const db = testEnv.authenticatedContext(userId, authClaims).firestore();
+            const rootRef = db.doc(`suuntoAppAccessTokens/${userId}`);
+            const tokenRef = db.doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`);
+
+            await assertSucceeds(rootRef.get());
+            await assertSucceeds(tokenRef.get());
+            await assertFails(rootRef.set({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.update({ state: 'client-oauth-state' }));
+            await assertFails(rootRef.delete());
+            await assertFails(db.doc(`suuntoAppAccessTokens/${userId}/tokens/victim-account`).set({
+                accessToken: 'attacker-access-token',
+                refreshToken: 'attacker-refresh-token',
+                serviceName: 'SuuntoApp',
+                userName: 'victim-account',
+            }));
+            await assertFails(tokenRef.update({ userName: 'victim-account' }));
+            await assertFails(tokenRef.delete());
+            const cursorRef = db.doc('providerMaintenanceState/suuntoWebhookBindingVerification');
+            await assertFails(cursorRef.get());
+            await assertFails(cursorRef.set({ nextOffset: 0 }));
         });
     });
 
@@ -1407,6 +1445,20 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Rejected route original cleanup tasks', () => {
+            it('denies owners and other clients all direct access', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+                const ref = ownerDb.doc('routeOriginalFileCleanup/cleanup-1');
+
+                await assertFails(ref.get());
+                await assertFails(ref.set({ path: 'forged' }));
+                await assertFails(ref.delete());
+                await assertFails(otherDb.doc('routeOriginalFileCleanup/cleanup-1').get());
+                await assertFails(ownerDb.doc(`users/${userId}/routeOriginalFileCleanup/legacy-cleanup-1`).get());
+            });
+        });
+
         describe('MCP server-owned credential state', () => {
             it('should deny owners reading or writing MCP connection summaries directly', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -1897,6 +1949,51 @@ describe('Firestore Security Rules', () => {
                 processed: false,
                 provider: 'COROSAPI'
             }));
+        });
+
+        it('should deny all browser access to Suunto Health webhook ingress', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookIngress/ingress-1').set({
+                    processed: false,
+                    providerUserId: 'private-provider-account',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/ingress-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookIngress/forged').set({ processed: false }));
+        });
+
+        it('should deny all browser access to Suunto Health webhook account bindings', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('suuntoHealthWebhookAccountBindings/binding-1').set({
+                    schemaVersion: 1,
+                    userID: 'regular-user',
+                    tokenCredentialGeneration: 'credential-generation-1',
+                });
+            });
+
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/binding-1').get());
+            await assertFails(adminDb.doc('suuntoHealthWebhookAccountBindings/forged').set({
+                schemaVersion: 1,
+                userID: 'admin-user',
+            }));
+        });
+
+        it('forbids descendants beneath permanent Suunto binding leaf documents', async () => {
+            const ownerDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(ownerDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .get());
+            await assertFails(adminDb
+                .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
+                .set({ value: 1 }));
         });
     });
 
