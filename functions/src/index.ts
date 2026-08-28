@@ -121,8 +121,15 @@ export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
-export { scheduleSuuntoSleepSync, scheduleCOROSSleepSync } from './sleep/polling';
+export {
+  scheduleSuuntoSleepSync,
+  scheduleCOROSSleepSync,
+  scheduleSuuntoHealthSync,
+  scheduleSuuntoWebhookBindingVerification,
+} from './sleep/polling';
 export { backfillCorosAPISleep, backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
+export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
+export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
@@ -151,6 +158,10 @@ export { importActivityToCOROSAPI, getCOROSAPIWorkoutFileUploadStatus } from './
 export { cleanupEventFile } from './events/cleanup';
 export { uploadActivity } from './events/upload-activity';
 export { cleanupRouteFiles } from './routes/cleanup';
+export {
+  cleanupRejectedRouteOriginalFile,
+  redriveRejectedRouteOriginalCleanup,
+} from './routes/rejected-original-cleanup';
 export { uploadRoute } from './routes/upload-route';
 export { createToolComparisonEvent } from './events/create-tool-comparison-event';
 export { reprocessEvent } from './events/reprocess-event';

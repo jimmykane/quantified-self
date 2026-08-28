@@ -2,6 +2,10 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceAdapter } from './auth/factory';
+import {
+  getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding,
+} from './suunto/health-webhook-binding';
 
 export const OAUTH_FLOW_GENERATION_FIELD = 'oauthFlowGeneration';
 export const SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD = 'disconnectOperationGeneration';
@@ -125,6 +129,19 @@ export async function deleteLocalServiceToken(
 
     const tokenRootSnapshot = await transaction.get(userDocRef);
     const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
+    const suuntoProviderUserId = serviceName === ServiceNames.SuuntoApp
+      ? tokenID.trim()
+      : '';
+    const suuntoBindingRef = suuntoProviderUserId
+      ? getSuuntoHealthWebhookAccountBindingRef(
+        admin.firestore(),
+        suuntoProviderUserId,
+        userID,
+      )
+      : null;
+    const suuntoBindingSnapshot = suuntoBindingRef
+      ? await transaction.get(suuntoBindingRef)
+      : null;
     const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenID).length;
     const shouldPreserveOAuthFlowContext = options.preserveOAuthFlowContext !== false;
     const tokenRootPreservedForOAuthFlow = shouldPreserveOAuthFlowContext
@@ -132,6 +149,13 @@ export async function deleteLocalServiceToken(
       && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
     transaction.delete(tokenDocRef);
+    if (suuntoBindingRef
+      && parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data())?.userID === userID) {
+      // Suunto webhook bindings are permanent leaf documents: clients cannot
+      // create descendants and no Admin writer defines a child collection.
+      // The document-only delete remains atomic with the token lifecycle fence.
+      transaction.delete(suuntoBindingRef);
+    }
 
     if (remainingTokenCount === 0
       && !tokenRootPreservedForOAuthFlow

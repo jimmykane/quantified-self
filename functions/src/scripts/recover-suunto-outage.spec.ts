@@ -1015,6 +1015,7 @@ describe('recover-suunto-outage source backfill flow', () => {
         expect(hoisted.addToQueueForSuunto).toHaveBeenCalledWith({
             userName: 'suuntoUser',
             workoutID: 'workout-1',
+            firebaseUserID: 'u1',
         });
         expect(hoisted.enqueueRouteSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             sourceServiceName: ServiceNames.SuuntoApp,

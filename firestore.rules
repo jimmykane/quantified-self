@@ -358,6 +358,12 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Durable cleanup tasks may contain private Storage object paths and
+        // are owned exclusively by the rejected-route cleanup trigger.
+        match /routeOriginalFileCleanup/{cleanupID} {
+          allow read, write: if false;
+        }
+
         // MCP connection summaries and all credential state are server-owned.
         // The app uses authenticated, App-Check-protected callables to list
         // and revoke connections without exposing token material.
@@ -379,6 +385,12 @@ service cloud.firestore {
     }
 
     match /mcpOAuthRefreshTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Pre-upload route-original reservations must survive account-subtree
+    // deletion until their exact Storage object has been reconciled.
+    match /routeOriginalFileCleanup/{cleanupID} {
       allow read, write: if false;
     }
 
@@ -413,23 +425,15 @@ service cloud.firestore {
 
     match /suuntoAppAccessTokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
-      allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetBackendFields();
-      allow update: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchBackendFields();
-      allow delete: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect();
+      // Suunto OAuth state, credentials, stable provider identity, and
+      // lifecycle fences are server-owned. In particular, an owner must not
+      // be able to create a token child that a backend scheduler could promote
+      // into webhook delivery authority. Parent deletion is also denied
+      // because Firestore would retain its token subcollection as an orphan.
+      allow create, update, delete: if false;
        match /tokens/{document=**} {
           allow read: if isNonAnonymousOwner(userID);
-          allow write: if isNonAnonymousOwner(userID)
-            && (
-              !exists(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID))
-              || (
-                get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data.disconnectState != 'disconnect_pending'
-                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/suuntoAppAccessTokens/$(userID)).data)
-              )
-            );
+          allow write: if false;
        }
     }
 
@@ -510,6 +514,21 @@ service cloud.firestore {
     match /sleepSyncQueue/{queueItemID} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    // Short-lived signed Suunto Health webhook envelopes are backend-only.
+    match /suuntoHealthWebhookIngress/{ingressID} {
+      allow read, write: if false;
+    }
+
+    // One-way-keyed reverse index used only by signed Suunto Health ingress.
+    match /suuntoHealthWebhookAccountBindings/{bindingID} {
+      allow read, write: if false;
+    }
+
+    // Bounded provider-maintenance cursors are backend-only operational state.
+    match /providerMaintenanceState/{document=**} {
+      allow read, write: if false;
     }
 
 

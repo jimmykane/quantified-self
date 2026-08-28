@@ -218,6 +218,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)

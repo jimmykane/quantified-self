@@ -190,7 +190,7 @@ describe('AdminQueueMonitorComponent', () => {
         sleepSyncFixture.detectChanges();
 
         expect(sleepSyncComponent.queueView).toBe('sleep-sync');
-        expect(sleepSyncComponent.pageTitle).toContain('Sleep Sync Queue');
+        expect(sleepSyncComponent.pageTitle).toContain('Sleep & Health Sync Queue');
     });
 
     it('should configure route reparse queue view from route data', () => {
@@ -211,7 +211,7 @@ describe('AdminQueueMonitorComponent', () => {
         expect(text).toContain('Activity Sync Queue');
         expect(text).toContain('Route Delivery Sync Queue');
         expect(text).toContain('Route Sync Queue');
-        expect(text).toContain('Sleep Sync Queue');
+        expect(text).toContain('Sleep & Health Sync Queue');
         expect(text).toContain('Event Reparse Queue');
         expect(text).toContain('Route Reparse Queue');
         expect(text).toContain('Derived Metrics Queue');

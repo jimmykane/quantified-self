@@ -3,7 +3,10 @@ import * as logger from 'firebase-functions/logger';
 import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
-import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../../shared/route-delivery-sync-routes';
+import {
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS,
+    ROUTE_DELIVERY_SYNC_ROUTES,
+} from '../../../shared/route-delivery-sync-routes';
 import {
     isDisconnectPendingServiceConnection,
     isReconnectRequiredServiceConnection,
@@ -63,6 +66,13 @@ import {
     DisabledSyncRouteTransitionResult,
     finalizeDisabledSyncRouteIfCurrent,
 } from '../queue/sync-route-eligibility';
+import {
+    parseRouteDeliverySourceLifecycleFence,
+    recheckCurrentSuuntoRouteDeliverySourceLifecycle,
+    recheckSuuntoRouteDeliverySourceLifecycleInTransaction,
+    RouteDeliverySourceLifecycleFence,
+    RouteDeliverySourceLifecycleResult,
+} from './source-lifecycle';
 
 interface ErrorLike {
     code?: unknown;
@@ -281,7 +291,61 @@ function isSameRouteDeliverySyncQueueItem(
         && currentQueueItem.routeId === queueItem.routeId
         && currentQueueItem.sourceRevisionKey === queueItem.sourceRevisionKey
         && currentQueueItem.sourceServiceName === queueItem.sourceServiceName
-        && currentQueueItem.destinationServiceName === queueItem.destinationServiceName;
+        && currentQueueItem.destinationServiceName === queueItem.destinationServiceName
+        && normalizeNonEmptyString(currentQueueItem.sourceConnectionStateGeneration)
+            === normalizeNonEmptyString(queueItem.sourceConnectionStateGeneration)
+        && normalizeNonEmptyString(currentQueueItem.sourceTokenCredentialGeneration)
+            === normalizeNonEmptyString(queueItem.sourceTokenCredentialGeneration)
+        && normalizeNonEmptyString(currentQueueItem.sourceRootOAuthCredentialGeneration)
+            === normalizeNonEmptyString(queueItem.sourceRootOAuthCredentialGeneration);
+}
+
+function getRouteDeliverySourceLifecycleFence(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+): RouteDeliverySourceLifecycleFence | null | 'invalid' {
+    const lifecycleValues = [
+        queueItem.sourceConnectionStateGeneration,
+        queueItem.sourceTokenCredentialGeneration,
+        queueItem.sourceRootOAuthCredentialGeneration,
+    ];
+    if (lifecycleValues.every(value => value === undefined || value === null)) {
+        return null;
+    }
+    return parseRouteDeliverySourceLifecycleFence({
+        connectionStateGeneration: queueItem.sourceConnectionStateGeneration,
+        tokenCredentialGeneration: queueItem.sourceTokenCredentialGeneration,
+        rootOAuthCredentialGeneration: queueItem.sourceRootOAuthCredentialGeneration,
+    }) || 'invalid';
+}
+
+const SUUNTO_SOURCE_ROUTE_IDS = new Set([
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_COROSAPI,
+]);
+
+function hasSuuntoRouteDeliverySource(queueItem: RouteDeliverySyncQueueItemInterface): boolean {
+    return SUUNTO_SOURCE_ROUTE_IDS.has(queueItem.routeId)
+        && ROUTE_DELIVERY_SYNC_ROUTES[queueItem.routeId]?.sourceServiceName === queueItem.sourceServiceName;
+}
+
+async function recheckRouteDeliverySourceLifecycle(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+): Promise<RouteDeliverySourceLifecycleResult | null> {
+    const fence = getRouteDeliverySourceLifecycleFence(queueItem);
+    const sourceProviderUserId = normalizeNonEmptyString(queueItem.sourceProviderUserId);
+    if (fence === null) return null;
+    if (fence === 'invalid'
+        || !hasSuuntoRouteDeliverySource(queueItem)
+        || !sourceProviderUserId) {
+        return { status: 'inactive' };
+    }
+    return recheckCurrentSuuntoRouteDeliverySourceLifecycle(
+        admin.firestore(),
+        queueItem.userID,
+        sourceProviderUserId,
+        fence,
+    );
 }
 
 function isSameRouteDeliveryProviderState(
@@ -448,6 +512,8 @@ async function markDestinationProviderOperationInFlight(
         throw new Error('Destination provider operation cannot start without a queue document reference.');
     }
     const expectedQueueItem = { ...queueItem };
+    const sourceLifecycleFence = getRouteDeliverySourceLifecycleFence(expectedQueueItem);
+    const sourceProviderUserId = normalizeNonEmptyString(expectedQueueItem.sourceProviderUserId);
     const providerOperationStartedAt = Date.now();
     const updateResult = await updateQueueItemIfUserActive({
         queueItemDocument: queueItem.ref,
@@ -461,6 +527,22 @@ async function markDestinationProviderOperationInFlight(
         logPrefix: 'RouteDeliverySync',
         actionDescription: 'destination provider in-flight marker',
         isCurrent: currentQueueItem => isSameRouteDeliveryProviderState(currentQueueItem, expectedQueueItem),
+        ...(sourceLifecycleFence && sourceLifecycleFence !== 'invalid'
+            && hasSuuntoRouteDeliverySource(expectedQueueItem)
+            && sourceProviderUserId
+            ? {
+                isAuthorizedInTransaction: async (
+                    db: admin.firestore.Firestore,
+                    transaction: admin.firestore.Transaction,
+                ) => (await recheckSuuntoRouteDeliverySourceLifecycleInTransaction(
+                    db,
+                    transaction,
+                    expectedQueueItem.userID,
+                    sourceProviderUserId,
+                    sourceLifecycleFence,
+                )).status === 'active',
+            }
+            : {}),
     });
     if (updateResult !== QueueItemUserGuardedUpdateResult.Updated) {
         return false;
@@ -965,6 +1047,21 @@ export async function processRouteDeliverySyncQueueItem(
             );
         }
 
+        const sourceLifecycle = await recheckRouteDeliverySourceLifecycle(queueItem);
+        if (sourceLifecycle?.status === 'disconnect_pending') {
+            return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                queueItem.sourceServiceName,
+            );
+        }
+        if (sourceLifecycle?.status === 'inactive') {
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'source_connection_changed',
+                resultStatus: 'skipped',
+            });
+        }
+
         if (await isWahooReconnectRequiredForRouteDelivery(
             queueItem.userID,
             queueItem.destinationServiceName,
@@ -1101,6 +1198,27 @@ export async function processRouteDeliverySyncQueueItem(
         const operationMarked = await markDestinationProviderOperationInFlight(queueItem);
         if (!operationMarked) {
             return QueueResult.Processed;
+        }
+
+        const sourceLifecycleBeforeSend = await recheckRouteDeliverySourceLifecycle(queueItem);
+        if (sourceLifecycleBeforeSend?.status === 'disconnect_pending') {
+            return deferRouteDeliverySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                queueItem.sourceServiceName,
+                true,
+            );
+        }
+        if (sourceLifecycleBeforeSend?.status === 'inactive') {
+            return markRouteDeliverySyncQueueItemProcessedIfCurrent(
+                queueItem,
+                {
+                    skippedReason: 'source_connection_changed',
+                    resultStatus: 'skipped',
+                },
+                'route_delivery_sync_source_lifecycle_transition',
+                'source lifecycle skip',
+            );
         }
 
         providerSendInProgress = true;

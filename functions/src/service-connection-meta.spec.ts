@@ -117,6 +117,7 @@ import {
   mirrorServiceDisconnectPendingToUserMeta,
   recordWahooOpaqueRefreshFailure,
   beginPendingDisconnectQueueReleaseRepair,
+  retryPendingHealthLifecycleProjection,
   retryPendingCOROSHealthLifecycleProjection,
   supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
   retryPendingDisconnectQueueRelease,
@@ -299,6 +300,66 @@ describe('service-connection-meta', () => {
     expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
+  it('mirrors staged Suunto connection and terminal-auth transitions to Health state', async () => {
+    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+
+    await expect(markServiceConnected(stagedUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      stagedUserID,
+      'SuuntoApp',
+      { status: 'ready', lastErrorCode: null },
+      expect.any(Number),
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+
+    hoisted.updateHealthSyncState.mockRejectedValueOnce(new Error('temporary health write failure'));
+    await expect(markServiceReconnectRequired(
+      stagedUserID,
+      ServiceNames.SuuntoApp,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+    expect(hoisted.metaData.healthLifecycleProjectionPending).toBe(true);
+
+    await expect(retryPendingHealthLifecycleProjection(
+      stagedUserID,
+      ServiceNames.SuuntoApp,
+    )).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenLastCalledWith(
+      stagedUserID,
+      'SuuntoApp',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+  });
+
+  it('clears a pending Suunto Health projection when the user leaves the rollout', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'connected-generation',
+      healthLifecycleProjectionPending: true,
+      healthLifecycleProjectionConnectionGeneration: 'connected-generation',
+      healthLifecycleProjectionTransitionAtMs: 123,
+    };
+
+    await expect(retryPendingHealthLifecycleProjection(
+      'user-1',
+      ServiceNames.SuuntoApp,
+    )).resolves.toBe(false);
+
+    expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionConnectionGeneration');
+    expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionTransitionAtMs');
+  });
+
   it('durably repairs a failed COROS Health lifecycle projection for the exact generation', async () => {
     hoisted.updateHealthSyncState.mockRejectedValueOnce(new Error('temporary health write failure'));
 
@@ -317,8 +378,8 @@ describe('service-connection-meta', () => {
       healthLifecycleProjectionTransitionAtMs: 123,
     }));
     expect(logger.error).toHaveBeenCalledWith(
-      '[ServiceConnectionMeta] Failed to update COROS Health lifecycle state for user user-1.',
-      { errorName: 'Error' },
+      '[ServiceConnectionMeta] Failed to update provider Health lifecycle state.',
+      { serviceName: ServiceNames.COROSAPI, errorName: 'Error' },
     );
 
     await expect(retryPendingCOROSHealthLifecycleProjection('user-1')).resolves.toBe(true);

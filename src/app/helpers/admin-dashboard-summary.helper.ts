@@ -278,7 +278,7 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
         }),
         buildQueueRow({
             id: 'sleep-sync',
-            label: 'Sleep Sync',
+            label: 'Sleep & Health Sync',
             icon: 'hotel',
             route: '/admin/queues/sleep-sync',
             pendingDb: stats.sleepSync?.pending,

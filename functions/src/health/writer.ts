@@ -238,6 +238,17 @@ function digestPayload(input: HealthSourceRecordInput): unknown {
     });
 }
 
+function storedHealthRevisionWatermark(sourceRecord: HealthSourceRecord): number {
+    const revisionOrder = sourceRecord.source.revision.order;
+    const watermark = sourceRecord.source.maxObservedRevisionOrder ?? revisionOrder;
+    if (!Number.isSafeInteger(watermark) || watermark < revisionOrder) {
+        throw new HealthWriteValidationError(
+            'Stored health source record violates the revision-watermark invariant.',
+        );
+    }
+    return watermark;
+}
+
 export async function buildHealthSourceRecordWrite(
     userID: string,
     value: unknown,
@@ -355,6 +366,7 @@ export async function buildHealthSourceRecordWrite(
             sourceRecordType: input.sourceRecordType,
             sourceRecordKey: opaqueSourceRecordKey,
             revision,
+            maxObservedRevisionOrder: revision.order,
             receivedAtMs: input.receivedAtMs,
         },
         calendarDate: input.calendarDate,
@@ -521,8 +533,11 @@ export async function replaceHealthSourceRecord(
 
         const snapshot = await transaction.get(sourceRecordRef);
         const existingSourceRecord = snapshot.exists ? snapshot.data() as HealthSourceRecord : null;
+        const existingRevisionWatermark = existingSourceRecord
+            ? storedHealthRevisionWatermark(existingSourceRecord)
+            : null;
         if (existingSourceRecord
-            && existingSourceRecord.source.revision.order > built.sourceRecord.source.revision.order) {
+            && existingRevisionWatermark! > built.sourceRecord.source.revision.order) {
             return {
                 sourceRecordId: existingSourceRecord.id,
                 status: 'stale' as const,
@@ -531,20 +546,35 @@ export async function replaceHealthSourceRecord(
                 chunksDeleted: 0,
             };
         }
-        if (existingSourceRecord
-            && existingSourceRecord.source.revision.order === built.sourceRecord.source.revision.order) {
-            const unchanged = existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
-                && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
-            if (!unchanged) {
-                throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
+        const unchanged = existingSourceRecord
+            && existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
+            && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
+        if (unchanged) {
+            const sourceRecord = existingRevisionWatermark! < built.sourceRecord.source.revision.order
+                ? {
+                    ...existingSourceRecord,
+                    source: {
+                        ...existingSourceRecord.source,
+                        maxObservedRevisionOrder: built.sourceRecord.source.revision.order,
+                    },
+                }
+                : existingSourceRecord;
+            if (sourceRecord !== existingSourceRecord) {
+                transaction.update(sourceRecordRef, {
+                    'source.maxObservedRevisionOrder': built.sourceRecord.source.revision.order,
+                });
             }
             return {
                 sourceRecordId: existingSourceRecord.id,
                 status: 'unchanged' as const,
-                sourceRecord: existingSourceRecord,
+                sourceRecord,
                 chunksWritten: 0,
                 chunksDeleted: 0,
             };
+        }
+        if (existingSourceRecord
+            && existingRevisionWatermark === built.sourceRecord.source.revision.order) {
+            throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
         }
 
         const existingChunkIds = existingSourceRecord?.sampleChunkIds || [];

@@ -18,6 +18,8 @@ import {
   listSuuntoRoutes,
 } from './routes';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { resolveActiveSuuntoWebhookUserIDs } from './health-webhook-binding-lifecycle';
+import { SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH } from './health';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -131,24 +133,54 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
   const { userName, routeId, routeName, routeCreatedAt, routeModifiedAt } = getJsonRouteNotification(req.body);
   if (!userName || !routeId) {
     logger.warn('Suunto route webhook missing username or route.id');
-    res.status(400).send();
+    res.status(200).send();
+    return;
+  }
+  if (userName.length > SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+    logger.warn('Dropping signed Suunto route webhook with invalid provider account identifier.');
+    res.status(200).send();
     return;
   }
 
   try {
-    await enqueueRouteSyncQueueItem({
-      sourceServiceName: ServiceNames.SuuntoApp,
-      providerUserId: userName,
-      providerRouteId: routeId,
-      providerRouteName: routeName,
-      providerRouteCreatedAt: routeCreatedAt,
-      providerRouteModifiedAt: routeModifiedAt,
-      manual: false,
-    });
-    logger.info('Suunto route webhook routed', {
-      notificationType: 'ROUTE_UPDATED',
+    const firebaseUserIDs = await resolveActiveSuuntoWebhookUserIDs(
+      admin.firestore(),
       userName,
-      routeId,
+    );
+    if (firebaseUserIDs.length === 0) {
+      logger.info('Skipping Suunto route webhook without an active bound connection.');
+      res.status(200).send();
+      return;
+    }
+    const queueResults = await Promise.allSettled(firebaseUserIDs.map(async firebaseUserID => {
+      try {
+        await enqueueRouteSyncQueueItem({
+          sourceServiceName: ServiceNames.SuuntoApp,
+          providerUserId: userName,
+          providerRouteId: routeId,
+          providerRouteName: routeName,
+          providerRouteCreatedAt: routeCreatedAt,
+          providerRouteModifiedAt: routeModifiedAt,
+          manual: false,
+          firebaseUserID,
+        });
+        return 'queued' as const;
+      } catch (error) {
+        if (isProviderQueueSkippedWithoutRetryError(error)) return 'skipped' as const;
+        throw error;
+      }
+    }));
+    const failedResult = queueResults.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failedResult) throw failedResult.reason;
+    const queuedConnectionCount = queueResults.filter(
+      result => result.status === 'fulfilled' && result.value === 'queued',
+    ).length;
+    logger.info('Fanned out signed Suunto route webhook.', {
+      notificationType: 'ROUTE_UPDATED',
+      queuedConnectionCount,
+      skippedConnectionCount: queueResults.length - queuedConnectionCount,
     });
     res.status(200).send();
   } catch (error) {

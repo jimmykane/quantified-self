@@ -69,6 +69,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   requestAndSetWahooAPIAccessToken: WAHOO,
   restoreUserClaims: ['STRIPE_SECRET_KEY'],
   retryPendingServiceDisconnects: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],
+  scheduleSuuntoWebhookBindingVerification: SUUNTO,
   sendRoutesToService: [...COROS, ...SUUNTO_API, ...GARMIN, ...WAHOO],
   wahooAPIWebhook: ['WAHOOAPI_WEBHOOK_TOKEN'],
 };

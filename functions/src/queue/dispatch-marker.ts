@@ -34,6 +34,11 @@ export interface UpdateQueueItemIfUserActiveParams {
      * replaced by a newer provider revision between enqueue and marker write.
      */
     isCurrent?: (queueItem: Record<string, unknown>) => boolean;
+    /** Additional server-owned authority check evaluated in the update transaction. */
+    isAuthorizedInTransaction?: (
+        db: admin.firestore.Firestore,
+        transaction: admin.firestore.Transaction,
+    ) => Promise<boolean>;
 }
 
 export interface MarkQueueItemDispatchedIfUserActiveParams {
@@ -145,6 +150,14 @@ export async function updateQueueItemIfUserActive(
                 );
                 return QueueItemUserGuardedUpdateResult.NotCurrent;
             }
+        }
+
+        if (params.isAuthorizedInTransaction
+            && !(await params.isAuthorizedInTransaction(db, transaction))) {
+            logger.info(
+                `[${params.logPrefix}] Skipping ${params.actionDescription} for queue item ${params.queueItemId} because its authority changed.`,
+            );
+            return QueueItemUserGuardedUpdateResult.NotCurrent;
         }
 
         await Promise.resolve(transaction.update(params.queueItemDocument, params.updateData));

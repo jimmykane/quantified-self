@@ -1131,6 +1131,11 @@ async function runActivityBackfillForToken(
     options: ScriptOptions,
     summary: SuuntoOutageRecoverySummary,
 ): Promise<void> {
+    const firebaseUserID = normalizeString(token.tokenSnapshot.ref.parent.parent?.id);
+    if (!firebaseUserID) {
+        incrementSkipped(summary, 'source_backfill_token_missing_uid');
+        return;
+    }
     const serviceToken = options.execute
         ? await getTokenData(token.tokenSnapshot, ServiceNames.SuuntoApp, false) as any
         : buildCurrentSuuntoTokenForDryRun(token.tokenSnapshot);
@@ -1161,6 +1166,7 @@ async function runActivityBackfillForToken(
             await addToQueueForSuunto({
                 userName,
                 workoutID,
+                firebaseUserID,
             });
         }
         summary.activityBackfill.workoutsQueued += 1;

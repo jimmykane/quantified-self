@@ -12,6 +12,7 @@ const hasProAccessMock = vi.fn();
 const enforceAppCheckMock = vi.fn();
 const routeImportMetaSetMock = vi.fn();
 const deleteFieldSentinel = { __op: 'delete' };
+let resolvedWebhookUserIDs = ['firebase-user-1'];
 
 vi.mock('./webhook-signature', () => ({
   verifySuuntoWebhookSignature: (...args: any[]) => verifySuuntoWebhookSignatureMock(...args),
@@ -19,6 +20,10 @@ vi.mock('./webhook-signature', () => ({
 
 vi.mock('../routes/route-sync-queue', () => ({
   enqueueRouteSyncQueueItem: (...args: any[]) => enqueueRouteSyncQueueItemMock(...args),
+}));
+
+vi.mock('./health-webhook-binding-lifecycle', () => ({
+  resolveActiveSuuntoWebhookUserIDs: vi.fn(async () => resolvedWebhookUserIDs),
 }));
 
 vi.mock('./routes', () => ({
@@ -94,6 +99,7 @@ describe('Suunto route sync', () => {
     hasProAccessMock.mockResolvedValue(true);
     enforceAppCheckMock.mockReturnValue(undefined);
     verifySuuntoWebhookSignatureMock.mockReturnValue(true);
+    resolvedWebhookUserIDs = ['firebase-user-1'];
     createSuuntoRouteUploadContextMock.mockResolvedValue({
       tokenRefs: [
         { id: 'token-1', ref: {}, providerUserId: 'suunto-user-1', sourceKey: 'suunto-user-1:1700000000000' },
@@ -342,6 +348,7 @@ describe('Suunto route sync', () => {
       providerRouteId: 'route-1',
       providerRouteName: 'Morning Route',
       manual: false,
+      firebaseUserID: 'firebase-user-1',
     }));
     expect(response.status).toHaveBeenCalledWith(200);
 
@@ -364,5 +371,60 @@ describe('Suunto route sync', () => {
     } as any, skippedResponse as any);
 
     expect(skippedResponse.status).toHaveBeenCalledWith(200);
+  });
+
+  it('fans out shared-account route notifications to every active owner', async () => {
+    resolvedWebhookUserIDs = ['firebase-user-1', 'firebase-user-2'];
+    enqueueRouteSyncQueueItemMock.mockReset();
+    enqueueRouteSyncQueueItemMock.mockResolvedValue({
+      enqueued: true,
+      queueItemId: 'queue-id',
+    });
+    const response = createWebhookResponse();
+
+    await insertSuuntoAppRouteToQueue({
+      rawBody: Buffer.from('payload'),
+      body: {
+        username: 'shared-suunto-user',
+        route: { id: 'shared-route' },
+      },
+      get: vi.fn().mockReturnValue('valid-signature'),
+      headers: {},
+    } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledTimes(2);
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerUserId: 'shared-suunto-user',
+      providerRouteId: 'shared-route',
+      firebaseUserID: 'firebase-user-1',
+    }));
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      providerUserId: 'shared-suunto-user',
+      providerRouteId: 'shared-route',
+      firebaseUserID: 'firebase-user-2',
+    }));
+  });
+
+  it('returns a retryable response when any route owner queue write fails transiently', async () => {
+    resolvedWebhookUserIDs = ['firebase-user-1', 'firebase-user-2'];
+    enqueueRouteSyncQueueItemMock.mockReset();
+    enqueueRouteSyncQueueItemMock
+      .mockResolvedValueOnce({ enqueued: true, queueItemId: 'queue-1' })
+      .mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = createWebhookResponse();
+
+    await insertSuuntoAppRouteToQueue({
+      rawBody: Buffer.from('payload'),
+      body: {
+        username: 'shared-suunto-user',
+        route: { id: 'shared-route' },
+      },
+      get: vi.fn().mockReturnValue('valid-signature'),
+      headers: {},
+    } as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(enqueueRouteSyncQueueItemMock).toHaveBeenCalledTimes(2);
   });
 });

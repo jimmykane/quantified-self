@@ -328,6 +328,8 @@ export interface HealthSourceMetadata {
   /** Account-scoped opaque hash of the adapter's source-record key. */
   sourceRecordKey: string;
   revision: HealthSourceRecordRevision;
+  /** Highest ordered provider revision observed, including identical redeliveries. */
+  maxObservedRevisionOrder?: number;
   receivedAtMs: number;
 }
 

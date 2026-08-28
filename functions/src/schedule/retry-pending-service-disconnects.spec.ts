@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => ({
   getTokenData: vi.fn(),
   clearServiceDisconnectPending: vi.fn(),
   recordServiceDisconnectRetryFailure: vi.fn(),
-  retryPendingCOROSHealthLifecycleProjection: vi.fn(),
+  retryPendingHealthLifecycleProjection: vi.fn(),
   retryPendingDisconnectQueueRelease: vi.fn(),
   retryWahooReconnectQueueRelease: vi.fn(),
   retryPendingServiceRouteRestore: vi.fn(),
@@ -60,7 +60,7 @@ vi.mock('../service-auth-lifecycle', () => ({
 }));
 
 vi.mock('../service-connection-meta', () => ({
-  retryPendingCOROSHealthLifecycleProjection: hoisted.retryPendingCOROSHealthLifecycleProjection,
+  retryPendingHealthLifecycleProjection: hoisted.retryPendingHealthLifecycleProjection,
   retryPendingDisconnectQueueRelease: hoisted.retryPendingDisconnectQueueRelease,
   retryWahooReconnectQueueRelease: hoisted.retryWahooReconnectQueueRelease,
   retryPendingServiceRouteRestore: hoisted.retryPendingServiceRouteRestore,
@@ -153,7 +153,7 @@ describe('retry-pending-service-disconnects', () => {
     hoisted.getTokenData.mockResolvedValue({ accessToken: 'pending-token' });
     hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
-    hoisted.retryPendingCOROSHealthLifecycleProjection.mockResolvedValue(true);
+    hoisted.retryPendingHealthLifecycleProjection.mockResolvedValue(true);
     hoisted.retryPendingDisconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryPendingServiceRouteRestore.mockResolvedValue(true);
@@ -387,7 +387,7 @@ describe('retry-pending-service-disconnects', () => {
     expect(hoisted.retryPendingServiceRouteRestore).toHaveBeenCalledTimes(1);
   });
 
-  it('retries only COROS Health lifecycle projection markers', async () => {
+  it('retries COROS and Suunto Health lifecycle projection markers', async () => {
     hoisted.collectionGroup.mockReturnValueOnce({
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
@@ -408,10 +408,13 @@ describe('retry-pending-service-disconnects', () => {
     });
 
     await expect(retryPendingServiceDisconnectsTestInternals
-      .retryPendingCOROSHealthLifecycleProjections()).resolves.toBe(1);
+      .retryPendingHealthLifecycleProjections()).resolves.toBe(2);
 
-    expect(hoisted.retryPendingCOROSHealthLifecycleProjection).toHaveBeenCalledWith('user-1');
-    expect(hoisted.retryPendingCOROSHealthLifecycleProjection).toHaveBeenCalledTimes(1);
+    expect(hoisted.retryPendingHealthLifecycleProjection)
+      .toHaveBeenCalledWith('user-1', ServiceNames.COROSAPI);
+    expect(hoisted.retryPendingHealthLifecycleProjection)
+      .toHaveBeenCalledWith('user-2', ServiceNames.SuuntoApp);
+    expect(hoisted.retryPendingHealthLifecycleProjection).toHaveBeenCalledTimes(2);
   });
 
   it('ignores matching marker fields outside users/{uid}/meta/{service}', async () => {

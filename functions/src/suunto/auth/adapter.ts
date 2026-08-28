@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../constants';
 import { SuuntoAPIAuth } from './auth';
 import { deauthorizeSuuntoUser } from './api';
+import { resolveSuuntoProviderUserIdFromTokenResponse } from './token-identity';
 
 export class SuuntoAuthAdapter implements ServiceAuthAdapter {
     public serviceName = ServiceNames.SuuntoApp;
@@ -35,7 +36,10 @@ export class SuuntoAuthAdapter implements ServiceAuthAdapter {
 
     convertTokenResponse(response: AccessToken, uniqueId?: string, extraData?: any): ServiceTokenInput & { userName: string } {
         const currentDate = new Date();
-        const userIdFromToken = (response.token as Record<string, unknown>).user as string;
+        const userIdFromToken = resolveSuuntoProviderUserIdFromTokenResponse(
+            response.token as Record<string, unknown>,
+            uniqueId,
+        );
 
         return {
             serviceName: this.serviceName,
@@ -44,14 +48,16 @@ export class SuuntoAuthAdapter implements ServiceAuthAdapter {
             tokenType: (response.token.token_type as string) || 'bearer',
             expiresAt: currentDate.getTime() + ((response.token as Record<string, unknown>).expires_in as number * 1000),
             scope: (response.token.scope as string) || this.oAuthScopes,
-            userName: uniqueId || userIdFromToken,
+            userName: userIdFromToken,
             dateCreated: currentDate.getTime(),
             dateRefreshed: currentDate.getTime(),
         };
     }
 
     async processNewToken(token: AccessToken, userId: string): Promise<{ uniqueId?: string; permissions?: string[] }> {
-        const uniqueId = (token.token as any).user;
+        const uniqueId = resolveSuuntoProviderUserIdFromTokenResponse(
+            token.token as Record<string, unknown>,
+        );
         return { uniqueId };
     }
 

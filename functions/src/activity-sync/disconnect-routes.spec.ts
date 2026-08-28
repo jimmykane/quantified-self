@@ -15,6 +15,7 @@ const {
   mockFieldValueDelete,
   mockUpdateHealthSyncState,
   mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
+  mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete,
   mockTokenRootGet,
   mockTokenRootRef,
 } = vi.hoisted(() => {
@@ -87,6 +88,7 @@ const {
     mockFieldValueDelete: vi.fn(() => 'DELETE_SENTINEL'),
     mockUpdateHealthSyncState: vi.fn().mockResolvedValue(true),
     mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete: vi.fn().mockResolvedValue(true),
+    mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete: vi.fn().mockResolvedValue(true),
     mockTokenRootGet,
     mockTokenRootRef,
   };
@@ -133,6 +135,8 @@ vi.mock('../health/writer', () => ({
 vi.mock('../service-connection-meta', () => ({
   supersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete:
     mockSupersedePendingCOROSHealthLifecycleProjectionForTokenRootDelete,
+  supersedePendingHealthLifecycleProjectionForTokenRootDelete:
+    mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete,
 }));
 
 vi.mock('../service-token-store', () => ({
@@ -248,6 +252,36 @@ describe('activity-sync/disconnect-routes', () => {
         },
       },
     }, { merge: true });
+    expect(mockUpdateHealthSyncState).not.toHaveBeenCalled();
+    expect(mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete)
+      .toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+  });
+
+  it('projects staged Suunto Health as disconnected when its token root is deleted', async () => {
+    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+    await (disableActivitySyncRoutesOnSuuntoTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
+      params: { uid: stagedUserID },
+      time: '2026-04-28T12:34:56.789Z',
+    });
+
+    expect(mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete)
+      .toHaveBeenCalledWith(stagedUserID, ServiceNames.SuuntoApp);
+    expect(mockUpdateHealthSyncState).toHaveBeenCalledWith(
+      stagedUserID,
+      'SuuntoApp',
+      { status: 'disconnected', lastErrorCode: null },
+      Date.parse('2026-04-28T12:34:56.789Z'),
+      expect.objectContaining({
+        authoritativeLifecycleTransition: true,
+        requiredMissingDocumentRef: mockTokenRootRef,
+        updateWhenDocumentFieldEquals: expect.objectContaining({
+          documentRef: expect.objectContaining({
+            __mockType: 'meta',
+            serviceName: ServiceNames.SuuntoApp,
+          }),
+        }),
+      }),
+    );
   });
 
   it('disables every COROS activity-sync route when COROS token root is deleted', async () => {

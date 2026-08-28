@@ -34,6 +34,9 @@ import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
+import { isSuuntoHealthSyncUserAllowed } from '../suunto/health-rollout';
+import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
+import { SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH } from '../suunto/health';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -96,13 +99,14 @@ export function chunkSleepBackfillRange(startMs: number, endMs: number, windowDa
     return windows;
 }
 
-async function getSuuntoSleepBackfillToken(userID: string): Promise<SuuntoSleepBackfillToken> {
+async function getSuuntoSleepBackfillTokens(userID: string): Promise<SuuntoSleepBackfillToken[]> {
     const tokenSnapshot = await admin.firestore()
         .collection('suuntoAppAccessTokens')
         .doc(userID)
         .collection('tokens')
         .get();
 
+    const tokens: SuuntoSleepBackfillToken[] = [];
     for (const tokenDoc of tokenSnapshot.docs) {
         const tokenDocData = tokenDoc.data() as Record<string, unknown>;
         const storedServiceName = tokenDocData.serviceName;
@@ -111,19 +115,27 @@ async function getSuuntoSleepBackfillToken(userID: string): Promise<SuuntoSleepB
         }
 
         try {
-            const tokenData = await getTokenData(tokenDoc, ServiceNames.SuuntoApp, false) as { userName?: unknown };
+            const tokenData = await getTokenData(tokenDoc, ServiceNames.SuuntoApp, false, {
+                opaqueTelemetry: true,
+            }) as { userName?: unknown };
             const providerUserId = `${tokenData.userName || ''}`.trim();
             if (providerUserId) {
-                return {
+                tokens.push({
                     providerUserId,
-                };
+                });
             }
         } catch (error) {
-            logger.warn(`[SleepBackfill] Could not use Suunto token ${tokenDoc.id} for ${userID}`, error);
+            logger.warn('[SleepBackfill] Could not use a connected Suunto token.', {
+                userID,
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
         }
     }
 
-    throw new HttpsError('failed-precondition', 'Connected Suunto token is required for sleep backfill.');
+    if (tokens.length === 0) {
+        throw new HttpsError('failed-precondition', 'Connected Suunto token is required for sleep backfill.');
+    }
+    return tokens;
 }
 
 async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepBackfillToken> {
@@ -576,7 +588,8 @@ export const backfillSuuntoAppSleep = onCall({
     const nowMs = Date.now();
     await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.SuuntoApp, nowMs);
 
-    const token = await getSuuntoSleepBackfillToken(userID);
+    const tokens = await getSuuntoSleepBackfillTokens(userID);
+    const sleepToken = tokens[0];
     const startMs = getSharedSleepBackfillStartMs();
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
 
@@ -588,22 +601,64 @@ export const backfillSuuntoAppSleep = onCall({
     }
 
     let queued = 0;
+    let sleepQueued = 0;
+    let healthQueued = 0;
+    const includeHealth = isSuuntoHealthSyncEnabled() && isSuuntoHealthSyncUserAllowed(userID);
+    const healthTokens = includeHealth
+        ? tokens.filter((healthToken) => {
+            if (healthToken.providerUserId.length <= SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH) {
+                return true;
+            }
+            logger.warn('[SleepBackfill] Skipping Suunto Health for a token with an invalid provider account identifier.', {
+                userID,
+            });
+            return false;
+        })
+        : [];
     try {
         for (const window of windows) {
             await addSleepSyncQueueItem({
                 type: 'suunto_poll',
                 provider: SLEEP_PROVIDERS.SuuntoApp,
                 userID,
-                providerUserId: token.providerUserId,
+                providerUserId: sleepToken.providerUserId,
                 rangeStartMs: window.startMs,
                 rangeEndMs: window.endMs,
                 dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
             });
+            sleepQueued += 1;
+            if (includeHealth) {
+                for (const healthToken of healthTokens) {
+                    await addSleepSyncQueueItem({
+                        type: 'suunto_health_poll',
+                        provider: SLEEP_PROVIDERS.SuuntoApp,
+                        userID,
+                        providerUserId: healthToken.providerUserId,
+                        rangeStartMs: window.startMs,
+                        rangeEndMs: window.endMs,
+                        healthTrigger: 'backfill',
+                        dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.startMs}:${window.endMs}`,
+                    });
+                    healthQueued += 1;
+                }
+            }
             queued += 1;
         }
     } catch (error) {
-        const message = error instanceof Error ? error.message : `${error}`;
-        logger.error(`[SleepBackfill] Failed after queueing ${queued} Suunto sleep windows for ${userID}`, error);
+        const message = includeHealth
+            ? 'Could not queue Suunto Sleep and Health history.'
+            : error instanceof Error ? error.message : `${error}`;
+        if (includeHealth) {
+            logger.error('[SleepBackfill] Failed to queue staged Suunto Sleep and Health history.', {
+                userID,
+                queued,
+                sleepQueued,
+                healthQueued,
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+        } else {
+            logger.error(`[SleepBackfill] Failed after queueing ${queued} Suunto sleep windows for ${userID}`, error);
+        }
         await updateSleepSyncState(userID, SLEEP_PROVIDERS.SuuntoApp, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueuedAtMs: null,
@@ -628,6 +683,8 @@ export const backfillSuuntoAppSleep = onCall({
 
     return {
         queued,
+        sleepQueued,
+        healthQueued,
         startDate: new Date(startMs).toISOString(),
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,

@@ -19,6 +19,11 @@ import {
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
+import {
+    parseRouteDeliverySourceLifecycleFence,
+    recheckSuuntoRouteDeliverySourceLifecycleInTransaction,
+    RouteDeliverySourceLifecycleFence,
+} from './source-lifecycle';
 
 export interface EnqueueRouteDeliverySyncQueueItemParams {
     routeId: RouteDeliverySyncRouteId;
@@ -29,20 +34,21 @@ export interface EnqueueRouteDeliverySyncQueueItemParams {
     sourceRevisionKey: string;
     sourceProviderRouteId?: string;
     sourceProviderUserId?: string;
+    sourceLifecycleFence?: RouteDeliverySourceLifecycleFence;
     manual: boolean;
 }
 
 export interface EnqueueRouteDeliverySyncQueueItemResult {
     enqueued: boolean;
     queueItemId: string;
-    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting';
+    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting' | 'source_connection_changed';
     redispatched?: boolean;
 }
 
 interface QueueInsertDecision {
     enqueued: boolean;
     queueItemId: string;
-    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting';
+    reason?: 'already_pending' | 'already_processed' | 'user_deleted_or_deleting' | 'source_connection_changed';
     dateCreated?: number;
     shouldDispatchExisting?: boolean;
 }
@@ -135,6 +141,17 @@ export async function enqueueRouteDeliverySyncQueueItem(
     if (!userID || !savedRouteID || !sourceRevisionKey) {
         throw new Error('userID, savedRouteID, and sourceRevisionKey are required for route delivery sync queue items.');
     }
+    const sourceProviderUserId = normalizeNonEmptyString(params.sourceProviderUserId);
+    const sourceLifecycleFence = params.sourceLifecycleFence
+        ? parseRouteDeliverySourceLifecycleFence(params.sourceLifecycleFence)
+        : null;
+    if (params.sourceLifecycleFence && (
+        !sourceLifecycleFence
+        || params.sourceServiceName !== ServiceNames.SuuntoApp
+        || !sourceProviderUserId
+    )) {
+        throw new Error('Invalid route delivery source lifecycle fence.');
+    }
 
     const queueItemId = await buildRouteDeliverySyncQueueItemId(params.routeId, userID, savedRouteID, sourceRevisionKey);
     const db = admin.firestore();
@@ -154,6 +171,23 @@ export async function enqueueRouteDeliverySyncQueueItem(
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
+        }
+
+        if (sourceLifecycleFence) {
+            const sourceLifecycle = await recheckSuuntoRouteDeliverySourceLifecycleInTransaction(
+                db,
+                transaction,
+                userID,
+                sourceProviderUserId,
+                sourceLifecycleFence,
+            );
+            if (sourceLifecycle.status !== 'active') {
+                return {
+                    enqueued: false,
+                    queueItemId,
+                    reason: 'source_connection_changed',
+                };
+            }
         }
 
         if (existingSnapshot.exists) {
@@ -202,7 +236,12 @@ export async function enqueueRouteDeliverySyncQueueItem(
             savedRouteID,
             sourceRevisionKey,
             sourceProviderRouteId: normalizeNonEmptyString(params.sourceProviderRouteId) || undefined,
-            sourceProviderUserId: normalizeNonEmptyString(params.sourceProviderUserId) || undefined,
+            sourceProviderUserId: sourceProviderUserId || undefined,
+            ...(sourceLifecycleFence ? {
+                sourceConnectionStateGeneration: sourceLifecycleFence.connectionStateGeneration,
+                sourceTokenCredentialGeneration: sourceLifecycleFence.tokenCredentialGeneration,
+                sourceRootOAuthCredentialGeneration: sourceLifecycleFence.rootOAuthCredentialGeneration,
+            } : {}),
             manual: params.manual === true,
         };
 

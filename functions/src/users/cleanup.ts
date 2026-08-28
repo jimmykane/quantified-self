@@ -9,8 +9,12 @@ import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
-import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
+import {
+    SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+    SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+} from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
@@ -32,6 +36,7 @@ import {
 } from '../orphaned-service-tokens';
 import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { cleanupRejectedRouteOriginalFilesForUser } from '../routes/rejected-original-cleanup';
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -472,6 +477,8 @@ function providerQueueLookupFromCollectionData(
             const serviceName = serviceNameFromSleepProvider(data.provider);
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
         }
+        case SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME:
+            return providerLookupForService(ServiceNames.SuuntoApp, data.providerUserId);
         case ROUTE_SYNC_QUEUE_COLLECTION_NAME: {
             const serviceName = asNonEmptyString(data.sourceServiceName) as ServiceNames | null;
             return serviceName ? providerLookupForService(serviceName, data.providerUserId) : null;
@@ -524,7 +531,8 @@ function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<
     if (
         collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
         collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
-        collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME
+        collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
+        collectionName === SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME
     ) {
         return asNonEmptyString(data.userID);
     }
@@ -628,6 +636,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
         ROUTE_SYNC_QUEUE_COLLECTION_NAME,
         ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
+        SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
         GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -780,6 +789,14 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
     await collectProviderIdentifiersFromQueueQuery(
         db,
         uid,
+        SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME,
+        'userID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.SuuntoApp, data.providerUserId),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
         SLEEP_SYNC_QUEUE_COLLECTION_NAME,
         'userID',
         firebaseUIDValues,
@@ -879,6 +896,9 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'sleep sync queue', SLEEP_SYNC_QUEUE_COLLECTION_NAME, 'providerUserId', providerValues, deletedRefKeys, providerKeyedDeleteFilter(SLEEP_SYNC_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook account binding', SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Suunto Health webhook ingress', SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME, 'providerUserId', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Suunto workout queue', SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, 'userName', suuntoValues, deletedRefKeys, providerKeyedDeleteFilter(SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
@@ -976,6 +996,15 @@ export const cleanupUserAccounts = functions
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
 
     await cleanupUserScopedGeneratedState(uid);
+    let routeOriginalCleanupFailed = false;
+    let routeOriginalCleanupError: unknown = null;
+    try {
+        await cleanupRejectedRouteOriginalFilesForUser(uid);
+    } catch (error) {
+        routeOriginalCleanupFailed = true;
+        routeOriginalCleanupError = error;
+        logger.error('[Cleanup] Rejected route-original cleanup did not complete; continuing remaining account cleanup before retry.', error);
+    }
     let mcpOAuthCleanupFailed = false;
     let mcpOAuthCleanupError: unknown = null;
     try {
@@ -1045,5 +1074,10 @@ export const cleanupUserAccounts = functions
         throw mcpOAuthCleanupError instanceof Error
             ? mcpOAuthCleanupError
             : new Error('MCP OAuth cleanup did not complete.');
+    }
+    if (routeOriginalCleanupFailed) {
+        throw routeOriginalCleanupError instanceof Error
+            ? routeOriginalCleanupError
+            : new Error('Rejected route-original cleanup did not complete.');
     }
 });
