@@ -1429,6 +1429,19 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Rejected route original cleanup tasks', () => {
+            it('denies owners and other clients all direct access', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+                const ref = ownerDb.doc(`users/${userId}/routeOriginalFileCleanup/cleanup-1`);
+
+                await assertFails(ref.get());
+                await assertFails(ref.set({ path: 'forged' }));
+                await assertFails(ref.delete());
+                await assertFails(otherDb.doc(`users/${userId}/routeOriginalFileCleanup/cleanup-1`).get());
+            });
+        });
+
         describe('MCP server-owned credential state', () => {
             it('should deny owners reading or writing MCP connection summaries directly', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {

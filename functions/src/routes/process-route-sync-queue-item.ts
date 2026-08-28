@@ -45,6 +45,7 @@ import { buildRouteDeliverySourceRevisionKeyForRouteSource } from '../route-deli
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 import {
     captureCurrentSuuntoRouteDeliverySourceLifecycle,
+    recheckSuuntoRouteDeliverySourceLifecycleInTransaction,
     RouteDeliverySourceLifecycleFence,
 } from '../route-delivery-sync/source-lifecycle';
 
@@ -241,6 +242,32 @@ async function requireActiveSuuntoRouteSource(
     };
 }
 
+async function assertSuuntoRouteSourceAuthorizedInTransaction(params: {
+    db: admin.firestore.Firestore;
+    transaction: admin.firestore.Transaction;
+    userID: string;
+    providerUserId: string;
+    expectedFence: RouteDeliverySourceLifecycleFence;
+}): Promise<void> {
+    const sourceLifecycle = await recheckSuuntoRouteDeliverySourceLifecycleInTransaction(
+        params.db,
+        params.transaction,
+        params.userID,
+        params.providerUserId,
+        params.expectedFence,
+    );
+    if (sourceLifecycle.status === 'disconnect_pending') {
+        throw new ProviderPendingDisconnectError(
+            params.userID,
+            ServiceNames.SuuntoApp,
+            'route_sync_persistence_guard',
+        );
+    }
+    if (sourceLifecycle.status !== 'active') {
+        throw new HttpsError('unauthenticated', 'The source Suunto account lifecycle changed during route import.');
+    }
+}
+
 async function enqueueRouteDeliveryForSavedSuuntoRoute(params: {
     userID: string;
     routeID: string;
@@ -412,6 +439,15 @@ export async function processRouteSyncQueueItem(
             routeFile,
             sourceMetadata,
             originalFile,
+            assertSourceAuthorizedInTransaction: (db, transaction) => (
+                assertSuuntoRouteSourceAuthorizedInTransaction({
+                    db,
+                    transaction,
+                    userID,
+                    providerUserId: queueItem.providerUserId,
+                    expectedFence: sourceAuthorization.lifecycleFence,
+                })
+            ),
         });
 
         await enqueueRouteDeliveryForSavedSuuntoRoute({

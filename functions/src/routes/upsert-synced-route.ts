@@ -17,6 +17,7 @@ import {
     buildRouteDocumentForWrite,
     getRouteSourceMetadataRef,
 } from './route-persistence';
+import { enqueueRejectedRouteOriginalCleanup } from './rejected-original-cleanup';
 
 interface UpsertSyncedRouteParams {
     userID: string;
@@ -24,6 +25,10 @@ interface UpsertSyncedRouteParams {
     routeFile: AppRouteInterface;
     sourceMetadata: RouteSourceMetadata;
     originalFile: OriginalRouteFile;
+    assertSourceAuthorizedInTransaction?: (
+        db: admin.firestore.Firestore,
+        transaction: admin.firestore.Transaction,
+    ) => Promise<void>;
 }
 
 export interface UpsertSyncedRouteResult {
@@ -122,25 +127,34 @@ async function uploadSyncedRouteOriginalFile(
 
 async function deleteOriginalRouteFiles(
     originalFiles: OriginalRouteFileMetaData[],
-): Promise<void> {
-    await Promise.all(originalFiles.map(async (file) => {
+    maxAttempts = 1,
+): Promise<OriginalRouteFileMetaData[]> {
+    const results = await Promise.all(originalFiles.map(async (file) => {
         const filePath = `${file?.path || ''}`.trim();
         if (!filePath) {
-            return;
+            return null;
         }
-        try {
-            const bucket = file.bucket
-                ? admin.storage().bucket(file.bucket)
-                : admin.storage().bucket();
-            await bucket.file(filePath).delete({ ignoreNotFound: true });
-        } catch (error) {
-            logger.warn('[RouteSync] Failed to delete replaced original route file', {
-                bucket: file.bucket,
-                path: file.path,
-                error,
-            });
+        const attempts = Math.max(1, Math.min(Math.floor(maxAttempts), 3));
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+            try {
+                const bucket = file.bucket
+                    ? admin.storage().bucket(file.bucket)
+                    : admin.storage().bucket();
+                await bucket.file(filePath).delete({ ignoreNotFound: true });
+                return null;
+            } catch (error) {
+                logger.warn('[RouteSync] Failed to delete original route file', {
+                    bucket: file.bucket,
+                    path: file.path,
+                    attempt,
+                    attempts,
+                    error,
+                });
+            }
         }
+        return file;
     }));
+    return results.filter((file): file is OriginalRouteFileMetaData => file !== null);
 }
 
 function getExistingOriginalFiles(routeDocument?: FirestoreRouteJSON | null): OriginalRouteFileMetaData[] {
@@ -187,6 +201,8 @@ export async function upsertSyncedRoute(
             if (deletionGuard.shouldSkip) {
                 throw new SyncedRouteSkippedForDeletedUserError(params.userID);
             }
+
+            await params.assertSourceAuthorizedInTransaction?.(db, transaction);
 
             const [routeSnapshot, counterSnapshot] = await Promise.all([
                 transaction.get(routeRef),
@@ -247,7 +263,12 @@ export async function upsertSyncedRoute(
 
         return result;
     } catch (error) {
-        await deleteOriginalRouteFiles([uploadedOriginalFile]);
+        const cleanupFailures = await deleteOriginalRouteFiles([uploadedOriginalFile], 3);
+        await Promise.all(cleanupFailures.map(originalFile => enqueueRejectedRouteOriginalCleanup({
+            userID: params.userID,
+            routeID: params.routeID,
+            originalFile,
+        })));
         throw error;
     }
 }

@@ -358,6 +358,12 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Durable cleanup tasks may contain private Storage object paths and
+        // are owned exclusively by the rejected-route cleanup trigger.
+        match /routeOriginalFileCleanup/{cleanupID} {
+          allow read, write: if false;
+        }
+
         // MCP connection summaries and all credential state are server-owned.
         // The app uses authenticated, App-Check-protected callables to list
         // and revoke connections without exposing token material.

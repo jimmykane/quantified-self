@@ -70,11 +70,15 @@ vi.mock('../suunto/routes', () => ({
 
 const sourceLifecycleMocks = {
   captureCurrentSuuntoRouteDeliverySourceLifecycle: vi.fn(),
+  recheckSuuntoRouteDeliverySourceLifecycleInTransaction: vi.fn(),
 };
 
 vi.mock('../route-delivery-sync/source-lifecycle', () => ({
   captureCurrentSuuntoRouteDeliverySourceLifecycle: (...args: any[]) => (
     sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle(...args)
+  ),
+  recheckSuuntoRouteDeliverySourceLifecycleInTransaction: (...args: any[]) => (
+    sourceLifecycleMocks.recheckSuuntoRouteDeliverySourceLifecycleInTransaction(...args)
   ),
 }));
 
@@ -191,6 +195,14 @@ describe('processRouteSyncQueueItem', () => {
     routeProcessingMocks.parseRoutePayload.mockResolvedValue(createParsedRouteFile());
     routeProcessingMocks.getRouteParsingFailureMessage.mockReturnValue('Could not parse route.');
     sourceLifecycleMocks.captureCurrentSuuntoRouteDeliverySourceLifecycle.mockResolvedValue({
+      status: 'active',
+      fence: {
+        connectionStateGeneration: 'connection-generation-1',
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+      },
+    });
+    sourceLifecycleMocks.recheckSuuntoRouteDeliverySourceLifecycleInTransaction.mockResolvedValue({
       status: 'active',
       fence: {
         connectionStateGeneration: 'connection-generation-1',
@@ -592,6 +604,40 @@ describe('processRouteSyncQueueItem', () => {
       sourceRevisionKey: 'SuuntoApp:provider-route-1:1700000005000',
       manual: false,
     }));
+  });
+
+  it('defers an in-flight import when disconnect wins before the guarded route write', async () => {
+    const transaction = { get: vi.fn(), set: vi.fn() };
+    const db = { runTransaction: vi.fn() };
+    sourceLifecycleMocks.recheckSuuntoRouteDeliverySourceLifecycleInTransaction.mockResolvedValueOnce({
+      status: 'disconnect_pending',
+    });
+    upsertSyncedRouteMocks.upsertSyncedRoute.mockImplementationOnce(async (params) => {
+      await params.assertSourceAuthorizedInTransaction(db, transaction);
+      return {
+        status: 'created',
+        routeID: 'route-doc-1',
+        routeCountAfterWrite: 1,
+      };
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(sourceLifecycleMocks.recheckSuuntoRouteDeliverySourceLifecycleInTransaction).toHaveBeenCalledWith(
+      db,
+      transaction,
+      'user-1',
+      'suunto-user',
+      {
+        connectionStateGeneration: 'connection-generation-1',
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+      },
+    );
+    expect(queueUtilsMocks.deferQueueItemForPendingDisconnect).toHaveBeenCalled();
+    expect(queueUtilsMocks.updateToProcessed).not.toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
   });
 
   it('keeps route import successful when route delivery sync enqueue fails', async () => {

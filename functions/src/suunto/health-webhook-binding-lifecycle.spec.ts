@@ -191,6 +191,164 @@ describe('Suunto Health webhook account binding lifecycle', () => {
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
+  it('atomically backfills a generationless legacy lifecycle from an existing provider-authorized binding', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'provider_refresh',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: null,
+    };
+    hoisted.state.token = {
+      accessToken: 'access-token-1',
+      refreshToken: 'refresh-token-1',
+      expiresAt: 1_800_000_000_000,
+      serviceName: ServiceNames.SuuntoApp,
+      userName: 'provider-1',
+    };
+    hoisted.state.tokenRoot = {};
+    hoisted.state.serviceMeta = undefined;
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('current');
+
+    expect(hoisted.getTokenData).not.toHaveBeenCalled();
+    const tokenGeneration = hoisted.transactionSet.mock.calls.find(
+      ([ref]) => ref === hoisted.tokenRef,
+    )?.[1]?.tokenCredentialGeneration;
+    expect(tokenGeneration).toEqual(expect.any(String));
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRootRef,
+      { activeOAuthCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.serviceMetaRef,
+      {
+        connectionState: 'connected',
+        connectionStateGeneration: expect.any(String),
+      },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      expect.objectContaining({
+        authorizationSource: 'provider_refresh',
+        tokenCredentialGeneration: tokenGeneration,
+      }),
+    );
+  });
+
+  it('provider-verifies an unbound legacy lifecycle before backfilling it', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+    hoisted.state.tokenRoot = {};
+    hoisted.state.serviceMeta = {
+      connectionState: 'connected',
+    };
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('created');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRef,
+      { tokenCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRootRef,
+      { activeOAuthCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+  });
+
+  it('backfills a retained legacy account without rotating the newer root revision', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'provider_refresh',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: null,
+    };
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('current');
+
+    expect(hoisted.getTokenData).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRef,
+      { tokenCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).not.toHaveBeenCalledWith(
+      hoisted.tokenRootRef,
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      expect.objectContaining({
+        tokenCredentialGeneration: expect.any(String),
+      }),
+    );
+  });
+
+  it('requires a fresh provider verification before repairing an impossible token/root generation split', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+    hoisted.state.tokenRoot = {};
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('current');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRootRef,
+      { activeOAuthCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+  });
+
+  it('does not overwrite malformed legacy generations during verification', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: ' malformed ',
+    };
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('inactive');
+
+    expect(hoisted.getTokenData).not.toHaveBeenCalled();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+  });
+
   it('captures every current authority field for transaction-level Sleep writes', async () => {
     hoisted.state.binding = {
       schemaVersion: 3,

@@ -1,7 +1,10 @@
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { isServiceUnavailableForSyncConnection } from '../../../shared/service-connection';
+import {
+  isServiceUnavailableForSyncConnection,
+  SERVICE_CONNECTION_STATES,
+} from '../../../shared/service-connection';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import {
   doesServiceDisconnectOperationPermitTokenUse,
@@ -50,6 +53,28 @@ function expectedFieldsEqual(
 ): boolean {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   return [...keys].every(key => Object.is(left[key], right[key]));
+}
+
+const MAX_SUUNTO_LIFECYCLE_GENERATION_LENGTH = 128;
+
+interface ParsedLifecycleGeneration {
+  kind: 'missing' | 'valid' | 'malformed';
+  value: string | null;
+}
+
+function parseLifecycleGeneration(value: unknown): ParsedLifecycleGeneration {
+  if (value === undefined || value === null) {
+    return { kind: 'missing', value: null };
+  }
+  if (typeof value !== 'string') {
+    return { kind: 'malformed', value: null };
+  }
+  const normalized = value.trim();
+  return normalized
+    && normalized === value
+    && normalized.length <= MAX_SUUNTO_LIFECYCLE_GENERATION_LENGTH
+    ? { kind: 'valid', value: normalized }
+    : { kind: 'malformed', value: null };
 }
 
 /**
@@ -133,42 +158,99 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
     const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
     const tokenRootData = tokenRootSnapshot.data() as Record<string, unknown> | undefined;
     const serviceMeta = serviceMetaSnapshot.data() as Record<string, unknown> | undefined;
-    const tokenCredentialGeneration = normalizeSuuntoTokenCredentialGeneration(
+    const tokenCredentialGeneration = parseLifecycleGeneration(
       tokenData?.tokenCredentialGeneration,
+    );
+    const rootOAuthCredentialGeneration = parseLifecycleGeneration(
+      tokenRootData?.[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD],
+    );
+    const connectionStateGeneration = parseLifecycleGeneration(
+      serviceMeta?.connectionStateGeneration,
     );
     if (deletionGuard.shouldSkip
       || !tokenSnapshot.exists
       || !tokenRootSnapshot.exists
-      || !serviceMetaSnapshot.exists
       || tokenData?.userName !== providerUserId
       || (tokenData.serviceName && tokenData.serviceName !== ServiceNames.SuuntoApp)
       || isServiceUnavailableForSyncConnection(serviceMeta)
+      || (serviceMeta?.connectionState !== undefined
+        && serviceMeta?.connectionState !== null
+        && serviceMeta.connectionState !== SERVICE_CONNECTION_STATES.Connected)
       || isServiceDisconnectPendingData(tokenRootData)
       || !doesServiceDisconnectOperationPermitTokenUse(tokenRootData, undefined, nowMs)) {
       return 'inactive';
     }
 
+    if (tokenCredentialGeneration.kind === 'malformed'
+      || rootOAuthCredentialGeneration.kind === 'malformed'
+      || connectionStateGeneration.kind === 'malformed') {
+      return 'inactive';
+    }
+
     const current = parseSuuntoHealthWebhookAccountBinding(bindingSnapshot.data());
-    if (current?.schemaVersion === SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
+    const hasCurrentAuthorizedBinding = current?.schemaVersion
+      === SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDING_SCHEMA_VERSION
       && doesSuuntoHealthWebhookBindingMatch(
         current,
         userID,
         providerUserId,
-        tokenCredentialGeneration,
-      )) {
+        tokenCredentialGeneration.value,
+      );
+    const requiresIndependentProviderVerification = tokenCredentialGeneration.kind === 'valid'
+      && rootOAuthCredentialGeneration.kind === 'missing';
+    const canMigrateLegacyLifecycle = Boolean(authorizationSource)
+      || (hasCurrentAuthorizedBinding && !requiresIndependentProviderVerification);
+    const requiresLifecycleMigration = !serviceMetaSnapshot.exists
+      || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+      || tokenCredentialGeneration.kind === 'missing'
+      || rootOAuthCredentialGeneration.kind === 'missing'
+      || connectionStateGeneration.kind === 'missing';
+
+    if (requiresLifecycleMigration && !canMigrateLegacyLifecycle) {
+      return 'unverified';
+    }
+
+    const nextTokenCredentialGeneration = tokenCredentialGeneration.value || crypto.randomUUID();
+    const nextRootOAuthCredentialGeneration = rootOAuthCredentialGeneration.value || crypto.randomUUID();
+    const nextConnectionStateGeneration = connectionStateGeneration.value || crypto.randomUUID();
+    const bindingAuthorizationSource = current?.authorizationSource || authorizationSource;
+    if (!bindingAuthorizationSource) return 'unverified';
+
+    if (requiresLifecycleMigration) {
+      if (tokenCredentialGeneration.kind === 'missing') {
+        transaction.set(tokenRef, {
+          tokenCredentialGeneration: nextTokenCredentialGeneration,
+        }, { merge: true });
+      }
+      if (rootOAuthCredentialGeneration.kind === 'missing') {
+        transaction.set(tokenRootRef, {
+          [ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD]: nextRootOAuthCredentialGeneration,
+        }, { merge: true });
+      }
+      if (!serviceMetaSnapshot.exists
+        || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected
+        || connectionStateGeneration.kind === 'missing') {
+        transaction.set(serviceMetaRef, {
+          connectionState: SERVICE_CONNECTION_STATES.Connected,
+          connectionStateGeneration: nextConnectionStateGeneration,
+        }, { merge: true });
+      }
+    }
+
+    if (hasCurrentAuthorizedBinding
+      && current.tokenCredentialGeneration === nextTokenCredentialGeneration) {
       return 'current';
     }
-    if (!authorizationSource) return 'unverified';
     transaction.set(
       bindingRef,
       buildSuuntoHealthWebhookAccountBinding(
         userID,
         providerUserId,
-        tokenCredentialGeneration,
-        authorizationSource,
+        nextTokenCredentialGeneration,
+        bindingAuthorizationSource,
       ),
     );
-    return 'created';
+    return hasCurrentAuthorizedBinding ? 'current' : 'created';
   });
 }
 

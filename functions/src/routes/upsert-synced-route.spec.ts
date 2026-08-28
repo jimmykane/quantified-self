@@ -8,6 +8,7 @@ const hoisted = vi.hoisted(() => {
   const mockBuildRouteDocumentForWrite = vi.fn();
   const mockGetUserDeletionGuardStateInTransaction = vi.fn();
   const mockCreateRouteProcessingMetadataPayload = vi.fn();
+  const mockEnqueueRejectedRouteOriginalCleanup = vi.fn();
   const mockTransactionGet = vi.fn();
   const mockTransactionSet = vi.fn();
   const mockRunTransaction = vi.fn(async (handler: unknown) => (
@@ -36,6 +37,7 @@ const hoisted = vi.hoisted(() => {
     mockBuildRouteDocumentForWrite,
     mockGetUserDeletionGuardStateInTransaction,
     mockCreateRouteProcessingMetadataPayload,
+    mockEnqueueRejectedRouteOriginalCleanup,
     mockTransactionGet,
     mockTransactionSet,
     mockRunTransaction,
@@ -85,6 +87,12 @@ vi.mock('./route-persistence', () => ({
 vi.mock('./route-processing', () => ({
   createRouteProcessingMetadataPayload: (...args: unknown[]) => (
     hoisted.mockCreateRouteProcessingMetadataPayload(...args)
+  ),
+}));
+
+vi.mock('./rejected-original-cleanup', () => ({
+  enqueueRejectedRouteOriginalCleanup: (...args: unknown[]) => (
+    hoisted.mockEnqueueRejectedRouteOriginalCleanup(...args)
   ),
 }));
 
@@ -170,6 +178,7 @@ describe('upsertSyncedRoute', () => {
     hoisted.mockCreateRouteProcessingMetadataPayload.mockReturnValue({
       processingEntity: 'route',
     });
+    hoisted.mockEnqueueRejectedRouteOriginalCleanup.mockResolvedValue(undefined);
     hoisted.mockTransactionGet.mockImplementation(async (ref: { path: string }) => {
       if (ref.path === 'users/user-1/routes/route-1') {
         return makeSnapshot(true, makeExistingRouteDocument());
@@ -251,6 +260,77 @@ describe('upsertSyncedRoute', () => {
       'users/user-1/routes/route-1/uploads/provider-sync/original-old.gpx',
       { ignoreNotFound: true },
     );
+  });
+
+  it('removes only the new original and writes nothing when source authority changes before persistence', async () => {
+    const sourceLifecycleError = new Error('Suunto source lifecycle changed.');
+    const assertSourceAuthorizedInTransaction = vi.fn().mockRejectedValue(sourceLifecycleError);
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+        originalFilename: 'Updated Route.gpx',
+      },
+      assertSourceAuthorizedInTransaction,
+    })).rejects.toBe(sourceLifecycleError);
+
+    expect(assertSourceAuthorizedInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ runTransaction: hoisted.mockRunTransaction }),
+      expect.objectContaining({
+        get: hoisted.mockTransactionGet,
+        set: hoisted.mockTransactionSet,
+      }),
+    );
+    expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledWith(
+      'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
+      { ignoreNotFound: true },
+    );
+    expect(hoisted.mockStorageDelete).not.toHaveBeenCalledWith(
+      'users/user-1/routes/route-1/uploads/provider-sync/original-old.gpx',
+      { ignoreNotFound: true },
+    );
+    expect(hoisted.mockEnqueueRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+  });
+
+  it('durably queues cleanup when deleting a lifecycle-rejected original fails', async () => {
+    const sourceLifecycleError = new Error('Suunto source lifecycle changed.');
+    hoisted.mockStorageDelete.mockRejectedValue(new Error('Storage unavailable.'));
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+        originalFilename: 'Updated Route.gpx',
+      },
+      assertSourceAuthorizedInTransaction: vi.fn().mockRejectedValue(sourceLifecycleError),
+    })).rejects.toBe(sourceLifecycleError);
+
+    expect(hoisted.mockEnqueueRejectedRouteOriginalCleanup).toHaveBeenCalledWith({
+      userID: 'user-1',
+      routeID: 'route-1',
+      originalFile: expect.objectContaining({
+        bucket: 'test-bucket',
+        path: 'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
+      }),
+    });
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledTimes(3);
   });
 
   it('blocks synced route upserts for non-pro users before uploading or writing', async () => {
