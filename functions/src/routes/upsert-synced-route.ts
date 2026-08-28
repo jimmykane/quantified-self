@@ -234,10 +234,13 @@ export async function upsertSyncedRoute(
     });
 
     let existingOriginalFilesToDelete: OriginalRouteFileMetaData[] = [];
+    let originalFileUploadOutcomeAmbiguous = false;
     let routeTransactionMayHaveCommitted = false;
 
     try {
+        originalFileUploadOutcomeAmbiguous = true;
         await uploadSyncedRouteOriginalFile(uploadedOriginalFile, params.originalFile);
+        originalFileUploadOutcomeAmbiguous = false;
         const result = await db.runTransaction(async (transaction): Promise<UpsertSyncedRouteResult> => {
             // Firestore may retry this callback. Reset on every attempt so a
             // callback rejection remains distinguishable from an ambiguous
@@ -328,6 +331,13 @@ export async function upsertSyncedRoute(
         }
 
         const cleanupFailures = await deleteOriginalRouteFiles([uploadedOriginalFile], 3);
+        if (originalFileUploadOutcomeAmbiguous) {
+            logger.warn('[RouteSync] Route-original upload outcome is ambiguous; preserving its delayed cleanup reservation.', {
+                cleanupID: cleanupReservation.cleanupID,
+            });
+            throw error;
+        }
+
         if (cleanupFailures.length === 0) {
             try {
                 await releaseRejectedRouteOriginalCleanupReservation(cleanupReservation);

@@ -287,6 +287,51 @@ describe('upsertSyncedRoute', () => {
     expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
   });
 
+  it('retains the reservation when a rejected upload becomes visible after immediate deletion', async () => {
+    const uploadError = new Error('upload response timed out');
+    let uploadedObjectVisible = false;
+    let completeDelayedUpload = () => {
+      uploadedObjectVisible = true;
+    };
+    hoisted.mockStorageSave.mockImplementationOnce(async () => {
+      completeDelayedUpload = () => {
+        uploadedObjectVisible = true;
+      };
+      throw uploadError;
+    });
+    hoisted.mockStorageDelete.mockImplementationOnce(async () => {
+      uploadedObjectVisible = false;
+    });
+
+    await expect(upsertSyncedRoute({
+      userID: 'user-1',
+      routeID: 'route-1',
+      routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: {
+        sourceType: 'service_sync',
+        sourceServiceName: 'suuntoApp',
+      } as never,
+      originalFile: {
+        data: Buffer.from('<gpx />'),
+        extension: 'gpx',
+      },
+    })).rejects.toBe(uploadError);
+
+    expect(hoisted.mockStorageDelete).toHaveBeenCalledWith(
+      'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
+      { ignoreNotFound: true },
+    );
+    expect(uploadedObjectVisible).toBe(false);
+
+    completeDelayedUpload();
+
+    expect(uploadedObjectVisible).toBe(true);
+    expect(hoisted.mockReserveRejectedRouteOriginalCleanup).toHaveBeenCalledOnce();
+    expect(hoisted.mockRunTransaction).toHaveBeenCalledOnce();
+    expect(hoisted.mockReleaseRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+    expect(hoisted.mockRequestRejectedRouteOriginalCleanup).not.toHaveBeenCalled();
+  });
+
   it('does not delete a potentially committed original after an ambiguous transaction error', async () => {
     hoisted.mockRunTransaction
       .mockImplementationOnce(async (handler: unknown) => (
