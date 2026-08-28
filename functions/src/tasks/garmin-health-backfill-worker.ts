@@ -5,7 +5,10 @@ import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
 import { QueueResult } from '../queue-utils';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
-import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import {
+  CLOUD_TASK_RETRY_CONFIG,
+  GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS,
+} from '../shared/queue-config';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { isCurrentSleepQueueRevision } from '../sleep/queue-revision';
 import { processGarminHealthBackfillQueueItem } from '../garmin/health-backfill';
@@ -25,7 +28,7 @@ export const processGarminHealthBackfillTask = onTaskDispatched({
   },
   secrets: FUNCTION_SECRET_BINDINGS.processGarminHealthBackfillTask,
   memory: '512MiB',
-  timeoutSeconds: 1_800,
+  timeoutSeconds: GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS,
   region: FUNCTIONS_MANIFEST.processGarminHealthBackfillTask.region,
 }, async request => {
   const { queueItemId, queueRevision, queueDateCreated } = (

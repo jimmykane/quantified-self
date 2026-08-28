@@ -50,7 +50,10 @@ vi.mock('../queue-utils', () => ({
 vi.mock('../secrets', () => ({
   FUNCTION_SECRET_BINDINGS: { processGarminHealthBackfillTask: [] },
 }));
-vi.mock('../shared/queue-config', () => ({ CLOUD_TASK_RETRY_CONFIG: {} }));
+vi.mock('../shared/queue-config', () => ({
+  CLOUD_TASK_RETRY_CONFIG: {},
+  GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS: 1_800,
+}));
 vi.mock('../../../shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: { processGarminHealthBackfillTask: { region: 'europe-west2' } },
 }));

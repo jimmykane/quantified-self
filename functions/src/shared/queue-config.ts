@@ -19,6 +19,9 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxDoublings: 4,
 } as const;
 
+/** Runtime and HTTP dispatch deadline for the paced Garmin Health history worker. */
+export const GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS = 1_800;
+
 // Keep shared activity-sync bursts below provider-side rate limits. These are
 // half of the queue's previous deployed limits while provider-specific
 // throttling is investigated.

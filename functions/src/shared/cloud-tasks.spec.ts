@@ -300,12 +300,12 @@ describe('Cloud Tasks Utils', () => {
         });
 
         it.each([
-            ['enqueueActivitySyncTask', 'processActivitySyncTask', 'activity-sync-item-123-9'],
-            ['enqueueRouteSyncTask', 'processRouteSyncTask', 'route-sync-item-123-9'],
-            ['enqueueRouteDeliverySyncTask', 'processRouteDeliverySyncTask', 'route-delivery-sync-item-123-9'],
-            ['enqueueSleepSyncTask', 'processSleepSyncTask', 'sleep-sync-item-123-9'],
-            ['enqueueGarminHealthBackfillTask', 'processGarminHealthBackfillTask', 'garmin-health-backfill-item-123-9'],
-        ])('uses the matching function queue for %s', async (dispatcher, functionName, taskId) => {
+            ['enqueueActivitySyncTask', 'processActivitySyncTask', 'activity-sync-item-123-9', undefined],
+            ['enqueueRouteSyncTask', 'processRouteSyncTask', 'route-sync-item-123-9', undefined],
+            ['enqueueRouteDeliverySyncTask', 'processRouteDeliverySyncTask', 'route-delivery-sync-item-123-9', undefined],
+            ['enqueueSleepSyncTask', 'processSleepSyncTask', 'sleep-sync-item-123-9', undefined],
+            ['enqueueGarminHealthBackfillTask', 'processGarminHealthBackfillTask', 'garmin-health-backfill-item-123-9', 1_800],
+        ])('uses the matching function queue for %s', async (dispatcher, functionName, taskId, dispatchDeadlineSeconds) => {
             const tasks = await import('./cloud-tasks');
             const enqueue = tasks[dispatcher as keyof typeof tasks] as unknown as (id: string, date: number) => Promise<boolean>;
 
@@ -316,7 +316,42 @@ describe('Cloud Tasks Utils', () => {
             );
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
                 { queueItemId: 'item-123' },
-                { id: taskId, scheduleDelaySeconds: 1 },
+                {
+                    id: taskId,
+                    ...(dispatchDeadlineSeconds ? { dispatchDeadlineSeconds } : {}),
+                    scheduleDelaySeconds: 1,
+                },
+            );
+        });
+
+        it('keeps the 30-minute Garmin deadline on a recovery task', async () => {
+            const { enqueueGarminHealthBackfillTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue
+                .mockRejectedValueOnce(Object.assign(new Error('Already exists'), {
+                    code: 'functions/task-already-exists',
+                }))
+                .mockResolvedValueOnce(undefined);
+            hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(
+                Object.assign(new Error('NOT_FOUND'), { code: 5 }),
+            );
+
+            await expect(enqueueGarminHealthBackfillTask('health-item-1', 1000, undefined, {
+                queueRevision: 'revision-2',
+                queueDateCreated: 1000,
+                recoveryTaskKey: 'lease/123',
+            })).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
+                {
+                    queueItemId: 'health-item-1',
+                    queueRevision: 'revision-2',
+                    queueDateCreated: 1000,
+                },
+                {
+                    id: 'garmin-health-backfill-health-item-1-1000-revision-revision-2-dedupe-recovery-lease-123',
+                    dispatchDeadlineSeconds: 1_800,
+                    scheduleDelaySeconds: 1,
+                },
             );
         });
 

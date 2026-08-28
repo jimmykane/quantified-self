@@ -21,6 +21,7 @@ import {
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import { normalizeQueueRevision } from '../queue/revision-identity';
+import { GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS } from './queue-config';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
@@ -576,6 +577,7 @@ async function enqueueRevisionBoundQueueTask(
     logPrefix: string,
     scheduleDelaySeconds?: number,
     identity?: RevisionBoundQueueTaskIdentity,
+    dispatchDeadlineSeconds?: number,
 ): Promise<boolean> {
     const { projectId, location } = config.cloudtasks;
 
@@ -605,6 +607,7 @@ async function enqueueRevisionBoundQueueTask(
         taskId,
         payload,
         scheduleDelaySeconds,
+        dispatchDeadlineSeconds,
         alreadyExistsLogMessage: `[${logPrefix}] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[${logPrefix}] Failed to enqueue task for ${queueItemId}:`,
     });
@@ -626,6 +629,7 @@ async function enqueueRevisionBoundQueueTask(
         taskId: recoveryTaskId,
         payload,
         scheduleDelaySeconds,
+        dispatchDeadlineSeconds,
         alreadyExistsLogMessage: `[${logPrefix}] Recovery task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[${logPrefix}] Failed to enqueue recovery task for ${queueItemId}:`,
     });
@@ -671,6 +675,7 @@ export async function enqueueGarminHealthBackfillTask(
         'GarminHealthBackfillDispatcher',
         scheduleDelaySeconds,
         identity,
+        GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS,
     );
 }
 
