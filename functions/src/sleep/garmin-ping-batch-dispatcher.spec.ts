@@ -47,6 +47,7 @@ vi.mock('../utils', () => ({
 import {
     dispatchGarminPingBatchOnWrite,
     dispatchGarminPingBatchQueueRevision,
+    shouldDispatchGarminPingBatchWrite,
 } from './garmin-ping-batch-dispatcher';
 
 const registeredTriggerOptions = hoisted.onDocumentWritten.mock.calls[0]?.[0];
@@ -90,6 +91,109 @@ describe('Garmin Ping batch Firestore dispatcher', () => {
             retry: true,
         }));
         expect(dispatchGarminPingBatchOnWrite).toBeTypeOf('function');
+    });
+
+    it('dispatches creates and genuinely new queue revisions', () => {
+        const firstRevision = queueItem();
+        const secondRevision = queueItem({
+            queueRevision: 'revision-2',
+            retryCount: 0,
+            dispatchedToCloudTask: null,
+        });
+
+        expect(shouldDispatchGarminPingBatchWrite(
+            false,
+            undefined,
+            firstRevision,
+        )).toBe(true);
+        expect(shouldDispatchGarminPingBatchWrite(
+            true,
+            firstRevision,
+            secondRevision,
+        )).toBe(true);
+    });
+
+    it('does not redispatch retry-state writes for the same queue revision', () => {
+        const dispatchedRevision = queueItem({
+            dispatchedToCloudTask: 1_700_000_000_500,
+        });
+        const retryState = queueItem({
+            retryCount: 1,
+            dispatchedToCloudTask: null,
+        });
+
+        expect(shouldDispatchGarminPingBatchWrite(
+            true,
+            dispatchedRevision,
+            retryState,
+        )).toBe(false);
+    });
+
+    it('leaves same-revision retry writes to the existing Cloud Task backoff', async () => {
+        const ref = {
+            get: vi.fn(),
+        } as unknown as admin.firestore.DocumentReference;
+        const handler = dispatchGarminPingBatchOnWrite as unknown as (event: {
+            data: {
+                before: { exists: boolean; data: () => SleepSyncQueueItemInterface };
+                after: {
+                    exists: boolean;
+                    data: () => SleepSyncQueueItemInterface;
+                    ref: admin.firestore.DocumentReference;
+                    id: string;
+                };
+            };
+            params: { queueItemId: string };
+            id: string;
+        }) => Promise<void>;
+
+        await handler({
+            data: {
+                before: {
+                    exists: true,
+                    data: () => queueItem({
+                        dispatchedToCloudTask: 1_700_000_000_500,
+                    }),
+                },
+                after: {
+                    exists: true,
+                    data: () => queueItem({
+                        retryCount: 1,
+                        dispatchedToCloudTask: null,
+                    }),
+                    ref,
+                    id: 'batch-1',
+                },
+            },
+            params: { queueItemId: 'batch-1' },
+            id: 'retry-write-event',
+        });
+
+        expect(ref.get).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it('uses the creation timestamp to distinguish legacy queue revisions', () => {
+        const firstRevision = queueItem({ queueRevision: undefined });
+        const retryState = queueItem({
+            queueRevision: undefined,
+            retryCount: 1,
+        });
+        const replacement = queueItem({
+            queueRevision: undefined,
+            dateCreated: firstRevision.dateCreated + 1,
+        });
+
+        expect(shouldDispatchGarminPingBatchWrite(
+            true,
+            firstRevision,
+            retryState,
+        )).toBe(false);
+        expect(shouldDispatchGarminPingBatchWrite(
+            true,
+            firstRevision,
+            replacement,
+        )).toBe(true);
     });
 
     it('dispatches the current batch revision and guards the marker write', async () => {

@@ -47,8 +47,9 @@ Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise sep
 They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
 `receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
 validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
-UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each batch outside
-the HTTP acknowledgement path; its worker immediately dispatches the per-callback children, and the scheduled
+UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each newly created
+or replacement batch revision outside the HTTP acknowledgement path without redispatching same-revision retry-state
+writes; its worker immediately dispatches the per-callback children, and the scheduled
 dispatcher remains the recovery path. The callback worker pulls and writes
 with OAuth and connection lifecycle guards. Large callback responses are written
 in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose

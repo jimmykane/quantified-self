@@ -13,6 +13,7 @@ import { enqueueSleepSyncTask } from '../utils';
 import { getActiveRevisionProcessingLease } from '../queue/revision-processing-lease';
 import {
     deleteSleepQueueRevisionWithTombstone,
+    getSleepQueueRevisionIdentity,
     isCurrentSleepQueueRevision,
 } from './queue-revision';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './constants';
@@ -34,6 +35,29 @@ function isUndispatchedGarminPingBatch(
         && candidate.provider === SLEEP_PROVIDERS.GarminAPI
         && candidate.processed !== true
         && candidate.dispatchedToCloudTask == null;
+}
+
+/**
+ * Dispatch only a newly durable batch revision. Retry bookkeeping can clear
+ * dispatchedToCloudTask on the same revision; Cloud Tasks must own that
+ * delivery's backoff instead of this write trigger starting a fresh task.
+ */
+export function shouldDispatchGarminPingBatchWrite(
+    beforeExists: boolean,
+    beforeQueueItem: unknown,
+    afterQueueItem: unknown,
+): boolean {
+    if (!isUndispatchedGarminPingBatch(afterQueueItem)) return false;
+    if (!beforeExists) return true;
+    if (!beforeQueueItem || typeof beforeQueueItem !== 'object') return false;
+
+    const beforeRevision = getSleepQueueRevisionIdentity(
+        beforeQueueItem as { queueRevision?: unknown; dateCreated?: unknown },
+    );
+    const afterRevision = getSleepQueueRevisionIdentity(
+        afterQueueItem as { queueRevision?: unknown; dateCreated?: unknown },
+    );
+    return afterRevision !== null && afterRevision !== beforeRevision;
 }
 
 function nonEmptyString(value: unknown): string | null {
@@ -149,10 +173,16 @@ export const dispatchGarminPingBatchOnWrite = onDocumentWritten({
     concurrency: 10,
     retry: true,
 }, async event => {
+    const before = event.data?.before;
     const after = event.data?.after;
     if (!after?.exists) return;
     const queueItem = after.data() as SleepSyncQueueItemInterface | undefined;
-    if (!queueItem || !isUndispatchedGarminPingBatch(queueItem)) return;
+    const beforeQueueItem = before?.exists ? before.data() : undefined;
+    if (!queueItem || !shouldDispatchGarminPingBatchWrite(
+        before?.exists === true,
+        beforeQueueItem,
+        queueItem,
+    )) return;
     await dispatchGarminPingBatchQueueRevision(
         `${event.params.queueItemId || after.id}`,
         after.ref,
