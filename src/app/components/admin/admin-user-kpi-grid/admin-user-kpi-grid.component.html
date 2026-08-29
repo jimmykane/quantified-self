@@ -1,0 +1,64 @@
+@if (loading && cards.length === 0) {
+<div class="kpi-status" role="status">
+    <mat-spinner diameter="36"></mat-spinner>
+    <span>Loading user KPIs</span>
+</div>
+} @else {
+    @if (error) {
+    <mat-card class="kpi-error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ error }}</span>
+    </mat-card>
+    }
+
+    @if (cards.length > 0) {
+    <div class="kpi-grid">
+        @for (card of cards; track card.id) {
+        <mat-card class="app-stat-card" [class.status-success]="card.severity === 'ok'"
+            [class.status-pending]="card.severity === 'warning'"
+            [class.status-error]="card.severity === 'error'">
+            <div class="app-stat-header">
+                <mat-icon>{{ card.icon }}</mat-icon>
+                <span>{{ card.label }}</span>
+                @if (showCountRefreshActions && card.id === 'events') {
+                <button mat-icon-button type="button" class="kpi-action" matTooltip="Refresh event count"
+                    aria-label="Refresh event count"
+                    [disabled]="actionsDisabled || refreshingEventCount"
+                    (click)="refreshEventCount.emit()">
+                    @if (refreshingEventCount) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                    } @else {
+                    <mat-icon>refresh</mat-icon>
+                    }
+                </button>
+                }
+                @if (showCountRefreshActions && card.id === 'routes') {
+                <button mat-icon-button type="button" class="kpi-action" matTooltip="Refresh route count"
+                    aria-label="Refresh route count"
+                    [disabled]="actionsDisabled || refreshingRouteCount"
+                    (click)="refreshRouteCount.emit()">
+                    @if (refreshingRouteCount) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                    } @else {
+                    <mat-icon>refresh</mat-icon>
+                    }
+                </button>
+                }
+            </div>
+            <div class="app-stat-value">
+                @if (card.value === null) {
+                <span class="kpi-value-muted">-</span>
+                } @else if (card.valueKind === 'compact') {
+                {{ card.value | compactCount }}
+                } @else {
+                {{ card.value | number }}
+                }
+            </div>
+            @if (card.subtitle) {
+            <div class="kpi-subtitle">{{ card.subtitle }}</div>
+            }
+        </mat-card>
+        }
+    </div>
+    }
+}

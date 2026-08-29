@@ -1,0 +1,23 @@
+<main class="admin-user-workspace qs-workspace-page" aria-labelledby="admin-user-workspace-title">
+    <app-page-header title="User Management" titleId="admin-user-workspace-title" eyebrow="Admin / Users"
+        subtitle="Explore aggregate user analytics or search and manage individual accounts." [leadingAction]="true">
+        <button pageHeaderLeading mat-icon-button routerLink="/admin" matTooltip="Back to Dashboard"
+            aria-label="Back to Admin Dashboard">
+            <mat-icon>arrow_back</mat-icon>
+        </button>
+    </app-page-header>
+
+    <mat-tab-group class="workspace-tabs" [selectedIndex]="selectedTabIndex()" [preserveContent]="true"
+        (selectedIndexChange)="selectTab($event)">
+        <mat-tab label="Overview">
+            <ng-template matTabContent>
+                <app-admin-user-overview></app-admin-user-overview>
+            </ng-template>
+        </mat-tab>
+        <mat-tab label="Users">
+            <ng-template matTabContent>
+                <app-admin-user-table></app-admin-user-table>
+            </ng-template>
+        </mat-tab>
+    </mat-tab-group>
+</main>

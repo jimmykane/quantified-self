@@ -1,0 +1,50 @@
+:host {
+    display: block;
+    padding-top: 1.5rem;
+}
+
+.overview-section {
+    margin-bottom: 2rem;
+}
+
+.section-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+
+    h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0;
+        font: var(--mat-sys-headline-small);
+    }
+
+    p {
+        margin: 0.4rem 0 0;
+        color: var(--mat-sys-on-surface-variant);
+        max-width: 78ch;
+    }
+}
+
+.section-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: var(--mat-sys-tertiary);
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 1rem;
+}
+
+@media (max-width: 900px) {
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+}

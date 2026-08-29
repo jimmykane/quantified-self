@@ -1,0 +1,192 @@
+<section class="user-table-section" aria-labelledby="admin-users-table-title">
+    <div class="section-heading">
+        <h2 id="admin-users-table-title"><mat-icon>manage_accounts</mat-icon>User Accounts</h2>
+        <p>Search, inspect, and manage individual user accounts.</p>
+    </div>
+
+    <mat-card class="filter-card">
+        <mat-form-field appearance="outline" class="search-field" subscriptSizing="dynamic">
+            <mat-label>Search users</mat-label>
+            <input matInput [value]="searchInputValue()" (input)="onSearchInput($event)"
+                placeholder="Search by email, name, or UID">
+            @if (!searchInputValue()) {
+            <mat-icon matSuffix>search</mat-icon>
+            } @else {
+            <button mat-icon-button matSuffix type="button" (click)="clearSearch()" aria-label="Clear search">
+                <mat-icon>close</mat-icon>
+            </button>
+            }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="service-filter" subscriptSizing="dynamic">
+            <mat-label>Filter Service</mat-label>
+            <mat-select [value]="filterService()" (selectionChange)="onFilterServiceChange($event.value)">
+                <mat-option [value]="undefined">All Services</mat-option>
+                <mat-option value="garmin">Garmin</mat-option>
+                <mat-option value="suunto">Suunto</mat-option>
+                <mat-option value="coros">COROS</mat-option>
+                <mat-option value="wahoo">Wahoo</mat-option>
+            </mat-select>
+        </mat-form-field>
+    </mat-card>
+
+    <mat-card class="table-card">
+        @if (loading()) {
+        <div class="loading-shade" role="status"><mat-spinner></mat-spinner></div>
+        }
+        @if (error()) {
+        <div class="error-message" role="alert">{{ error() }}</div>
+        }
+
+        <div class="table-wrapper">
+            <table mat-table [dataSource]="rows()" matSort [matSortActive]="sortField()"
+                [matSortDirection]="sortDirection()" matSortDisableClear (matSortChange)="onSortChange($event)">
+                <ng-container matColumnDef="photoURL">
+                    <th mat-header-cell *matHeaderCellDef></th>
+                    <td mat-cell *matCellDef="let row">
+                        <img [src]="row.user.photoURL || 'assets/icons/user.svg'" class="user-avatar" alt=""
+                            referrerpolicy="no-referrer" (error)="onAvatarError($event)">
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="email">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
+                    <td mat-cell *matCellDef="let row">{{ row.user.email }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="uid">
+                    <th mat-header-cell *matHeaderCellDef>UID</th>
+                    <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.user.uid }}</span></td>
+                </ng-container>
+
+                <ng-container matColumnDef="providerIds">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Auth</th>
+                    <td mat-cell *matCellDef="let row">
+                        <div class="provider-icons">
+                            @for (provider of row.user.providerIds; track provider) {
+                            @if (provider === 'google.com') { <mat-icon matTooltip="Google" class="provider-google">public</mat-icon> }
+                            @else if (provider === 'password') { <mat-icon matTooltip="Email/Password" class="provider-email">email</mat-icon> }
+                            @else if (provider === 'apple.com') { <mat-icon matTooltip="Apple" class="provider-apple">apple</mat-icon> }
+                            @else if (provider === 'facebook.com') { <mat-icon matTooltip="Facebook" class="provider-facebook">facebook</mat-icon> }
+                            @else { <mat-icon [matTooltip]="provider">person</mat-icon> }
+                            }
+                        </div>
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="displayName">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+                    <td mat-cell *matCellDef="let row">{{ row.user.displayName || '-' }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="role">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Role</th>
+                    <td mat-cell *matCellDef="let row"><mat-chip [class]="'role-' + row.role">{{ row.role | uppercase }}</mat-chip></td>
+                </ng-container>
+
+                <ng-container matColumnDef="subscriptionHistory">
+                    <th mat-header-cell *matHeaderCellDef>Subscription</th>
+                    <td mat-cell *matCellDef="let row">
+                        <div class="subscription-cell">
+                            <mat-chip [class]="'subscription-' + row.subscriptionState">{{ row.subscriptionLabel }}</mat-chip>
+                            @if (row.subscriptionDetails) { <span class="detail-text">{{ row.subscriptionDetails }}</span> }
+                        </div>
+                        @if (row.user.subscription?.stripeLink) {
+                        <a [href]="row.user.subscription.stripeLink" target="_blank" rel="noopener noreferrer"
+                            mat-icon-button class="qs-mat-primary" matTooltip="View in Stripe" aria-label="View user in Stripe">
+                            <mat-icon>open_in_new</mat-icon>
+                        </a>
+                        }
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="assistantRequestsUsed">
+                    <th mat-header-cell *matHeaderCellDef>Assistant Requests Used</th>
+                    <td mat-cell *matCellDef="let row">{{ (row.user.assistantRequestsUsed ?? 0) | number }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="eventStats">
+                    <th mat-header-cell *matHeaderCellDef>Events</th>
+                    <td mat-cell *matCellDef="let row">{{ row.user.eventStats?.total | compactCount }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="routeStats">
+                    <th mat-header-cell *matHeaderCellDef>Routes</th>
+                    <td mat-cell *matCellDef="let row">{{ row.user.routeStats?.total | compactCount }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="services">
+                    <th mat-header-cell *matHeaderCellDef>Services</th>
+                    <td mat-cell *matCellDef="let row">
+                        <div class="services-cell">
+                            @for (service of row.connectedServices; track service.provider) {
+                            <div class="service-row">
+                                @if (service.sourceServiceName) {
+                                <app-service-source-icon [sourceServiceName]="service.sourceServiceName" [showTooltip]="false"
+                                    [iconWidth]="24" [iconHeight]="18"></app-service-source-icon>
+                                } @else {
+                                <mat-icon>link</mat-icon>
+                                }
+                                <span class="detail-text">{{ service.connectedAtLabel }}</span>
+                            </div>
+                            } @empty { <span class="detail-text">-</span> }
+                        </div>
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="created">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Created</th>
+                    <td mat-cell *matCellDef="let row">{{ row.createdLabel }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="lastLogin">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Last Login</th>
+                    <td mat-cell *matCellDef="let row">{{ row.lastLoginLabel }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="onboarding">
+                    <th mat-header-cell *matHeaderCellDef>Onboarding</th>
+                    <td mat-cell *matCellDef="let row">
+                        <mat-chip [class]="row.user.onboardingCompleted ? 'state-active' : 'state-disabled'">
+                            {{ row.user.onboardingCompleted ? 'Completed' : 'Pending' }}
+                        </mat-chip>
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="status">
+                    <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
+                    <td mat-cell *matCellDef="let row">
+                        <mat-chip [class]="row.user.disabled ? 'state-disabled' : 'state-active'">
+                            {{ row.user.disabled ? 'Disabled' : 'Active' }}
+                        </mat-chip>
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef>Actions</th>
+                    <td mat-cell *matCellDef="let row">
+                        @if (!row.isAdmin) {
+                        <button mat-icon-button class="qs-mat-primary" matTooltip="Impersonate User"
+                            aria-label="Impersonate user" (click)="onImpersonate(row.user)">
+                            <mat-icon>supervised_user_circle</mat-icon>
+                        </button>
+                        }
+                    </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+                <tr class="mat-row" *matNoDataRow>
+                    <td class="mat-cell no-data-cell" [attr.colspan]="displayedColumns.length">
+                        @if (searchTerm()) { No users found matching "{{ searchTerm() }}" }
+                        @else if (!loading()) { No users found }
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <mat-paginator [length]="totalCount()" [pageIndex]="currentPage()" [pageSize]="pageSize()"
+            [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)" aria-label="Select page of users">
+        </mat-paginator>
+    </mat-card>
+</section>

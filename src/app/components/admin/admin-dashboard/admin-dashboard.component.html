@@ -1,8 +1,8 @@
-<div class="admin-container">
-    <div class="header-container">
-        <h1 class="app-text-gradient">Admin Dashboard</h1>
-        <p class="premium-subtitle">A live view of user growth, queue work, service availability, releases, and current-month billing.</p>
-    </div>
+<main class="admin-dashboard qs-workspace-page" aria-labelledby="admin-dashboard-title">
+    <app-page-header title="Admin Dashboard" titleId="admin-dashboard-title" eyebrow="Administration"
+        leadingIcon="admin_panel_settings"
+        subtitle="A live view of user growth, queue work, service availability, releases, and current-month billing.">
+    </app-page-header>
 
     <section class="dashboard-section">
         <div class="health-grid">
@@ -59,59 +59,29 @@
             </div>
             <div class="section-actions">
                 <button mat-icon-button type="button" matTooltip="Refresh user data" aria-label="Refresh user data"
-                    [disabled]="isLoadingUsers() || isLoadingUserHistory()" (click)="fetchUserOverview()">
+                    [disabled]="refreshingUsers()" (click)="refreshUserAnalytics()">
+                    @if (refreshingUsers()) {
+                    <mat-spinner diameter="20"></mat-spinner>
+                    } @else {
                     <mat-icon>refresh</mat-icon>
+                    }
                 </button>
-                <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/users">
+                <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/users"
+                    [queryParams]="{ tab: 'users' }">
                     <mat-icon>manage_accounts</mat-icon>
                     Manage Users
                 </button>
             </div>
         </div>
 
-        @if (isLoadingUsers()) {
-        <div class="spinner-container">
-            <mat-spinner diameter="36"></mat-spinner>
-            <span>Loading user KPIs</span>
-        </div>
-        } @else if (userError()) {
-        <mat-card class="error-card">
-            <mat-icon>error</mat-icon>
-            <span>{{ userError() }}</span>
-        </mat-card>
-        } @else {
-        <div class="stats-grid">
-            @for (card of userKpiCards(); track card.id) {
-            <mat-card class="app-stat-card" [class.status-success]="card.severity === 'ok'"
-                [class.status-pending]="card.severity === 'warning'"
-                [class.status-error]="card.severity === 'error'">
-                <div class="app-stat-header">
-                    <mat-icon>{{ card.icon }}</mat-icon>
-                    <span>{{ card.label }}</span>
-                </div>
-                <div class="app-stat-value">
-                    @if (card.value === null) {
-                    -
-                    } @else if (card.valueKind === 'compact') {
-                    {{ card.value | compactCount }}
-                    } @else if (card.valueKind === 'number') {
-                    {{ card.value | number }}
-                    } @else {
-                    {{ card.value }}
-                    }
-                </div>
-                @if (card.subtitle) {
-                <div class="stat-subtitle">{{ card.subtitle }}</div>
-                }
-            </mat-card>
-            }
-        </div>
-        }
+        <app-admin-user-kpi-grid [cards]="userKpiCards()" [loading]="userAnalytics.loadingKpis()"
+            [error]="userAnalytics.statsError()">
+        </app-admin-user-kpi-grid>
 
         <app-admin-user-history
-            [history]="userHistory()"
-            [loading]="isLoadingUserHistory()"
-            [error]="userHistoryError()" />
+            [history]="userAnalytics.history()"
+            [loading]="userAnalytics.loadingHistory()"
+            [error]="userAnalytics.historyError()" />
     </section>
 
     <section class="dashboard-section">
@@ -434,4 +404,4 @@
     @if (!financialError()) {
     <app-admin-financials [stats]="financialStats()" [loading]="isLoadingFinancials()"></app-admin-financials>
     }
-</div>
+</main>

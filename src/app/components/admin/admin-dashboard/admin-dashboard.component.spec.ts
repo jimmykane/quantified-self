@@ -21,6 +21,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-new.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { AdminUserAnalyticsStore } from '../../../services/admin-user-analytics.store';
 
 describe('AdminDashboardComponent', () => {
     let fixture: ComponentFixture<AdminDashboardComponent>;
@@ -41,6 +42,19 @@ describe('AdminDashboardComponent', () => {
     };
     let loggerSpy: { error: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
     let releaseChangelogAdminModeSpy: ReturnType<typeof vi.fn>;
+    let userAnalyticsSpy: {
+        stats: WritableSignal<UserCountStats | null>;
+        userGrowthTrend: WritableSignal<UserGrowthTrendResponse | null>;
+        subscriptionHistoryTrend: WritableSignal<SubscriptionHistoryTrendResponse | null>;
+        history: WritableSignal<AdminDashboardHistoryResponse | null>;
+        loadingKpis: WritableSignal<boolean>;
+        loadingHistory: WritableSignal<boolean>;
+        refreshingAll: WritableSignal<boolean>;
+        loadingAll: WritableSignal<boolean>;
+        statsError: WritableSignal<string | null>;
+        historyError: WritableSignal<string | null>;
+        refreshAll: ReturnType<typeof vi.fn>;
+    };
 
     const mockFinancialStats: FinancialStats = {
         revenue: { total: 1000, currency: 'USD', invoiceCount: 10 },
@@ -245,6 +259,19 @@ describe('AdminDashboardComponent', () => {
             requestAdminMode: vi.fn(() => releaseChangelogAdminModeSpy),
         };
         loggerSpy = { error: vi.fn(), log: vi.fn() };
+        userAnalyticsSpy = {
+            stats: signal(mockUserStats),
+            userGrowthTrend: signal(mockGrowthTrend),
+            subscriptionHistoryTrend: signal(mockSubscriptionTrend),
+            history: signal(mockUserHistory),
+            loadingKpis: signal(false),
+            loadingHistory: signal(false),
+            refreshingAll: signal(false),
+            loadingAll: signal(false),
+            statsError: signal(null),
+            historyError: signal(null),
+            refreshAll: vi.fn(() => Promise.resolve()),
+        };
 
         await TestBed.configureTestingModule({
             imports: [AdminDashboardComponent, NoopAnimationsModule],
@@ -253,6 +280,7 @@ describe('AdminDashboardComponent', () => {
                 { provide: AdminService, useValue: adminServiceSpy },
                 { provide: AppWhatsNewService, useValue: whatsNewServiceSpy },
                 { provide: LoggerService, useValue: loggerSpy },
+                { provide: AdminUserAnalyticsStore, useValue: userAnalyticsSpy },
                 { provide: AppThemeService, useValue: { getAppTheme: () => of(AppThemes.Normal) } },
                 {
                     provide: EChartsLoaderService,
@@ -287,15 +315,12 @@ describe('AdminDashboardComponent', () => {
         createComponent();
 
         expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
-        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalled();
-        expect(adminServiceSpy.getUserGrowthTrend).toHaveBeenCalledWith(12);
-        expect(adminServiceSpy.getSubscriptionHistoryTrend).toHaveBeenCalledWith(12);
-        expect(adminServiceSpy.getAdminDashboardHistory).toHaveBeenCalledWith(365);
+        expect(userAnalyticsSpy.refreshAll).toHaveBeenCalled();
         expect(adminServiceSpy.getQueueStats).toHaveBeenCalledWith(true);
         expect(adminServiceSpy.getMaintenanceStatus).toHaveBeenCalled();
         expect(component.financialStats()).toEqual(mockFinancialStats);
-        expect(component.userStats()).toEqual(mockUserStats);
-        expect(component.userHistory()).toEqual(mockUserHistory);
+        expect(component.userAnalytics.stats()).toEqual(mockUserStats);
+        expect(component.userAnalytics.history()).toEqual(mockUserHistory);
         expect(component.queueRows()).toHaveLength(8);
         expect(component.maintenanceCards()).toHaveLength(3);
     });
@@ -317,12 +342,11 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Collecting daily history');
         expect(text).toContain('Total Users');
         expect(text).toContain('Marketing Opt-ins');
-        expect(text).toContain('Ever Paid');
         expect(text).toContain('Scheduled Cancels');
-        expect(text).toContain('Service Connected');
-        expect(text).toContain('MCP Connected');
         expect(text).toContain('Any Connection');
-        expect(text).toContain('Garmin 35');
+        expect(text).not.toContain('Ever Paid');
+        expect(text).not.toContain('Service Connected');
+        expect(text).not.toContain('MCP Connected');
         expect(text).toContain('Workout');
         expect(text).toContain('Event Reparse');
         expect(text).toContain('Automatic scan: disabled');
@@ -369,29 +393,26 @@ describe('AdminDashboardComponent', () => {
         expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin queue stats:', expect.any(Error));
     });
 
-    it('should keep core user KPIs visible when user trend calls fail', () => {
-        adminServiceSpy.getUserGrowthTrend.mockReturnValue(throwError(() => new Error('growth failed')));
-        adminServiceSpy.getSubscriptionHistoryTrend.mockReturnValue(throwError(() => new Error('subscription failed')));
+    it('should keep core user KPIs visible when trend data is unavailable', () => {
+        userAnalyticsSpy.userGrowthTrend.set(null);
+        userAnalyticsSpy.subscriptionHistoryTrend.set(null);
         createComponent();
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Total Users');
-        expect(text).toContain('Ever Paid');
         expect(text).toContain('12-Month Growth');
         expect(text).not.toContain('User KPIs are unavailable.');
-        expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin user growth trend:', expect.any(Error));
-        expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin subscription history trend:', expect.any(Error));
     });
 
     it('should isolate daily history failures from live user KPIs', () => {
-        adminServiceSpy.getAdminDashboardHistory.mockReturnValue(throwError(() => new Error('history failed')));
+        userAnalyticsSpy.history.set(null);
+        userAnalyticsSpy.historyError.set('User history is unavailable.');
         createComponent();
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Total Users');
-        expect(text).toContain('Daily user history is unavailable. Live user KPIs are unaffected.');
+        expect(text).toContain('User history is unavailable.');
         expect(text).not.toContain('User KPIs are unavailable.');
-        expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin user history:', expect.any(Error));
     });
 
     it('should show top-level unavailable state when financial stats fail', () => {

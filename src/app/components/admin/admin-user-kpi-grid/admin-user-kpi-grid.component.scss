@@ -1,0 +1,56 @@
+:host {
+    display: block;
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1rem;
+}
+
+.app-stat-card {
+    min-width: 0;
+}
+
+.app-stat-header {
+    width: 100%;
+    min-width: 0;
+
+    > span {
+        min-width: 0;
+    }
+}
+
+.kpi-action {
+    margin: -0.5rem -0.5rem -0.5rem auto;
+    flex: 0 0 auto;
+}
+
+.kpi-subtitle {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    margin-top: 0.35rem;
+}
+
+.kpi-value-muted {
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.kpi-status,
+.kpi-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    min-height: 120px;
+}
+
+.kpi-error {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: auto;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    color: var(--mat-sys-error);
+}

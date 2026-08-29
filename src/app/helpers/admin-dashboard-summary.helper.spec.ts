@@ -6,9 +6,15 @@ import {
     buildAdminDashboardHealthSummary,
     buildAdminDashboardMaintenanceCards,
     buildAdminDashboardQueueRows,
-    buildAdminDashboardUserKpiCards,
     formatAdminDashboardDuration,
 } from './admin-dashboard-summary.helper';
+import { buildAdminUserKpiCards } from './admin-user-kpis.helper';
+
+const buildFullUserKpiCards = (
+    stats: Parameters<typeof buildAdminUserKpiCards>[1],
+    growth: Parameters<typeof buildAdminUserKpiCards>[2],
+    subscriptions: Parameters<typeof buildAdminUserKpiCards>[3],
+) => buildAdminUserKpiCards('full', stats, growth, subscriptions);
 
 describe('admin-dashboard-summary helper', () => {
     it('builds user KPI cards from stats and trend totals', () => {
@@ -45,7 +51,7 @@ describe('admin-dashboard-summary helper', () => {
             },
         };
 
-        const cards = buildAdminDashboardUserKpiCards(
+        const cards = buildFullUserKpiCards(
             stats,
             {
                 months: 12,
@@ -126,11 +132,15 @@ describe('admin-dashboard-summary helper', () => {
             routes: { total: 0 },
         };
 
-        const cards = buildAdminDashboardUserKpiCards(stats, {} as any, { totals: { net: Number.NaN } } as any);
+        const cards = buildFullUserKpiCards(
+            stats,
+            {} as Parameters<typeof buildFullUserKpiCards>[1],
+            { totals: { net: Number.NaN } } as Parameters<typeof buildFullUserKpiCards>[2],
+        );
 
         expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
-        expect(cards.some(card => card.id.startsWith('active-'))).toBe(false);
+        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
     });
 
     it('caps the marketing consent share for non-atomic count snapshots', () => {
@@ -151,7 +161,7 @@ describe('admin-dashboard-summary helper', () => {
             routes: { total: 0 },
         };
 
-        const card = buildAdminDashboardUserKpiCards(stats, null, null)
+        const card = buildFullUserKpiCards(stats, null, null)
             .find(candidate => candidate.id === 'marketing-consent');
 
         expect(card?.subtitle).toBe('Consent only · 100% of users');
@@ -181,7 +191,7 @@ describe('admin-dashboard-summary helper', () => {
             },
         };
 
-        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+        const cards = buildFullUserKpiCards(stats, null, null);
 
         expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
         expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or ID token refresh');
@@ -212,7 +222,7 @@ describe('admin-dashboard-summary helper', () => {
             },
         };
 
-        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+        const cards = buildFullUserKpiCards(stats, null, null);
 
         expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
             value: null,
@@ -249,7 +259,7 @@ describe('admin-dashboard-summary helper', () => {
             routes: { total: 5 },
         } as UserCountStats;
 
-        const cards = buildAdminDashboardUserKpiCards(stats, null, null);
+        const cards = buildFullUserKpiCards(stats, null, null);
         const summary = buildAdminDashboardHealthSummary(
             [],
             [],
@@ -487,7 +497,7 @@ describe('admin-dashboard-summary helper', () => {
         expect(maintenanceCards.find(card => card.id === 'prod')?.severity).toBe('error');
         expect(maintenanceCards.find(card => card.id === 'beta')?.value).toBe('Unknown');
         expect(maintenanceCards.find(card => card.id === 'beta')?.severity).toBe('warning');
-        expect(buildAdminDashboardUserKpiCards(stats, null, null).find(card => card.id === 'events')?.subtitle).toBeUndefined();
+        expect(buildFullUserKpiCards(stats, null, null).find(card => card.id === 'events')?.subtitle).toBeUndefined();
     });
 
     it('builds health summary and formats durations', () => {

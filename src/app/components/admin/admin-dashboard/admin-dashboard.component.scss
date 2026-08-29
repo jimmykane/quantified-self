@@ -5,33 +5,8 @@
     width: 100%;
 }
 
-.admin-container {
-    padding: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
-
-    @include bp.xsmall {
-        padding: 1rem;
-    }
-}
-
-.header-container {
-    text-align: center;
-    margin-bottom: 2rem;
-
-    h1 {
-        margin: 0 0 0.5rem;
-    }
-
-    .premium-subtitle {
-        margin: 0;
-        color: var(--mat-sys-on-surface-variant);
-    }
-
-    @include bp.xsmall {
-        text-align: start;
-        margin-bottom: 1.5rem;
-    }
+.admin-dashboard {
+    min-width: 0;
 }
 
 .dashboard-section {
@@ -87,7 +62,6 @@
 }
 
 .health-grid,
-.stats-grid,
 .mini-card-grid {
     display: grid;
     gap: 1rem;
@@ -105,10 +79,6 @@
     }
 }
 
-.stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
 .mini-card-grid {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -124,15 +94,13 @@
 }
 
 .overview-card,
-.app-stat-card,
 .mini-status-card,
 .queue-card {
     border-radius: 8px;
     border-inline-start: 4px solid transparent;
 }
 
-.overview-card,
-.app-stat-card {
+.overview-card {
     min-height: 132px;
 }
 
@@ -143,7 +111,6 @@
 }
 
 .overview-card-header,
-.app-stat-header,
 .mini-card-header {
     display: flex;
     align-items: center;
@@ -161,15 +128,13 @@
 }
 
 .overview-value,
-.app-stat-value,
 .mini-card-value {
     font-family: 'Barlow Condensed', var(--mat-sys-title-large-font);
     color: var(--mat-sys-on-surface);
     font-weight: 500;
 }
 
-.overview-value,
-.app-stat-value {
+.overview-value {
     margin: 0.75rem 0 0.35rem;
     font-size: 2rem;
     line-height: 1.05;
@@ -182,7 +147,6 @@
 }
 
 .overview-subtitle,
-.stat-subtitle,
 .mini-card-subtitle,
 .cell-detail {
     color: var(--mat-sys-on-surface-variant);
@@ -192,13 +156,6 @@
 .latest-title {
     font-size: 1.25rem;
     overflow-wrap: anywhere;
-}
-
-.app-stat-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 1rem;
 }
 
 .status-ok,
@@ -342,33 +299,28 @@ mat-chip {
         }
     }
 
-    .stats-grid,
     .mini-card-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.75rem;
     }
 
-    .overview-card,
-    .app-stat-card {
+    .overview-card {
         min-height: 118px;
     }
 
     .overview-card,
-    .app-stat-card,
     .mini-status-card {
         padding: 0.875rem;
     }
 
     .overview-card-header,
-    .app-stat-header,
     .mini-card-header {
         align-items: flex-start;
         font-size: 0.72rem;
         line-height: 1.25;
     }
 
-    .overview-value,
-    .app-stat-value {
+    .overview-value {
         margin: 0.6rem 0 0.25rem;
         font-size: 1.6rem;
     }
@@ -378,7 +330,6 @@ mat-chip {
     }
 
     .overview-subtitle,
-    .stat-subtitle,
     .mini-card-subtitle,
     .cell-detail {
         font-size: 0.75rem;
