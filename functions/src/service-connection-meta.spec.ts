@@ -300,6 +300,43 @@ describe('service-connection-meta', () => {
     expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
+  it('mirrors staged Garmin connection and terminal-auth transitions to Health state', async () => {
+    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+
+    await expect(markServiceConnected(
+      stagedUserID,
+      ServiceNames.GarminAPI,
+      'garmin-account',
+    )).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      stagedUserID,
+      'GarminAPI',
+      { status: 'ready', lastErrorCode: null },
+      expect.any(Number),
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+    expect(hoisted.metaData.providerUserId).toBe('garmin-account');
+
+    hoisted.updateHealthSyncState.mockClear();
+    await expect(markServiceReconnectRequired(
+      stagedUserID,
+      ServiceNames.GarminAPI,
+      'invalid_grant',
+      'Reconnect required',
+      123,
+    )).resolves.toBe(true);
+    expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+      stagedUserID,
+      'GarminAPI',
+      {
+        status: 'reconnect_required',
+        lastErrorCode: 'provider_auth_reconnect_required',
+      },
+      123,
+      expect.objectContaining({ authoritativeLifecycleTransition: true }),
+    );
+  });
+
   it('mirrors Suunto connection and terminal-auth transitions to Health state', async () => {
     const healthUserID = 'suunto-health-user';
 

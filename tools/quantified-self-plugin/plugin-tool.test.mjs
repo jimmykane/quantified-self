@@ -70,6 +70,7 @@ async function makeRepositoryFixture() {
     `${JSON.stringify({
       name: 'quantified-self',
       version: '0.1.0',
+      license: 'AGPL-3.0-only',
       description: 'Test plugin',
       author: { name: 'Test' },
       skills: './skills/',
@@ -143,6 +144,25 @@ test('replaces existing build metadata with one Codex cachebuster', () => {
     () => createPluginVersion('0.1.0', 'invalid_cachebuster'),
     /cachebuster/,
   );
+});
+
+test('keeps repository package and plugin license metadata aligned', async () => {
+  for (const relativePath of [
+    'package.json',
+    'package-lock.json',
+    'functions/package.json',
+    'functions/package-lock.json',
+    'plugins/quantified-self/plugin.template.json',
+  ]) {
+    const metadata = JSON.parse(await readFile(join(DEFAULT_REPO_ROOT, relativePath), 'utf8'));
+    const declaredLicense = relativePath.endsWith('package-lock.json')
+      ? metadata.packages?.['']?.license
+      : metadata.license;
+    assert.equal(declaredLicense, 'AGPL-3.0-only', relativePath);
+  }
+
+  const licenseText = await readFile(join(DEFAULT_REPO_ROOT, 'LICENSE'), 'utf8');
+  assert.match(licenseText, /GNU AFFERO GENERAL PUBLIC LICENSE\s+Version 3/);
 });
 
 test('rejects output paths outside their declared root', () => {
@@ -269,6 +289,7 @@ test('builds an exact app mapping, cache-busted manifest, and copied icon', asyn
   const manifest = JSON.parse(await readFile(built.manifestPath, 'utf8'));
   const appManifest = JSON.parse(await readFile(built.appPath, 'utf8'));
   assert.equal(manifest.version, '0.1.0+codex.ci-abcdef123456');
+  assert.equal(manifest.license, 'AGPL-3.0-only');
   assert.deepEqual(appManifest, {
     apps: {
       'quantified-self': {
@@ -335,7 +356,7 @@ test('rejects malformed and wrong-identity templates before generating account-b
   });
   await writeFile(
     templatePath,
-    '{"name":"quantified-self","version":"not-semver"}\n',
+    '{"name":"quantified-self","version":"not-semver","license":"AGPL-3.0-only"}\n',
   );
   await assert.rejects(
     buildPlugin({
@@ -345,6 +366,23 @@ test('rejects malformed and wrong-identity templates before generating account-b
       environment: {},
     }),
     /semantic versioning/,
+  );
+
+  const validTemplate = JSON.parse(
+    await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'plugin.template.json'), 'utf8'),
+  );
+  await writeFile(
+    templatePath,
+    `${JSON.stringify({ ...validTemplate, license: 'AGPL-3.0' })}\n`,
+  );
+  await assert.rejects(
+    buildPlugin({
+      repoRoot: root,
+      appId: 'plugin_asdk_app_local',
+      cachebuster: 'ci-test',
+      environment: {},
+    }),
+    /license must be AGPL-3.0-only/,
   );
 });
 

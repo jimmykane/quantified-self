@@ -458,7 +458,34 @@ export function sanitizeSuuntoHealthErrorForTelemetry(error: unknown): Error {
     return error;
   }
   if (error instanceof Error && error.name === 'SuuntoHealthValidationError') {
-    return new Error('Suunto Health response validation failed.');
+    const validationCode = suuntoHealthValidationTelemetryCode(error.message);
+    return new Error(`Suunto Health response validation failed [${validationCode}].`);
   }
   return new Error('Suunto Health processing failed.');
+}
+
+function suuntoHealthValidationTelemetryCode(message: string): string {
+  const rules: ReadonlyArray<readonly [RegExp, string]> = [
+    [/ must be an object\.$/, 'expected_object'],
+    [/ must be a string\.$/, 'expected_string'],
+    [/ must be a bounded non-empty string\.$/, 'invalid_bounded_string'],
+    [/ must be a valid ISO8601 timestamp(?: with an offset)?\.$/, 'invalid_timestamp'],
+    [/ contains an invalid calendar value\.$/, 'invalid_calendar_value'],
+    [/ contains an unsupported timezone offset\.$/, 'unsupported_timezone_offset'],
+    [/ is outside the supported timestamp range\.$/, 'timestamp_out_of_range'],
+    [/ is outside the supported numeric range\.$/, 'numeric_value_out_of_range'],
+    [/ response must be an array\.$/, 'expected_array'],
+    [/ response exceeds the bounded item count\.$/, 'response_item_limit'],
+    [/^Suunto activity HRExt minimum exceeds maximum\.$/, 'invalid_heart_rate_extrema'],
+    [/ statistic value must be numeric or null\.$/, 'invalid_statistic_value'],
+    [/ statistic value is outside the supported range\.$/, 'statistic_value_out_of_range'],
+    [/^Suunto daily statistics contains an unsupported aggregation\.$/, 'unsupported_aggregation'],
+    [/^Suunto daily statistics contains conflicting non-null duplicates\.$/, 'conflicting_daily_statistic'],
+    [/^Suunto Health samples exceed the bounded source-record count\.$/, 'source_record_limit'],
+    [/^Suunto daily statistics exceeds the bounded source-record count\.$/, 'daily_source_record_limit'],
+    [/^Suunto daily statistics has conflicting day boundaries for one source\.$/, 'conflicting_day_boundaries'],
+    [/^Suunto Health range must be a supported positive window of at most 28 days\.$/, 'invalid_request_range'],
+    [/ response contains a timestamp outside the requested range\.$/, 'timestamp_outside_request'],
+  ];
+  return rules.find(([pattern]) => pattern.test(message))?.[1] || 'unclassified_validation';
 }

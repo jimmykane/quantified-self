@@ -56,6 +56,10 @@ export const processSleepSyncTask = onTaskDispatched({
         logger.info(`[SleepSyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
         return;
     }
+    if (queueItem?.type === 'garmin_health_backfill') {
+        logger.warn(`[SleepSyncTaskWorker] Item ${queueItemId} belongs to the dedicated Garmin Health backfill worker.`);
+        return;
+    }
 
     const result = await processSleepSyncQueueItem(Object.assign({
         id: queueDoc.id,

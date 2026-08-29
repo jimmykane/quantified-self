@@ -21,6 +21,7 @@ import {
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import { normalizeQueueRevision } from '../queue/revision-identity';
+import { GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS } from './queue-config';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
@@ -562,17 +563,23 @@ export async function enqueueRouteDeliverySyncTask(
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.
  */
-export async function enqueueSleepSyncTask(
+interface RevisionBoundQueueTaskIdentity {
+    queueRevision?: string;
+    queueDateCreated?: number;
+    recoveryTaskKey?: string | number;
+}
+
+async function enqueueRevisionBoundQueueTask(
     queueItemId: string,
     dateCreated: number,
+    functionName: string,
+    taskPrefix: string,
+    logPrefix: string,
     scheduleDelaySeconds?: number,
-    identity?: {
-        queueRevision?: string;
-        queueDateCreated?: number;
-        recoveryTaskKey?: string | number;
-    },
+    identity?: RevisionBoundQueueTaskIdentity,
+    dispatchDeadlineSeconds?: number,
 ): Promise<boolean> {
-    const { projectId, location, sleepSyncQueue } = config.cloudtasks;
+    const { projectId, location } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
@@ -584,8 +591,8 @@ export async function enqueueSleepSyncTask(
     const safeQueueRevision = queueRevision
         ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
         : '';
-    const taskId = `sleep-sync-${safeQueueItemId}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
-    const taskName = getCloudTaskName(projectId, location, sleepSyncQueue, taskId);
+    const taskId = `${taskPrefix}-${safeQueueItemId}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
+    const taskName = getCloudTaskName(projectId, location, functionName, taskId);
     const queueDateCreated = Number(identity?.queueDateCreated);
     const payload = {
         queueItemId,
@@ -596,47 +603,80 @@ export async function enqueueSleepSyncTask(
     const taskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
-        functionName: sleepSyncQueue,
+        functionName,
         taskId,
         payload,
         scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[SleepSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
-        failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue sleep sync task for ${queueItemId}:`,
+        dispatchDeadlineSeconds,
+        alreadyExistsLogMessage: `[${logPrefix}] Task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[${logPrefix}] Failed to enqueue task for ${queueItemId}:`,
     });
-    if (taskCreated) {
-        return true;
-    }
+    if (taskCreated) return true;
 
     if (await cloudTaskExists(taskName)) {
-        logger.info(`[SleepSyncDispatcher] Existing task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
+        logger.info(`[${logPrefix}] Existing task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
         return true;
     }
 
     const recoveryTaskKey = sanitizeTaskNamePart(`${identity?.recoveryTaskKey ?? safeDateCreated}`).slice(0, 80);
     const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
-    const recoveryTaskName = getCloudTaskName(projectId, location, sleepSyncQueue, recoveryTaskId);
-    logger.warn(`[SleepSyncDispatcher] Task name for queue item ${queueItemId} is reserved but no live task was found; enqueueing a revision-bound recovery task.`);
+    const recoveryTaskName = getCloudTaskName(projectId, location, functionName, recoveryTaskId);
+    logger.warn(`[${logPrefix}] Task name for queue item ${queueItemId} is reserved but no live task was found; enqueueing a revision-bound recovery task.`);
     const recoveryTaskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
-        functionName: sleepSyncQueue,
+        functionName,
         taskId: recoveryTaskId,
         payload,
         scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[SleepSyncDispatcher] Recovery task already exists for queue item ${queueItemId}, skipping`,
-        failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue recovery sleep sync task for ${queueItemId}:`,
+        dispatchDeadlineSeconds,
+        alreadyExistsLogMessage: `[${logPrefix}] Recovery task already exists for queue item ${queueItemId}, skipping`,
+        failedLogPrefix: `[${logPrefix}] Failed to enqueue recovery task for ${queueItemId}:`,
     });
-    if (recoveryTaskCreated) {
-        return true;
-    }
+    if (recoveryTaskCreated) return true;
 
     if (await cloudTaskExists(recoveryTaskName)) {
-        logger.info(`[SleepSyncDispatcher] Existing recovery task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
+        logger.info(`[${logPrefix}] Existing recovery task is still live for queue item ${queueItemId}; treating its revision as dispatched.`);
         return true;
     }
 
-    logger.warn(`[SleepSyncDispatcher] Recovery task name for queue item ${queueItemId} is reserved but no live task was found; leaving its dispatch marker unchanged.`);
+    logger.warn(`[${logPrefix}] Recovery task name for queue item ${queueItemId} is reserved but no live task was found; leaving its dispatch marker unchanged.`);
     return false;
+}
+
+export async function enqueueSleepSyncTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+    identity?: RevisionBoundQueueTaskIdentity,
+): Promise<boolean> {
+    return enqueueRevisionBoundQueueTask(
+        queueItemId,
+        dateCreated,
+        config.cloudtasks.sleepSyncQueue,
+        'sleep-sync',
+        'SleepSyncDispatcher',
+        scheduleDelaySeconds,
+        identity,
+    );
+}
+
+export async function enqueueGarminHealthBackfillTask(
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds?: number,
+    identity?: RevisionBoundQueueTaskIdentity,
+): Promise<boolean> {
+    return enqueueRevisionBoundQueueTask(
+        queueItemId,
+        dateCreated,
+        config.cloudtasks.garminHealthBackfillQueue,
+        'garmin-health-backfill',
+        'GarminHealthBackfillDispatcher',
+        scheduleDelaySeconds,
+        identity,
+        GARMIN_HEALTH_BACKFILL_TASK_TIMEOUT_SECONDS,
+    );
 }
 
 /**

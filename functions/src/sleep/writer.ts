@@ -422,6 +422,10 @@ export async function updateSleepSyncState(
         nextBackfillAllowedAtMs: number | null;
         providerMinBackfillStartMs: number | null;
         providerMinBackfillStartProviderUserId: string | null;
+        healthBackfillStatus: 'queued' | 'running' | 'complete' | 'failed' | 'skipped' | null;
+        healthBackfillWindowsCompleted: number | null;
+        healthBackfillWindowsTotal: number | null;
+        healthBackfillSummaryType: string | null;
         lastError: string | null;
     }>,
     nowMs = Date.now(),

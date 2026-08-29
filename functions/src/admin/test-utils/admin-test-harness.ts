@@ -104,6 +104,9 @@ const {
         if (queueId === 'processSleepSyncTask') {
             return 3;
         }
+        if (queueId === 'processGarminHealthBackfillTask') {
+            return 2;
+        }
         if (queueId === 'processSportsLibReparseTask') {
             return 8;
         }
@@ -250,6 +253,7 @@ vi.mock('../../config', () => ({
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
+            garminHealthBackfillQueue: 'processGarminHealthBackfillTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',

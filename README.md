@@ -219,6 +219,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
+- [Garmin Health integration](docs/garmin-integration.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
@@ -253,7 +254,14 @@ Security-related guidance is available in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Quantified Self is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Unless a file or directory states otherwise, original Quantified Self source code—including the Firebase Functions
+backend—is licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Third-party
+packages and assets remain under their respective licenses. Release tags retain versioned source, and the hosted
+interfaces link directly to the source repository and license.
+
+Original frontend code whose copyright holders have authorized it also carries a narrow
+[AGPL section 7 exception for linking or combining with Mapbox GL JS](LICENSE-MAPBOX-EXCEPTION). The exception does
+not license Mapbox materials: users must obtain any required Mapbox account and access token and follow Mapbox's terms.
 
 ---
 

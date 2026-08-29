@@ -49,7 +49,7 @@ export interface ServiceConnectionMetaFields {
   routeRestoreConnectionGeneration?: string | null;
   routeRestoreLastAttemptAt?: number | null;
   routeRestoreAttemptCount?: number | null;
-  /** Durable COROS-only repair marker for the derived Health lifecycle state. */
+  /** Durable provider Health repair marker for the derived lifecycle state. */
   healthLifecycleProjectionPending?: boolean | null;
   healthLifecycleProjectionConnectionGeneration?: string | null;
   healthLifecycleProjectionTransitionAtMs?: number | null;

@@ -3,7 +3,10 @@
 Sleep sync is controlled independently from activity sync. The shared Sleep & Health queue supports
 Garmin, Suunto, and COROS Sleep for every connected user. COROS daily responses also feed the unified
 Health writer. Suunto 24/7 Health uses the same queue and worker but has a separate scheduler, kill switch,
-and production-wide account cursor; enabling or disabling it does not change Suunto Sleep.
+and production-wide account cursor. Garmin Health API 1.2.4 Ping/Pull uses the shared Firestore queue;
+live callback pulls use the ordinary Sleep worker, while user-requested historical Health uses a dedicated
+single-concurrency Cloud Tasks worker. Garmin keeps its own deny-all-when-empty rollout, and enabling either
+Health adapter does not change provider Sleep behavior.
 
 COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
@@ -39,6 +42,20 @@ enqueue bounded refetches asynchronously; the raw notification samples are not p
 rejects are acknowledged without retained ingress, and later non-retryable ingress is deleted with its original version guard.
 See [Suunto 24/7 Health integration](suunto-integration.md).
 
+Garmin Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration,
+Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise separate Health records.
+They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
+`receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
+validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
+UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each newly created
+or replacement batch revision outside the HTTP acknowledgement path without redispatching same-revision retry-state
+writes; its worker immediately dispatches the per-callback children, and the scheduled
+dispatcher remains the recovery path. Scheduled recovery scans regular Sleep work and Garmin Health backfills
+independently, so capacity pressure in one Cloud Tasks queue cannot starve the other. The callback worker pulls and writes
+with OAuth and connection lifecycle guards. Large callback responses are written
+in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose
+digest-bound cursor resumes without retaining raw provider data. See [Garmin Health integration](garmin-integration.md).
+
 ## Provider Kill Switch
 
 Sleep provider disablement is source controlled in:
@@ -54,12 +71,16 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
 ```
 
 This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
-and COROS is unchanged. It also does not disable Suunto 24/7 Health.
+and COROS is unchanged. It also does not disable Suunto 24/7 Health or staged Garmin Health.
 
 Suunto Health has an independent source-controlled switch in
 `functions/src/suunto/health-flags.ts`. When false, scheduled and webhook ingress stop creating
 Health work, and queued `suunto_health_poll` rows are acknowledged as provider-disabled without
 calling Suunto. Existing Sleep work continues.
+
+Garmin Health has an independent source-controlled switch and deny-all rollout in
+`functions/src/garmin/health-rollout.ts`. Disabled Health families are acknowledged without queue work;
+Garmin Sleep remains controlled by the normal Sleep flags.
 
 ## User Rollout
 
@@ -83,6 +104,11 @@ Suunto Health has no UID allowlist. While its independent kill switch is enabled
 resolve the bounded server-owned binding index, and eligible Suunto history requests offer the combined
 Sleep & Health control. Polling advances at most 25 roots per 30-minute invocation and pauses for 24 hours
 after completing a production-wide sweep.
+
+Garmin Health uses the same deny-all rollout rule in `functions/src/garmin/health-rollout.ts`. The
+Garmin handler can continue accepting Sleep for normal Sleep users while acknowledging staged Health
+families only for an explicitly allowed connected UID. The `getGarminHealthSyncAvailability` callable is
+the client-safe source of that decision; clients do not infer rollout membership locally.
 
 ## What Disabled Means
 
@@ -126,15 +152,37 @@ queue row permanently stuck.
    does not provide sleep stages, scores, naps, or in-bed duration.
 4. Check `users/{uid}/healthSourceRecords` for a `coros_daily` daily summary and its bounded
    `healthSampleChunks`. Persisted source/account/revision identities must be opaque hashes.
-5. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
-   Push sleep summaries are rejected in v1 because Garmin does not provide an authenticated
-   push signature in the local docs; the worker only persists Garmin sleep data after pulling
-   it from a Garmin-owned callback URL with the user's stored token.
+5. For Garmin, configure Sleep plus each staged Health family as Ping/Pull notifications to
+   `receiveGarminAPIHealthData`. Direct Push summaries are acknowledged but discarded because the
+   provider request is not locally authenticated; the worker persists data only after pulling from
+   the exact Garmin callback host with the connected user's OAuth token. Confirm the live queue URL
+   is removed after completion and `healthSyncState/GarminAPI` advances for Health families.
 6. For Suunto Health, verify `scheduleSuuntoHealthSync` creates `suunto_health_poll`
    rows for the rolling seven-day range, and verify signed Activity/Recovery notifications create
    immediate local-day refetches. Confirm `healthSyncState/SuuntoApp` advances without changing
    `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
    source-record types.
+
+The Garmin history control calls `backfillGarminAPIHealth`. The legacy `backfillGarminAPISleep` callable is a
+temporary alias for cached clients, with removal tracked by #625. The canonical callable requests Sleep for every eligible connected
+Pro user and, for a UID in the staged Health rollout, adds one durable cursor for all ten Health families.
+The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
+completion from the server response. Sleep-only users retain the prior behavior.
+
+Historical Health requests use inclusive windows of at most 90 days from January 1, 2016 to the request
+time. `processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
+at least 1.5 seconds between Garmin requests. It advances its Firestore cursor after each accepted or
+already-requested window, clips a family when Garmin reports its minimum start, retries network/`429`/`5xx`
+failures, and treats permanent authorization/permission/request errors as terminal. It re-reads and
+expiry-refreshes the exact token before every provider request while retaining the original OAuth and
+connection-generation fence, then rechecks queue revision, account deletion, rollout, provider identity,
+and lifecycle transactionally before progress. Rollout removal atomically skips matching progress. Every
+terminal DLQ path, including retry exhaustion, authorization failure, and invalid ranges or requests,
+atomically marks the matching progress failed while moving the exact queue revision to the DLQ. Invalid
+callback responses first mark Garmin Health state failed through the captured lifecycle guard; a stale guard
+skips the callback instead. Sleep and Health
+share the 30-day user cooldown, while each Health family can independently establish its provider minimum.
+Garmin Summary Resender is retained for bounded operational recovery rather than the normal user backfill.
 
 Garmin sleep ingestion stores average respiration from positive samples and derives the
 normalized maximum SpO₂ aggregate from valid recorded samples. MCP and other aggregate

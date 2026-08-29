@@ -8,9 +8,15 @@ import {
 } from '../../../shared/sleep-backfill';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
+import { countGarminHealthBackfillRequests } from '../garmin/health-backfill-range';
 
 const hoisted = vi.hoisted(() => ({
-    tokenDocs: [] as Array<{ id: string; data: () => Record<string, unknown> }>,
+    tokenDocs: [] as Array<{
+        id: string;
+        exists: boolean;
+        data: () => Record<string, unknown>;
+        ref: { get: ReturnType<typeof vi.fn> };
+    }>,
     stateData: null as Record<string, unknown> | null,
     transactionStateData: undefined as Record<string, unknown> | null | undefined,
     userExists: true,
@@ -28,6 +34,10 @@ const hoisted = vi.hoisted(() => ({
     requestGet: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
     isSuuntoHealthSyncEnabled: vi.fn(),
+    isGarminHealthSyncEnabled: vi.fn(),
+    isGarminHealthSyncUserAllowed: vi.fn(),
+    captureGarminHealthLifecycleGuards: vi.fn(),
+    garminTokenMatchesLifecycleGuard: vi.fn(),
     suuntoTokenLimit: vi.fn(),
 }));
 
@@ -215,6 +225,16 @@ vi.mock('../suunto/health-flags', () => ({
     isSuuntoHealthSyncEnabled: hoisted.isSuuntoHealthSyncEnabled,
 }));
 
+vi.mock('../garmin/health-rollout', () => ({
+    isGarminHealthSyncEnabled: hoisted.isGarminHealthSyncEnabled,
+    isGarminHealthSyncUserAllowed: hoisted.isGarminHealthSyncUserAllowed,
+}));
+
+vi.mock('../garmin/health-lifecycle', () => ({
+    captureActiveGarminHealthWriteLifecycleGuards: hoisted.captureGarminHealthLifecycleGuards,
+    doesGarminHealthTokenDataMatchGuard: hoisted.garminTokenMatchesLifecycleGuard,
+}));
+
 vi.mock('../service-connection-meta', () => ({
     isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
 }));
@@ -233,6 +253,7 @@ vi.mock('../request-helper', () => ({
 
 import {
     backfillCorosAPISleep,
+    backfillGarminAPIHealth,
     backfillGarminAPISleep,
     backfillSuuntoAppSleep,
     chunkSleepBackfillRange,
@@ -253,24 +274,55 @@ function createRequest(overrides: Partial<{
 }
 
 function seedSuuntoToken(serviceName: string | undefined = undefined) {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id: 'suunto-token-1',
+        exists: true,
         data: () => serviceName ? { serviceName } : {},
-    });
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
 }
 
 function seedGarminToken(id = 'garmin-user-1') {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id,
-        data: () => ({ serviceName: 'GarminAPI' }),
-    });
+        exists: true,
+        data: () => ({
+            serviceName: 'GarminAPI',
+            userID: id,
+            accessToken: 'garmin-access-token',
+        }),
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
+}
+
+function garminLifecycleGuards() {
+    return {
+        requiredExistingDocumentRef: { path: 'garminAPITokens/user-1/tokens/garmin-user-1' },
+        requiredExistingTokenCredential: {
+            accessToken: 'garmin-access-token',
+            credentialGeneration: 'token-generation-1',
+        },
+        providerUserId: 'garmin-user-1',
+        providerIdentityPinned: true,
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+        connectionStateGeneration: 'connection-generation-1',
+    };
 }
 
 function seedCorosToken() {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id: 'coros-token-1',
+        exists: true,
         data: () => ({ serviceName: 'COROS API' }),
-    });
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
 }
 
 describe('backfillSuuntoAppSleep', () => {
@@ -737,7 +789,11 @@ describe('backfillCorosAPISleep', () => {
     });
 });
 
-describe('backfillGarminAPISleep', () => {
+describe('backfillGarminAPIHealth', () => {
+    it('keeps the legacy Sleep callable as the same compatibility handler', () => {
+        expect(backfillGarminAPISleep).toBe(backfillGarminAPIHealth);
+    });
+
     const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
     const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
     const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI) || 0;
@@ -762,6 +818,10 @@ describe('backfillGarminAPISleep', () => {
         });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isGarminHealthSyncEnabled.mockReturnValue(true);
+        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(false);
+        hoisted.captureGarminHealthLifecycleGuards.mockResolvedValue(garminLifecycleGuards());
+        hoisted.garminTokenMatchesLifecycleGuard.mockReturnValue(true);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.requestGet.mockResolvedValue(undefined);
@@ -775,10 +835,12 @@ describe('backfillGarminAPISleep', () => {
         seedGarminToken();
         const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result).toEqual({
             queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: 0,
             startDate: SLEEP_BACKFILL_START_DATE_ISO,
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
@@ -815,6 +877,61 @@ describe('backfillGarminAPISleep', () => {
         }, nowMs);
     });
 
+    it('queues one durable staged Health cursor alongside the existing Sleep requests', async () => {
+        seedGarminToken();
+        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(true);
+        const expectedSleepWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedHealthWindows = countGarminHealthBackfillRequests(startMs, nowMs);
+
+        const result = await backfillGarminAPIHealth(createRequest());
+
+        expect(result).toEqual({
+            queued: expectedSleepWindows.length,
+            sleepQueued: expectedSleepWindows.length,
+            healthQueued: expectedHealthWindows,
+            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            endDate: new Date(nowMs).toISOString(),
+            nextAllowedAtMs: nowMs + cooldownMs,
+        });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledOnce();
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith({
+            type: 'garmin_health_backfill',
+            provider: SLEEP_PROVIDERS.GarminAPI,
+            userID: 'user-1',
+            providerUserId: 'garmin-user-1',
+            rangeStartMs: startMs,
+            rangeEndMs: nowMs,
+            healthTrigger: 'backfill',
+            garminHealthBackfillSummaryIndex: 0,
+            garminHealthBackfillNextStartMs: startMs,
+            garminHealthBackfillWindowsCompleted: 0,
+            garminHealthBackfillWindowsTotal: expectedHealthWindows,
+            dedupeKey: `health-backfill:user-1:garmin-user-1:${startMs}:${nowMs}`,
+            dispatchImmediately: true,
+        });
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith(
+            'user-1',
+            SLEEP_PROVIDERS.GarminAPI,
+            expect.objectContaining({
+                healthBackfillStatus: 'queued',
+                healthBackfillWindowsCompleted: 0,
+                healthBackfillWindowsTotal: expectedHealthWindows,
+                healthBackfillSummaryType: 'dailies',
+            }),
+            nowMs,
+        );
+        expect(hoisted.updateSleepSyncState.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.addSleepSyncQueueItem.mock.invocationCallOrder[0]);
+        expect(logger.info).toHaveBeenCalledWith(
+            '[SleepBackfill] Requested Garmin history for user-1',
+            {
+                sleepQueued: expectedSleepWindows.length,
+                healthQueued: expectedHealthWindows,
+            },
+        );
+        expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('garmin-user-1');
+    });
+
     it('uses a later Garmin token when the first token is missing sleep backfill permissions', async () => {
         seedGarminToken('stale-garmin-user');
         seedGarminToken('fresh-garmin-user');
@@ -834,7 +951,7 @@ describe('backfillGarminAPISleep', () => {
             };
         });
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
@@ -853,7 +970,7 @@ describe('backfillGarminAPISleep', () => {
         seedGarminToken();
         hoisted.getTokenData.mockRejectedValue(new Error('refresh unavailable'));
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({
                 code: 'internal',
                 message: 'Could not read connected Garmin token for sleep backfill.',
@@ -878,7 +995,7 @@ describe('backfillGarminAPISleep', () => {
             throw new Error('refresh unavailable');
         });
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({
                 code: 'internal',
                 message: 'Could not read connected Garmin token for sleep backfill.',
@@ -894,7 +1011,7 @@ describe('backfillGarminAPISleep', () => {
     it('rejects Garmin requests without App Check', async () => {
         seedGarminToken();
 
-        await expect(backfillGarminAPISleep(createRequest({ app: null })))
+        await expect(backfillGarminAPIHealth(createRequest({ app: null })))
             .rejects.toMatchObject({ code: 'failed-precondition' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
@@ -903,7 +1020,7 @@ describe('backfillGarminAPISleep', () => {
     it('rejects unauthenticated Garmin requests', async () => {
         seedGarminToken();
 
-        await expect(backfillGarminAPISleep(createRequest({ auth: null })))
+        await expect(backfillGarminAPIHealth(createRequest({ auth: null })))
             .rejects.toMatchObject({ code: 'unauthenticated' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
@@ -913,7 +1030,7 @@ describe('backfillGarminAPISleep', () => {
         seedGarminToken();
         hoisted.hasProAccess.mockResolvedValue(false);
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'permission-denied' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
@@ -923,7 +1040,7 @@ describe('backfillGarminAPISleep', () => {
         seedGarminToken();
         hoisted.isSleepProviderEnabled.mockReturnValue(false);
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'failed-precondition' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
@@ -933,14 +1050,14 @@ describe('backfillGarminAPISleep', () => {
         seedGarminToken();
         hoisted.isSleepSyncUserAllowed.mockReturnValue(false);
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'permission-denied' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
     });
 
     it('rejects Garmin users without a connected token', async () => {
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'failed-precondition' });
 
         expect(hoisted.requestGet).not.toHaveBeenCalled();
@@ -954,7 +1071,7 @@ describe('backfillGarminAPISleep', () => {
             permissions: ['HISTORICAL_DATA_EXPORT'],
         });
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'failed-precondition' });
 
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, {
@@ -973,7 +1090,7 @@ describe('backfillGarminAPISleep', () => {
         });
         hoisted.updateSleepSyncState.mockRejectedValueOnce(new Error('state write failed'));
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({
                 code: 'failed-precondition',
                 message: 'Missing required Garmin permissions (Historical Data Export, Health Export). Please reconnect Garmin and grant health permissions.',
@@ -988,7 +1105,7 @@ describe('backfillGarminAPISleep', () => {
             nextBackfillAllowedAtMs: nowMs + 60_000,
         };
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'resource-exhausted' });
 
         expect(hoisted.getTokenData).not.toHaveBeenCalled();
@@ -1001,7 +1118,7 @@ describe('backfillGarminAPISleep', () => {
             .mockResolvedValueOnce(undefined)
             .mockRejectedValueOnce(new Error('garmin unavailable'));
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'internal' });
 
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
@@ -1014,28 +1131,49 @@ describe('backfillGarminAPISleep', () => {
             lastBackfillQueueItems: 1,
             nextBackfillAllowedAtMs: null,
             lastError: 'garmin unavailable',
-        }, nowMs);
+        }, nowMs, garminLifecycleGuards());
+    });
+
+    it('fences a failed Health queue admission to the initiating Garmin lifecycle', async () => {
+        seedGarminToken();
+        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(true);
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(new Error('lifecycle changed'));
+
+        await expect(backfillGarminAPIHealth(createRequest()))
+            .rejects.toMatchObject({ code: 'internal' });
+
+        expect(hoisted.updateSleepSyncState).toHaveBeenLastCalledWith(
+            'user-1',
+            SLEEP_PROVIDERS.GarminAPI,
+            expect.objectContaining({
+                status: 'failed',
+                healthBackfillStatus: 'failed',
+                lastError: 'lifecycle changed',
+            }),
+            nowMs,
+            garminLifecycleGuards(),
+        );
     });
 
     it('clears the dashboard prompt suppression marker when Garmin request submission fails', async () => {
         seedGarminToken();
         hoisted.requestGet.mockRejectedValueOnce(new Error('garmin unavailable'));
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'internal' });
 
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({
             status: 'failed',
             lastBackfillQueuedAtMs: null,
             nextBackfillAllowedAtMs: null,
-        }), nowMs);
+        }), nowMs, garminLifecycleGuards());
     });
 
     it('does not claim cooldown or request Garmin windows when account deletion starts before the transaction', async () => {
         seedGarminToken();
         hoisted.transactionTombstoneData = {};
 
-        await expect(backfillGarminAPISleep(createRequest()))
+        await expect(backfillGarminAPIHealth(createRequest()))
             .rejects.toMatchObject({ code: 'failed-precondition' });
 
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
@@ -1049,7 +1187,7 @@ describe('backfillGarminAPISleep', () => {
             return undefined;
         });
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(1);
         expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
@@ -1072,7 +1210,7 @@ describe('backfillGarminAPISleep', () => {
             };
         });
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(0);
         expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
@@ -1094,7 +1232,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1125,7 +1263,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1151,7 +1289,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1174,10 +1312,12 @@ describe('backfillGarminAPISleep', () => {
         };
         const expectedWindows = chunkSleepBackfillRange(rememberedStartMs, nowMs, windowDays);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result).toEqual({
             queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: 0,
             startDate: new Date(rememberedStartMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
@@ -1209,10 +1349,12 @@ describe('backfillGarminAPISleep', () => {
         };
         const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result).toEqual({
             queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: 0,
             startDate: SLEEP_BACKFILL_START_DATE_ISO,
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
@@ -1243,7 +1385,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(1);
         expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
@@ -1273,7 +1415,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1297,7 +1439,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1322,7 +1464,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1351,7 +1493,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1381,7 +1523,7 @@ describe('backfillGarminAPISleep', () => {
             .mockRejectedValueOnce({ statusCode: 409 })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(expectedWindows.length - 1);
         expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, {
@@ -1410,7 +1552,7 @@ describe('backfillGarminAPISleep', () => {
             })
             .mockResolvedValue(undefined);
 
-        const result = await backfillGarminAPISleep(createRequest());
+        const result = await backfillGarminAPIHealth(createRequest());
 
         expect(result.queued).toBe(chunkSleepBackfillRange(startMs, nowMs, windowDays).length - 1);
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.GarminAPI, expect.objectContaining({

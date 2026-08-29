@@ -64,6 +64,22 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('keeps Garmin Health backfill recovery independently queryable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'sleepSyncQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'processed', order: 'ASCENDING' },
+                { fieldPath: 'type', order: 'ASCENDING' },
+                { fieldPath: 'dateCreated', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps outbound activity echo fingerprints short-lived and unindexed', () => {
         const config = loadFirestoreIndexes();
 

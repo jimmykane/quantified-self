@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { SleepProvider } from '../../../shared/sleep';
+import type { GarminSupportedSummaryType } from '../garmin/health-summary-types';
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
@@ -158,9 +159,11 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
 export type SleepSyncQueueItemType =
   | 'garmin_push'
   | 'garmin_ping'
+  | 'garmin_ping_batch'
   | 'suunto_webhook'
   | 'suunto_poll'
   | 'suunto_health_poll'
+  | 'garmin_health_backfill'
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
@@ -170,6 +173,29 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   providerUserId: string;
   payload?: unknown;
   callbackURL?: string;
+  /** Bounded live-only callback credentials on a compact Garmin ingress batch. */
+  garminCallbackURLs?: string[];
+  /** Garmin Ping/Pull family; absent legacy rows are Sleep. */
+  garminSummaryType?: GarminSupportedSummaryType;
+  /** Garmin Health lifecycle fences captured at durable queue admission. */
+  garminHealthTokenCredentialGeneration?: string | null;
+  garminHealthRootOAuthCredentialGeneration?: string | null;
+  garminHealthConnectionStateGeneration?: string | null;
+  /** Resumable cursor for bounded writes from one immutable Garmin callback. */
+  garminHealthWriteCursor?: number;
+  /** Opaque digest binding the cursor to the normalized callback ordering. */
+  garminHealthPayloadDigest?: string;
+  /** Stable first-receipt timestamp reused when a callback continuation refetches. */
+  garminHealthReceivedAtMs?: number;
+  /** Cumulative callback write outcomes committed before the cursor. */
+  garminHealthRecordsWritten?: number;
+  garminHealthRecordsUnchanged?: number;
+  garminHealthRecordsStale?: number;
+  /** Durable Garmin Summary Backfill cursor. */
+  garminHealthBackfillSummaryIndex?: number;
+  garminHealthBackfillNextStartMs?: number;
+  garminHealthBackfillWindowsCompleted?: number;
+  garminHealthBackfillWindowsTotal?: number;
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';

@@ -39,6 +39,19 @@ import {
     SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS,
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
 } from '../suunto/health';
+import {
+    isGarminHealthSyncEnabled,
+    isGarminHealthSyncUserAllowed,
+} from '../garmin/health-rollout';
+import {
+    countGarminHealthBackfillRequests,
+    floorToGarminBackfillSecond,
+} from '../garmin/health-backfill-range';
+import {
+    captureActiveGarminHealthWriteLifecycleGuards,
+    doesGarminHealthTokenDataMatchGuard,
+} from '../garmin/health-lifecycle';
+import type { GarminHealthWriteLifecycleGuards } from '../garmin/health-lifecycle';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -55,6 +68,7 @@ interface SuuntoSleepBackfillToken {
 interface GarminSleepBackfillToken {
     accessToken: string;
     providerUserId: string;
+    lifecycleGuards: GarminHealthWriteLifecycleGuards;
 }
 
 interface CorosSleepBackfillToken {
@@ -187,9 +201,26 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
                 logger.warn(`[SleepBackfill] Skipping incomplete Garmin token ${tokenDoc.id} for ${userID}`);
                 continue;
             }
+
+            const currentTokenDoc = await tokenDoc.ref.get();
+            const lifecycleGuards = await captureActiveGarminHealthWriteLifecycleGuards(
+                admin.firestore(),
+                userID,
+                providerUserId,
+                currentTokenDoc,
+            );
+            if (!lifecycleGuards
+                || !doesGarminHealthTokenDataMatchGuard(
+                    tokenData as Record<string, unknown>,
+                    lifecycleGuards,
+                )) {
+                logger.warn(`[SleepBackfill] Skipping inactive connected Garmin token for ${userID}`);
+                continue;
+            }
             return {
                 accessToken,
                 providerUserId,
+                lifecycleGuards,
             };
         } catch (error) {
             lastTokenReadError = error;
@@ -799,9 +830,9 @@ export const backfillCorosAPISleep = onCall({
     };
 });
 
-export const backfillGarminAPISleep = onCall({
-    region: FUNCTIONS_MANIFEST.backfillGarminAPISleep.region,
-    secrets: FUNCTION_SECRET_BINDINGS.backfillGarminAPISleep,
+export const backfillGarminAPIHealth = onCall({
+    region: FUNCTIONS_MANIFEST.backfillGarminAPIHealth.region,
+    secrets: FUNCTION_SECRET_BINDINGS.backfillGarminAPIHealth,
     cors: ALLOWED_CORS_ORIGINS,
     memory: '512MiB',
     timeoutSeconds: 540,
@@ -815,7 +846,7 @@ export const backfillGarminAPISleep = onCall({
 
     const userID = request.auth.uid;
     if (!(await hasProAccess(userID))) {
-        logger.warn(`[SleepBackfill] Blocking Garmin sleep backfill for non-pro user ${userID}`);
+        logger.warn(`[SleepBackfill] Blocking Garmin history backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
     }
 
@@ -836,6 +867,12 @@ export const backfillGarminAPISleep = onCall({
     const startMs = Math.max(sharedStartMs, storedProviderMinStartMs || sharedStartMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+    const includeHealth = isGarminHealthSyncEnabled() && isGarminHealthSyncUserAllowed(userID);
+    const healthRangeStartMs = sharedStartMs;
+    const healthRangeEndMs = floorToGarminBackfillSecond(nowMs);
+    const healthQueued = includeHealth
+        ? countGarminHealthBackfillRequests(healthRangeStartMs, healthRangeEndMs)
+        : 0;
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
     const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.GarminAPI, startMs, nowMs, nextAllowedAtMs);
     if (!cooldownClaimed) {
@@ -844,6 +881,7 @@ export const backfillGarminAPISleep = onCall({
 
     let requested = 0;
     let abortedForDeletion = false;
+    let completedStartMs = startMs;
     const requestContext: GarminSleepBackfillRequestContext = {
         providerUserId: token.providerUserId,
         providerMinStartMs: storedProviderMinStartMs,
@@ -859,6 +897,53 @@ export const backfillGarminAPISleep = onCall({
                 requested += 1;
             }
         }
+        if (!abortedForDeletion) {
+            completedStartMs = Math.max(startMs, requestContext.providerMinStartMs || startMs);
+            const finalStateUpdate: Parameters<typeof updateSleepSyncState>[2] = {
+                status: SLEEP_SYNC_STATUSES.Ready,
+                lastBackfillQueuedAtMs: nowMs,
+                lastBackfillStartMs: completedStartMs,
+                lastBackfillEndMs: nowMs,
+                lastBackfillQueueItems: requested,
+                nextBackfillAllowedAtMs: nextAllowedAtMs,
+                ...(includeHealth ? {
+                    healthBackfillStatus: 'queued' as const,
+                    healthBackfillWindowsCompleted: 0,
+                    healthBackfillWindowsTotal: healthQueued,
+                    healthBackfillSummaryType: 'dailies',
+                } : {}),
+                lastError: null,
+            };
+            if (requestContext.providerMinStartMs) {
+                finalStateUpdate.providerMinBackfillStartMs = requestContext.providerMinStartMs;
+                finalStateUpdate.providerMinBackfillStartProviderUserId = requestContext.providerUserId;
+            }
+            // Publish the initial state before dispatch so a fast worker cannot
+            // have its newer running/terminal state overwritten by this callable.
+            await updateSleepSyncState(
+                userID,
+                SLEEP_PROVIDERS.GarminAPI,
+                finalStateUpdate,
+                nowMs,
+            );
+        }
+        if (includeHealth && !abortedForDeletion) {
+            await addSleepSyncQueueItem({
+                type: 'garmin_health_backfill',
+                provider: SLEEP_PROVIDERS.GarminAPI,
+                userID,
+                providerUserId: token.providerUserId,
+                rangeStartMs: healthRangeStartMs,
+                rangeEndMs: healthRangeEndMs,
+                healthTrigger: 'backfill',
+                garminHealthBackfillSummaryIndex: 0,
+                garminHealthBackfillNextStartMs: healthRangeStartMs,
+                garminHealthBackfillWindowsCompleted: 0,
+                garminHealthBackfillWindowsTotal: healthQueued,
+                dedupeKey: `health-backfill:${userID}:${token.providerUserId}:${healthRangeStartMs}:${healthRangeEndMs}`,
+                dispatchImmediately: true,
+            });
+        }
     } catch (error) {
         const message = error instanceof Error ? error.message : `${error}`;
         logger.error(`[SleepBackfill] Failed after requesting ${requested} Garmin sleep windows for ${userID}`, error);
@@ -867,44 +952,43 @@ export const backfillGarminAPISleep = onCall({
             lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: requested,
             nextBackfillAllowedAtMs: null,
+            healthBackfillStatus: includeHealth ? 'failed' : undefined,
+            healthBackfillWindowsCompleted: includeHealth ? 0 : undefined,
+            healthBackfillWindowsTotal: includeHealth ? healthQueued : undefined,
             lastError: message,
-        }, Date.now());
-        throw new HttpsError('internal', 'Could not request Garmin sleep backfill.');
+        }, Date.now(), token.lifecycleGuards);
+        throw new HttpsError('internal', 'Could not request Garmin history backfill.');
     }
 
     if (abortedForDeletion) {
         return {
             queued: requested,
+            sleepQueued: requested,
+            healthQueued: 0,
             startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs,
         };
     }
 
-    const completedStartMs = Math.max(startMs, requestContext.providerMinStartMs || startMs);
-    const finalStateUpdate: Parameters<typeof updateSleepSyncState>[2] = {
-        status: SLEEP_SYNC_STATUSES.Ready,
-        lastBackfillQueuedAtMs: nowMs,
-        lastBackfillStartMs: completedStartMs,
-        lastBackfillEndMs: nowMs,
-        lastBackfillQueueItems: requested,
-        nextBackfillAllowedAtMs: nextAllowedAtMs,
-        lastError: null,
-    };
-    if (requestContext.providerMinStartMs) {
-        finalStateUpdate.providerMinBackfillStartMs = requestContext.providerMinStartMs;
-        finalStateUpdate.providerMinBackfillStartProviderUserId = requestContext.providerUserId;
-    }
-    await updateSleepSyncState(userID, SLEEP_PROVIDERS.GarminAPI, finalStateUpdate, nowMs);
-
-    logger.info(`[SleepBackfill] Requested ${requested} Garmin sleep windows for ${userID}`, {
-        providerUserId: token.providerUserId,
+    logger.info(`[SleepBackfill] Requested Garmin history for ${userID}`, {
+        sleepQueued: requested,
+        healthQueued,
     });
 
     return {
         queued: requested,
+        sleepQueued: requested,
+        healthQueued,
         startDate: new Date(completedStartMs).toISOString(),
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,
     };
 });
+
+/**
+ * Temporary compatibility alias for already-open tabs and cached clients.
+ * Remove after the canonical callable has aged through the compatibility
+ * window tracked by GitHub issue #625.
+ */
+export const backfillGarminAPISleep = backfillGarminAPIHealth;

@@ -1,7 +1,7 @@
 {
   "name": "quantified-self",
   "version": "10.13.0",
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "ng": "ng",
     "start": "ng serve --configuration local --port 4200",

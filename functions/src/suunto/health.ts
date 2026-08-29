@@ -193,15 +193,23 @@ function recognizedContentToken(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 
-function dedupeByTimestamp<T extends ParsedTimestamp>(samples: T[], family: string): T[] {
+function dedupeByTimestamp<T extends ParsedTimestamp>(samples: T[]): T[] {
   const byTimestamp = new Map<string, T>();
   for (const sample of samples) {
     const key = `${sample.timestampMs}:${sample.timezoneOffsetSeconds ?? 'unknown'}`;
     const existing = byTimestamp.get(key);
-    if (existing && stableStringify(existing) !== stableStringify(sample)) {
-      throw new SuuntoHealthValidationError(`${family} response contains conflicting duplicate timestamps.`);
+    if (!existing) {
+      byTimestamp.set(key, sample);
+      continue;
     }
-    byTimestamp.set(key, sample);
+    const merged = { ...existing } as Record<string, unknown>;
+    for (const [field, value] of Object.entries(sample)) {
+      // Suunto can return complementary or corrected rows for one timestamp.
+      // Preserve an earlier measurement when the later row omits it, while a
+      // later non-null value is the provider's final observation for that field.
+      if (value !== null && value !== undefined) merged[field] = value;
+    }
+    byTimestamp.set(key, merged as T);
   }
   return [...byTimestamp.values()].sort((left, right) => left.timestampMs - right.timestampMs);
 }
@@ -233,7 +241,15 @@ export function parseSuuntoActivitySamples(value: unknown): SuuntoActivitySample
       energyJoules: optionalNumber(entryData, 'EnergyConsumption', 0, 1_000_000_000_000),
     };
   });
-  return dedupeByTimestamp(samples, 'Suunto activity');
+  const deduplicated = dedupeByTimestamp(samples);
+  for (const sample of deduplicated) {
+    if (sample.minimumHeartRateBpm !== null
+      && sample.maximumHeartRateBpm !== null
+      && sample.minimumHeartRateBpm > sample.maximumHeartRateBpm) {
+      throw new SuuntoHealthValidationError('Suunto activity HRExt minimum exceeds maximum.');
+    }
+  }
+  return deduplicated;
 }
 
 export function parseSuuntoRecoverySamples(value: unknown): SuuntoRecoverySample[] {
@@ -250,7 +266,7 @@ export function parseSuuntoRecoverySamples(value: unknown): SuuntoRecoverySample
         : rawStressState as 1 | 2 | 3 | 4,
     };
   });
-  return dedupeByTimestamp(samples, 'Suunto recovery');
+  return dedupeByTimestamp(samples);
 }
 
 function statisticNumber(value: unknown, metricName: string): number | null {
