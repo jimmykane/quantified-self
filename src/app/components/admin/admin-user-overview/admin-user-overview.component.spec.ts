@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,7 @@ import { AdminUserAnalyticsStore } from '../../../services/admin-user-analytics.
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AdminUserGrowthChartComponent } from './admin-user-growth-chart.component';
 import { AdminUserOverviewComponent } from './admin-user-overview.component';
 
 describe('AdminUserOverviewComponent', () => {
@@ -85,6 +87,16 @@ describe('AdminUserOverviewComponent', () => {
         analytics.refreshingRouteCount.set(true);
         expect(component.refreshInProgress()).toBe(true);
     });
+
+    it('uses trend loading state for the growth chart after KPI stats settle', () => {
+        analytics.loadingKpis.set(false);
+        analytics.loadingTrends.set(true);
+        fixture.detectChanges();
+
+        const growthChart = fixture.debugElement.query(By.directive(AdminUserGrowthChartComponent))
+            .componentInstance as AdminUserGrowthChartComponent;
+        expect(growthChart.loading).toBe(true);
+    });
 });
 
 function analyticsStore() {
@@ -131,6 +143,7 @@ function analyticsStore() {
         historyError: signal<string | null>(null),
         trendWarning: signal<string | null>(null),
         loadingKpis: signal(false),
+        loadingTrends: signal(false),
         loadingHistory: signal(false),
         loadingAll: signal(false),
         refreshingAll: signal(false),

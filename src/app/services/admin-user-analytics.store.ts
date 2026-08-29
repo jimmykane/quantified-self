@@ -50,6 +50,10 @@ export class AdminUserAnalyticsStore {
         || this.userGrowthTrendLoadingState()
         || this.subscriptionHistoryTrendLoadingState()
     ) && this.statsState() === null);
+    readonly loadingTrends = computed(() => (
+        this.userGrowthTrendLoadingState()
+        || this.subscriptionHistoryTrendLoadingState()
+    ));
     readonly refreshingKpis = computed(() => (
         this.statsLoadingState()
         || this.userGrowthTrendLoadingState()

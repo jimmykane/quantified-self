@@ -31,7 +31,7 @@
         [loading]="analytics.loadingKpis()" [error]="analytics.statsError()">
     </app-admin-auth-provider-chart>
     <app-admin-user-growth-chart [stats]="analytics.stats()" [userGrowthTrend]="analytics.userGrowthTrend()"
-        [subscriptionHistoryTrend]="analytics.subscriptionHistoryTrend()" [loading]="analytics.loadingKpis()"
+        [subscriptionHistoryTrend]="analytics.subscriptionHistoryTrend()" [loading]="analytics.loadingTrends()"
         [error]="analytics.trendWarning()">
     </app-admin-user-growth-chart>
 </section>

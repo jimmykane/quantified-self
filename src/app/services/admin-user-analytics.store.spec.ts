@@ -71,6 +71,28 @@ describe('AdminUserAnalyticsStore', () => {
         await first;
     });
 
+    it('keeps trend loading active after stats resolve until both trend sources settle', async () => {
+        const growthSubject = new Subject<UserGrowthTrendResponse>();
+        const subscriptionsSubject = new Subject<SubscriptionHistoryTrendResponse>();
+        adminService.getUserGrowthTrend.mockReturnValue(growthSubject);
+        adminService.getSubscriptionHistoryTrend.mockReturnValue(subscriptionsSubject);
+
+        const refresh = store.refreshAll();
+        await vi.waitFor(() => expect(store.stats()).toBe(stats));
+        expect(store.loadingKpis()).toBe(false);
+        expect(store.loadingTrends()).toBe(true);
+
+        growthSubject.next(growth);
+        growthSubject.complete();
+        await vi.waitFor(() => expect(store.userGrowthTrend()).toBe(growth));
+        expect(store.loadingTrends()).toBe(true);
+
+        subscriptionsSubject.next(subscriptions);
+        subscriptionsSubject.complete();
+        await refresh;
+        expect(store.loadingTrends()).toBe(false);
+    });
+
     it('retains the last good source value after a partial refresh failure', async () => {
         await store.refreshAll();
         adminService.getUserGrowthTrend.mockReturnValue(throwError(() => new Error('growth failed')));
