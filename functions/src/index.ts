@@ -125,6 +125,7 @@ export {
   receiveSuunto247Data,
 } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
+export { dispatchGarminPingBatchOnWrite } from './sleep/garmin-ping-batch-dispatcher';
 export {
   scheduleSuuntoSleepSync,
   scheduleCOROSSleepSync,

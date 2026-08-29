@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
 
 const {
     mockLoggerError,
@@ -102,7 +103,7 @@ describe('queue dispatch marker guarded updates', () => {
         };
 
         const result = await updateQueueItemIfUserActive({
-            queueItemDocument: queueItemDocument as any,
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
             queueItemId: 'sleep-item-1',
             userID: 'deleted-user',
             phase: 'sleep_sync_dispatch_marker',
@@ -133,7 +134,7 @@ describe('queue dispatch marker guarded updates', () => {
         };
 
         const result = await updateQueueItemIfUserActive({
-            queueItemDocument: queueItemDocument as any,
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
             queueItemId: 'sleep-item-1',
             userID: 'deleted-user',
             phase: 'sleep_sync_dispatch_marker',
@@ -154,6 +155,34 @@ describe('queue dispatch marker guarded updates', () => {
         );
     });
 
+    it('allows a caller to defer deletion cleanup to an exact revision guard', async () => {
+        mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
+            userExists: true,
+            deletionInProgress: true,
+            shouldSkip: true,
+        });
+        const queueItemDocument = {
+            parent: { id: 'sleepSyncQueue' },
+            update: vi.fn(),
+        };
+
+        const result = await updateQueueItemIfUserActive({
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
+            queueItemId: 'sleep-item-guarded-cleanup',
+            userID: 'deleting-user',
+            phase: 'sleep_sync_dispatch_marker',
+            updateData: { dispatchedToCloudTask: 123 },
+            logPrefix: 'SleepSync',
+            actionDescription: 'dispatch marker write',
+            isCurrent: queueItem => queueItem.revision === 'expected',
+            cleanupOnDeletedUser: false,
+        });
+
+        expect(result).toBe(QueueItemUserGuardedUpdateResult.SkippedDeletedUser);
+        expect(mockMarkQueueItemDeletedForUserCleanup).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    });
+
     it('does not mark a queue item that was replaced by a newer revision', async () => {
         mockTransactionGet.mockResolvedValueOnce({
             exists: true,
@@ -165,7 +194,7 @@ describe('queue dispatch marker guarded updates', () => {
         };
 
         const result = await updateQueueItemIfUserActive({
-            queueItemDocument: queueItemDocument as any,
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
             queueItemId: 'wahoo-item-1',
             userID: 'active-user',
             phase: 'wahoo_queue_dispatch_marker',
@@ -192,7 +221,7 @@ describe('queue dispatch marker guarded updates', () => {
         const isAuthorizedInTransaction = vi.fn().mockResolvedValue(false);
 
         const result = await updateQueueItemIfUserActive({
-            queueItemDocument: queueItemDocument as any,
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
             queueItemId: 'route-delivery-1',
             userID: 'active-user',
             phase: 'route_delivery_source_guard',
@@ -222,7 +251,7 @@ describe('queue dispatch marker guarded updates', () => {
         };
 
         const result = await markQueueItemDispatchedIfUserActive({
-            queueItemDocument: queueItemDocument as any,
+            queueItemDocument: queueItemDocument as unknown as admin.firestore.DocumentReference,
             queueItemId: 'activity-sync-item-1',
             userID: 'active-user',
             phase: 'activity_sync_dispatch_marker',

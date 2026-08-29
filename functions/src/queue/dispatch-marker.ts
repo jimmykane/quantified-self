@@ -39,6 +39,11 @@ export interface UpdateQueueItemIfUserActiveParams {
         db: admin.firestore.Firestore,
         transaction: admin.firestore.Transaction,
     ) => Promise<boolean>;
+    /**
+     * Disable the generic post-transaction cleanup when the caller must use a
+     * provider/revision-specific atomic delete. Defaults to true.
+     */
+    cleanupOnDeletedUser?: boolean;
 }
 
 export interface MarkQueueItemDispatchedIfUserActiveParams {
@@ -49,6 +54,7 @@ export interface MarkQueueItemDispatchedIfUserActiveParams {
     dispatchedAtMs: number;
     logPrefix: string;
     isCurrent?: UpdateQueueItemIfUserActiveParams['isCurrent'];
+    cleanupOnDeletedUser?: boolean;
 }
 
 export interface CleanupQueueItemAfterUserDeletionGuardParams {
@@ -107,6 +113,7 @@ export async function markQueueItemDispatchedIfUserActive(
         logPrefix: params.logPrefix,
         actionDescription: 'dispatch marker write',
         isCurrent: params.isCurrent,
+        cleanupOnDeletedUser: params.cleanupOnDeletedUser,
     });
 
     switch (result) {
@@ -164,7 +171,8 @@ export async function updateQueueItemIfUserActive(
         return QueueItemUserGuardedUpdateResult.Updated;
     });
 
-    if (result === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+    if (result === QueueItemUserGuardedUpdateResult.SkippedDeletedUser
+        && params.cleanupOnDeletedUser !== false) {
         await cleanupQueueItemAfterUserDeletionGuard(params);
     }
 

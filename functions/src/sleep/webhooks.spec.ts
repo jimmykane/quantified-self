@@ -125,7 +125,7 @@ describe('sleep webhooks', () => {
             userID: 'test-user-uid',
             garminSummaryType: summaryType,
             dedupeKey: expect.stringMatching(/^[a-f0-9]{64}$/),
-            dispatchImmediately: true,
+            dispatchImmediately: false,
         }));
         expect(input.garminCallbackURLs).toEqual(callbackURLs);
     }
