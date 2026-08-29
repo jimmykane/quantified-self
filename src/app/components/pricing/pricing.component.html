@@ -75,7 +75,13 @@
               <mat-icon>payments</mat-icon>
               Next renewal
             </div>
-            <div class="meta-value">{{ summary.renewalAmountDisplay }}</div>
+            <div class="meta-value renewal-amount">
+              @if (summary.isRenewalAmountLoading) {
+              <mat-progress-bar mode="indeterminate" aria-label="Loading next renewal price"></mat-progress-bar>
+              } @else {
+              {{ summary.renewalAmountDisplay }}
+              }
+            </div>
             <div class="meta-helper">Based on your Stripe billing setup.</div>
           </div>
         </div>
