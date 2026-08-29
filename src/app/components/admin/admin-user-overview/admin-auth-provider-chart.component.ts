@@ -80,10 +80,11 @@ export class AdminAuthProviderChartComponent implements AfterViewInit, OnDestroy
         }
 
         const providers = this.providersState();
-        const option = this.hasData()
+        const hasData = this.hasData();
+        const option = hasData
             ? buildAdminAuthProviderChartOption(providers, this.isDark, element.clientWidth)
             : { backgroundColor: 'transparent', tooltip: { show: false }, legend: { show: false }, series: [], graphic: [] };
-        this.chartHost.setOption(option, ECHARTS_SERIES_MERGE_UPDATE_SETTINGS);
+        this.chartHost.setOption(option, hasData ? ECHARTS_SERIES_MERGE_UPDATE_SETTINGS : { notMerge: true });
         this.chartHost.scheduleResize();
     }
 }

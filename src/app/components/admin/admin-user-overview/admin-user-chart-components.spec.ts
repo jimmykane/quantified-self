@@ -53,6 +53,30 @@ describe('admin user chart components', () => {
         expect(loader.dispose).toHaveBeenCalled();
     });
 
+    it('fully resets the provider chart when refreshed with empty data', async () => {
+        const fixture = TestBed.createComponent(AdminAuthProviderChartComponent);
+        fixture.componentRef.setInput('providers', { password: 4 });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalled());
+        const populatedRenderCount = loader.setOption.mock.calls.length;
+
+        fixture.componentRef.setInput('providers', {});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThan(populatedRenderCount));
+
+        const [, option, settings] = loader.setOption.mock.calls.at(-1) as [
+            unknown,
+            { graphic?: unknown[]; series?: unknown[] },
+            { notMerge?: boolean },
+        ];
+        expect(option.graphic).toEqual([]);
+        expect(option.series).toEqual([]);
+        expect(settings).toEqual({ notMerge: true });
+        fixture.destroy();
+    });
+
     it('rerenders growth data when the theme changes', async () => {
         const fixture = TestBed.createComponent(AdminUserGrowthChartComponent);
         fixture.componentRef.setInput('stats', { total: 10, onboardingCompleted: 7, basic: 2, pro: 1 });
