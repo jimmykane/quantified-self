@@ -120,18 +120,26 @@ export {
 export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export {
+  receiveGarminAPIHealthData,
   receiveGarminAPISleepData,
   receiveSuunto247Data,
 } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
+export { dispatchGarminPingBatchOnWrite } from './sleep/garmin-ping-batch-dispatcher';
 export {
   scheduleSuuntoSleepSync,
   scheduleCOROSSleepSync,
   scheduleSuuntoHealthSync,
   scheduleSuuntoWebhookBindingVerification,
 } from './sleep/polling';
-export { backfillCorosAPISleep, backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
+export {
+  backfillCorosAPISleep,
+  backfillGarminAPIHealth,
+  backfillGarminAPISleep,
+  backfillSuuntoAppSleep,
+} from './sleep/backfill';
 export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
+export { getGarminHealthSyncAvailability } from './garmin/health-availability';
 export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
@@ -212,6 +220,7 @@ export { processActivitySyncTask } from './tasks/activity-sync-worker';
 export { processRouteSyncTask } from './tasks/route-sync-worker';
 export { processRouteDeliverySyncTask } from './tasks/route-delivery-sync-worker';
 export { processSleepSyncTask } from './tasks/sleep-sync-worker';
+export { processGarminHealthBackfillTask } from './tasks/garmin-health-backfill-worker';
 export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 export { processSportsLibRouteReparseTask } from './tasks/sports-lib-route-reparse-worker';
 export { processDerivedMetricsTask } from './tasks/derived-metrics-worker';

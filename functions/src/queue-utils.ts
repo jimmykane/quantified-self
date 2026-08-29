@@ -202,6 +202,10 @@ function buildFailedQueueItem(
     // Signed provider continuation URLs are short-lived credentials. They are
     // needed only while the live queue item can retry the exact same request.
     delete failedItem.destinationUploadContinuation;
+    // Garmin Ping/Pull callback URLs contain a short-lived pull token. Keep
+    // them only on a retryable live queue row, never in the longer-lived DLQ.
+    delete failedItem.callbackURL;
+    delete failedItem.garminCallbackURLs;
     delete failedItem.processingOwner;
     delete failedItem.processingRevision;
     delete failedItem.processingLeaseExpiresAt;
@@ -329,6 +333,11 @@ export interface MoveToDeadLetterQueueIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /** Adds provider-owned terminal state to the same transaction as the DLQ move. */
+    onBeforeMoveInTransaction?: (
+        transaction: admin.firestore.Transaction,
+        currentQueueItem: Record<string, unknown>,
+    ) => void | Promise<void>;
 }
 
 export interface QueueManualReconciliationState {
@@ -350,7 +359,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
     transition: (
         transaction: admin.firestore.Transaction,
         currentQueueItem: Record<string, unknown>,
-    ) => void,
+    ) => void | Promise<void>,
 ): Promise<QueueItemUserGuardedUpdateResult> {
     const queueItemRef = params.queueItem.ref;
     if (!queueItemRef) {
@@ -382,7 +391,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
             return QueueItemUserGuardedUpdateResult.NotCurrent;
         }
 
-        transition(transaction, currentQueueItem);
+        await transition(transaction, currentQueueItem);
         return QueueItemUserGuardedUpdateResult.Updated;
     });
 
@@ -436,7 +445,8 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
             ...params,
             actionDescription: 'DLQ move',
-        }, transaction => {
+        }, async (transaction, currentQueueItem) => {
+            await params.onBeforeMoveInTransaction?.(transaction, currentQueueItem);
             transaction.set(failedDocRef, failedItem);
             if (params.manualReconciliation) {
                 transaction.update(
@@ -489,6 +499,11 @@ export interface IncreaseRetryCountIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /** Adds provider-owned state to the same transaction as retry-exhausted DLQ movement. */
+    onRetryExhaustedInTransaction?: (
+        transaction: admin.firestore.Transaction,
+        currentQueueItem: Record<string, unknown>,
+    ) => void | Promise<void>;
     /**
      * An acknowledged delayed retry can retain its planned dispatch time as
      * the queue marker. This prevents the reconciliation scheduler from
@@ -769,7 +784,7 @@ export async function increaseRetryCountIfCurrentUserActive(
         const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
             ...params,
             actionDescription: 'retry-state transition',
-        }, (transaction, currentQueueItem) => {
+        }, async (transaction, currentQueueItem) => {
             movedToDlq = false;
             const currentRetryCount = Number.isFinite(Number(currentQueueItem.retryCount))
                 ? Math.max(0, Math.floor(Number(currentQueueItem.retryCount)))
@@ -798,6 +813,10 @@ export async function increaseRetryCountIfCurrentUserActive(
 
             if (nextRetryCount >= MAX_RETRY_COUNT) {
                 movedToDlq = true;
+                await params.onRetryExhaustedInTransaction?.(
+                    transaction,
+                    currentQueueItem,
+                );
                 const currentQueueItemForDlq = {
                     ...currentQueueItem,
                     id: params.queueItem.id,
@@ -884,6 +903,9 @@ export async function increaseRetryCountForQueueItem(
     incrementBy = 1,
     bulkWriter?: admin.firestore.BulkWriter,
     maxRetryDlqContext?: string,
+    onRetryExhaustedInTransaction?: IncreaseRetryCountIfCurrentUserActiveParams[
+        'onRetryExhaustedInTransaction'
+    ],
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
@@ -897,6 +919,7 @@ export async function increaseRetryCountForQueueItem(
             incrementBy,
             maxRetryDlqContext,
             bulkWriter,
+            onRetryExhaustedInTransaction,
             userID: revisionGuard.userID,
             phase: `${revisionGuard.phasePrefix}_retry`,
             logPrefix: revisionGuard.logPrefix,
@@ -962,6 +985,7 @@ async function updateToProcessedIfCurrentUserActive(
                 processed: true,
                 processedAt: nowMs,
                 ...additionalData,
+                ...clearTerminalProviderCredentialUpdate(queueItem),
                 ...clearRevisionProcessingLeaseUpdate(),
             });
         });
@@ -1001,6 +1025,7 @@ async function updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned
                 processed: true,
                 processedAt: nowMs,
                 ...additionalData,
+                ...clearTerminalProviderCredentialUpdate(queueItem),
                 ...clearRevisionProcessingLeaseUpdate(),
             });
             return true;
@@ -1037,7 +1062,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         const updateData = Object.assign({
             'processed': true,
             'processedAt': (new Date()).getTime(),
-        }, additionalData);
+        }, additionalData, clearTerminalProviderCredentialUpdate(queueItem));
         if (bulkWriter) {
             void bulkWriter.update(ref, updateData);
         } else {
@@ -1050,6 +1075,26 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         logger.error(new Error(`Could not update processed state for ${queueItem.id}`));
         return QueueResult.Failed;
     }
+}
+
+function clearTerminalProviderCredentialUpdate(
+    queueItem: QueueItemInterface,
+): Record<string, unknown> {
+    // Garmin callback URLs embed a short-lived pull token. Preserve that
+    // credential only while the live row can retry; every terminal outcome
+    // (success, skip, or provider-disabled) must remove it.
+    const credentialFields: Record<string, unknown> = {};
+    const providerQueueItem = queueItem as QueueItemInterface & {
+        callbackURL?: unknown;
+        garminCallbackURLs?: unknown;
+    };
+    if (typeof providerQueueItem.callbackURL === 'string') {
+        credentialFields.callbackURL = FieldValue.delete();
+    }
+    if (Array.isArray(providerQueueItem.garminCallbackURLs)) {
+        credentialFields.garminCallbackURLs = FieldValue.delete();
+    }
+    return credentialFields;
 }
 
 export async function markQueueItemSkipped(

@@ -199,10 +199,10 @@ describe('dashboard-action-prompt.helper', () => {
     });
     expect(prompts[4]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
-      title: 'Import Garmin sleep history',
+      title: 'Import Garmin history',
       primaryAction: {
         id: 'backfillGarminSleep',
-        label: 'Import sleep history',
+        label: 'Import history',
       },
       secondaryAction: {
         id: 'dismissBackfillGarminSleep',

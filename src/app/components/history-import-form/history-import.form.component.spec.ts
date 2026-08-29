@@ -63,6 +63,7 @@ describe('HistoryImportFormComponent', () => {
             isPro: vi.fn().mockResolvedValue(true),
             importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true),
             getSuuntoHealthSyncAvailabilityForCurrentUser: vi.fn().mockResolvedValue(false),
+            getGarminHealthSyncAvailabilityForCurrentUser: vi.fn().mockResolvedValue(false),
             backfillSuuntoSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 135,
                 startDate: '2016-01-01T00:00:00.000Z',
@@ -75,7 +76,7 @@ describe('HistoryImportFormComponent', () => {
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_778_244_000_000,
             }),
-            backfillGarminSleepForCurrentUser: vi.fn().mockResolvedValue({
+            backfillGarminHealthForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 43,
                 startDate: '2016-01-01T00:00:00.000Z',
                 endDate: '2026-04-30T12:00:00.000Z',
@@ -265,13 +266,13 @@ describe('HistoryImportFormComponent', () => {
         expect(mockUserService.backfillSuuntoSleepForCurrentUser).not.toHaveBeenCalled();
 
         mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(false);
-        component.retrySuuntoHealthRolloutAvailability();
-        expect(component.suuntoHealthAvailabilityState()).toBe('loading');
+        component.retryHealthRolloutAvailability();
+        expect(component.healthAvailabilityState()).toBe('loading');
         await fixture.whenStable();
         fixture.detectChanges();
 
         expect(mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser).toHaveBeenCalledTimes(2);
-        expect(component.suuntoHealthAvailabilityState()).toBe('unavailable');
+        expect(component.healthAvailabilityState()).toBe('unavailable');
         const retriedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
         expect(retriedButton.disabled).toBe(false);
         expect(retriedButton.textContent).toContain('Import Sleep History');
@@ -285,6 +286,7 @@ describe('HistoryImportFormComponent', () => {
         component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
@@ -302,6 +304,7 @@ describe('HistoryImportFormComponent', () => {
         component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
@@ -424,6 +427,7 @@ describe('HistoryImportFormComponent', () => {
         component.providerConnected = true;
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
 
         await component.onSleepBackfill({
             preventDefault: vi.fn(),
@@ -451,18 +455,55 @@ describe('HistoryImportFormComponent', () => {
         component.missingPermissions = [];
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
 
         await component.onSleepBackfill({
             preventDefault: vi.fn(),
             stopPropagation: vi.fn(),
         } as any);
 
-        expect(mockUserService.backfillGarminSleepForCurrentUser).toHaveBeenCalled();
+        expect(mockUserService.backfillGarminHealthForCurrentUser).toHaveBeenCalled();
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
             method: ServiceNames.GarminAPI,
             source: 'history_import',
         });
         expect(component.pendingSleepBackfillResult()?.queued).toBe(43);
+    });
+
+    it('requests Garmin Sleep and Health history when the staged rollout is available', async () => {
+        await fixture.whenStable();
+        mockUserService.getGarminHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
+        mockUserService.backfillGarminHealthForCurrentUser.mockResolvedValueOnce({
+            queued: 43,
+            sleepQueued: 43,
+            healthQueued: 1,
+            startDate: '2016-01-01T00:00:00.000Z',
+            endDate: '2026-04-30T12:00:00.000Z',
+            nextAllowedAtMs: 1_780_231_200_000,
+        });
+        component.serviceName = ServiceNames.GarminAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.missingPermissions = [];
+        component.isPro = true;
+        (component as any).processChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(component.isSleepAndHealthBackfill).toBe(true);
+        expect(fixture.nativeElement.textContent).toContain('Import Sleep & Health History');
+        expect(fixture.nativeElement.textContent).toContain('and available Health metrics');
+
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'Garmin Sleep & Health history import started for 43 date ranges.',
+            undefined,
+            { duration: 3000 },
+        );
     });
 
     it('should disable Garmin sleep backfill when health permissions are missing', async () => {
@@ -473,6 +514,7 @@ describe('HistoryImportFormComponent', () => {
         component.missingPermissions = ['HEALTH_EXPORT'];
         component.isPro = true;
         (component as any).processChanges();
+        await fixture.whenStable();
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];

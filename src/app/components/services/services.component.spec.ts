@@ -608,14 +608,14 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
         expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(4);
         expect(activePanel.textContent).toContain('Activity sync');
-        expect(activePanel.textContent).toContain('Sleep history');
+        expect(activePanel.textContent).toContain('Sleep & Health history');
 
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
         expect(manageButtons[0].textContent).toContain('Manage');
         expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
         expect(manageButtons[1].textContent).toContain('Manage');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Garmin');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Garmin');
         expect(manageButtons[2].textContent).toContain('Manage');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Send route file for Garmin');
         expect(manageButtons[3].textContent).toContain('Manage');
@@ -647,9 +647,9 @@ describe('ServicesComponent', () => {
 
         expect(component.managedService).toBe('garmin');
         expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Sleep history');
+        expect(component.managedToolTitle).toBe('Sleep & Health history');
         expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Sleep history tools',
+            ariaLabel: 'Garmin Sleep & Health history tools',
         }));
 
         dialogClosed$.next();

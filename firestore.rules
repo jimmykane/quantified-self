@@ -455,23 +455,12 @@ service cloud.firestore {
 
     match /garminAPITokens/{userID} {
       allow read: if isNonAnonymousOwner(userID);
-      allow create: if isNonAnonymousOwner(userID)
-        && serviceRootCreateDoesNotSetBackendFields();
-      allow update: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect()
-        && serviceRootUpdateDoesNotTouchBackendFields();
-      allow delete: if isNonAnonymousOwner(userID)
-        && serviceRootIsNotPendingDisconnect();
+      // Garmin OAuth state, credentials, provider identity, and lifecycle
+      // fences authorize backend Health callback processing and are server-owned.
+      allow create, update, delete: if false;
        match /tokens/{tokenId} {
           allow read: if isNonAnonymousOwner(userID);
-          allow write: if isNonAnonymousOwner(userID)
-            && (
-              !exists(/databases/$(database)/documents/garminAPITokens/$(userID))
-              || (
-                get(/databases/$(database)/documents/garminAPITokens/$(userID)).data.disconnectState != 'disconnect_pending'
-                && !('disconnectOperationGeneration' in get(/databases/$(database)/documents/garminAPITokens/$(userID)).data)
-              )
-            );
+          allow write: if false;
        }
     }
 

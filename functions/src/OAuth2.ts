@@ -841,7 +841,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
       persistedOAuthCredentialGuard.rootGenerationGuard,
       persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
     );
-    const didMarkConnected = (serviceName === ServiceNames.WahooAPI || serviceName === ServiceNames.COROSAPI) && uniqueId
+    const didMarkConnected = (serviceName === ServiceNames.WahooAPI
+      || serviceName === ServiceNames.COROSAPI
+      || serviceName === ServiceNames.GarminAPI) && uniqueId
       ? await markServiceConnected(
         userID,
         serviceName,

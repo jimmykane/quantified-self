@@ -31,6 +31,10 @@ export interface SuuntoHealthSyncAvailabilityResponse {
   available: boolean;
 }
 
+export interface GarminHealthSyncAvailabilityResponse {
+  available: boolean;
+}
+
 export function getSleepBackfillWindowDays(provider: SleepProvider): number | null {
   const windowDays = SLEEP_BACKFILL_PROVIDER_WINDOW_DAYS[provider];
   return typeof windowDays === 'number' && Number.isFinite(windowDays) && windowDays > 0

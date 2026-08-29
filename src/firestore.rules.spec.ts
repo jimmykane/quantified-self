@@ -127,12 +127,28 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('allows direct legacy Garmin token documents but denies arbitrary nested descendants', async () => {
+        it('preserves Garmin owner reads while denying root and credential mutations', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
 
-            await assertSucceeds(tokenRef.set({ accessToken: 'legacy-client-token' }));
-            await assertSucceeds(tokenRef.update({ accessToken: 'updated-client-token' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(`garminAPITokens/${userId}`).set({
+                    state: 'server-oauth-state',
+                });
+                await context.firestore().doc(`garminAPITokens/${userId}/tokens/token-1`).set({
+                    accessToken: 'server-token',
+                    userID: 'garmin-provider-user',
+                });
+            });
+
+            await assertSucceeds(db.doc(`garminAPITokens/${userId}`).get());
+            await assertSucceeds(tokenRef.get());
+            await assertFails(db.doc(`garminAPITokens/${userId}`).set({ state: 'client-state' }));
+            await assertFails(db.doc(`garminAPITokens/${userId}`).update({ state: 'client-state' }));
+            await assertFails(db.doc(`garminAPITokens/${userId}`).delete());
+            await assertFails(tokenRef.set({ accessToken: 'legacy-client-token' }));
+            await assertFails(tokenRef.update({ accessToken: 'updated-client-token' }));
+            await assertFails(tokenRef.delete());
 
             await assertFails(db.doc(
                 `garminAPITokens/${userId}/tokens/token-1/subscriptions/forged`,

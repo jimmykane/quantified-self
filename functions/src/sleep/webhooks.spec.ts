@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
     addSleepSyncQueueItem: vi.fn(),
+    resolveGarminPingFirebaseUserIDs: vi.fn(),
     persistSuuntoHealthWebhookIngress: vi.fn(),
     garminEnabled: false,
+    garminHealthEnabled: false,
     suuntoEnabled: true,
     allowedUserIDs: ['test-user-uid'] as string[],
     suuntoWebhookTokenMatches: true,
@@ -34,6 +36,9 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
+    GARMIN_PING_BATCH_MAX_CALLBACK_BYTES: 700 * 1024,
+    GARMIN_PING_BATCH_MAX_CALLBACKS: 250,
+    resolveGarminPingFirebaseUserIDs: hoisted.resolveGarminPingFirebaseUserIDs,
 }));
 
 vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
@@ -60,7 +65,12 @@ vi.mock('./provider-flags', () => ({
     }),
 }));
 
+vi.mock('../garmin/health-rollout', () => ({
+    isGarminHealthSyncEnabled: vi.fn(() => hoisted.garminHealthEnabled),
+}));
+
 import {
+    receiveGarminAPIHealthData,
     receiveGarminAPISleepData,
     receiveSuunto247Data,
     suuntoWebhookTestInternals,
@@ -77,23 +87,57 @@ describe('sleep webhooks', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.garminEnabled = false;
+        hoisted.garminHealthEnabled = false;
         hoisted.suuntoEnabled = true;
         hoisted.allowedUserIDs = ['test-user-uid'];
         hoisted.suuntoWebhookTokenMatches = true;
         hoisted.suuntoWebhookResolvedUserIDs = ['test-user-uid'];
         process.env.SUUNTOAPP_NOTIFICATION_SECRET = 'suunto-notification-secret';
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-id' });
+        hoisted.resolveGarminPingFirebaseUserIDs.mockImplementation(
+            async (providerUserIDs: string[]) => new Map(
+                providerUserIDs.map(providerUserID => [providerUserID, 'test-user-uid']),
+            ),
+        );
         hoisted.persistSuuntoHealthWebhookIngress.mockResolvedValue('created');
     });
 
-    it('acknowledges disabled Garmin sleep webhooks without queueing', async () => {
+    function garminCallbackURL(summaryType: string, start = 1760000000): string {
+        const endpointPath = summaryType === 'pulseox'
+            ? 'pulseOx'
+            : summaryType === 'allDayRespiration'
+                ? 'respiration'
+                : summaryType;
+        return `https://apis.garmin.com/wellness-api/rest/${endpointPath}?uploadStartTimeInSeconds=${start}&uploadEndTimeInSeconds=${start + 60}&token=garmin-token`;
+    }
+
+    function expectGarminPingBatch(
+        callIndex: number,
+        summaryType: string,
+        providerUserId: string,
+        callbackURLs: string[],
+    ): void {
+        const input = hoisted.addSleepSyncQueueItem.mock.calls[callIndex][0];
+        expect(input).toEqual(expect.objectContaining({
+            type: 'garmin_ping_batch',
+            provider: 'GarminAPI',
+            providerUserId,
+            userID: 'test-user-uid',
+            garminSummaryType: summaryType,
+            dedupeKey: expect.stringMatching(/^[a-f0-9]{64}$/),
+            dispatchImmediately: false,
+        }));
+        expect(input.garminCallbackURLs).toEqual(callbackURLs);
+    }
+
+    it('acknowledges disabled Garmin webhooks without queueing', async () => {
         const response = createResponse();
 
-        await receiveGarminAPISleepData({
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
             body: {
-                sleeps: [
-                    { userId: 'garmin-user-1', summaryId: 'summary-1', startTimeInSeconds: 1760000000 },
-                ],
+                dailies: [{ userId: 'garmin-user-1', callbackURL: garminCallbackURL('dailies') }],
             },
         } as any, response as any);
 
@@ -101,12 +145,14 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('queues Garmin ping payloads with trusted Health API callback URLs', async () => {
+    it('keeps the legacy Sleep endpoint as a durable Ping/Pull alias', async () => {
         hoisted.garminEnabled = true;
         const response = createResponse();
-        const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=garmin-token';
+        const callbackURL = garminCallbackURL('sleeps');
 
         await receiveGarminAPISleepData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
             body: {
                 sleeps: [
                     { userId: 'garmin-user-1', callbackURL },
@@ -115,50 +161,70 @@ describe('sleep webhooks', () => {
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(200);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'garmin_ping',
-            provider: 'GarminAPI',
-            providerUserId: 'garmin-user-1',
-            callbackURL,
-            dedupeKey: callbackURL,
-        }));
+        expectGarminPingBatch(0, 'sleeps', 'garmin-user-1', [callbackURL]);
         expect(hoisted.addSleepSyncQueueItem.mock.calls[0][0]).not.toHaveProperty('payload');
     });
 
-    it('acknowledges Garmin sleep webhooks when queueing skips a deleted or disconnected provider user', async () => {
-        hoisted.garminEnabled = true;
+    it.each([
+        'dailies',
+        'stressDetails',
+        'hrv',
+        'userMetrics',
+        'bodyComps',
+        'pulseox',
+        'allDayRespiration',
+        'bloodPressures',
+        'skinTemp',
+        'healthSnapshot',
+    ])('queues Garmin %s Ping/Pull callbacks through the canonical endpoint', async summaryType => {
+        hoisted.garminHealthEnabled = true;
+        const response = createResponse();
+        const callbackURL = garminCallbackURL(summaryType);
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: { [summaryType]: [{ userId: 'garmin-user-1', callbackURL }] },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expectGarminPingBatch(0, summaryType, 'garmin-user-1', [callbackURL]);
+    });
+
+    it('acknowledges Garmin webhooks when admission skips a disconnected user', async () => {
+        hoisted.garminHealthEnabled = true;
         hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(Object.assign(new Error('deleted'), {
             name: 'ProviderQueueUserDeletedOrDeletingError',
         }));
         const response = createResponse();
-        const callbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=garmin-token';
+        const callbackURL = garminCallbackURL('dailies');
 
-        await receiveGarminAPISleepData({
-            body: {
-                sleeps: [
-                    { userId: 'garmin-user-1', callbackURL },
-                ],
-            },
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(200);
         expect(response.send).toHaveBeenCalled();
     });
 
-    it('queues valid Garmin sleep payloads when another payload in the same batch is skipped', async () => {
-        hoisted.garminEnabled = true;
+    it('queues valid Garmin payloads when another callback in the batch is skipped', async () => {
+        hoisted.garminHealthEnabled = true;
         hoisted.addSleepSyncQueueItem
             .mockRejectedValueOnce(Object.assign(new Error('deleted'), {
                 name: 'ProviderQueueUserDeletedOrDeletingError',
             }))
             .mockResolvedValueOnce({ id: 'queued-valid-payload' });
         const response = createResponse();
-        const skippedCallbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000000&token=deleted-token';
-        const validCallbackURL = 'https://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1760000100&token=valid-token';
+        const skippedCallbackURL = garminCallbackURL('hrv');
+        const validCallbackURL = garminCallbackURL('hrv', 1760000100);
 
-        await receiveGarminAPISleepData({
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
             body: {
-                sleeps: [
+                hrv: [
                     { userId: 'deleted-garmin-user', callbackURL: skippedCallbackURL },
                     { userId: 'valid-garmin-user', callbackURL: validCallbackURL },
                 ],
@@ -167,23 +233,82 @@ describe('sleep webhooks', () => {
 
         expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            providerUserId: 'deleted-garmin-user',
-            callbackURL: skippedCallbackURL,
-        }));
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            providerUserId: 'valid-garmin-user',
-            callbackURL: validCallbackURL,
-        }));
+        expectGarminPingBatch(0, 'hrv', 'deleted-garmin-user', [skippedCallbackURL]);
+        expectGarminPingBatch(1, 'hrv', 'valid-garmin-user', [validCallbackURL]);
     });
 
-    it('rejects Garmin push summary payloads without timestamp fallback dedupe', async () => {
-        hoisted.garminEnabled = true;
+    it('deduplicates and durably batches Garmin callbacks before acknowledgement', async () => {
+        hoisted.garminHealthEnabled = true;
+        const response = createResponse();
+        const callbacks = Array.from(
+            { length: 251 },
+            (_, index) => garminCallbackURL('dailies', 1_760_000_000 + (index * 61)),
+        );
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                dailies: [
+                    ...callbacks.map(callbackURL => ({ userId: 'garmin-user-1', callbackURL })),
+                    { userId: 'garmin-user-1', callbackURL: callbacks[0] },
+                ],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.resolveGarminPingFirebaseUserIDs).toHaveBeenCalledTimes(1);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expectGarminPingBatch(0, 'dailies', 'garmin-user-1', callbacks.slice(0, 250));
+        expectGarminPingBatch(1, 'dailies', 'garmin-user-1', callbacks.slice(250));
+    });
+
+    it('drops unresolved Garmin provider accounts before durable queue writes', async () => {
+        hoisted.garminHealthEnabled = true;
+        hoisted.resolveGarminPingFirebaseUserIDs.mockResolvedValueOnce(new Map());
         const response = createResponse();
 
-        await receiveGarminAPISleepData({
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
             body: {
-                sleeps: [
+                dailies: [{
+                    userId: 'unknown-garmin-user',
+                    callbackURL: garminCallbackURL('dailies'),
+                }],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('bounds malformed Garmin descriptors before account resolution', async () => {
+        hoisted.garminHealthEnabled = true;
+        const response = createResponse();
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                dailies: Array.from({ length: 10_001 }, () => ({})),
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.resolveGarminPingFirebaseUserIDs).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('acknowledges and drops direct Push summaries and malformed callback descriptors', async () => {
+        hoisted.garminHealthEnabled = true;
+        const response = createResponse();
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                dailies: [
                     {
                         userId: 'garmin-user-1',
                         summaryId: 'summary-1',
@@ -200,7 +325,7 @@ describe('sleep webhooks', () => {
             },
         } as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(400);
+        expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
@@ -211,11 +336,13 @@ describe('sleep webhooks', () => {
         ['Garmin-looking attacker host', 'https://apis.garmin.com.attacker.example/wellness-api/rest/sleeps?token=garmin-token'],
         ['custom port', 'https://apis.garmin.com:444/wellness-api/rest/sleeps?token=garmin-token'],
         ['non-Health API path', 'https://apis.garmin.com/tools/login'],
-    ])('rejects Garmin ping payloads with %s', async (_caseName, callbackURL) => {
+    ])('acknowledges and drops Garmin ping payloads with %s', async (_caseName, callbackURL) => {
         hoisted.garminEnabled = true;
         const response = createResponse();
 
         await receiveGarminAPISleepData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
             body: {
                 sleeps: [
                     { userId: 'garmin-user-1', callbackURL },
@@ -223,8 +350,69 @@ describe('sleep webhooks', () => {
             },
         } as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(400);
+        expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('ignores unsupported epochs while accepting supported Health families', async () => {
+        hoisted.garminHealthEnabled = true;
+        const response = createResponse();
+        const callbackURL = garminCallbackURL('dailies');
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                epochs: [{ userId: 'garmin-user-1', callbackURL: garminCallbackURL('epochs') }],
+                dailies: [{ userId: 'garmin-user-1', callbackURL }],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            garminSummaryType: 'dailies',
+        }));
+    });
+
+    it('accepts the documented 10 MiB payload boundary and drops larger payloads', async () => {
+        hoisted.garminHealthEnabled = true;
+        const callbackURL = garminCallbackURL('dailies');
+        const acceptedResponse = createResponse();
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.alloc(10 * 1024 * 1024),
+            body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
+        } as any, acceptedResponse as any);
+        expect(acceptedResponse.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+
+        vi.clearAllMocks();
+        const oversizedResponse = createResponse();
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
+            body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
+        } as any, oversizedResponse as any);
+        expect(oversizedResponse.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 only when a durable Garmin queue write fails', async () => {
+        hoisted.garminHealthEnabled = true;
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(new Error('firestore unavailable'));
+        const response = createResponse();
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                dailies: [{ userId: 'garmin-user-1', callbackURL: garminCallbackURL('dailies') }],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(500);
     });
 
     it('validates Suunto HMAC before queueing sleep samples', async () => {

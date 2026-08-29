@@ -44,7 +44,7 @@ export interface HistoryImportResult {
   failedBatches: number;
 }
 
-type SuuntoHealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
+type HealthAvailabilityState = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
 
 
 @Component({
@@ -83,8 +83,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
   public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
-  public suuntoHealthAvailabilityState = signal<SuuntoHealthAvailabilityState>('idle');
+  public healthAvailabilityState = signal<HealthAvailabilityState>('idle');
   public isSleepAndHealthBackfill = false;
+  public isStagedHealthBackfillProvider = false;
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -100,8 +101,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private currentUserID: string | null = null;
   private sleepSyncStateSubscription: Subscription | null = null;
   private sleepSyncStateKey: string | null = null;
-  private suuntoHealthAvailabilityRequestKey: string | null = null;
-  private suuntoHealthAvailabilityRequestGeneration = 0;
+  private healthAvailabilityRequestKey: string | null = null;
+  private healthAvailabilityRequestGeneration = 0;
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -162,7 +163,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
-    this.syncSuuntoHealthRolloutAvailability();
+    this.isStagedHealthBackfillProvider = this.serviceName === ServiceNames.SuuntoApp
+      || this.serviceName === ServiceNames.GarminAPI;
+    this.syncHealthRolloutAvailability();
     this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
@@ -306,7 +309,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
     this.sleepSyncStateSubscription?.unsubscribe();
-    this.suuntoHealthAvailabilityRequestGeneration += 1;
+    this.healthAvailabilityRequestGeneration += 1;
   }
 
   get cooldownDays(): number {
@@ -411,16 +414,16 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   get canSubmitSleepBackfill(): boolean {
-    const suuntoAvailabilityResolved = this.serviceName !== ServiceNames.SuuntoApp
-      || this.suuntoHealthAvailabilityState() === 'available'
-      || this.suuntoHealthAvailabilityState() === 'unavailable';
+    const healthAvailabilityResolved = !this.isStagedHealthBackfillProvider
+      || this.healthAvailabilityState() === 'available'
+      || this.healthAvailabilityState() === 'unavailable';
     return this.isSleepBackfillVisible
       && !this.isSubmitting
       && !this.isLoadingParent
       && !this.isSleepBackfillSubmitting()
       && !this.isSleepBackfillCooldownActive
       && !this.isMissingGarminSleepBackfillPermissions
-      && suuntoAvailabilityResolved;
+      && healthAvailabilityResolved;
   }
 
   async onSleepBackfill(event: Event) {
@@ -448,13 +451,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     try {
       const result = provider === SLEEP_PROVIDERS.GarminAPI
-        ? await this.userService.backfillGarminSleepForCurrentUser()
+        ? await this.userService.backfillGarminHealthForCurrentUser()
         : provider === SLEEP_PROVIDERS.COROSAPI
           ? await this.userService.backfillCorosSleepForCurrentUser()
           : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
-      const startedHistoryName = provider === SLEEP_PROVIDERS.SuuntoApp
-        && typeof result.healthQueued === 'number'
+      const startedHistoryName = typeof result.healthQueued === 'number'
         ? (result.healthQueued > 0 ? 'Sleep & Health history' : 'sleep history')
         : historyName;
       this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${result.queued} date ranges.`, undefined, {
@@ -505,53 +507,56 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       });
   }
 
-  private syncSuuntoHealthRolloutAvailability(): void {
-    const key = this.serviceName === ServiceNames.SuuntoApp && this.currentUserID
-      ? this.currentUserID
+  private syncHealthRolloutAvailability(): void {
+    const key = this.isStagedHealthBackfillProvider && this.currentUserID
+      ? `${this.currentUserID}:${this.serviceName}`
       : null;
-    if (this.suuntoHealthAvailabilityRequestKey === key) {
+    if (this.healthAvailabilityRequestKey === key) {
       return;
     }
 
-    this.suuntoHealthAvailabilityRequestKey = key;
-    const requestGeneration = ++this.suuntoHealthAvailabilityRequestGeneration;
-    this.suuntoHealthAvailabilityState.set(key ? 'loading' : 'idle');
+    this.healthAvailabilityRequestKey = key;
+    const requestGeneration = ++this.healthAvailabilityRequestGeneration;
+    this.healthAvailabilityState.set(key ? 'loading' : 'idle');
     this.updateSleepAndHealthBackfillAvailability();
 
     if (!key) {
       return;
     }
 
-    void this.userService.getSuuntoHealthSyncAvailabilityForCurrentUser()
+    const availabilityRequest = this.serviceName === ServiceNames.GarminAPI
+      ? this.userService.getGarminHealthSyncAvailabilityForCurrentUser()
+      : this.userService.getSuuntoHealthSyncAvailabilityForCurrentUser();
+    void availabilityRequest
       .then((available) => {
-        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
-          || this.suuntoHealthAvailabilityRequestKey !== key) return;
-        this.suuntoHealthAvailabilityState.set(available ? 'available' : 'unavailable');
+        if (this.healthAvailabilityRequestGeneration !== requestGeneration
+          || this.healthAvailabilityRequestKey !== key) return;
+        this.healthAvailabilityState.set(available ? 'available' : 'unavailable');
         this.updateSleepAndHealthBackfillAvailability();
         this.changeDetectorRef.markForCheck();
       })
       .catch((error) => {
-        if (this.suuntoHealthAvailabilityRequestGeneration !== requestGeneration
-          || this.suuntoHealthAvailabilityRequestKey !== key) return;
+        if (this.healthAvailabilityRequestGeneration !== requestGeneration
+          || this.healthAvailabilityRequestKey !== key) return;
         this.logger.error(error);
-        this.suuntoHealthAvailabilityState.set('error');
+        this.healthAvailabilityState.set('error');
         this.updateSleepAndHealthBackfillAvailability();
         this.changeDetectorRef.markForCheck();
       });
   }
 
-  public retrySuuntoHealthRolloutAvailability(): void {
-    if (this.serviceName !== ServiceNames.SuuntoApp
+  public retryHealthRolloutAvailability(): void {
+    if (!this.isStagedHealthBackfillProvider
       || !this.currentUserID
-      || this.suuntoHealthAvailabilityState() === 'loading') return;
-    this.suuntoHealthAvailabilityRequestKey = null;
-    this.syncSuuntoHealthRolloutAvailability();
+      || this.healthAvailabilityState() === 'loading') return;
+    this.healthAvailabilityRequestKey = null;
+    this.syncHealthRolloutAvailability();
   }
 
   private updateSleepAndHealthBackfillAvailability(): void {
     this.isSleepAndHealthBackfill = this.serviceName === ServiceNames.COROSAPI
-      || (this.serviceName === ServiceNames.SuuntoApp
-        && this.suuntoHealthAvailabilityState() === 'available');
+      || (this.isStagedHealthBackfillProvider
+        && this.healthAvailabilityState() === 'available');
   }
 
   private coerceUserID(user: User | null | undefined): string | null {

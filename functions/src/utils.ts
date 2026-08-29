@@ -656,6 +656,7 @@ export {
   enqueueRouteDeliverySyncTask,
   enqueueRouteSyncTask,
   enqueueSleepSyncTask,
+  enqueueGarminHealthBackfillTask,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';

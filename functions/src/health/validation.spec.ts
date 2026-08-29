@@ -93,12 +93,19 @@ describe('health write validation', () => {
     it.each([
         ['providerAccountId', '   ', 'providerAccountId'],
         ['calendarDate', '2026-02-30', 'valid YYYY-MM-DD'],
-        ['timezoneOffsetSeconds', 70_000, 'outside the supported range'],
+        ['timezoneOffsetSeconds', 86_400, 'outside the supported range'],
     ])('rejects invalid %s', (field, value, message) => {
         const input = validInput();
         input[field] = value;
         expect(() => validateHealthSourceRecordInput(input)).toThrowError(new RegExp(message));
         expect(() => validateHealthSourceRecordInput(input)).toThrow(HealthWriteValidationError);
+    });
+
+    it('accepts a non-standard device display offset within 24 hours of UTC', () => {
+        const input = validInput();
+        input.timezoneOffsetSeconds = 70_000;
+
+        expect(validateHealthSourceRecordInput(input).timezoneOffsetSeconds).toBe(70_000);
     });
 
     it('rejects a canonical unit that disagrees with the catalog', () => {

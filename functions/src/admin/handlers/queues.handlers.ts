@@ -161,6 +161,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeDeliverySyncQueue,
             routeSyncQueue,
             sleepSyncQueue,
+            garminHealthBackfillQueue,
             sportsLibReparseQueue,
             sportsLibReparseHeavyQueue,
             sportsLibRouteReparseQueue,
@@ -173,6 +174,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeDeliverySyncCloudTaskStats,
             routeSyncCloudTaskStats,
             sleepSyncCloudTaskStats,
+            garminHealthBackfillCloudTaskStats,
             sportsLibReparseCloudTaskStats,
             sportsLibReparseHeavyCloudTaskStats,
             sportsLibRouteReparseCloudTaskStats,
@@ -184,6 +186,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             getAdminCloudTaskQueueStats(routeDeliverySyncQueue),
             getAdminCloudTaskQueueStats(routeSyncQueue),
             getAdminCloudTaskQueueStats(sleepSyncQueue),
+            getAdminCloudTaskQueueStats(garminHealthBackfillQueue),
             getAdminCloudTaskQueueStats(sportsLibReparseQueue),
             getAdminCloudTaskQueueStats(sportsLibReparseHeavyQueue),
             getAdminCloudTaskQueueStats(sportsLibRouteReparseQueue),
@@ -196,6 +199,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             + routeDeliverySyncCloudTaskStats.pending
             + routeSyncCloudTaskStats.pending
             + sleepSyncCloudTaskStats.pending
+            + garminHealthBackfillCloudTaskStats.pending
             + reparseCloudTaskDepth
             + sportsLibRouteReparseCloudTaskStats.pending
             + derivedMetricsIngressCloudTaskStats.pending
@@ -1073,6 +1077,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     routeDeliverySync: routeDeliverySyncCloudTaskStats,
                     routeSync: routeSyncCloudTaskStats,
                     sleepSync: sleepSyncCloudTaskStats,
+                    garminHealthBackfill: garminHealthBackfillCloudTaskStats,
                     sportsLibReparse: sportsLibReparseCloudTaskStats,
                     sportsLibReparseHeavy: sportsLibReparseHeavyCloudTaskStats,
                     sportsLibRouteReparse: sportsLibRouteReparseCloudTaskStats,

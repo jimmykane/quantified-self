@@ -56,7 +56,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
-    'HEALTH_EXPORT': 'Required to import Garmin sleep history.',
+    'HEALTH_EXPORT': 'Required for Garmin Sleep and supported Health summary imports.',
     'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
@@ -132,7 +132,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
       : this.isReconnectRequired
       ? 'Reconnect Garmin to resume history imports, sending routes to Garmin, and automatic activity sync to Suunto.'
-      : 'Required for history imports, sending routes to Garmin, and automatic activity sync to Suunto.';
+      : 'Required for activity and Sleep history, supported Garmin Health summaries, sending routes to Garmin, and automatic activity sync to Suunto.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {

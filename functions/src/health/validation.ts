@@ -687,7 +687,9 @@ export function validateHealthSourceRecordInput(value: unknown): HealthSourceRec
         timezoneOffsetSeconds = null;
     } else if (input.timezoneOffsetSeconds !== undefined) {
         timezoneOffsetSeconds = safeInteger(input.timezoneOffsetSeconds, 'timezoneOffsetSeconds');
-        if (Math.abs(timezoneOffsetSeconds) > 18 * 60 * 60) {
+        // Garmin device display offsets are user-controlled and may be
+        // non-standard values anywhere within 24 hours of UTC.
+        if (Math.abs(timezoneOffsetSeconds) >= 24 * 60 * 60) {
             throw new HealthWriteValidationError('timezoneOffsetSeconds is outside the supported range.');
         }
     }

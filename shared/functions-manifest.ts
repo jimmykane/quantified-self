@@ -71,7 +71,9 @@ export const FUNCTIONS_MANIFEST = {
     deauthorizeGarminAPI: { name: 'deauthorizeGarminAPI', region: 'europe-west2' },
     importRouteToGarminAPI: { name: 'importRouteToGarminAPI', region: 'europe-west2' },
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
+    backfillGarminAPIHealth: { name: 'backfillGarminAPIHealth', region: 'europe-west2' },
     backfillGarminAPISleep: { name: 'backfillGarminAPISleep', region: 'europe-west2' },
+    getGarminHealthSyncAvailability: { name: 'getGarminHealthSyncAvailability', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },
     receiveGarminAPIUserPermissions: { name: 'receiveGarminAPIUserPermissions', region: 'europe-west2' },
     backfillActivitySyncRoute: { name: 'backfillActivitySyncRoute', region: 'europe-west2' },
@@ -89,6 +91,7 @@ export const FUNCTIONS_MANIFEST = {
     processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
     processSportsLibRouteReparseTask: { name: 'processSportsLibRouteReparseTask', region: 'europe-west2' },
     processRouteDeliverySyncTask: { name: 'processRouteDeliverySyncTask', region: 'europe-west2' },
+    processGarminHealthBackfillTask: { name: 'processGarminHealthBackfillTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions
     uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },

@@ -1712,6 +1712,19 @@ describe('OAuth2', () => {
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(
+                userID,
+                ServiceNames.GarminAPI,
+                'mock-garmin-user',
+                expect.objectContaining({
+                    fieldName: 'activeOAuthCredentialGeneration',
+                    expectedGeneration: expect.any(String),
+                }),
+                expect.objectContaining({
+                    fieldName: 'oauthFlowGeneration',
+                    expectedGeneration: 'oauth-flow-generation',
+                }),
+            );
         });
 
         it('clears pending disconnect root fields before marking an OAuth reconnect as connected', async () => {
