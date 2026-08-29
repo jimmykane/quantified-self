@@ -230,16 +230,6 @@ async function assertUserActiveBeforeProviderRequest(
   }
 }
 
-function assertDailyResultsIntersectRange(
-  results: readonly SuuntoHealthResult[],
-  startMs: number,
-  endMs: number,
-): void {
-  if (results.some(result => result.input.endTimeMs <= startMs || result.input.startTimeMs >= endMs)) {
-    throw new SuuntoHealthRequestError();
-  }
-}
-
 function buildSuuntoHealthRequestWindows(startMs: number, endMs: number): SuuntoHealthRequestWindow[] {
   const windows: SuuntoHealthRequestWindow[] = [];
   for (let targetStartMs = startMs; targetStartMs < endMs; targetStartMs += SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS) {
@@ -397,11 +387,11 @@ export async function processSuuntoHealthQueueItem(
       queueItem.providerUserId,
       receivedAtMs,
     );
-    assertDailyResultsIntersectRange(
-      statisticsResults,
-      window.requestStartMs,
-      window.requestEndMs,
-    );
+    // Suunto may include the current provider-local day even when it falls
+    // beyond the requested end date. The response has already passed the
+    // byte, group, source, sample, timestamp, and value bounds. Persist only
+    // complete daily records intersecting the original target, just as we do
+    // for the padded Activity and Recovery responses.
     for (const result of statisticsResults) {
       if (resultIntersectsTarget(result, window)) {
         healthResultsBySource.set(sourceResultIdentity(result), result);

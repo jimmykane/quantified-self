@@ -179,6 +179,7 @@ For every new persistent write path:
 - When any terminal path removes a durable cursor, mark only its matching observable progress state terminal in the same guarded transaction as the DLQ move. Apply the same guarded progress transition when rollout or lifecycle removal skips the cursor. Never leave progress running after its final queue row is gone or overwrite progress owned by a newer import.
 - Confirm the partner pagination order. For descending history, include both selected date boundaries and stop only once records are older than the start boundary. Do not assume API ordering without tests.
 - Confirm whether a provider range is made of calendar dates or instants and whether both ends are inclusive. Use one canonical representation end to end, split by the provider's maximum number of included dates, and make adjacent windows non-overlapping. Test timezone boundaries plus one-day, exact-limit, and limit-plus-one ranges.
+- Do not assume a successful bounded range endpoint returns only requested dates. Some providers include a current-day summary with older requests. Keep response byte and item bounds, validate every returned row, and persist only records intersecting the original target; a valid extra day is not a retryable transport failure.
 - Classify provider 429 responses separately and surface reset metadata where available. Do not convert rate limits into rapid retries.
 
 ### Queue item design

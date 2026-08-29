@@ -299,6 +299,60 @@ describe('Suunto Health provider sync', () => {
     expect(result.healthResults[0].input.sampleSeries[0].nativeValues).toEqual([50, 60]);
   });
 
+  it('ignores a current-day statistic returned beyond an older requested range', async () => {
+    hoisted.requestGet.mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        Name: 'stepcount',
+        Aggregation: 'sum',
+        Sources: [{
+          Name: 'private-watch-id',
+          Samples: [
+            { TimeISO8601: '2026-08-26T00:00:00.000Z', Value: 1234 },
+            { TimeISO8601: '2026-08-29T00:00:00.000Z', Value: 2345 },
+          ],
+        }],
+      }])
+      .mockResolvedValueOnce([]);
+    const snapshot = tokenSnapshot();
+    const initialGuards = currentAuthorityGuards(snapshot);
+
+    const result = await processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      initialGuards,
+    );
+
+    expect(result.healthResults).toHaveLength(1);
+    expect(result.healthResults[0].input.sourceRecordType)
+      .toBe('suunto_247_daily_activity_statistics');
+    expect(result.healthResults[0].input.calendarDate).toBe('2026-08-26');
+  });
+
+  it('still validates a statistic that will be discarded outside the target', async () => {
+    hoisted.requestGet.mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        Name: 'stepcount',
+        Aggregation: 'sum',
+        Sources: [{
+          Name: 'private-watch-id',
+          Samples: [{ TimeISO8601: '2026-08-29T00:00:00.000Z', Value: 'invalid' }],
+        }],
+      }]);
+    const snapshot = tokenSnapshot();
+    const initialGuards = currentAuthorityGuards(snapshot);
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      initialGuards,
+    )).rejects.toBeInstanceOf(SuuntoHealthValidationError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
+  });
+
   it('force-refreshes once after a provider 401 and advances the write fence', async () => {
     hoisted.requestGet.mockReset()
       .mockRejectedValueOnce({ response: { statusCode: 401 }, body: 'private response' })
