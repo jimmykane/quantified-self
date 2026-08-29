@@ -173,7 +173,7 @@ export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTre
  */
 export const getUserGrowthTrend = onAdminCall<GetUserGrowthTrendRequest, UserGrowthTrendResponse>({
     region: FUNCTIONS_MANIFEST.getUserGrowthTrend.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     try {
         const db = admin.firestore();
