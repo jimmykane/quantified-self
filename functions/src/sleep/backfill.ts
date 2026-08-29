@@ -47,6 +47,11 @@ import {
     countGarminHealthBackfillRequests,
     floorToGarminBackfillSecond,
 } from '../garmin/health-backfill-range';
+import {
+    captureActiveGarminHealthWriteLifecycleGuards,
+    doesGarminHealthTokenDataMatchGuard,
+} from '../garmin/health-lifecycle';
+import type { GarminHealthWriteLifecycleGuards } from '../garmin/health-lifecycle';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -63,6 +68,7 @@ interface SuuntoSleepBackfillToken {
 interface GarminSleepBackfillToken {
     accessToken: string;
     providerUserId: string;
+    lifecycleGuards: GarminHealthWriteLifecycleGuards;
 }
 
 interface CorosSleepBackfillToken {
@@ -195,9 +201,26 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
                 logger.warn(`[SleepBackfill] Skipping incomplete Garmin token ${tokenDoc.id} for ${userID}`);
                 continue;
             }
+
+            const currentTokenDoc = await tokenDoc.ref.get();
+            const lifecycleGuards = await captureActiveGarminHealthWriteLifecycleGuards(
+                admin.firestore(),
+                userID,
+                providerUserId,
+                currentTokenDoc,
+            );
+            if (!lifecycleGuards
+                || !doesGarminHealthTokenDataMatchGuard(
+                    tokenData as Record<string, unknown>,
+                    lifecycleGuards,
+                )) {
+                logger.warn(`[SleepBackfill] Skipping inactive connected Garmin token for ${userID}`);
+                continue;
+            }
             return {
                 accessToken,
                 providerUserId,
+                lifecycleGuards,
             };
         } catch (error) {
             lastTokenReadError = error;
@@ -933,7 +956,7 @@ export const backfillGarminAPIHealth = onCall({
             healthBackfillWindowsCompleted: includeHealth ? 0 : undefined,
             healthBackfillWindowsTotal: includeHealth ? healthQueued : undefined,
             lastError: message,
-        }, Date.now());
+        }, Date.now(), token.lifecycleGuards);
         throw new HttpsError('internal', 'Could not request Garmin history backfill.');
     }
 

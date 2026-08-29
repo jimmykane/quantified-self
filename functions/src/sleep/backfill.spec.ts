@@ -11,7 +11,12 @@ import { chunkCOROSInclusiveTimestampRange } from '../coros/date-range';
 import { countGarminHealthBackfillRequests } from '../garmin/health-backfill-range';
 
 const hoisted = vi.hoisted(() => ({
-    tokenDocs: [] as Array<{ id: string; data: () => Record<string, unknown> }>,
+    tokenDocs: [] as Array<{
+        id: string;
+        exists: boolean;
+        data: () => Record<string, unknown>;
+        ref: { get: ReturnType<typeof vi.fn> };
+    }>,
     stateData: null as Record<string, unknown> | null,
     transactionStateData: undefined as Record<string, unknown> | null | undefined,
     userExists: true,
@@ -31,6 +36,8 @@ const hoisted = vi.hoisted(() => ({
     isSuuntoHealthSyncEnabled: vi.fn(),
     isGarminHealthSyncEnabled: vi.fn(),
     isGarminHealthSyncUserAllowed: vi.fn(),
+    captureGarminHealthLifecycleGuards: vi.fn(),
+    garminTokenMatchesLifecycleGuard: vi.fn(),
     suuntoTokenLimit: vi.fn(),
 }));
 
@@ -223,6 +230,11 @@ vi.mock('../garmin/health-rollout', () => ({
     isGarminHealthSyncUserAllowed: hoisted.isGarminHealthSyncUserAllowed,
 }));
 
+vi.mock('../garmin/health-lifecycle', () => ({
+    captureActiveGarminHealthWriteLifecycleGuards: hoisted.captureGarminHealthLifecycleGuards,
+    doesGarminHealthTokenDataMatchGuard: hoisted.garminTokenMatchesLifecycleGuard,
+}));
+
 vi.mock('../service-connection-meta', () => ({
     isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
 }));
@@ -262,24 +274,55 @@ function createRequest(overrides: Partial<{
 }
 
 function seedSuuntoToken(serviceName: string | undefined = undefined) {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id: 'suunto-token-1',
+        exists: true,
         data: () => serviceName ? { serviceName } : {},
-    });
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
 }
 
 function seedGarminToken(id = 'garmin-user-1') {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id,
-        data: () => ({ serviceName: 'GarminAPI' }),
-    });
+        exists: true,
+        data: () => ({
+            serviceName: 'GarminAPI',
+            userID: id,
+            accessToken: 'garmin-access-token',
+        }),
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
+}
+
+function garminLifecycleGuards() {
+    return {
+        requiredExistingDocumentRef: { path: 'garminAPITokens/user-1/tokens/garmin-user-1' },
+        requiredExistingTokenCredential: {
+            accessToken: 'garmin-access-token',
+            credentialGeneration: 'token-generation-1',
+        },
+        providerUserId: 'garmin-user-1',
+        providerIdentityPinned: true,
+        tokenCredentialGeneration: 'token-generation-1',
+        rootOAuthCredentialGeneration: 'root-generation-1',
+        connectionStateGeneration: 'connection-generation-1',
+    };
 }
 
 function seedCorosToken() {
-    hoisted.tokenDocs.push({
+    const tokenDoc = {
         id: 'coros-token-1',
+        exists: true,
         data: () => ({ serviceName: 'COROS API' }),
-    });
+        ref: { get: vi.fn() },
+    };
+    tokenDoc.ref.get.mockResolvedValue(tokenDoc);
+    hoisted.tokenDocs.push(tokenDoc);
 }
 
 describe('backfillSuuntoAppSleep', () => {
@@ -777,6 +820,8 @@ describe('backfillGarminAPIHealth', () => {
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
         hoisted.isGarminHealthSyncEnabled.mockReturnValue(true);
         hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(false);
+        hoisted.captureGarminHealthLifecycleGuards.mockResolvedValue(garminLifecycleGuards());
+        hoisted.garminTokenMatchesLifecycleGuard.mockReturnValue(true);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.requestGet.mockResolvedValue(undefined);
@@ -1086,7 +1131,28 @@ describe('backfillGarminAPIHealth', () => {
             lastBackfillQueueItems: 1,
             nextBackfillAllowedAtMs: null,
             lastError: 'garmin unavailable',
-        }, nowMs);
+        }, nowMs, garminLifecycleGuards());
+    });
+
+    it('fences a failed Health queue admission to the initiating Garmin lifecycle', async () => {
+        seedGarminToken();
+        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(true);
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(new Error('lifecycle changed'));
+
+        await expect(backfillGarminAPIHealth(createRequest()))
+            .rejects.toMatchObject({ code: 'internal' });
+
+        expect(hoisted.updateSleepSyncState).toHaveBeenLastCalledWith(
+            'user-1',
+            SLEEP_PROVIDERS.GarminAPI,
+            expect.objectContaining({
+                status: 'failed',
+                healthBackfillStatus: 'failed',
+                lastError: 'lifecycle changed',
+            }),
+            nowMs,
+            garminLifecycleGuards(),
+        );
     });
 
     it('clears the dashboard prompt suppression marker when Garmin request submission fails', async () => {
@@ -1100,7 +1166,7 @@ describe('backfillGarminAPIHealth', () => {
             status: 'failed',
             lastBackfillQueuedAtMs: null,
             nextBackfillAllowedAtMs: null,
-        }), nowMs);
+        }), nowMs, garminLifecycleGuards());
     });
 
     it('does not claim cooldown or request Garmin windows when account deletion starts before the transaction', async () => {

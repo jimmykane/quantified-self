@@ -64,7 +64,6 @@ export class GarminHealthRequestError extends Error {
 export function assertGarminHealthPermission(tokenData: Record<string, unknown>, userID: string): void {
   const permissions = tokenData.permissions;
   if (Array.isArray(permissions)
-    && permissions.length > 0
     && !permissions.includes('HEALTH_EXPORT')) {
     throw new GarminHealthPermissionError(userID);
   }

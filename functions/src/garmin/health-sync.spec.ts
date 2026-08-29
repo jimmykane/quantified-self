@@ -287,6 +287,23 @@ describe('Garmin Health callback synchronization', () => {
     )).rejects.toBeInstanceOf(GarminHealthPermissionError);
   });
 
+  it('rejects an explicit empty Garmin permission set before fetching Health data', async () => {
+    hoisted.getTokenData.mockResolvedValue({
+      accessToken: 'garmin-access-token',
+      refreshToken: 'garmin-refresh-token',
+      permissions: [],
+    });
+
+    await expect(processGarminHealthQueueItem(
+      queueItem(),
+      tokenSnapshot(),
+      'test-user',
+      lifecycleGuards(),
+    )).rejects.toBeInstanceOf(GarminHealthPermissionError);
+
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+  });
+
   it('publishes refreshed lifecycle guards before a callback request can fail', async () => {
     const refreshedGuards = lifecycleGuards();
     refreshedGuards.requiredExistingTokenCredential = {
