@@ -241,7 +241,7 @@ describe('PricingComponent', () => {
             cancel_at_period_end: false,
         }]);
         await Promise.resolve();
-        expect(summaries.at(-1)?.renewalAmountDisplay).toBe('Calculating…');
+        expect(summaries.at(-1)?.isRenewalAmountLoading).toBe(true);
 
         roleSpy.mockReturnValue(secondRole);
         historySpy.mockReturnValue(secondHistory);
@@ -1450,7 +1450,7 @@ describe('PricingComponent', () => {
         expect(content).not.toContain('Current billing cadence:');
     });
 
-    it('should render Calculating… while renewal callable is pending, then render exact amount', async () => {
+    it('should render a progress bar while renewal callable is pending, then render exact amount', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         let resolveRenewalAmount: ((value: UpcomingRenewalAmountResult) => void) | null = null;
@@ -1472,7 +1472,10 @@ describe('PricingComponent', () => {
         await component.ngOnInit();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+        expect(fixture.nativeElement.querySelector(
+            'mat-progress-bar[aria-label="Loading next renewal price"]'
+        )).toBeTruthy();
+        expect(fixture.nativeElement.textContent as string).not.toContain('Calculating…');
 
         resolveRenewalAmount?.({
             status: 'ready',
@@ -1485,6 +1488,7 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         expect(fixture.nativeElement.textContent as string).toContain('$20');
+        expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeNull();
     });
 
     it('should render No upcoming charge when callable returns no_upcoming_charge', async () => {
@@ -1554,7 +1558,9 @@ describe('PricingComponent', () => {
             cancel_at_period_end: false
         }]);
         fixture.detectChanges();
-        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+        expect(fixture.nativeElement.querySelector(
+            'mat-progress-bar[aria-label="Loading next renewal price"]'
+        )).toBeTruthy();
 
         subscriptions$.next([]);
         fixture.detectChanges();
@@ -1597,7 +1603,9 @@ describe('PricingComponent', () => {
             cancel_at_period_end: false
         }]);
         fixture.detectChanges();
-        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+        expect(fixture.nativeElement.querySelector(
+            'mat-progress-bar[aria-label="Loading next renewal price"]'
+        )).toBeTruthy();
 
         subscriptions$.error(Object.assign(new Error('Missing or insufficient permissions.'), {
             code: 'permission-denied'

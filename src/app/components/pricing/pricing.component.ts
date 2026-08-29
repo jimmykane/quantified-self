@@ -3,6 +3,7 @@ import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
@@ -32,13 +33,24 @@ interface SubscriptionSummary {
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
     billingCadenceDisplay: string;
+    isRenewalAmountLoading: boolean;
     renewalAmountDisplay: string;
 }
 
 @Component({
     selector: 'app-pricing',
     standalone: true,
-    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule, MatChipsModule, MatBadgeModule, MatListModule],
+    imports: [
+        CommonModule,
+        MatCardModule,
+        MatButtonModule,
+        MatProgressSpinnerModule,
+        MatProgressBarModule,
+        MatIconModule,
+        MatChipsModule,
+        MatBadgeModule,
+        MatListModule
+    ],
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
@@ -711,7 +723,7 @@ export class PricingComponent implements OnInit, OnDestroy {
 
     private buildBaseSubscriptionSummary(
         subscriptions: StripeSubscription[]
-    ): Omit<SubscriptionSummary, 'renewalAmountDisplay'> | null {
+    ): Omit<SubscriptionSummary, 'isRenewalAmountLoading' | 'renewalAmountDisplay'> | null {
         if (!subscriptions.length) {
             return null;
         }
@@ -757,7 +769,8 @@ export class PricingComponent implements OnInit, OnDestroy {
 
         this.subscriptionSummarySubject.next({
             ...baseSummary,
-            renewalAmountDisplay: 'Calculating…'
+            isRenewalAmountLoading: true,
+            renewalAmountDisplay: ''
         });
 
         const renewalAmountResult = await this.paymentService.getUpcomingRenewalAmount();
@@ -767,6 +780,7 @@ export class PricingComponent implements OnInit, OnDestroy {
 
         this.subscriptionSummarySubject.next({
             ...baseSummary,
+            isRenewalAmountLoading: false,
             renewalAmountDisplay: this.mapRenewalAmountDisplay(renewalAmountResult)
         });
     }
