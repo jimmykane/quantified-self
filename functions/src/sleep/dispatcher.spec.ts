@@ -16,7 +16,6 @@ const {
     mockQueueStartAfter,
     mockQueueWhere,
     mockFirestore,
-    mockRunTransaction,
     mockRecursiveDelete,
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
@@ -74,7 +73,6 @@ const {
         mockQueueStartAfter,
         mockQueueWhere,
         mockFirestore,
-        mockRunTransaction,
         mockRecursiveDelete,
         mockGetUserDeletionGuardState,
         mockGetUserDeletionGuardStateInTransaction,
@@ -215,7 +213,7 @@ describe('sleep/dispatcher', () => {
             shouldSkip: false,
         });
 
-        const queryChain: any = {
+        const queryChain = {
             get: mockQueueGet,
             limit: mockQueueLimit,
             orderBy: mockQueueOrderBy,
@@ -232,7 +230,7 @@ describe('sleep/dispatcher', () => {
             docs: [],
         });
 
-        const tokenQueryChain: any = {
+        const tokenQueryChain = {
             get: mockTokenGet,
             limit: mockTokenLimit,
             where: mockTokenWhere,
@@ -359,6 +357,48 @@ describe('sleep/dispatcher', () => {
         expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
     });
 
+    it('recovers Garmin Health backfills when the regular Sleep task queue is saturated', async () => {
+        const nowMs = 1_700_000_000_000;
+        const update = vi.fn().mockResolvedValue(undefined);
+        mockGetCloudTaskQueueDepthForQueue.mockImplementation(async (queueName: string) => (
+            queueName === 'processSleepSyncTask' ? MAX_PENDING_TASKS : 0
+        ));
+        mockQueueGet.mockResolvedValue({
+            empty: false,
+            docs: [{
+                id: 'garmin-health-backfill-ready',
+                data: () => ({
+                    type: 'garmin_health_backfill',
+                    dispatchedToCloudTask: null,
+                    dateCreated: 150,
+                    queueRevision: 'revision-health',
+                    userID: 'garmin-user',
+                    provider: 'GarminAPI',
+                    providerUserId: 'garmin-provider-user',
+                }),
+                ref: { update },
+            }],
+        });
+
+        await expect(reconcileSleepSyncQueueDispatches(nowMs)).resolves.toEqual({
+            inspected: 1,
+            dispatched: 1,
+            skippedRecent: 0,
+        });
+        expect(mockQueueWhere).toHaveBeenCalledWith('type', '==', 'garmin_health_backfill');
+        expect(mockEnqueueGarminHealthBackfillTask).toHaveBeenCalledWith(
+            'garmin-health-backfill-ready',
+            150,
+            undefined,
+            {
+                queueRevision: 'revision-health',
+                queueDateCreated: 150,
+                recoveryTaskKey: `dispatch-${nowMs}`,
+            },
+        );
+        expect(mockEnqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
     it('redispatches a current revision after its retained processing lease expires', async () => {
         const nowMs = 1_700_000_000_000;
         const update = vi.fn().mockResolvedValue(undefined);
@@ -470,7 +510,7 @@ describe('sleep/dispatcher', () => {
         });
         expect(mockQueueOrderBy).toHaveBeenCalledWith('dateCreated', 'asc');
         expect(mockQueueStartAfter).toHaveBeenCalled();
-        expect(mockQueueGet).toHaveBeenCalledTimes(2);
+        expect(mockQueueGet).toHaveBeenCalledTimes(3);
         expect(mockEnqueueSleepSyncTask).toHaveBeenCalledWith('older-undispatched-item', 999, undefined, {
             queueRevision: undefined,
             queueDateCreated: 999,

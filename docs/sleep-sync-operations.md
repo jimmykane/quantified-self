@@ -50,7 +50,8 @@ validated descriptors, resolves unique accounts with bounded lookups, and durabl
 UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each newly created
 or replacement batch revision outside the HTTP acknowledgement path without redispatching same-revision retry-state
 writes; its worker immediately dispatches the per-callback children, and the scheduled
-dispatcher remains the recovery path. The callback worker pulls and writes
+dispatcher remains the recovery path. Scheduled recovery scans regular Sleep work and Garmin Health backfills
+independently, so capacity pressure in one Cloud Tasks queue cannot starve the other. The callback worker pulls and writes
 with OAuth and connection lifecycle guards. Large callback responses are written
 in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose
 digest-bound cursor resumes without retaining raw provider data. See [Garmin Health integration](garmin-integration.md).

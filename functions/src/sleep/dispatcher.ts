@@ -30,6 +30,8 @@ const MAX_SLEEP_SYNC_QUEUE_SCAN = 500;
 const SLEEP_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const SLEEP_SYNC_RECONCILIATION_PAGE_SIZE = 100;
 
+type SleepSyncTaskClass = 'sleep_sync' | 'garmin_health_backfill';
+
 function toDispatchTimestamp(value: unknown): number | null {
     const timestamp = Number(value);
     return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
@@ -155,6 +157,52 @@ async function shouldDispatchSleepSyncCandidate(
     }
 }
 
+function isQueueDocumentInTaskClass(
+    doc: admin.firestore.QueryDocumentSnapshot,
+    taskClass: SleepSyncTaskClass,
+): boolean {
+    const isGarminHealthBackfill = doc.data().type === 'garmin_health_backfill';
+    return taskClass === 'garmin_health_backfill'
+        ? isGarminHealthBackfill
+        : !isGarminHealthBackfill;
+}
+
+async function scanSleepSyncQueueTaskClass(
+    taskClass: SleepSyncTaskClass,
+): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+    const matchedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
+
+    while (matchedDocs.length < MAX_SLEEP_SYNC_QUEUE_SCAN) {
+        let query = admin.firestore()
+            .collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME)
+            .where('processed', '==', false);
+        if (taskClass === 'garmin_health_backfill') {
+            query = query.where('type', '==', 'garmin_health_backfill');
+        }
+        query = query
+            .orderBy('dateCreated', 'asc')
+            .limit(SLEEP_SYNC_RECONCILIATION_PAGE_SIZE);
+
+        if (pageCursor) {
+            query = query.startAfter(pageCursor);
+        }
+
+        const pageSnapshot = await query.get();
+        if (pageSnapshot.empty) break;
+
+        const remainingCapacity = MAX_SLEEP_SYNC_QUEUE_SCAN - matchedDocs.length;
+        matchedDocs.push(...pageSnapshot.docs
+            .filter(doc => isQueueDocumentInTaskClass(doc, taskClass))
+            .slice(0, remainingCapacity));
+        if (pageSnapshot.docs.length < SLEEP_SYNC_RECONCILIATION_PAGE_SIZE) break;
+
+        pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+    }
+
+    return matchedDocs;
+}
+
 export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Promise<{
     inspected: number;
     dispatched: number;
@@ -180,36 +228,14 @@ export async function reconcileSleepSyncQueueDispatches(nowMs = Date.now()): Pro
         MAX_PENDING_TASKS - pendingGarminHealthBackfillTasks,
     );
 
-    const scannedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
-    const pageSize = Math.min(SLEEP_SYNC_RECONCILIATION_PAGE_SIZE, MAX_SLEEP_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
-    let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
-
-    while (scannedDocs.length < MAX_SLEEP_SYNC_QUEUE_SCAN) {
-        const remainingScanCapacity = MAX_SLEEP_SYNC_QUEUE_SCAN - scannedDocs.length;
-        const currentPageSize = Math.min(pageSize, remainingScanCapacity);
-
-        let query = admin.firestore()
-            .collection(SLEEP_SYNC_QUEUE_COLLECTION_NAME)
-            .where('processed', '==', false)
-            .orderBy('dateCreated', 'asc')
-            .limit(currentPageSize);
-
-        if (pageCursor) {
-            query = query.startAfter(pageCursor);
-        }
-
-        const pageSnapshot = await query.get();
-        if (pageSnapshot.empty) {
-            break;
-        }
-
-        scannedDocs.push(...pageSnapshot.docs);
-        if (pageSnapshot.docs.length < currentPageSize) {
-            break;
-        }
-
-        pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
-    }
+    const scannedDocs = [
+        ...(availableSleepSlots > 0
+            ? await scanSleepSyncQueueTaskClass('sleep_sync')
+            : []),
+        ...(availableGarminHealthBackfillSlots > 0
+            ? await scanSleepSyncQueueTaskClass('garmin_health_backfill')
+            : []),
+    ];
 
     if (!scannedDocs.length) {
         return {
