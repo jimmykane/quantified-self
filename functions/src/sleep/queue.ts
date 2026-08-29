@@ -1978,7 +1978,7 @@ async function fanOutGarminPingBatch(
                     callbackURL,
                     garminSummaryType: summaryType,
                     dedupeKey: `${summaryType}:${callbackURL}`,
-                    dispatchImmediately: false,
+                    dispatchImmediately: true,
                 });
             }
         },

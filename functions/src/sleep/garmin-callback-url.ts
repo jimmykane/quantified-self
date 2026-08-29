@@ -1,6 +1,6 @@
 import {
-    GarminSupportedSummaryType,
-    isGarminSupportedSummaryType,
+    getGarminSummaryTypeForEndpointPath,
+    type GarminSupportedSummaryType,
 } from '../garmin/health-summary-types';
 
 const GARMIN_HEALTH_API_CALLBACK_HOST = 'apis.garmin.com';
@@ -59,9 +59,8 @@ export function parseTrustedGarminCallbackURL(
         return null;
     }
     const pathMatch = /^\/wellness-api\/rest\/([A-Za-z]+)$/.exec(url.pathname);
-    const summaryType = pathMatch?.[1];
-    if (!isGarminSupportedSummaryType(summaryType)
-        || (expectedSummaryType && summaryType !== expectedSummaryType)) {
+    const summaryType = getGarminSummaryTypeForEndpointPath(pathMatch?.[1]);
+    if (!summaryType || (expectedSummaryType && summaryType !== expectedSummaryType)) {
         return null;
     }
 

@@ -1769,7 +1769,7 @@ describe('sleep queue', () => {
         }
     });
 
-    it('expands a durable Garmin Ping batch asynchronously and removes its callback credentials', async () => {
+    it('immediately dispatches a durable Garmin Ping batch fan-out and removes its callback credentials', async () => {
         const callbackURLs = [
             'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token-1',
             'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424460&uploadEndTimeInSeconds=1777424520&token=garmin-token-2',
@@ -1829,6 +1829,7 @@ describe('sleep queue', () => {
                 userID: 'test-user-uid',
             }), { merge: false }]),
         ));
+        expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledTimes(2);
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             processed: true,
             resultStatus: 'success',

@@ -47,8 +47,9 @@ Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise sep
 They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
 `receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
 validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
-UID-scoped callback batches before acknowledging. The existing dispatcher expands each batch, then the
-worker pulls and writes with OAuth and connection lifecycle guards. Large callback responses are written
+UID-scoped callback batches before acknowledging. Cloud Tasks immediately expands each batch and dispatches
+its per-callback children; the scheduled dispatcher remains the recovery path. The worker pulls and writes
+with OAuth and connection lifecycle guards. Large callback responses are written
 in 32-record checkpointed batches; a six-minute budget hands remaining work to a fresh queue revision whose
 digest-bound cursor resumes without retaining raw provider data. See [Garmin Health integration](garmin-integration.md).
 

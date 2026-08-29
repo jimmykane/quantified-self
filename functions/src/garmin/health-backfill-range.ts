@@ -1,20 +1,11 @@
 import {
   GARMIN_HEALTH_SUMMARY_TYPES,
+  GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS,
   type GarminHealthSummaryType,
 } from './health-summary-types';
 
-export const GARMIN_HEALTH_BACKFILL_ENDPOINTS: Readonly<Record<GarminHealthSummaryType, string>> = {
-  dailies: 'dailies',
-  stressDetails: 'stressDetails',
-  hrv: 'hrv',
-  userMetrics: 'userMetrics',
-  bodyComps: 'bodyComps',
-  pulseox: 'pulseOx',
-  allDayRespiration: 'respiration',
-  bloodPressures: 'bloodPressures',
-  skinTemp: 'skinTemp',
-  healthSnapshot: 'healthSnapshot',
-};
+export const GARMIN_HEALTH_BACKFILL_ENDPOINTS: Readonly<Record<GarminHealthSummaryType, string>>
+  = GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS;
 
 export const GARMIN_HEALTH_BACKFILL_SECOND_MS = 1_000;
 export const GARMIN_HEALTH_BACKFILL_MAX_INCLUSIVE_DAYS = 90;

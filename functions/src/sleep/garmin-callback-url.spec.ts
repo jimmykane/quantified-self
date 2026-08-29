@@ -29,6 +29,23 @@ describe('Garmin callback URL validation', () => {
     });
 
     it.each([
+        ['pulseox', 'pulseOx'],
+        ['allDayRespiration', 'respiration'],
+    ] as const)('normalizes the %s payload family from its %s REST path', (
+        summaryType,
+        endpointPath,
+    ) => {
+        const callbackURL = `https://apis.garmin.com/wellness-api/rest/${endpointPath}?uploadStartTimeInSeconds=1760000000&uploadEndTimeInSeconds=1760086400&token=token-1`;
+
+        expect(parseTrustedGarminCallbackURL(callbackURL, summaryType)).toEqual({
+            callbackURL,
+            summaryType,
+            uploadStartTimeMs: 1_760_000_000_000,
+            uploadEndTimeMs: 1_760_086_400_000,
+        });
+    });
+
+    it.each([
         ['missing', undefined],
         ['invalid URL', 'not-a-url'],
         ['non-HTTPS URL', 'http://apis.garmin.com/wellness-api/rest/sleeps?uploadStartTimeInSeconds=1&uploadEndTimeInSeconds=2&token=token-1'],

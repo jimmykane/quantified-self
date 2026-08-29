@@ -359,8 +359,9 @@ async function handleGarminAPIHealthData(
                             .update(`${group.summaryType}:${serializedCallbacks}`)
                             .digest('hex'),
                         // This compact row is the durable acknowledgement
-                        // boundary. The dispatcher expands it asynchronously.
-                        dispatchImmediately: false,
+                        // boundary. Cloud Tasks expands it immediately, while
+                        // the scheduled dispatcher remains the recovery path.
+                        dispatchImmediately: true,
                     },
                     callbackCount: callbacks.length,
                 });

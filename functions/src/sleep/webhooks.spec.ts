@@ -103,7 +103,12 @@ describe('sleep webhooks', () => {
     });
 
     function garminCallbackURL(summaryType: string, start = 1760000000): string {
-        return `https://apis.garmin.com/wellness-api/rest/${summaryType}?uploadStartTimeInSeconds=${start}&uploadEndTimeInSeconds=${start + 60}&token=garmin-token`;
+        const endpointPath = summaryType === 'pulseox'
+            ? 'pulseOx'
+            : summaryType === 'allDayRespiration'
+                ? 'respiration'
+                : summaryType;
+        return `https://apis.garmin.com/wellness-api/rest/${endpointPath}?uploadStartTimeInSeconds=${start}&uploadEndTimeInSeconds=${start + 60}&token=garmin-token`;
     }
 
     function expectGarminPingBatch(
@@ -120,7 +125,7 @@ describe('sleep webhooks', () => {
             userID: 'test-user-uid',
             garminSummaryType: summaryType,
             dedupeKey: expect.stringMatching(/^[a-f0-9]{64}$/),
-            dispatchImmediately: false,
+            dispatchImmediately: true,
         }));
         expect(input.garminCallbackURLs).toEqual(callbackURLs);
     }
