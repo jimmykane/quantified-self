@@ -4,6 +4,7 @@
  */
 export const GARMIN_HEALTH_SYNC_ALLOWED_USER_IDS: readonly string[] = [
   'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+  'dFhvO7MSa5PzxGGpSILOZr35E3c2',
 ];
 
 export const GARMIN_HEALTH_SYNC_ENABLED = true;
