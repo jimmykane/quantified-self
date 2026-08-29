@@ -75,7 +75,7 @@
         </div>
 
         <app-admin-user-kpi-grid [cards]="userKpiCards()" [loading]="userAnalytics.loadingKpis()"
-            [error]="userAnalytics.statsError()">
+            [error]="userKpiError()">
         </app-admin-user-kpi-grid>
 
         <app-admin-user-history

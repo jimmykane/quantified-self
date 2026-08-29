@@ -35,8 +35,8 @@ export function buildAdminAuthProviderChartOption(
         'apple.com': '#555555',
         'facebook.com': '#1877F2',
     };
-    const entries = Object.entries(providers);
-    const total = entries.reduce((sum, [, value]) => sum + normalizeNumber(value), 0);
+    const entries = normalizedProviderEntries(providers);
+    const total = entries.reduce((sum, [, value]) => sum + value, 0);
     const topProvider = [...entries].sort((a, b) => b[1] - a[1])[0]?.[0];
     const themeTokens = buildOfficialEChartsThemeTokens(isDark);
     const isMobileLayout = containerWidth > 0 && containerWidth < 680;
@@ -68,7 +68,7 @@ export function buildAdminAuthProviderChartOption(
             itemStyle: { borderColor: themeTokens.subtleBorderColor, borderWidth: 2 },
             data: entries.map(([key, value]) => ({
                 name: providerLabels[key] || key,
-                value: normalizeNumber(value),
+                value,
                 itemStyle: { color: providerColors[key] || '#9E9E9E' },
             })),
         }],
@@ -84,6 +84,10 @@ export function buildAdminAuthProviderChartOption(
             ],
         }],
     };
+}
+
+export function hasAdminAuthProviderData(providers: Record<string, number>): boolean {
+    return normalizedProviderEntries(providers).length > 0;
 }
 
 export function buildAdminUserGrowthChartOption(
@@ -105,8 +109,8 @@ export function buildAdminUserGrowthChartOption(
     const labels = monthKeys.map(key => userBucketsByKey.get(key)?.label || subscriptionBucketsByKey.get(key)?.label || key);
     const registeredPerMonth = monthKeys.map(key => normalizeNumber(userBucketsByKey.get(key)?.registeredUsers));
     const onboardedPerMonth = monthKeys.map(key => normalizeNumber(userBucketsByKey.get(key)?.onboardedUsers));
-    const basicNetPerMonth = monthKeys.map(key => normalizeNumber(subscriptionBucketsByKey.get(key)?.basicNet));
-    const proNetPerMonth = monthKeys.map(key => normalizeNumber(subscriptionBucketsByKey.get(key)?.proNet));
+    const basicNetPerMonth = monthKeys.map(key => normalizeSignedNumber(subscriptionBucketsByKey.get(key)?.basicNet));
+    const proNetPerMonth = monthKeys.map(key => normalizeSignedNumber(subscriptionBucketsByKey.get(key)?.proNet));
     const registeredTotals = buildCumulativeSeriesFromEndingTotal(registeredPerMonth, totals.registeredUsers);
     const onboardedTotals = buildCumulativeSeriesFromEndingTotal(onboardedPerMonth, totals.onboardedUsers);
     const basicTotals = buildCumulativeSeriesFromEndingTotal(basicNetPerMonth, totals.basicSubscriptions);
@@ -259,6 +263,12 @@ function centeredText(
         left: 'center',
         top,
     };
+}
+
+function normalizedProviderEntries(providers: Record<string, number>): Array<[string, number]> {
+    return Object.entries(providers)
+        .map(([provider, value]): [string, number] => [provider, Math.floor(normalizeNumber(value))])
+        .filter(([, value]) => value > 0);
 }
 
 function normalizeNumber(value: unknown): number {

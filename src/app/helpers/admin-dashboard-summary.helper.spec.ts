@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MaintenanceStatus, QueueStats, UserCountStats } from '../services/admin.service';
+import type { MaintenanceStatus, QueueStats } from '../services/admin.service';
 import type { ChangelogPost } from '../services/app.whats-new.service';
 import {
     buildAdminDashboardChangelogSummary,
@@ -8,273 +8,26 @@ import {
     buildAdminDashboardQueueRows,
     formatAdminDashboardDuration,
 } from './admin-dashboard-summary.helper';
-import { buildAdminUserKpiCards } from './admin-user-kpis.helper';
-
-const buildFullUserKpiCards = (
-    stats: Parameters<typeof buildAdminUserKpiCards>[1],
-    growth: Parameters<typeof buildAdminUserKpiCards>[2],
-    subscriptions: Parameters<typeof buildAdminUserKpiCards>[3],
-) => buildAdminUserKpiCards('full', stats, growth, subscriptions);
 
 describe('admin-dashboard-summary helper', () => {
-    it('builds user KPI cards from stats and trend totals', () => {
-        const stats: UserCountStats = {
-            total: 120,
-            pro: 30,
-            basic: 25,
-            free: 65,
-            monthlyPaid: 40,
-            yearlyPaid: 14,
-            subscriptionCadence: {
-                pro: { monthly: 18, yearly: 11, unknown: 1 },
-                basic: { monthly: 22, yearly: 3, unknown: 0 },
-            },
-            everPaid: 70,
-            canceled: 15,
-            cancelScheduled: 3,
-            onboardingCompleted: 90,
-            marketingConsent: 35,
-            providers: {},
-            events: { total: 1_250, computedAt: '2026-06-01T10:00:00.000Z' },
-            routes: { total: 42 },
-            connections: {
-                serviceUsers: 48,
-                mcpUsers: 12,
-                both: 9,
-                providers: { Garmin: 30, Suunto: 12, COROS: 8, Wahoo: 5 },
-            },
-            authActivity: {
-                last24Hours: 12,
-                last7Days: 40,
-                last30Days: 50,
-                computedAt: '2026-06-01T10:05:00.000Z',
-            },
-        };
-
-        const cards = buildFullUserKpiCards(
-            stats,
-            {
-                months: 12,
-                buckets: [],
-                totals: { registeredUsers: 18, onboardedUsers: 12 },
-            },
-            {
-                months: 12,
-                buckets: [],
-                totals: {
-                    newSubscriptions: 10,
-                    plannedCancellations: 4,
-                    net: 6,
-                    basicNewSubscriptions: 4,
-                    basicPlannedCancellations: 1,
-                    basicNet: 3,
-                    proNewSubscriptions: 6,
-                    proPlannedCancellations: 3,
-                    proNet: 3,
-                },
-            }
-        );
-
-        expect(cards.slice(0, 3).map(card => card.id)).toEqual(['active-24h', 'active-7d', 'active-30d']);
-        expect(cards.find(card => card.id === 'active-24h')).toMatchObject({
-            value: 12,
-            subtitle: 'Sign-in or ID token refresh',
-            severity: undefined,
-        });
-        expect(cards.find(card => card.id === 'active-7d')).toMatchObject({
-            value: 40,
-            subtitle: 'Sign-in or ID token refresh · 80% of 30-day active',
-            severity: undefined,
-        });
-        expect(cards.find(card => card.id === 'active-30d')?.value).toBe(50);
-        expect(cards.find(card => card.id === 'total-users')?.value).toBe(120);
-        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
-            label: 'Marketing Opt-ins',
-            value: 35,
-            subtitle: 'Consent only · 29% of users',
-        });
-        expect(cards.find(card => card.id === 'pro-users')?.subtitle).toBe('Monthly 18 · Yearly 11 · Unknown 1');
-        expect(cards.find(card => card.id === 'basic-users')?.subtitle).toBe('Monthly 22 · Yearly 3');
-        expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
-        expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
-        expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBe(6);
-        expect(cards.find(card => card.id === 'scheduled-cancel')?.severity).toBe('warning');
-        expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
-            value: 48,
-            subtitle: '40% of users · Garmin 30 · Suunto 12 · COROS 8 · Wahoo 5',
-        });
-        expect(cards.find(card => card.id === 'mcp-connected-users')).toMatchObject({
-            value: 12,
-            subtitle: 'Active authorization · 10% of users',
-        });
-        expect(cards.find(card => card.id === 'any-connected-users')).toMatchObject({
-            label: 'Any Connection',
-            value: 51,
-            subtitle: 'Service or MCP · 43% of users',
-        });
-    });
-
-    it('keeps trend KPI cards present when trend totals are malformed', () => {
-        const stats: UserCountStats = {
-            total: 2,
-            pro: 1,
-            basic: 0,
-            free: 1,
-            monthlyPaid: 1,
-            yearlyPaid: 0,
-            everPaid: 1,
-            canceled: 0,
-            cancelScheduled: 0,
-            onboardingCompleted: 1,
-            marketingConsent: 0,
-            providers: {},
-            events: { total: 0 },
-            routes: { total: 0 },
-        };
-
-        const cards = buildFullUserKpiCards(
-            stats,
-            {} as Parameters<typeof buildFullUserKpiCards>[1],
-            { totals: { net: Number.NaN } } as Parameters<typeof buildFullUserKpiCards>[2],
-        );
-
-        expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
-    });
-
-    it('caps the marketing consent share for non-atomic count snapshots', () => {
-        const stats: UserCountStats = {
-            total: 10,
-            pro: 0,
-            basic: 0,
-            free: 10,
-            monthlyPaid: 0,
-            yearlyPaid: 0,
-            everPaid: 0,
-            canceled: 0,
-            cancelScheduled: 0,
-            onboardingCompleted: 10,
-            marketingConsent: 11,
-            providers: {},
-            events: { total: 0 },
-            routes: { total: 0 },
-        };
-
-        const card = buildFullUserKpiCards(stats, null, null)
-            .find(candidate => candidate.id === 'marketing-consent');
-
-        expect(card?.subtitle).toBe('Consent only · 100% of users');
-    });
-
-    it('omits the activity ratio when the 30-day denominator is zero', () => {
-        const stats: UserCountStats = {
-            total: 1,
-            pro: 0,
-            basic: 0,
-            free: 1,
-            monthlyPaid: 0,
-            yearlyPaid: 0,
-            everPaid: 0,
-            canceled: 0,
-            cancelScheduled: 0,
-            onboardingCompleted: 1,
-            marketingConsent: 0,
-            providers: {},
-            events: { total: 0 },
-            routes: { total: 0 },
-            authActivity: {
-                last24Hours: null,
-                last7Days: 0,
-                last30Days: 0,
-                computedAt: null,
-            },
-        };
-
-        const cards = buildFullUserKpiCards(stats, null, null);
-
-        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or ID token refresh');
-    });
-
-    it('does not present unavailable connection counts as successful or zero', () => {
-        const stats: UserCountStats = {
-            total: 10,
-            pro: 1,
-            basic: 0,
-            free: 9,
-            monthlyPaid: 1,
-            yearlyPaid: 0,
-            everPaid: 1,
-            canceled: 0,
-            cancelScheduled: 0,
-            onboardingCompleted: 8,
-            marketingConsent: 3,
-            providers: {},
-            events: { total: 0 },
-            routes: { total: 0 },
-            connections: {
-                serviceUsers: null,
-                mcpUsers: null,
-                both: null,
-                providers: { Garmin: 0, Suunto: 0, COROS: 0, Wahoo: 0 },
-                cacheStatus: 'unavailable',
-            },
-        };
-
-        const cards = buildFullUserKpiCards(stats, null, null);
-
-        expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
-            value: null,
-            severity: undefined,
-            subtitle: 'Unavailable',
-        });
-        expect(cards.find(card => card.id === 'mcp-connected-users')).toMatchObject({
-            value: null,
-            severity: undefined,
-            subtitle: 'Unavailable',
-        });
-        expect(cards.find(card => card.id === 'any-connected-users')).toMatchObject({
-            value: null,
-            severity: undefined,
-            subtitle: 'Unavailable',
-        });
-    });
-
-    it('normalizes malformed KPI counts and financial summary numbers', () => {
-        const stats = {
-            total: Number.NaN,
-            pro: 1,
-            basic: 0,
-            free: 1,
-            monthlyPaid: 1,
-            yearlyPaid: 0,
-            everPaid: 1,
-            canceled: Number.NaN,
-            cancelScheduled: 2,
-            onboardingCompleted: 1,
-            marketingConsent: Number.NaN,
-            providers: {},
-            events: { total: Number.NaN },
-            routes: { total: 5 },
-        } as UserCountStats;
-
-        const cards = buildFullUserKpiCards(stats, null, null);
+    it('normalizes malformed financial summary numbers', () => {
         const summary = buildAdminDashboardHealthSummary(
             [],
             [],
             { total: 0, published: 0, drafts: 0, latestTitle: null, latestDate: null },
-            { revenue: { total: 0, currency: 'usd', invoiceCount: Number.NaN }, cost: { billingAccountId: null, projectId: 'p', reportUrl: null, currency: 'usd', total: null, budget: null } }
+            {
+                revenue: { total: 0, currency: 'usd', invoiceCount: Number.NaN },
+                cost: {
+                    billingAccountId: null,
+                    projectId: 'p',
+                    reportUrl: null,
+                    currency: 'usd',
+                    total: null,
+                    budget: null,
+                },
+            },
         );
 
-        expect(cards.find(card => card.id === 'total-users')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
-            value: null,
-            subtitle: 'Unavailable',
-        });
-        expect(cards.find(card => card.id === 'events')?.value).toBeNull();
-        expect(cards.find(card => card.id === 'canceled')?.severity).toBeUndefined();
-        expect(cards.find(card => card.id === 'scheduled-cancel')?.severity).toBe('warning');
         expect(summary.revenueInvoiceCount).toBeNull();
     });
 
@@ -473,31 +226,14 @@ describe('admin-dashboard-summary helper', () => {
         });
     });
 
-    it('keeps partial maintenance payloads and invalid count timestamps presentable', () => {
+    it('keeps partial maintenance payloads presentable', () => {
         const maintenanceCards = buildAdminDashboardMaintenanceCards({
             prod: { enabled: true, message: 'Deploying' },
         } as unknown as MaintenanceStatus);
-        const stats: UserCountStats = {
-            total: 1,
-            pro: 0,
-            basic: 0,
-            free: 1,
-            monthlyPaid: 0,
-            yearlyPaid: 0,
-            everPaid: 0,
-            canceled: 0,
-            cancelScheduled: 0,
-            onboardingCompleted: 0,
-            marketingConsent: 0,
-            providers: {},
-            events: { total: 10, computedAt: 'not-a-date' },
-            routes: { total: 5, computedAt: '2026-06-01T10:00:00.000Z' },
-        };
 
         expect(maintenanceCards.find(card => card.id === 'prod')?.severity).toBe('error');
         expect(maintenanceCards.find(card => card.id === 'beta')?.value).toBe('Unknown');
         expect(maintenanceCards.find(card => card.id === 'beta')?.severity).toBe('warning');
-        expect(buildFullUserKpiCards(stats, null, null).find(card => card.id === 'events')?.subtitle).toBeUndefined();
     });
 
     it('builds health summary and formats durations', () => {

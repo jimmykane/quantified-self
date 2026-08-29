@@ -30,12 +30,14 @@ export class AdminUserWorkspaceComponent implements OnInit, OnDestroy {
     private readonly route = inject(ActivatedRoute);
     private readonly router = inject(Router);
     private readonly destroy$ = new Subject<void>();
+    private activeQueryTab: 'overview' | 'users' = 'overview';
 
     readonly selectedTabIndex = signal(0);
 
     ngOnInit(): void {
         this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
-            this.selectedTabIndex.set(params.get('tab') === 'users' ? 1 : 0);
+            this.activeQueryTab = params.get('tab') === 'users' ? 'users' : 'overview';
+            this.selectedTabIndex.set(this.activeQueryTab === 'users' ? 1 : 0);
         });
     }
 
@@ -46,10 +48,16 @@ export class AdminUserWorkspaceComponent implements OnInit, OnDestroy {
 
     selectTab(index: number): void {
         const normalizedIndex = index === 1 ? 1 : 0;
+        const queryTab = normalizedIndex === 1 ? 'users' : 'overview';
         this.selectedTabIndex.set(normalizedIndex);
+        if (queryTab === this.activeQueryTab) {
+            return;
+        }
+
+        this.activeQueryTab = queryTab;
         void this.router.navigate([], {
             relativeTo: this.route,
-            queryParams: { tab: normalizedIndex === 1 ? 'users' : 'overview' },
+            queryParams: { tab: queryTab },
             queryParamsHandling: 'merge',
             replaceUrl: true,
         });

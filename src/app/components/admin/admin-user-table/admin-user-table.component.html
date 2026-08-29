@@ -20,8 +20,8 @@
 
         <mat-form-field appearance="outline" class="service-filter" subscriptSizing="dynamic">
             <mat-label>Filter Service</mat-label>
-            <mat-select [value]="filterService()" (selectionChange)="onFilterServiceChange($event.value)">
-                <mat-option [value]="undefined">All Services</mat-option>
+            <mat-select [value]="serviceSelection()" (selectionChange)="onFilterServiceChange($event.value)">
+                <mat-option value="all">All Services</mat-option>
                 <mat-option value="garmin">Garmin</mat-option>
                 <mat-option value="suunto">Suunto</mat-option>
                 <mat-option value="coros">COROS</mat-option>
@@ -32,7 +32,7 @@
 
     <mat-card class="table-card">
         @if (loading()) {
-        <div class="loading-shade" role="status"><mat-spinner></mat-spinner></div>
+        <div class="loading-shade" role="status" aria-label="Loading users"><mat-spinner></mat-spinner></div>
         }
         @if (error()) {
         <div class="error-message" role="alert">{{ error() }}</div>
@@ -81,14 +81,14 @@
 
                 <ng-container matColumnDef="role">
                     <th mat-header-cell *matHeaderCellDef mat-sort-header>Role</th>
-                    <td mat-cell *matCellDef="let row"><mat-chip [class]="'role-' + row.role">{{ row.role | uppercase }}</mat-chip></td>
+                    <td mat-cell *matCellDef="let row"><mat-chip [highlighted]="row.role !== 'free'">{{ row.role | uppercase }}</mat-chip></td>
                 </ng-container>
 
                 <ng-container matColumnDef="subscriptionHistory">
                     <th mat-header-cell *matHeaderCellDef>Subscription</th>
                     <td mat-cell *matCellDef="let row">
                         <div class="subscription-cell">
-                            <mat-chip [class]="'subscription-' + row.subscriptionState">{{ row.subscriptionLabel }}</mat-chip>
+                            <mat-chip [highlighted]="row.subscriptionState === 'active'">{{ row.subscriptionLabel }}</mat-chip>
                             @if (row.subscriptionDetails) { <span class="detail-text">{{ row.subscriptionDetails }}</span> }
                         </div>
                         @if (row.user.subscription?.stripeLink) {
@@ -147,7 +147,7 @@
                 <ng-container matColumnDef="onboarding">
                     <th mat-header-cell *matHeaderCellDef>Onboarding</th>
                     <td mat-cell *matCellDef="let row">
-                        <mat-chip [class]="row.user.onboardingCompleted ? 'state-active' : 'state-disabled'">
+                        <mat-chip [highlighted]="row.user.onboardingCompleted">
                             {{ row.user.onboardingCompleted ? 'Completed' : 'Pending' }}
                         </mat-chip>
                     </td>
@@ -156,7 +156,7 @@
                 <ng-container matColumnDef="status">
                     <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
                     <td mat-cell *matCellDef="let row">
-                        <mat-chip [class]="row.user.disabled ? 'state-disabled' : 'state-active'">
+                        <mat-chip [highlighted]="!row.user.disabled">
                             {{ row.user.disabled ? 'Disabled' : 'Active' }}
                         </mat-chip>
                     </td>
@@ -178,8 +178,7 @@
                 <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
                 <tr class="mat-row" *matNoDataRow>
                     <td class="mat-cell no-data-cell" [attr.colspan]="displayedColumns.length">
-                        @if (searchTerm()) { No users found matching "{{ searchTerm() }}" }
-                        @else if (!loading()) { No users found }
+                        @if (emptyStateMessage(); as message) { {{ message }} }
                     </td>
                 </tr>
             </table>

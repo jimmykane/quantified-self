@@ -111,6 +111,30 @@ describe('admin user KPI helper', () => {
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBeNull();
     });
 
+    it('omits the seven-day activity ratio when the 30-day denominator is zero', () => {
+        const cards = buildAdminUserKpiCards('full', buildStats({
+            authActivity: {
+                last24Hours: null,
+                last7Days: 0,
+                last30Days: 0,
+                computedAt: null,
+            },
+        }), null, null);
+
+        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'active-7d')?.subtitle).toBe('Sign-in or ID token refresh');
+    });
+
+    it('omits invalid aggregate count timestamps', () => {
+        const cards = buildAdminUserKpiCards('full', buildStats({
+            events: { total: 10, computedAt: 'not-a-date' },
+            routes: { total: 5, computedAt: '2026-06-01T10:00:00.000Z' },
+        }), null, null);
+
+        expect(cards.find(card => card.id === 'events')?.subtitle).toBeUndefined();
+        expect(cards.find(card => card.id === 'routes')?.subtitle).toContain('Updated');
+    });
+
     it('caps non-atomic shares and does not mark malformed values successful', () => {
         const stats = buildStats({
             total: 10,
@@ -135,5 +159,57 @@ describe('admin user KPI helper', () => {
             severity: undefined,
             subtitle: 'Unavailable',
         });
+    });
+
+    it('rejects malformed counts while preserving a signed subscription net', () => {
+        const cards = buildAdminUserKpiCards(
+            'full',
+            buildStats({ free: -1, canceled: 1.5, events: { total: -3 } }),
+            { ...growthTrend, totals: { registeredUsers: -2, onboardedUsers: 1 } },
+            { ...subscriptionTrend, totals: { ...subscriptionTrend.totals, net: -2 } },
+        );
+
+        expect(cards.find(card => card.id === 'free-users')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'canceled')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'events')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'growth-12m')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'subscription-net-12m')).toMatchObject({
+            value: -2,
+            severity: 'warning',
+        });
+
+        const fractionalNetCards = buildAdminUserKpiCards(
+            'full',
+            buildStats(),
+            null,
+            { ...subscriptionTrend, totals: { ...subscriptionTrend.totals, net: -1.5 } },
+        );
+        expect(fractionalNetCards.find(card => card.id === 'subscription-net-12m')).toMatchObject({
+            value: null,
+            severity: undefined,
+        });
+    });
+
+    it('does not coerce malformed activity or connection counts into valid zeros', () => {
+        const cards = buildAdminUserKpiCards('full', buildStats({
+            authActivity: {
+                last24Hours: -1,
+                last7Days: 2.5,
+                last30Days: 8,
+                computedAt: null,
+            },
+            connections: {
+                serviceUsers: -1,
+                mcpUsers: 2,
+                both: 1,
+                providers: {},
+            },
+        }), null, null);
+
+        expect(cards.find(card => card.id === 'active-24h')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'active-7d')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'active-30d')?.value).toBe(8);
+        expect(cards.find(card => card.id === 'service-connected-users')?.value).toBeNull();
+        expect(cards.find(card => card.id === 'any-connected-users')?.value).toBeNull();
     });
 });

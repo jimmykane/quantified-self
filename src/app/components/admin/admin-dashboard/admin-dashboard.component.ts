@@ -85,6 +85,9 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.userAnalytics.userGrowthTrend(),
         this.userAnalytics.subscriptionHistoryTrend()
     ));
+    readonly userKpiError = computed(() => (
+        this.userAnalytics.statsError() || this.userAnalytics.trendWarning()
+    ));
     readonly refreshingUsers = computed(() => this.userAnalytics.loadingAll() || this.userAnalytics.refreshingAll());
     readonly queueRows = computed(() => buildAdminDashboardQueueRows(this.queueStats()));
     readonly maintenanceCards = computed(() => buildAdminDashboardMaintenanceCards(this.maintenanceStatus()));

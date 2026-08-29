@@ -25,6 +25,7 @@ import { ServiceSourceIconComponent } from '../../event-summary/service-source-i
 
 const ADMIN_USER_SEARCH_DEBOUNCE_MS = 750;
 type AdminServiceFilter = 'garmin' | 'suunto' | 'coros' | 'wahoo' | undefined;
+type AdminServiceSelection = Exclude<AdminServiceFilter, undefined> | 'all';
 
 @Component({
     selector: 'app-admin-user-table',
@@ -73,9 +74,16 @@ export class AdminUserTableComponent implements OnInit, OnDestroy {
     readonly searchTerm = signal('');
     readonly searchInputValue = signal('');
     readonly filterService = signal<AdminServiceFilter>(undefined);
+    readonly serviceSelection = computed<AdminServiceSelection>(() => this.filterService() ?? 'all');
     readonly sortField = signal('created');
     readonly sortDirection = signal<'asc' | 'desc'>('desc');
     readonly pageSizeOptions = [10, 25, 50];
+    readonly emptyStateMessage = computed(() => {
+        if (this.loading() || this.error()) {
+            return null;
+        }
+        return this.searchTerm() ? `No users found matching "${this.searchTerm()}"` : 'No users found';
+    });
     readonly displayedColumns = [
         'photoURL', 'email', 'uid', 'providerIds', 'displayName', 'role', 'subscriptionHistory',
         'assistantRequestsUsed', 'eventStats', 'routeStats', 'services', 'created', 'lastLogin',
@@ -163,8 +171,8 @@ export class AdminUserTableComponent implements OnInit, OnDestroy {
         this.searchSubject.next('');
     }
 
-    onFilterServiceChange(service: AdminServiceFilter): void {
-        this.filterService.set(service);
+    onFilterServiceChange(service: AdminServiceSelection): void {
+        this.filterService.set(service === 'all' ? undefined : service);
         this.currentPage.set(0);
         this.fetchUsers();
     }

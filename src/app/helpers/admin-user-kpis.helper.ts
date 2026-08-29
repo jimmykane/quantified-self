@@ -93,20 +93,20 @@ export function buildAdminUserKpiCards(
         return [];
     }
 
-    const registeredGrowth = finiteNumber(userGrowthTrend?.totals?.registeredUsers);
-    const onboardedGrowth = finiteNumber(userGrowthTrend?.totals?.onboardedUsers);
-    const subscriptionNet = finiteNumber(subscriptionHistoryTrend?.totals?.net);
-    const newSubscriptions = finiteNumber(subscriptionHistoryTrend?.totals?.newSubscriptions);
-    const plannedCancellations = finiteNumber(subscriptionHistoryTrend?.totals?.plannedCancellations);
-    const canceled = finiteNumber(stats.canceled);
-    const cancelScheduled = finiteNumber(stats.cancelScheduled);
+    const registeredGrowth = safeCount(userGrowthTrend?.totals?.registeredUsers);
+    const onboardedGrowth = safeCount(userGrowthTrend?.totals?.onboardedUsers);
+    const subscriptionNet = safeSignedCount(subscriptionHistoryTrend?.totals?.net);
+    const newSubscriptions = safeCount(subscriptionHistoryTrend?.totals?.newSubscriptions);
+    const plannedCancellations = safeCount(subscriptionHistoryTrend?.totals?.plannedCancellations);
+    const canceled = safeCount(stats.canceled);
+    const cancelScheduled = safeCount(stats.cancelScheduled);
     const connections = stats.connections;
     const anyConnectionUsers = connections
         ? distinctConnectedUserCount(connections.serviceUsers, connections.mcpUsers, connections.both)
         : null;
-    const active24Hours = normalizeOptionalCount(stats.authActivity?.last24Hours);
-    const active7Days = normalizeOptionalCount(stats.authActivity?.last7Days);
-    const active30Days = normalizeOptionalCount(stats.authActivity?.last30Days);
+    const active24Hours = safeCount(stats.authActivity?.last24Hours);
+    const active7Days = safeCount(stats.authActivity?.last7Days);
+    const active30Days = safeCount(stats.authActivity?.last30Days);
     const marketingConsent = safeCount(stats.marketingConsent);
 
     const cards: AdminUserKpiCard[] = [
@@ -192,7 +192,7 @@ export function buildAdminUserKpiCards(
             undefined,
             onboardedGrowth !== null ? `${onboardedGrowth} onboarded` : undefined,
         ),
-        numberCard(
+        signedNumberCard(
             'subscription-net-12m',
             'Subscription Net',
             'trending_up',
@@ -217,7 +217,29 @@ function numberCard(
     severity?: AdminUserKpiSeverity,
     subtitle?: string,
 ): AdminUserKpiCard {
-    const normalizedValue = finiteNumber(value);
+    const normalizedValue = safeCount(value);
+    return normalizedNumberCard(id, label, icon, normalizedValue, severity, subtitle);
+}
+
+function signedNumberCard(
+    id: AdminUserKpiId,
+    label: string,
+    icon: string,
+    value: number | null,
+    severity?: AdminUserKpiSeverity,
+    subtitle?: string,
+): AdminUserKpiCard {
+    return normalizedNumberCard(id, label, icon, safeSignedCount(value), severity, subtitle);
+}
+
+function normalizedNumberCard(
+    id: AdminUserKpiId,
+    label: string,
+    icon: string,
+    normalizedValue: number | null,
+    severity?: AdminUserKpiSeverity,
+    subtitle?: string,
+): AdminUserKpiCard {
     return {
         id,
         label,
@@ -236,7 +258,7 @@ function compactCard(
     value: number | null | undefined,
     subtitle?: string,
 ): AdminUserKpiCard {
-    return { id, label, icon, value: finiteNumber(value), valueKind: 'compact', subtitle };
+    return { id, label, icon, value: safeCount(value), valueKind: 'compact', subtitle };
 }
 
 function countUpdatedSubtitle(computedAt: string | null | undefined): string | undefined {
@@ -312,17 +334,18 @@ function subscriptionCadenceSubtitle(stats: SubscriptionCadenceTierStats | undef
 }
 
 function distinctConnectedUserCount(serviceUsers: number | null, mcpUsers: number | null, both: number | null): number | null {
-    if (serviceUsers === null || mcpUsers === null || both === null) {
+    const normalizedServiceUsers = safeCount(serviceUsers);
+    const normalizedMcpUsers = safeCount(mcpUsers);
+    const normalizedBothUsers = safeCount(both);
+    if (normalizedServiceUsers === null || normalizedMcpUsers === null || normalizedBothUsers === null) {
         return null;
     }
-    const normalizedServiceUsers = normalizeCount(serviceUsers);
-    const normalizedMcpUsers = normalizeCount(mcpUsers);
-    const normalizedBoth = Math.min(normalizeCount(both), normalizedServiceUsers, normalizedMcpUsers);
+    const normalizedBoth = Math.min(normalizedBothUsers, normalizedServiceUsers, normalizedMcpUsers);
     return normalizedServiceUsers + normalizedMcpUsers - normalizedBoth;
 }
 
 function connectionCountSeverity(value: number | null): AdminUserKpiSeverity | undefined {
-    return finiteNumber(value) === null ? undefined : 'ok';
+    return safeCount(value) === null ? undefined : 'ok';
 }
 
 function normalizeCount(value: unknown): number {
@@ -330,14 +353,10 @@ function normalizeCount(value: unknown): number {
     return Number.isFinite(numericValue) ? Math.max(0, Math.floor(numericValue)) : 0;
 }
 
-function normalizeOptionalCount(value: unknown): number | null {
-    return finiteNumber(value) === null ? null : normalizeCount(value);
-}
-
 function safeCount(value: unknown): number | null {
     return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-function finiteNumber(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+function safeSignedCount(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
 }

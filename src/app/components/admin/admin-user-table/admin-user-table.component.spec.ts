@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
@@ -69,6 +69,18 @@ describe('AdminUserTableComponent', () => {
         }));
     });
 
+    it('uses an explicit All Services selection while omitting the server filter', () => {
+        component.onFilterServiceChange('garmin');
+        expect(component.serviceSelection()).toBe('garmin');
+
+        component.onFilterServiceChange('all');
+
+        expect(component.serviceSelection()).toBe('all');
+        expect(adminService.getUsers).toHaveBeenLastCalledWith(expect.objectContaining({
+            filterService: undefined,
+        }));
+    });
+
     it('falls back from unsupported sort requests', () => {
         component.onSortChange({ active: 'unsupported', direction: 'asc' });
         expect(adminService.getUsers).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -91,6 +103,15 @@ describe('AdminUserTableComponent', () => {
 
         expect(component.rows()).toHaveLength(1);
         expect(component.totalCount()).toBe(1);
+    });
+
+    it('does not show an empty-result message when loading fails', () => {
+        adminService.getUsers.mockReturnValueOnce(throwError(() => new Error('offline')));
+
+        component.fetchUsers();
+
+        expect(component.error()).toBe('Failed to load users. offline');
+        expect(component.emptyStateMessage()).toBeNull();
     });
 
     it('confirms and starts impersonation for a non-admin user', async () => {

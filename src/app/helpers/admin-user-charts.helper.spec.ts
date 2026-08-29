@@ -3,6 +3,7 @@ import {
     buildAdminAuthProviderChartOption,
     buildAdminUserGrowthChartOption,
     buildCumulativeSeriesFromEndingTotal,
+    hasAdminAuthProviderData,
 } from './admin-user-charts.helper';
 
 const palette = {
@@ -20,6 +21,18 @@ describe('admin user chart helpers', () => {
             expect.objectContaining({ name: 'Google', value: 4 }),
             expect.objectContaining({ name: 'Email/Password', value: 2 }),
         ]);
+    });
+
+    it('filters empty and malformed provider counts from chart data', () => {
+        const providers = { password: 0, 'google.com': Number.NaN, 'apple.com': -2, custom: 2.8 };
+        const option = buildAdminAuthProviderChartOption(providers, false, 900);
+        const series = option['series'] as Array<Record<string, unknown>>;
+
+        expect(hasAdminAuthProviderData(providers)).toBe(true);
+        expect(series[0]['data']).toEqual([
+            expect.objectContaining({ name: 'custom', value: 2 }),
+        ]);
+        expect(hasAdminAuthProviderData({ password: 0, 'google.com': Number.NaN })).toBe(false);
     });
 
     it('reconstructs cumulative totals from the ending snapshot', () => {
@@ -43,5 +56,28 @@ describe('admin user chart helpers', () => {
             'Registered Users / month', 'Onboarded Users / month', 'Total Registered', 'Total Onboarded',
             'Basic Totals', 'Pro Totals', 'Totals (Pro+Basic)',
         ]);
+    });
+
+    it('preserves negative subscription net months when reconstructing totals', () => {
+        const option = buildAdminUserGrowthChartOption(
+            null,
+            {
+                months: 12,
+                buckets: [
+                    { key: '2026-01', label: 'Jan', basicNet: 2, proNet: 1 },
+                    { key: '2026-02', label: 'Feb', basicNet: -1, proNet: -2 },
+                ],
+                totals: { net: 0 },
+            },
+            { registeredUsers: 0, onboardedUsers: 0, basicSubscriptions: 5, proSubscriptions: 4 },
+            false,
+            900,
+            palette,
+        );
+        const series = option['series'] as Array<Record<string, unknown>>;
+
+        expect(series.find(item => item['name'] === 'Basic Totals')?.['data']).toEqual([6, 5]);
+        expect(series.find(item => item['name'] === 'Pro Totals')?.['data']).toEqual([6, 4]);
+        expect(series.find(item => item['name'] === 'Totals (Pro+Basic)')?.['data']).toEqual([12, 9]);
     });
 });

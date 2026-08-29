@@ -52,6 +52,7 @@ describe('AdminDashboardComponent', () => {
         refreshingAll: WritableSignal<boolean>;
         loadingAll: WritableSignal<boolean>;
         statsError: WritableSignal<string | null>;
+        trendWarning: WritableSignal<string | null>;
         historyError: WritableSignal<string | null>;
         refreshAll: ReturnType<typeof vi.fn>;
     };
@@ -269,6 +270,7 @@ describe('AdminDashboardComponent', () => {
             refreshingAll: signal(false),
             loadingAll: signal(false),
             statsError: signal(null),
+            trendWarning: signal(null),
             historyError: signal(null),
             refreshAll: vi.fn(() => Promise.resolve()),
         };
@@ -396,11 +398,13 @@ describe('AdminDashboardComponent', () => {
     it('should keep core user KPIs visible when trend data is unavailable', () => {
         userAnalyticsSpy.userGrowthTrend.set(null);
         userAnalyticsSpy.subscriptionHistoryTrend.set(null);
+        userAnalyticsSpy.trendWarning.set('User growth trend is unavailable.');
         createComponent();
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Total Users');
         expect(text).toContain('12-Month Growth');
+        expect(text).toContain('User growth trend is unavailable.');
         expect(text).not.toContain('User KPIs are unavailable.');
     });
 

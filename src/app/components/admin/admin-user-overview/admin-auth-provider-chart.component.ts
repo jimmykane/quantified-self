@@ -6,7 +6,10 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { buildAdminAuthProviderChartOption } from '../../../helpers/admin-user-charts.helper';
+import {
+    buildAdminAuthProviderChartOption,
+    hasAdminAuthProviderData,
+} from '../../../helpers/admin-user-charts.helper';
 import { ECHARTS_SERIES_MERGE_UPDATE_SETTINGS, EChartsHostController } from '../../../helpers/echarts-host-controller';
 import { resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -37,7 +40,7 @@ export class AdminAuthProviderChartComponent implements AfterViewInit, OnDestroy
     @Input() loading = false;
     @Input() error: string | null = null;
 
-    readonly hasData = computed(() => Object.keys(this.providersState()).length > 0);
+    readonly hasData = computed(() => hasAdminAuthProviderData(this.providersState()));
 
     constructor(
         appThemeService: AppThemeService,

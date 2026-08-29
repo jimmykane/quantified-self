@@ -34,6 +34,14 @@ describe('AdminUserWorkspaceComponent', () => {
         expect(component.selectedTabIndex()).toBe(1);
     });
 
+    it('does not navigate again when a tab selection came from the route', () => {
+        queryParams.next(convertToParamMap({ tab: 'users' }));
+
+        component.selectTab(1);
+
+        expect(router.navigate).not.toHaveBeenCalled();
+    });
+
     it('updates the tab query parameter without adding browser history', () => {
         component.selectTab(1);
         expect(router.navigate).toHaveBeenCalledWith([], expect.objectContaining({
