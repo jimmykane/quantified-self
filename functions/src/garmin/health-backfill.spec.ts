@@ -361,12 +361,37 @@ describe('Garmin Health backfill processor', () => {
 
     await expect(processing).resolves.toBe(QueueResult.Processed);
     expect(hoisted.requestGet).toHaveBeenCalledOnce();
-    expect(hoisted.markSkipped).toHaveBeenCalledWith(
-      expect.anything(),
-      undefined,
-      'user_not_allowed',
-      { skippedContext: 'GARMIN_HEALTH_ROLLOUT' },
-    );
+    expect(hoisted.queueData).toEqual(expect.objectContaining({
+      processed: true,
+      resultStatus: 'skipped',
+      skippedReason: 'user_not_allowed',
+      skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+    }));
+    expect(hoisted.transactionSet).toHaveBeenLastCalledWith(expect.objectContaining({
+      healthBackfillStatus: 'skipped',
+      healthBackfillSummaryType: null,
+    }), { merge: true });
+    expect(hoisted.markSkipped).not.toHaveBeenCalled();
+  });
+
+  it('marks queued progress skipped when the Health rollout is disabled before processing', async () => {
+    vi.mocked(isGarminHealthSyncEnabled).mockReturnValueOnce(false);
+
+    await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
+      .resolves.toBe(QueueResult.Processed);
+
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.refreshGuards).not.toHaveBeenCalled();
+    expect(hoisted.queueData).toEqual(expect.objectContaining({
+      processed: true,
+      resultStatus: 'skipped',
+      skippedReason: 'user_not_allowed',
+      skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+    }));
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.objectContaining({
+      healthBackfillStatus: 'skipped',
+      healthBackfillSummaryType: null,
+    }), { merge: true });
   });
 
   it('retries an opaque transient credential failure instead of skipping the cursor', async () => {
@@ -517,10 +542,10 @@ describe('Garmin Health backfill processor', () => {
     await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
       .resolves.toBe(QueueResult.MovedToDLQ);
 
-    expect(hoisted.updateSleepState).toHaveBeenCalledWith(
+    expect(hoisted.updateHealthState).toHaveBeenCalledWith(
       'user-1',
       'GarminAPI',
-      expect.objectContaining({ healthBackfillStatus: 'failed' }),
+      expect.objectContaining({ status: 'permission_missing' }),
       expect.any(Number),
       refreshedGuards,
     );
@@ -533,6 +558,8 @@ describe('Garmin Health backfill processor', () => {
       garminHealthBackfillNextStartMs: 1_000,
     };
     hoisted.queueData = { ...queueItem };
+    hoisted.sleepStateData.lastBackfillQueuedAtMs = 1_000;
+    hoisted.sleepStateData.lastBackfillEndMs = 1_000;
     hoisted.requestGet.mockRejectedValueOnce({
       statusCode: 400,
       error: { minStartTimeInSeconds: 0 },
@@ -549,6 +576,27 @@ describe('Garmin Health backfill processor', () => {
       phase: 'garmin_health_backfill_dlq:GARMIN_HEALTH_BACKFILL_INVALID_RANGE',
       logPrefix: 'GarminHealthBackfill',
       isCurrent: expect.any(Function),
+      onBeforeMoveInTransaction: expect.any(Function),
     }));
+    const dlqParams = hoisted.moveDlq.mock.calls[0][0] as {
+      onBeforeMoveInTransaction: (
+        transaction: unknown,
+        currentQueueItem: Record<string, unknown>,
+      ) => Promise<void>;
+    };
+    await dlqParams.onBeforeMoveInTransaction({
+      get: vi.fn(async () => ({
+        exists: true,
+        data: () => ({ ...hoisted.sleepStateData }),
+      })),
+      set: (_ref: unknown, data: Record<string, unknown>, options: unknown) => {
+        hoisted.transactionSet(data, options);
+      },
+    }, { ...hoisted.queueData });
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.objectContaining({
+      healthBackfillStatus: 'failed',
+      healthBackfillSummaryType: null,
+      lastError: 'Garmin Health backfill ended because the provider request was invalid.',
+    }), { merge: true });
   });
 });

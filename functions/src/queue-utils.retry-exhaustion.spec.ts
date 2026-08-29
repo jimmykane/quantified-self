@@ -54,10 +54,11 @@ vi.mock('./shared/ttl-config', () => ({
 
 import {
   increaseRetryCountIfCurrentUserActive,
+  moveToDeadLetterQueueIfCurrentUserActive,
   QueueResult,
 } from './queue-utils';
 
-describe('retry-exhausted queue transitions', () => {
+describe('guarded terminal queue transitions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
@@ -96,6 +97,43 @@ describe('retry-exhausted queue transitions', () => {
 
     expect(result).toBe(QueueResult.MovedToDLQ);
     expect(onRetryExhaustedInTransaction).toHaveBeenCalledOnce();
+    expect(hoisted.transaction.set).toHaveBeenCalledWith(
+      terminalStateRef,
+      { status: 'failed' },
+      { merge: true },
+    );
+    expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
+  });
+
+  it('commits provider terminal state in an immediate DLQ transaction', async () => {
+    const queueItem = {
+      id: 'guarded-terminal-state',
+      ref: {
+        parent: { id: 'sleepSyncQueue' },
+        id: 'guarded-terminal-state',
+      },
+      retryCount: 0,
+      dispatchedToCloudTask: 123,
+    } as Parameters<typeof moveToDeadLetterQueueIfCurrentUserActive>[0]['queueItem'];
+    const terminalStateRef = { id: 'provider-state' };
+    const onBeforeMoveInTransaction = vi.fn(async (transaction, current) => {
+      expect(current.revision).toBe('expected');
+      transaction.set(terminalStateRef, { status: 'failed' }, { merge: true });
+    });
+
+    const result = await moveToDeadLetterQueueIfCurrentUserActive({
+      queueItem,
+      error: new Error('terminal failure'),
+      context: 'PROVIDER_TERMINAL',
+      userID: 'user-1',
+      phase: 'provider_dlq',
+      logPrefix: 'ProviderQueue',
+      isCurrent: current => current.revision === 'expected',
+      onBeforeMoveInTransaction,
+    });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(onBeforeMoveInTransaction).toHaveBeenCalledOnce();
     expect(hoisted.transaction.set).toHaveBeenCalledWith(
       terminalStateRef,
       { status: 'failed' },

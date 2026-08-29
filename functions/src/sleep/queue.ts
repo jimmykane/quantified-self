@@ -578,6 +578,39 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
+function garminHealthStateGuardsForCurrentQueueRevision(
+    queueItem: SleepSyncQueueItemInterface,
+    guards: GarminHealthWriteLifecycleGuards,
+): GarminHealthWriteLifecycleGuards {
+    if (!queueItem.ref) return guards;
+    const queueRevision = typeof queueItem.queueRevision === 'string'
+        ? queueItem.queueRevision.trim()
+        : '';
+    const expectedFields: Record<string, unknown> = {
+        processed: false,
+        ...(queueItem.userID ? { userID: queueItem.userID } : {}),
+        ...(queueRevision
+            ? { queueRevision }
+            : { dateCreated: queueItem.dateCreated }),
+        ...(queueItem.processingOwner
+            ? { processingOwner: queueItem.processingOwner }
+            : {}),
+        ...(queueItem.processingRevision
+            ? { processingRevision: queueItem.processingRevision }
+            : {}),
+    };
+    return {
+        ...guards,
+        additionalRequiredDocumentFieldValues: [
+            ...(guards.additionalRequiredDocumentFieldValues || []),
+            {
+                documentRef: queueItem.ref,
+                expectedFields,
+            },
+        ],
+    };
+}
+
 function moveSleepQueueItemToDeadLetterQueue(
     queueItem: SleepSyncQueueItemInterface,
     error: Error,
@@ -2860,6 +2893,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (error instanceof GarminHealthPermissionError) {
             if (garminHealthLifecycleGuards) {
+                const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
+                    queueItem,
+                    garminHealthLifecycleGuards,
+                );
                 const stateWritten = await updateHealthSyncState(
                     error.userID,
                     HEALTH_PROVIDERS.GarminAPI,
@@ -2868,7 +2905,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         lastErrorCode: error.code,
                     },
                     Date.now(),
-                    garminHealthLifecycleGuards,
+                    stateGuards,
                 );
                 if (!stateWritten) {
                     return markQueueItemSkipped(
@@ -2896,6 +2933,37 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (isGarminHealthQueueItem(queueItem)
             && error instanceof GarminHealthValidationError) {
             logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`);
+            if (garminHealthLifecycleGuards && resolvedFirebaseUserID) {
+                const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
+                    queueItem,
+                    garminHealthLifecycleGuards,
+                );
+                const stateWritten = await updateHealthSyncState(
+                    resolvedFirebaseUserID,
+                    HEALTH_PROVIDERS.GarminAPI,
+                    {
+                        status: HEALTH_SYNC_STATUSES.Failed,
+                        lastErrorCode: 'garmin_health_invalid_response',
+                    },
+                    Date.now(),
+                    stateGuards,
+                );
+                if (!stateWritten) {
+                    return markQueueItemSkipped(
+                        queueItem,
+                        undefined,
+                        'user_or_provider_lifecycle_changed',
+                        {
+                            skippedContext: 'USER_OR_PROVIDER_LIFECYCLE_GUARD',
+                            sessionsWritten: 0,
+                            sessionsSkipped: 0,
+                            healthRecordsWritten: 0,
+                            healthRecordsUnchanged: 0,
+                            healthRecordsStale: 0,
+                        },
+                    );
+                }
+            }
             return moveSleepQueueItemToDeadLetterQueue(
                 queueItem,
                 error,

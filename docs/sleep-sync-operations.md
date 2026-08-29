@@ -172,8 +172,11 @@ already-requested window, clips a family when Garmin reports its minimum start, 
 failures, and treats permanent authorization/permission/request errors as terminal. It re-reads and
 expiry-refreshes the exact token before every provider request while retaining the original OAuth and
 connection-generation fence, then rechecks queue revision, account deletion, rollout, provider identity,
-and lifecycle transactionally before progress. Retry exhaustion atomically marks the matching progress
-failed while moving the queue item to the DLQ. Sleep and Health
+and lifecycle transactionally before progress. Rollout removal atomically skips matching progress. Every
+terminal DLQ path, including retry exhaustion, authorization failure, and invalid ranges or requests,
+atomically marks the matching progress failed while moving the exact queue revision to the DLQ. Invalid
+callback responses first mark Garmin Health state failed through the captured lifecycle guard; a stale guard
+skips the callback instead. Sleep and Health
 share the 30-day user cooldown, while each Health family can independently establish its provider minimum.
 Garmin Summary Resender is retained for bounded operational recovery rather than the normal user backfill.
 

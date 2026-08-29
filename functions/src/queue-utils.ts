@@ -333,6 +333,11 @@ export interface MoveToDeadLetterQueueIfCurrentUserActiveParams {
     logPrefix: string;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
     manualReconciliation?: QueueManualReconciliationState;
+    /** Adds provider-owned terminal state to the same transaction as the DLQ move. */
+    onBeforeMoveInTransaction?: (
+        transaction: admin.firestore.Transaction,
+        currentQueueItem: Record<string, unknown>,
+    ) => void | Promise<void>;
 }
 
 export interface QueueManualReconciliationState {
@@ -440,7 +445,8 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
             ...params,
             actionDescription: 'DLQ move',
-        }, transaction => {
+        }, async (transaction, currentQueueItem) => {
+            await params.onBeforeMoveInTransaction?.(transaction, currentQueueItem);
             transaction.set(failedDocRef, failedItem);
             if (params.manualReconciliation) {
                 transaction.update(

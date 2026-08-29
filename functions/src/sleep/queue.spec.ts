@@ -347,6 +347,7 @@ import {
     resolveGarminPingFirebaseUserIDs,
 } from './queue';
 import { GarminHealthPermissionError } from '../garmin/health-sync';
+import { GarminHealthValidationError } from '../garmin/health';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
 
@@ -1881,8 +1882,128 @@ describe('sleep queue', () => {
             'GarminAPI',
             expect.objectContaining({ status: 'permission_missing' }),
             expect.any(Number),
-            refreshedGuards,
+            expect.objectContaining({
+                requiredExistingTokenCredential:
+                    refreshedGuards.requiredExistingTokenCredential,
+                additionalRequiredDocumentFieldValues: expect.arrayContaining([
+                    expect.objectContaining({
+                        expectedFields: expect.objectContaining({
+                            processed: false,
+                            userID: 'test-user-uid',
+                            dateCreated: 1_700_000_000_000,
+                            processingOwner: expect.any(String),
+                            processingRevision: 'legacy-date:1700000000000',
+                        }),
+                    }),
+                ]),
+            }),
         );
+    });
+
+    it('records a lifecycle-guarded Health failure before DLQing an invalid Garmin response', async () => {
+        const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'garmin-token-1',
+                data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                ref: tokenRef,
+            }],
+            empty: false,
+        });
+        const initialGuards = await hoisted.captureActiveGarminHealthWriteLifecycleGuards();
+        const refreshedGuards = {
+            ...initialGuards,
+            requiredExistingTokenCredential: {
+                ...initialGuards.requiredExistingTokenCredential,
+                accessToken: 'refreshed-garmin-access-token',
+            },
+        };
+        hoisted.processGarminHealthQueueItem.mockImplementationOnce(
+            async (...args: unknown[]) => {
+                (args[4] as (guards: unknown) => void)(refreshedGuards);
+                throw new GarminHealthValidationError('Invalid Garmin Health response.');
+            },
+        );
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-health-invalid-response',
+            dateCreated: 1_700_000_000_000,
+            processed: false,
+            provider: 'GarminAPI',
+            userID: 'test-user-uid',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_ping',
+            garminSummaryType: 'bodyComps',
+            callbackURL: 'https://apis.garmin.com/wellness-api/rest/bodyComps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
+            'test-user-uid',
+            'GarminAPI',
+            {
+                status: 'failed',
+                lastErrorCode: 'garmin_health_invalid_response',
+            },
+            expect.any(Number),
+            expect.objectContaining({
+                requiredExistingTokenCredential:
+                    refreshedGuards.requiredExistingTokenCredential,
+                additionalRequiredDocumentFieldValues: expect.arrayContaining([
+                    expect.objectContaining({
+                        expectedFields: expect.objectContaining({
+                            processed: false,
+                            userID: 'test-user-uid',
+                            dateCreated: 1_700_000_000_000,
+                            processingOwner: expect.any(String),
+                            processingRevision: 'legacy-date:1700000000000',
+                        }),
+                    }),
+                ]),
+            }),
+        );
+        expect(hoisted.updateHealthSyncState.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.batchSet.mock.invocationCallOrder[0]);
+    });
+
+    it('skips an invalid Garmin response when its Health lifecycle guard is stale', async () => {
+        hoisted.tokenRootGet.mockResolvedValue({
+            docs: [{
+                id: 'garmin-token-1',
+                data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }],
+            empty: false,
+        });
+        hoisted.processGarminHealthQueueItem.mockRejectedValueOnce(
+            new GarminHealthValidationError('Invalid Garmin Health response.'),
+        );
+        hoisted.updateHealthSyncState.mockResolvedValueOnce(false);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'garmin-health-invalid-response-stale-lifecycle',
+            dateCreated: 1_700_000_000_000,
+            processed: false,
+            provider: 'GarminAPI',
+            userID: 'test-user-uid',
+            providerUserId: 'garmin-user-1',
+            retryCount: 0,
+            type: 'garmin_ping',
+            garminSummaryType: 'bodyComps',
+            callbackURL: 'https://apis.garmin.com/wellness-api/rest/bodyComps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            ref: { update } as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'skipped',
+            skippedReason: 'user_or_provider_lifecycle_changed',
+        }));
+        expect(hoisted.batchSet).not.toHaveBeenCalled();
     });
 
     it('skips superseded Garmin Health OAuth generations instead of deferring them as disconnects', async () => {
