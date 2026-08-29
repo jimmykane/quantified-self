@@ -87,7 +87,8 @@ export class AdminUserGrowthChartComponent implements AfterViewInit, OnDestroy {
         }
 
         const stats = this.statsState();
-        const option = this.hasData()
+        const hasData = this.hasData();
+        const option = hasData
             ? buildAdminUserGrowthChartOption(
                 this.growthState(),
                 this.subscriptionsState(),
@@ -110,7 +111,7 @@ export class AdminUserGrowthChartComponent implements AfterViewInit, OnDestroy {
                 series: [],
                 graphic: [],
             };
-        this.chartHost.setOption(option, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+        this.chartHost.setOption(option, hasData ? ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS : { notMerge: true });
         this.chartHost.scheduleResize();
     }
 

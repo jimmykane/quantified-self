@@ -95,4 +95,37 @@ describe('admin user chart components', () => {
         expect(loader.dispose).toHaveBeenCalled();
         fixture.destroy();
     });
+
+    it('fully resets the growth chart when refreshed with empty trends', async () => {
+        const fixture = TestBed.createComponent(AdminUserGrowthChartComponent);
+        fixture.componentRef.setInput('stats', { total: 10, onboardingCompleted: 7, basic: 2, pro: 1 });
+        fixture.componentRef.setInput('userGrowthTrend', {
+            months: 12,
+            buckets: [{ key: '2026-08', label: 'Aug', registeredUsers: 2, onboardedUsers: 1 }],
+            totals: { registeredUsers: 2, onboardedUsers: 1 },
+        });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalled());
+        const populatedRenderCount = loader.setOption.mock.calls.length;
+
+        fixture.componentRef.setInput('userGrowthTrend', {
+            months: 12,
+            buckets: [],
+            totals: { registeredUsers: 0, onboardedUsers: 0 },
+        });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThan(populatedRenderCount));
+
+        const [, option, settings] = loader.setOption.mock.calls.at(-1) as [
+            unknown,
+            { graphic?: unknown[]; series?: unknown[] },
+            { notMerge?: boolean },
+        ];
+        expect(option.graphic).toEqual([]);
+        expect(option.series).toEqual([]);
+        expect(settings).toEqual({ notMerge: true });
+        fixture.destroy();
+    });
 });
