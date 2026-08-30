@@ -47,6 +47,7 @@ describe('PublicFooterComponent', () => {
     expect(text).toContain('Greece');
     expect(text).toContain('support@quantified-self.io');
     expect(text).toContain('contact@quantified-self.io');
+    expect(text).not.toMatch(/\bprivate\b/i);
     expect(footer?.querySelector('a[href="mailto:support@quantified-self.io"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="mailto:contact@quantified-self.io"]')).toBeTruthy();
   });

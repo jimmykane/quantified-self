@@ -44,7 +44,7 @@ export const COMPARISON_FEATURE_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'compare_arrows',
     title: 'Device, provider, and file data in one view',
-    copy: 'Bring Garmin, Suunto, COROS, Wahoo, manual FIT, TCX, GPX, JSON, and SML imports into one private dashboard so source service, original files, maps, routes, and workout metrics stay visible together.',
+    copy: 'Bring Garmin, Suunto, COROS, Wahoo, manual FIT, TCX, GPX, JSON, and SML imports into one dashboard so source service, original files, maps, routes, and workout metrics stay visible together.',
   },
   {
     icon: 'merge_type',
@@ -66,7 +66,7 @@ export const COMPARISON_FEATURE_ITEMS: readonly ComparisonFeatureItem[] = [
 export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'dashboard_customize',
-    title: 'Private Garmin training dashboard',
+    title: 'Garmin training dashboard',
     copy: 'Use Garmin data beyond Garmin Connect by keeping original activity files, maps, load metrics, routes, exports, and connected Suunto, COROS, or Wahoo workouts in your own account.',
   },
   {
@@ -87,18 +87,18 @@ export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = 
   {
     icon: 'article',
     title: 'Evidence for device reviews and blog posts',
-    copy: 'Create repeatable reports for sports watch reviews, sensor comparisons, coaching writeups, and YouTube videos without publishing raw private training history.',
+    copy: 'Create repeatable reports for sports watch reviews, sensor comparisons, coaching writeups, and YouTube videos without publishing raw training history.',
   },
 ];
 
 export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   {
     question: 'Can I compare Garmin, COROS, Suunto, Wahoo, and uploaded workout files?',
-    answer: 'Yes. Import provider activities or upload FIT, TCX, GPX, JSON, and SML files, then compare compatible recordings with source-aware maps, charts, overlays, and benchmark reports from the same private dashboard.',
+    answer: 'Yes. Import provider activities or upload FIT, TCX, GPX, JSON, and SML files, then compare compatible recordings with source-aware maps, charts, overlays, and benchmark reports from the same dashboard.',
   },
   {
     question: 'Is Quantified Self a FIT file viewer?',
-    answer: 'Quantified Self keeps original FIT, TCX, GPX, JSON, and SML activity files useful after import, including benchmark and reprocessing workflows, but it is a private dashboard rather than a standalone public file viewer.',
+    answer: 'Quantified Self keeps original FIT, TCX, GPX, JSON, and SML activity files useful after import, including benchmark and reprocessing workflows, but it is an account-based dashboard rather than a standalone public file viewer.',
   },
   {
     question: 'Can device reviewers use benchmark reports?',
@@ -118,12 +118,12 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
   title: 'Workout Data Comparison',
   preload: true,
   animation: 'Features',
-  description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
+  description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
-    description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
+    description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
     url: WORKOUT_DATA_COMPARISON_URL,
     inLanguage: 'en',
     isPartOf: {
@@ -146,7 +146,7 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
       'Garmin, Suunto, COROS, and Wahoo workout comparison',
       'Custom FIT and TCX workout file comparison',
       'Sports watch review benchmark reports',
-      'Private Garmin training dashboard',
+      'Garmin training dashboard',
       'Garmin to Suunto activity sync',
       'COROS to Suunto activity sync',
       'Wahoo to Suunto activity sync',

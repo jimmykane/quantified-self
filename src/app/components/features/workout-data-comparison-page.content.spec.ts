@@ -56,7 +56,8 @@ describe('workout-data-comparison-page.content', () => {
     expect(visibleCopy).toContain('custom activity files');
     expect(visibleCopy).toContain('YouTube reviews, blog posts, coaching notes, and device QA');
     expect(visibleCopy).toContain('lab tests, beta firmware, review units, exported workouts, or unsupported services');
-    expect(visibleCopy).toContain('private dashboard rather than a standalone public file viewer');
+    expect(visibleCopy).toContain('account-based dashboard rather than a standalone public file viewer');
+    expect(visibleCopy).not.toMatch(/\bprivate\b/i);
     expect(visibleCopy).toContain('Reviewers, YouTube creators, bloggers, coaches, and testers');
     expect(visibleCopy).toContain('available on the free plan for up to 100 activities and 10 saved routes');
     expect(visibleCopy).toContain('Automatic service sync and higher limits require a paid plan');
