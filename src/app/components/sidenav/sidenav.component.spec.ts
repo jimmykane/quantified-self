@@ -18,6 +18,9 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS } from '@shared/health-workspace-rollout';
+
+const HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID = HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -271,9 +274,9 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
-    it('links every signed-in user to Health immediately after Dashboard', () => {
+    it('links the staged Health user immediately after Dashboard', () => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: 'user-1',
+            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
@@ -286,6 +289,21 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeTruthy();
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(navigationItems.indexOf(healthItem!)).toBe(navigationItems.indexOf(dashboardItem!) + 1);
+    });
+
+    it('hides Health navigation from signed-in users outside the staged rollout', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'another-user',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const healthItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Health'));
+
+        expect(healthItem).toBeUndefined();
     });
 
     it('opens the profile section when the signed-in profile shortcut is selected', () => {
@@ -307,7 +325,7 @@ describe('SideNavComponent', () => {
 
     it('orders signed-in navigation with Assistant last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: 'user-1',
+            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
