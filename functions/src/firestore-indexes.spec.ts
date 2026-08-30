@@ -33,6 +33,19 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps canonical marketing consent queryable across user legal agreement documents', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'legal',
+            fieldPath: 'acceptedMarketingPolicy',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+    });
+
     it('keeps aggregate admin dashboard history on the documented TTL without an expireAt index', () => {
         const config = loadFirestoreIndexes();
 

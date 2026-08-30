@@ -9,6 +9,10 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../../wahoo/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
+    ACCEPTED_MARKETING_POLICY_FIELD,
+    USER_LEGAL_COLLECTION_NAME,
+} from '../../../../shared/user-profile-firestore';
+import {
     ACTIVE_SUBSCRIPTION_STATUSES,
     SUBSCRIPTION_ROLE_BASIC,
     SUBSCRIPTION_ROLE_PRO
@@ -81,6 +85,22 @@ function normalizeCount(value: unknown): number {
     }
 
     return Math.max(0, Math.floor(value));
+}
+
+async function getMarketingConsentCount(db: admin.firestore.Firestore): Promise<number | null> {
+    try {
+        const snapshot = await db.collectionGroup(USER_LEGAL_COLLECTION_NAME)
+            .where(ACCEPTED_MARKETING_POLICY_FIELD, '==', true)
+            .count()
+            .get();
+        const count = snapshot.data().count;
+        return typeof count === 'number' && Number.isFinite(count) && count >= 0
+            ? Math.floor(count)
+            : null;
+    } catch (error: unknown) {
+        logger.warn('Failed to count marketing consent from user legal agreements.', error);
+        return null;
+    }
 }
 
 function readSubscriptionOwnerId(doc: SubscriptionOwnerDocSnapshot): string | null {
@@ -753,22 +773,19 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
         const computedAt = new Date();
-        const marketingConsentQuery = db.collection('users')
-            .where('acceptedMarketingPolicy', '==', true)
-            .count();
         const paidLifecycleQuery = db.collectionGroup('subscriptions')
             .where('status', 'in', [...PAID_LIFECYCLE_SUBSCRIPTION_STATUSES])
             .select('role', 'status');
         const [
             userPlanActivityMetrics,
-            marketingConsentSnapshot,
+            marketingConsent,
             paidSubscriptionHistorySnapshot,
             eventStats,
             routeStats,
             connectionStats,
         ] = await Promise.all([
             collectUserPlanActivityMetrics(db, admin.auth(), computedAt),
-            marketingConsentQuery.get(),
+            getMarketingConsentCount(db),
             paidLifecycleQuery.get(),
             getGlobalEventCount(db, {
                 forceRefresh: forceRefreshEventCount,
@@ -794,7 +811,6 @@ export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
             authActivity,
             providers,
         } = userPlanActivityMetrics;
-        const marketingConsent = marketingConsentSnapshot.data().count;
         const activePaid = pro + basic;
         const everPaid = Math.max(activePaid, countDistinctPaidSubscriptionOwners(paidSubscriptionHistorySnapshot.docs));
         const canceled = Math.max(0, everPaid - activePaid);
