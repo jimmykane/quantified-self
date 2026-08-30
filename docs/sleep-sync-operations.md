@@ -303,8 +303,10 @@ npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --u
 For each candidate, execution rechecks account deletion and re-reads the exact document in the update transaction. It
 updates only the derived canonical field and never changes provider revisions, receipt timestamps, source metadata,
 stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a deletion race becomes
-`skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. Re-running the same
-page is safe. Finish by repeating both dry runs and require `candidates: 0`, `skippedInvalid: 0`, and `failed: 0`.
+`skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. A retryable failure
+stops the page, exits nonzero, and returns the cursor immediately before the failed document; rerun from that cursor
+before advancing. Re-running the same page is safe. Finish by repeating both dry runs and require `candidates: 0`,
+`skippedInvalid: 0`, and `failed: 0`.
 
 The migration does not require provider reconnects or history refetches. Ordinary disconnect intentionally retains
 imported history, so disconnecting during the migration does not remove a valid historical candidate. Account deletion

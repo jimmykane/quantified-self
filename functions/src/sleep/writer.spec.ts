@@ -7,6 +7,7 @@ const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
     docSet: vi.fn(),
     docIds: [] as string[],
+    deleteField: Object.freeze({ __fieldValue: 'delete' }),
     mockGetUserDeletionGuardState: vi.fn(),
     mockGetUserDeletionGuardStateInTransaction: vi.fn(),
     mockRunTransaction: vi.fn(),
@@ -71,6 +72,12 @@ vi.mock('firebase-admin', () => {
         })),
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: vi.fn(() => hoisted.deleteField),
+    },
+}));
 
 import {
     markSleepSyncError,
@@ -268,6 +275,40 @@ describe('sleep writer', () => {
                 metrics: expect.objectContaining({ duration: { 'Sleep Duration': 33300 } }),
             }),
         }), { merge: true });
+    });
+
+    it('deletes stale Sports Lib slots when optional sleep aggregates are cleared', async () => {
+        const existingSession = encodeSleepSessionSportsLibData(buildExistingSuuntoSession({
+            score: { value: 88 },
+            vitals: { averageHrvMs: 61, overnightHrvMs: 64 },
+        }));
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => existingSession,
+        });
+
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            inBedDurationSeconds: null,
+            score: null,
+            vitals: { averageHrvMs: null },
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        expect(result.session.inBedDurationSeconds).toBeNull();
+        expect(result.session.score).toBeNull();
+        expect(result.session.vitals?.averageHrvMs).toBeNull();
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('inBedDuration');
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('score');
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('averageHrv');
+
+        const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
+        const sportsLibData = writePayload.sportsLibData as Record<string, unknown>;
+        const metrics = sportsLibData.metrics as Record<string, unknown>;
+        expect(metrics.inBedDuration).toBe(hoisted.deleteField);
+        expect(metrics.score).toBe(hoisted.deleteField);
+        expect(metrics.averageHrv).toBe(hoisted.deleteField);
+        expect(metrics).not.toHaveProperty('overnightHrv');
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), writePayload, { merge: true });
     });
 
     it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {

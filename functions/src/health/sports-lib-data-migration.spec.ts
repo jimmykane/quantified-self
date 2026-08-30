@@ -241,6 +241,52 @@ describe('Health and sleep Sports Lib data migration', () => {
         );
     });
 
+    it('stops at a retryable failure and resumes before the failed document', async () => {
+        const fake = fakeQueryDatabase([healthDocument(), healthDocument(), healthDocument()]);
+        fake.dbMock.runTransaction
+            .mockResolvedValueOnce('migrated')
+            .mockRejectedValueOnce(new Error('transient'));
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--limit', '2',
+            '--start-after', 'opaque-prior',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            candidates: 2,
+            migrated: 1,
+            failed: 1,
+            nextStartAfter: 'opaque-1',
+        });
+        expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private-user-id');
+    });
+
+    it('retains the incoming cursor when the first document fails', async () => {
+        const fake = fakeQueryDatabase([healthDocument(), healthDocument()]);
+        fake.dbMock.runTransaction.mockRejectedValueOnce(new Error('transient'));
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--start-after', 'opaque-prior',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 1,
+            candidates: 1,
+            migrated: 0,
+            failed: 1,
+            nextStartAfter: 'opaque-prior',
+        });
+        expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(1);
+    });
+
     it('does not overwrite malformed canonical envelopes', () => {
         const health = healthDocument();
         (health.metrics[0] as Record<string, unknown>).sportsLibData = {

@@ -281,7 +281,7 @@ export async function runSportsLibDataMigration(
     const summary: SportsLibDataMigrationSummary = {
         dryRun: !options.execute,
         kind: options.kind,
-        scanned: documents.length,
+        scanned: 0,
         candidates: 0,
         migrated: 0,
         unchanged: 0,
@@ -292,20 +292,22 @@ export async function runSportsLibDataMigration(
         nextStartAfter: hasMore && documents.length > 0 ? documents[documents.length - 1].id : null,
     };
 
-    for (const document of documents) {
-        const initialDecision = migrationDecision(options.kind, document.data());
-        if (initialDecision.status === 'invalid') {
-            summary.skippedInvalid += 1;
-            continue;
-        }
-        if (initialDecision.status === 'unchanged') {
-            summary.unchanged += 1;
-            continue;
-        }
-        summary.candidates += 1;
-        if (!options.execute) continue;
-
+    for (let index = 0; index < documents.length; index += 1) {
+        const document = documents[index];
+        summary.scanned += 1;
         try {
+            const initialDecision = migrationDecision(options.kind, document.data());
+            if (initialDecision.status === 'invalid') {
+                summary.skippedInvalid += 1;
+                continue;
+            }
+            if (initialDecision.status === 'unchanged') {
+                summary.unchanged += 1;
+                continue;
+            }
+            summary.candidates += 1;
+            if (!options.execute) continue;
+
             const status = await migrateSportsLibDataDocument(db, options.userID, document.ref, options.kind);
             if (status === 'migrated') summary.migrated += 1;
             if (status === 'unchanged') summary.unchanged += 1;
@@ -314,10 +316,17 @@ export async function runSportsLibDataMigration(
             if (status === 'skipped_missing') summary.skippedMissing += 1;
         } catch {
             summary.failed += 1;
+            // Stop at the first retryable failure and return the cursor before
+            // it. Advancing to the end of the page would permanently skip the
+            // failed document when the operator resumes with nextStartAfter.
+            summary.nextStartAfter = index > 0
+                ? documents[index - 1].id
+                : options.startAfter ?? null;
             logger.error(`${LOG_PREFIX} Failed to migrate one document.`, {
                 kind: options.kind,
                 failure: 'sports_lib_data_migration_failed',
             });
+            break;
         }
     }
 
