@@ -24,6 +24,8 @@ export class SubscriptionGiftEligibilityError extends Error {
             | 'billing-schedule'
             | 'flexible-billing'
             | 'paused'
+            | 'custom-cancellation'
+            | 'incomplete-items'
             | 'missing-period'
             | 'trial-too-long',
         message: string,
@@ -135,6 +137,12 @@ function taxRateIds(value: Array<string | Stripe.TaxRate> | null | undefined): A
     return (value || []).map(rate => objectId(rate)).sort();
 }
 
+function discountIds(value: Array<string | Stripe.Discount> | null | undefined): string[] {
+    return (value || []).map(discount => (
+        typeof discount === 'string' ? discount : discount.id
+    )).sort();
+}
+
 function sortedMetadata(
     metadata: Stripe.Metadata | null | undefined,
     excludeGiftMetadata = false,
@@ -153,16 +161,19 @@ export function buildSubscriptionGiftInvariantVersion(subscription: Stripe.Subsc
     return hashVersion('iv1', {
         subscriptionId: subscription.id,
         cancellation: subscription.cancel_at_period_end,
+        cancelAt: requireUnixSeconds(subscription.cancel_at),
         schedule: objectId(subscription.schedule),
         billingMode: subscription.billing_mode?.type || null,
         automaticTax: subscription.automatic_tax,
         defaultTaxRates: taxRateIds(subscription.default_tax_rates),
+        discounts: discountIds(subscription.discounts),
         metadata: sortedMetadata(subscription.metadata, true),
         items: subscription.items.data.map(item => ({
             id: item.id,
             priceId: item.price.id,
             quantity: item.quantity ?? null,
             taxRates: taxRateIds(item.tax_rates),
+            discounts: discountIds(item.discounts),
         })).sort((left, right) => left.id.localeCompare(right.id)),
     });
 }
@@ -179,11 +190,14 @@ export function buildSubscriptionGiftPreviewVersion(
         status: subscription.status,
         trialEnd: subscription.trial_end,
         cancellation: subscription.cancel_at_period_end,
+        cancelAt: requireUnixSeconds(subscription.cancel_at),
         schedule: objectId(subscription.schedule),
         billingMode: subscription.billing_mode?.type || null,
         billingSchedules: subscription.billing_schedules,
         pauseCollection: subscription.pause_collection,
+        invariantVersion: buildSubscriptionGiftInvariantVersion(subscription),
         metadata: sortedMetadata(subscription.metadata),
+        itemsHasMore: subscription.items.has_more,
         items: subscription.items.data.map(item => ({
             id: item.id,
             priceId: item.price.id,
@@ -248,6 +262,18 @@ export function buildCurrentSubscriptionGiftState(
         throw new SubscriptionGiftEligibilityError(
             'paused',
             'Paused subscriptions are not eligible.',
+        );
+    }
+    if (subscription.cancel_at !== null && subscription.cancel_at !== undefined) {
+        throw new SubscriptionGiftEligibilityError(
+            'custom-cancellation',
+            'Subscriptions with a custom cancellation date require manual review.',
+        );
+    }
+    if (subscription.items.has_more) {
+        throw new SubscriptionGiftEligibilityError(
+            'incomplete-items',
+            'Subscriptions with more items than Stripe returned require manual review.',
         );
     }
 

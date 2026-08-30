@@ -9,6 +9,7 @@ import type {
     AdminSubscriptionGiftHistoryItem,
     AdminSubscriptionGiftNotificationStatus,
     AdminSubscriptionGiftOperationStatus,
+    AdminSubscriptionGiftResumableOperation,
     AdminSubscriptionGiftRole,
     GrantAdminSubscriptionGiftRequest,
     GrantAdminSubscriptionGiftResponse,
@@ -95,6 +96,8 @@ interface AcquiredGiftOperation {
     leaseToken: string | null;
     alreadySucceeded: boolean;
 }
+
+type NeedsReviewMarkResult = 'marked' | 'target-unavailable' | 'lock-conflict';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -195,8 +198,45 @@ function resolveSubscriptionId(documentId: string, data: Record<string, unknown>
     return null;
 }
 
+function resolveStripeObjectId(value: unknown, prefix: string): string | null {
+    if (typeof value === 'string') {
+        return value.startsWith(prefix) ? value : null;
+    }
+    if (isRecord(value) && typeof value.id === 'string' && value.id.startsWith(prefix)) {
+        return value.id;
+    }
+    return null;
+}
+
 function mapGiftEligibilityError(error: SubscriptionGiftEligibilityError): HttpsError {
     return new HttpsError('failed-precondition', error.message);
+}
+
+async function listCurrentCustomerSubscriptionIds(
+    stripe: Stripe,
+    customerId: string,
+): Promise<string[]> {
+    const inventory = await stripe.subscriptions.list({
+        customer: customerId,
+        status: 'all',
+        limit: 100,
+    });
+    if (inventory.has_more) {
+        throw new HttpsError(
+            'failed-precondition',
+            'The target subscription inventory is too large and requires manual review.',
+        );
+    }
+    const current = inventory.data.filter(subscription => (
+        subscription.status !== 'canceled' && subscription.status !== 'incomplete_expired'
+    ));
+    if (current.some(subscription => subscription.status !== 'active' && subscription.status !== 'trialing')) {
+        throw new HttpsError(
+            'failed-precondition',
+            'The target has a non-eligible current subscription and requires manual review.',
+        );
+    }
+    return [...new Set(current.map(subscription => subscription.id))];
 }
 
 async function validateTargetIdentity(
@@ -238,13 +278,29 @@ async function loadGiftTarget(
     uid: string,
     actorUid: string,
 ): Promise<GiftTarget> {
-    const [user, subscriptionsSnapshot] = await Promise.all([
+    const [user, subscriptionsSnapshot, customerSnapshot] = await Promise.all([
         validateTargetIdentity(db, uid, actorUid),
         db.collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
             .limit(2)
             .get(),
+        db.doc(`customers/${uid}`).get(),
     ]);
+    const customerData = customerSnapshot.data() as Record<string, unknown> | undefined;
+    const linkedCustomerId = resolveStripeObjectId(customerData?.stripeId, 'cus_');
+    if (!customerSnapshot.exists || !linkedCustomerId) {
+        throw new HttpsError(
+            'failed-precondition',
+            'The target billing customer link is missing and requires manual review.',
+        );
+    }
+    const currentSubscriptionIds = await listCurrentCustomerSubscriptionIds(stripe, linkedCustomerId);
+    if (currentSubscriptionIds.length === 0) {
+        throw new HttpsError('failed-precondition', 'The target must have one active or trialing Basic or Pro subscription.');
+    }
+    if (currentSubscriptionIds.length !== 1) {
+        throw new HttpsError('failed-precondition', 'The target has multiple current subscriptions and requires manual review.');
+    }
 
     const candidates = await Promise.all(subscriptionsSnapshot.docs.map(async document => {
         const local = document.data() as Record<string, unknown>;
@@ -253,6 +309,15 @@ async function loadGiftTarget(
             return null;
         }
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        if (resolveStripeObjectId(subscription.customer, 'cus_') !== linkedCustomerId) {
+            throw new HttpsError(
+                'failed-precondition',
+                'The target subscription does not match the linked billing customer.',
+            );
+        }
+        if (subscription.id !== currentSubscriptionIds[0]) {
+            return null;
+        }
         const role = resolveGiftRole(local, subscription, user.customClaims?.stripeRole);
         if (!role || (subscription.status !== 'active' && subscription.status !== 'trialing')) {
             return null;
@@ -401,6 +466,60 @@ async function readStoredOperation(
     return operation;
 }
 
+async function markExistingOperationNeedsReview(
+    db: admin.firestore.Firestore,
+    uid: string,
+    operationId: string,
+    resultCode: string,
+): Promise<NeedsReviewMarkResult> {
+    const giftOperationRef = operationRef(db, uid, operationId);
+    const giftLockRef = lockRef(db, uid);
+    return db.runTransaction(async transaction => {
+        const [guard, operationSnapshot, lockSnapshot] = await Promise.all([
+            getUserDeletionGuardStateInTransaction(db, transaction, uid),
+            transaction.get(giftOperationRef),
+            transaction.get(giftLockRef),
+        ]);
+        if (guard.shouldSkip) {
+            return 'target-unavailable' as const;
+        }
+
+        const operation = operationSnapshot.exists
+            ? parseStoredGiftOperation(operationSnapshot.data() as Record<string, unknown> | undefined)
+            : null;
+        if (!operation) {
+            return 'lock-conflict' as const;
+        }
+
+        const lock = lockSnapshot.data() as Record<string, unknown> | undefined;
+        const lockStatus = lock?.status;
+        const lockOperationId = typeof lock?.operationId === 'string' ? lock.operationId : null;
+        if (
+            (lockSnapshot.exists && lockStatus !== 'idle' && lockStatus !== 'applying' && lockStatus !== 'needs_review')
+            || lockStatus === 'applying'
+            || (lockStatus === 'needs_review' && lockOperationId !== operationId)
+        ) {
+            return 'lock-conflict' as const;
+        }
+
+        transaction.set(giftOperationRef, {
+            status: 'needs_review',
+            resultCode,
+            leaseToken: FieldValue.delete(),
+            leaseExpiresAt: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        transaction.set(giftLockRef, {
+            status: 'needs_review',
+            operationId,
+            leaseToken: FieldValue.delete(),
+            leaseExpiresAt: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return 'marked' as const;
+    });
+}
+
 async function acquireGiftOperation(
     db: admin.firestore.Firestore,
     actorUid: string,
@@ -440,6 +559,14 @@ async function acquireGiftOperation(
         const lockStatus = lockData?.status;
         const lockOperationId = typeof lockData?.operationId === 'string' ? lockData.operationId : null;
         const lockLeaseExpiresAtMs = timestampToMillis(lockData?.leaseExpiresAt);
+        if (
+            lockSnapshot.exists
+            && lockStatus !== 'idle'
+            && lockStatus !== 'applying'
+            && lockStatus !== 'needs_review'
+        ) {
+            throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
+        }
         if (lockStatus === 'needs_review' && lockOperationId !== request.operationId) {
             throw new HttpsError('failed-precondition', 'A previous gift operation requires manual review.');
         }
@@ -593,6 +720,28 @@ function buildResponse(
     };
 }
 
+function giftApplicationPreservesStoredInvariants(
+    subscription: Stripe.Subscription,
+    operationId: string,
+    operation: StoredGiftOperation,
+): boolean {
+    if (
+        !subscriptionHasAppliedGift(subscription, operationId, operation.targetAccessEndSeconds)
+        || subscription.cancel_at_period_end !== operation.cancelAtPeriodEnd
+    ) {
+        return false;
+    }
+
+    try {
+        return buildCurrentSubscriptionGiftState(
+            subscription,
+            operation.role,
+        ).invariantVersion === operation.invariantVersion;
+    } catch {
+        return false;
+    }
+}
+
 function idempotencyKey(uid: string, operationId: string): string {
     const digest = createHash('sha256').update(`${uid}\u0000${operationId}`).digest('hex');
     return `admin-subscription-gift-v1-${digest}`;
@@ -618,18 +767,32 @@ async function updateNotificationFailure(
     uid: string,
     operationId: string,
     resultCode: string,
-): Promise<void> {
+): Promise<AdminSubscriptionGiftNotificationStatus> {
     try {
-        await db.runTransaction(async transaction => {
-            const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
-            if (guard.shouldSkip) {
-                return;
+        return await db.runTransaction(async transaction => {
+            const giftOperationRef = operationRef(db, uid, operationId);
+            const [guard, operationSnapshot] = await Promise.all([
+                getUserDeletionGuardStateInTransaction(db, transaction, uid),
+                transaction.get(giftOperationRef),
+            ]);
+            if (guard.shouldSkip || !operationSnapshot.exists) {
+                return 'failed' as const;
             }
-            transaction.set(operationRef(db, uid, operationId), {
+            const latestOperation = parseStoredGiftOperation(
+                operationSnapshot.data() as Record<string, unknown> | undefined,
+            );
+            if (!latestOperation || latestOperation.status !== 'succeeded') {
+                return 'failed' as const;
+            }
+            if (latestOperation.notificationStatus === 'delivered') {
+                return 'delivered' as const;
+            }
+            transaction.set(giftOperationRef, {
                 notificationStatus: 'failed',
                 notificationResultCode: resultCode,
                 updatedAt: FieldValue.serverTimestamp(),
             }, { merge: true });
+            return 'failed' as const;
         });
     } catch (error) {
         logger.warn('[admin-subscription-gift] Could not persist notification failure.', {
@@ -637,6 +800,7 @@ async function updateNotificationFailure(
             operationId,
             code: (error as { code?: unknown })?.code || 'unknown',
         });
+        return 'failed';
     }
 }
 
@@ -649,17 +813,18 @@ async function queueGiftNotification(
     if (!operation.notifyUser) {
         return 'not_requested';
     }
+    if (operation.notificationStatus === 'delivered') {
+        return 'delivered';
+    }
 
     let recipient: string | undefined;
     try {
         recipient = (await admin.auth().getUser(uid)).email;
     } catch {
-        await updateNotificationFailure(db, uid, operationId, 'recipient_unavailable');
-        return 'failed';
+        return updateNotificationFailure(db, uid, operationId, 'recipient_unavailable');
     }
     if (!recipient) {
-        await updateNotificationFailure(db, uid, operationId, 'recipient_missing_email');
-        return 'failed';
+        return updateNotificationFailure(db, uid, operationId, 'recipient_missing_email');
     }
 
     try {
@@ -678,6 +843,9 @@ async function queueGiftNotification(
             if (!latestOperation || latestOperation.status !== 'succeeded') {
                 return 'failed' as const;
             }
+            if (latestOperation.notificationStatus === 'delivered') {
+                return 'delivered' as const;
+            }
 
             const currentAttempt = Math.min(latestOperation.notificationAttempt, MAX_NOTIFICATION_ATTEMPTS);
             const currentMailRef = db.collection('mail').doc(mailDocumentId(uid, operationId, currentAttempt));
@@ -695,6 +863,14 @@ async function queueGiftNotification(
                 transaction.set(giftOperationRef, {
                     notificationStatus: 'queued',
                     notificationResultCode: 'already_queued',
+                    updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+                return 'queued' as const;
+            }
+            if (!currentMail.exists && latestOperation.notificationStatus === 'queued') {
+                transaction.set(giftOperationRef, {
+                    notificationStatus: 'queued',
+                    notificationResultCode: 'mail_receipt_expired',
                     updatedAt: FieldValue.serverTimestamp(),
                 }, { merge: true });
                 return 'queued' as const;
@@ -749,8 +925,7 @@ async function queueGiftNotification(
             operationId,
             code: (error as { code?: unknown })?.code || 'unknown',
         });
-        await updateNotificationFailure(db, uid, operationId, 'queue_failed');
-        return 'failed';
+        return updateNotificationFailure(db, uid, operationId, 'queue_failed');
     }
 }
 
@@ -783,6 +958,45 @@ async function getRecentHistory(
     });
 }
 
+async function getResumableOperation(
+    db: admin.firestore.Firestore,
+    uid: string,
+): Promise<AdminSubscriptionGiftResumableOperation | null> {
+    const giftLockSnapshot = await lockRef(db, uid).get();
+    if (!giftLockSnapshot.exists) {
+        return null;
+    }
+
+    const lock = giftLockSnapshot.data() as Record<string, unknown> | undefined;
+    if (lock?.status === 'idle') {
+        return null;
+    }
+    const operationId = typeof lock?.operationId === 'string' ? lock.operationId : null;
+    if ((lock?.status !== 'applying' && lock?.status !== 'needs_review') || !operationId) {
+        throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
+    }
+
+    const operation = await readStoredOperation(db, uid, operationId);
+    if (!operation || operation.status !== lock.status) {
+        throw new HttpsError('failed-precondition', 'The subscription gift operation requires manual review.');
+    }
+
+    return {
+        operationId,
+        months: operation.months,
+        reason: operation.reason,
+        notifyUser: operation.notifyUser,
+        previewVersion: operation.previewVersion,
+        role: operation.role,
+        cadence: operation.cadence,
+        status: operation.status,
+        previousAccessEnd: secondsToIso(operation.previousAccessEndSeconds),
+        newAccessEnd: secondsToIso(operation.targetAccessEndSeconds),
+        cancelAtPeriodEnd: operation.cancelAtPeriodEnd,
+        notificationStatus: operation.notificationStatus,
+    };
+}
+
 export const previewAdminSubscriptionGift = onAdminCall<
     PreviewAdminSubscriptionGiftRequest,
     PreviewAdminSubscriptionGiftResponse
@@ -805,7 +1019,10 @@ export const previewAdminSubscriptionGift = onAdminCall<
         }
         throw error;
     }
-    const recentHistory = await getRecentHistory(db, input.uid);
+    const [recentHistory, resumableOperation] = await Promise.all([
+        getRecentHistory(db, input.uid),
+        getResumableOperation(db, input.uid),
+    ]);
 
     return {
         uid: input.uid,
@@ -818,6 +1035,7 @@ export const previewAdminSubscriptionGift = onAdminCall<
         cancelAtPeriodEnd: preview.cancelAtPeriodEnd,
         previewVersion: preview.previewVersion,
         recentHistory,
+        resumableOperation,
     };
 });
 
@@ -854,22 +1072,21 @@ export const grantAdminSubscriptionGift = onAdminCall<
         target = await loadGiftTarget(db, stripe, input.uid, actorUid);
     } catch (error) {
         if (existingOperation) {
-            await db.runTransaction(async transaction => {
-                const guard = await getUserDeletionGuardStateInTransaction(db, transaction, input.uid);
-                if (guard.shouldSkip) {
-                    return;
-                }
-                transaction.set(operationRef(db, input.uid, input.operationId), {
-                    status: 'needs_review',
-                    resultCode: 'subscription_state_changed',
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-                transaction.set(lockRef(db, input.uid), {
-                    status: 'needs_review',
-                    operationId: input.operationId,
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-            });
+            const markResult = await markExistingOperationNeedsReview(
+                db,
+                input.uid,
+                input.operationId,
+                'subscription_state_changed',
+            );
+            if (markResult === 'target-unavailable') {
+                throw new HttpsError('failed-precondition', 'The target account is missing or pending deletion.');
+            }
+            if (markResult === 'lock-conflict') {
+                throw new HttpsError(
+                    'aborted',
+                    'Another subscription gift operation is in progress or requires review. Retry the original operation.',
+                );
+            }
             return buildResponse(
                 input.operationId,
                 existingOperation,
@@ -944,6 +1161,27 @@ export const grantAdminSubscriptionGift = onAdminCall<
         input.operationId,
         acquired.operation.targetAccessEndSeconds,
     )) {
+        if (!giftApplicationPreservesStoredInvariants(
+            currentSubscription,
+            input.operationId,
+            acquired.operation,
+        )) {
+            await finalizeGiftOperation(
+                db,
+                input.uid,
+                input.operationId,
+                leaseToken,
+                'needs_review',
+                'stripe_reconciliation_invariant_failed',
+            );
+            return buildResponse(
+                input.operationId,
+                acquired.operation,
+                'needs_review',
+                acquired.operation.notificationStatus,
+                'The gift appears applied, but the subscription settings changed and require manual review.',
+            );
+        }
         const finalized = await finalizeGiftOperation(
             db,
             input.uid,
@@ -1031,22 +1269,12 @@ export const grantAdminSubscriptionGift = onAdminCall<
         );
     }
 
-    let invariantsPreserved = false;
-    try {
-        invariantsPreserved = buildCurrentSubscriptionGiftState(
-            updatedSubscription,
-            acquired.operation.role,
-        ).invariantVersion === acquired.operation.invariantVersion;
-    } catch {
-        invariantsPreserved = false;
-    }
-    const applied = subscriptionHasAppliedGift(
+    const applicationPreserved = giftApplicationPreservesStoredInvariants(
         updatedSubscription,
         input.operationId,
-        acquired.operation.targetAccessEndSeconds,
+        acquired.operation,
     );
-    const cancellationPreserved = updatedSubscription.cancel_at_period_end === acquired.operation.cancelAtPeriodEnd;
-    if (!applied || !invariantsPreserved || !cancellationPreserved) {
+    if (!applicationPreserved) {
         await finalizeGiftOperation(
             db,
             input.uid,

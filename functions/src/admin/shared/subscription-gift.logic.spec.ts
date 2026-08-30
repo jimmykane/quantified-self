@@ -194,6 +194,10 @@ describe('admin subscription gift logic', () => {
         ['billing schedule', { billing_schedules: [{ key: 'phase' }] }, 'billing-schedule'],
         ['flexible billing', { billing_mode: { type: 'flexible', flexible: {} } }, 'flexible-billing'],
         ['paused collection', { pause_collection: { behavior: 'keep_as_draft' } }, 'paused'],
+        ['a custom cancellation date', { cancel_at: unixSeconds('2026-02-15T00:00:00Z') }, 'custom-cancellation'],
+        ['a truncated subscription-item list', {
+            items: { ...subscription().items, has_more: true },
+        }, 'incomplete-items'],
         ['missing item period', {
             items: { object: 'list', data: [], has_more: false, url: '/v1/subscription_items' },
         }, 'missing-period'],
@@ -209,11 +213,24 @@ describe('admin subscription gift logic', () => {
     it('makes preview versions stale when a relevant subscription field changes', () => {
         const before = subscription();
         const after = subscription({ trial_end: unixSeconds('2026-02-15T00:00:00Z') });
+        const taxChanged = subscription({
+            automatic_tax: { enabled: false, disabled_reason: null, liability: null },
+        });
+        const discountChanged = subscription({ discounts: ['di_new'] });
+        const itemListTruncated = subscription({
+            items: { ...before.items, has_more: true },
+        });
 
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(after, 'basic', 1));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(before, 'basic', 2));
+        expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
+            .not.toBe(buildSubscriptionGiftPreviewVersion(taxChanged, 'basic', 1));
+        expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
+            .not.toBe(buildSubscriptionGiftPreviewVersion(discountChanged, 'basic', 1));
+        expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
+            .not.toBe(buildSubscriptionGiftPreviewVersion(itemListTruncated, 'basic', 1));
     });
 
     it('keeps plan and tax invariants stable across the expected trial and gift metadata change', () => {
@@ -229,6 +246,23 @@ describe('admin subscription gift logic', () => {
         });
 
         expect(buildSubscriptionGiftInvariantVersion(after)).toBe(buildSubscriptionGiftInvariantVersion(before));
+    });
+
+    it('treats existing subscription and item discounts as protected invariants', () => {
+        const before = subscription({ discounts: ['di_subscription'] });
+        const subscriptionDiscountChanged = subscription({ discounts: ['di_replacement'] });
+        const itemDiscountChanged = subscription({
+            discounts: ['di_subscription'],
+            items: {
+                ...before.items,
+                data: before.items.data.map(item => ({ ...item, discounts: ['di_item'] })),
+            },
+        });
+
+        expect(buildSubscriptionGiftInvariantVersion(subscriptionDiscountChanged))
+            .not.toBe(buildSubscriptionGiftInvariantVersion(before));
+        expect(buildSubscriptionGiftInvariantVersion(itemDiscountChanged))
+            .not.toBe(buildSubscriptionGiftInvariantVersion(before));
     });
 
     it('detects an applied gift only with the matching operation and target', () => {

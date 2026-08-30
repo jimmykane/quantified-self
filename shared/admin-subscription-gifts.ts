@@ -21,6 +21,21 @@ export interface AdminSubscriptionGiftHistoryItem {
     createdAt: string | null;
 }
 
+export interface AdminSubscriptionGiftResumableOperation {
+    operationId: string;
+    months: number;
+    reason: string;
+    notifyUser: boolean;
+    previewVersion: string;
+    role: AdminSubscriptionGiftRole;
+    cadence: AdminSubscriptionGiftCadence;
+    status: Extract<AdminSubscriptionGiftOperationStatus, 'applying' | 'needs_review'>;
+    previousAccessEnd: string;
+    newAccessEnd: string;
+    cancelAtPeriodEnd: boolean;
+    notificationStatus: AdminSubscriptionGiftNotificationStatus;
+}
+
 export interface PreviewAdminSubscriptionGiftResponse {
     uid: string;
     subscriptionId: string;
@@ -32,6 +47,7 @@ export interface PreviewAdminSubscriptionGiftResponse {
     cancelAtPeriodEnd: boolean;
     previewVersion: string;
     recentHistory: AdminSubscriptionGiftHistoryItem[];
+    resumableOperation?: AdminSubscriptionGiftResumableOperation | null;
 }
 
 export interface GrantAdminSubscriptionGiftRequest {

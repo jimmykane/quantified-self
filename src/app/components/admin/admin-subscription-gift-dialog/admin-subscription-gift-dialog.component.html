@@ -20,7 +20,11 @@
     @if (requestLockedForRetry()) {
     <div class="message-block retry-message" role="status">
         <mat-icon aria-hidden="true">sync</mat-icon>
-        <span>The original request is locked for a safe, idempotent retry.</span>
+        <span>
+            {{ requiresReview()
+                ? 'Reconcile this same operation before starting another gift.'
+                : 'The original request is locked for a safe, idempotent retry.' }}
+        </span>
     </div>
     }
 
@@ -47,6 +51,41 @@
         <span>Checking the live Stripe subscription…</span>
     </div>
     } @else if (preview(); as giftPreview) {
+    @if (giftPreview.resumableOperation; as resumableOperation) {
+    <section class="preview-section" aria-labelledby="gift-recovery-title">
+        <div class="section-title-row">
+            <h3 id="gift-recovery-title">Operation to reconcile</h3>
+            <mat-chip selected>{{ resumableOperation.status | titlecase }}</mat-chip>
+        </div>
+        <div class="preview-grid">
+            <div>
+                <span>Plan</span>
+                <strong>{{ resumableOperation.role | titlecase }}</strong>
+            </div>
+            <div>
+                <span>Cadence</span>
+                <strong>{{ resumableOperation.cadence | titlecase }}</strong>
+            </div>
+            <div>
+                <span>Gift</span>
+                <strong>{{ resumableOperation.months }} {{ resumableOperation.months === 1 ? 'month' : 'months' }}</strong>
+            </div>
+            <div>
+                <span>Renewal</span>
+                <strong>{{ resumableOperation.cancelAtPeriodEnd ? 'Will remain canceled' : 'Renews automatically' }}</strong>
+            </div>
+            <div>
+                <span>Previous access end</span>
+                <strong>{{ resumableOperation.previousAccessEnd | date:'medium':'UTC' }} UTC</strong>
+            </div>
+            <div class="gifted-date">
+                <span>Stored target end</span>
+                <strong>{{ resumableOperation.newAccessEnd | date:'medium':'UTC' }} UTC</strong>
+            </div>
+        </div>
+        <p class="preview-note">This exact server-stored operation was restored. Reconcile it before starting another gift.</p>
+    </section>
+    } @else {
     <section class="preview-section" aria-labelledby="gift-preview-title">
         <div class="section-title-row">
             <h3 id="gift-preview-title">Fresh preview</h3>
@@ -80,6 +119,7 @@
         </div>
         <p class="preview-note">No charge or proration is created. The current plan and cancellation choice stay unchanged.</p>
     </section>
+    }
 
     <section class="history-section" aria-labelledby="gift-history-title">
         <h3 id="gift-history-title">Recent grants</h3>
@@ -119,7 +159,7 @@
             @if (submitting()) {
             <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
             }
-            <span>{{ requestLockedForRetry() ? 'Retry same gift' : 'Grant time' }}</span>
+            <span>{{ requiresReview() ? 'Reconcile same gift' : (requestLockedForRetry() ? 'Retry same gift' : 'Grant time') }}</span>
         </span>
     </button>
 </mat-dialog-actions>

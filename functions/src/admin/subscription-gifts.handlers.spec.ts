@@ -14,6 +14,7 @@ const {
     mockGetAdminBillingStripe,
     mockDeletionGuard,
     mockTransactionDeletionGuard,
+    mockStripeList,
     mockStripeRetrieve,
     mockStripeUpdate,
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
     mockGetAdminBillingStripe: vi.fn(),
     mockDeletionGuard: vi.fn(),
     mockTransactionDeletionGuard: vi.fn(),
+    mockStripeList: vi.fn(),
     mockStripeRetrieve: vi.fn(),
     mockStripeUpdate: vi.fn(),
 }));
@@ -175,6 +177,7 @@ function buildSubscription(overrides: Record<string, unknown> = {}): Stripe.Subs
     return {
         id: 'sub_basic',
         object: 'subscription',
+        customer: 'cus_target_user',
         status: 'active',
         trial_end: null,
         cancel_at_period_end: false,
@@ -235,6 +238,9 @@ describe('admin subscription gift callables', () => {
         vi.clearAllMocks();
         db = new FakeFirestore();
         currentSubscription = buildSubscription();
+        db.store.set('customers/target-user', {
+            stripeId: 'cus_target_user',
+        });
         db.store.set('customers/target-user/subscriptions/sub_basic', {
             status: 'active',
             role: 'basic',
@@ -248,6 +254,12 @@ describe('admin subscription gift callables', () => {
         }));
         mockDeletionGuard.mockResolvedValue({ userExists: true, deletionInProgress: false, shouldSkip: false });
         mockTransactionDeletionGuard.mockResolvedValue({ userExists: true, deletionInProgress: false, shouldSkip: false });
+        mockStripeList.mockImplementation(async () => ({
+            object: 'list',
+            data: [currentSubscription],
+            has_more: false,
+            url: '/v1/subscriptions',
+        }));
         mockStripeRetrieve.mockImplementation(async () => currentSubscription);
         mockStripeUpdate.mockImplementation(async (_id: string, params: Stripe.SubscriptionUpdateParams) => {
             const target = params.trial_end as number;
@@ -271,6 +283,7 @@ describe('admin subscription gift callables', () => {
         });
         mockGetAdminBillingStripe.mockResolvedValue({
             subscriptions: {
+                list: mockStripeList,
                 retrieve: mockStripeRetrieve,
                 update: mockStripeUpdate,
             },
@@ -328,6 +341,60 @@ describe('admin subscription gift callables', () => {
             .rejects.toMatchObject({ code: 'failed-precondition' });
     });
 
+    it('rejects a second live Stripe subscription that has not reached Firestore yet', async () => {
+        const secondSubscription = buildSubscription({
+            id: 'sub_second_live',
+            metadata: { firebaseUID: 'target-user', role: 'pro' },
+        });
+        mockStripeList.mockImplementation(async () => ({
+            object: 'list',
+            data: [currentSubscription, secondSubscription],
+            has_more: false,
+            url: '/v1/subscriptions',
+        }));
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'The target has multiple current subscriptions and requires manual review.',
+            });
+        expect(mockStripeRetrieve).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-eligible current Stripe subscription alongside the eligible plan', async () => {
+        mockStripeList.mockResolvedValueOnce({
+            object: 'list',
+            data: [
+                currentSubscription,
+                buildSubscription({ id: 'sub_past_due', status: 'past_due' }),
+            ],
+            has_more: false,
+            url: '/v1/subscriptions',
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'The target has a non-eligible current subscription and requires manual review.',
+            });
+        expect(mockStripeRetrieve).not.toHaveBeenCalled();
+    });
+
+    it('ignores canceled Stripe history when counting current subscriptions', async () => {
+        mockStripeList.mockResolvedValueOnce({
+            object: 'list',
+            data: [
+                currentSubscription,
+                buildSubscription({ id: 'sub_canceled_history', status: 'canceled' }),
+            ],
+            has_more: false,
+            url: '/v1/subscriptions',
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .resolves.toMatchObject({ subscriptionId: 'sub_basic', status: 'active' });
+    });
+
     it('rejects multiple current subscription records even when only one resolves to a paid role', async () => {
         db.store.set('customers/target-user/subscriptions/sub_second', {
             status: 'trialing', created: 2,
@@ -352,6 +419,30 @@ describe('admin subscription gift callables', () => {
 
         await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
             .rejects.toMatchObject({ code: 'failed-precondition' });
+    });
+
+    it('rejects a subscription that does not belong to the target linked Stripe customer', async () => {
+        currentSubscription = buildSubscription({ customer: 'cus_another_user' });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'The target subscription does not match the linked billing customer.',
+            });
+        expect(mockStripeUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects a subscription with a fixed cancellation timestamp', async () => {
+        currentSubscription = buildSubscription({
+            cancel_at: unixSeconds('2026-09-15T12:00:00Z'),
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Subscriptions with a custom cancellation date require manual review.',
+            });
+        expect(mockStripeUpdate).not.toHaveBeenCalled();
     });
 
     it('requires a fresh matching preview', async () => {
@@ -451,6 +542,107 @@ describe('admin subscription gift callables', () => {
         expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
     });
 
+    it('does not resend a queued notification after its deterministic mail receipt expires', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+        const mailPath = [...db.store.keys()].find(path => path.startsWith('mail/'))!;
+        db.store.delete(mailPath);
+
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(0);
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({
+                notificationStatus: 'queued',
+                notificationAttempt: 0,
+                notificationResultCode: 'mail_receipt_expired',
+            });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a failed notification with a new bounded mail attempt and deduplicates delivery', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+        const [firstMailPath, firstMail] = [...db.store.entries()]
+            .find(([path]) => path.startsWith('mail/'))!;
+        db.store.set(firstMailPath, { ...firstMail, delivery: { state: 'ERROR' } });
+
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+        const mailEntriesAfterRetry = [...db.store.entries()].filter(([path]) => path.startsWith('mail/'));
+        expect(mailEntriesAfterRetry).toHaveLength(2);
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ notificationAttempt: 1, notificationStatus: 'queued' });
+
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(2);
+
+        const [secondMailPath, secondMail] = mailEntriesAfterRetry.find(([path]) => path !== firstMailPath)!;
+        db.store.set(secondMailPath, { ...secondMail, delivery: { state: 'SUCCESS' } });
+
+        expect((await grantGift(request)).notificationStatus).toBe('delivered');
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(2);
+
+        db.store.delete(secondMailPath);
+        expect((await grantGift(request)).notificationStatus).toBe('delivered');
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not downgrade a concurrently delivered notification when recipient lookup fails', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        expect((await grantGift(request)).notificationStatus).toBe('queued');
+
+        const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
+        mockAuthGetUser
+            .mockResolvedValueOnce({
+                uid: 'target-user',
+                email: 'target-user@example.com',
+                customClaims: { stripeRole: 'basic' },
+            })
+            .mockImplementationOnce(async () => {
+                db.store.set(operationPath, {
+                    ...db.store.get(operationPath),
+                    notificationStatus: 'delivered',
+                    notificationResultCode: 'delivered',
+                });
+                throw new Error('Transient Auth lookup failure');
+            });
+
+        const retried = await grantGift(request);
+
+        expect(retried.notificationStatus).toBe('delivered');
+        expect(db.store.get(operationPath)).toMatchObject({
+            notificationStatus: 'delivered',
+            notificationResultCode: 'delivered',
+        });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
     it('persists definitive Stripe failures without blocking a later operation', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         mockStripeUpdate.mockRejectedValueOnce({
@@ -528,6 +720,41 @@ describe('admin subscription gift callables', () => {
         }))).rejects.toMatchObject({ code: 'failed-precondition' });
     });
 
+    it('returns the exact server-stored request needed to resume a locked operation', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 3 }));
+        mockStripeUpdate.mockRejectedValueOnce({ type: 'StripeConnectionError' });
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 3,
+            reason: 'Service recovery credit',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        expect((await grantGift(request)).status).toBe('needs_review');
+
+        const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+
+        expect(reopened.resumableOperation).toEqual({
+            operationId,
+            months: 3,
+            reason: 'Service recovery credit',
+            notifyUser: true,
+            previewVersion: preview.previewVersion,
+            role: 'basic',
+            cadence: 'monthly',
+            status: 'needs_review',
+            previousAccessEnd: '2026-09-30T12:00:00.000Z',
+            newAccessEnd: '2026-12-30T12:00:00.000Z',
+            cancelAtPeriodEnd: false,
+            notificationStatus: 'not_requested',
+        });
+        expect(reopened.recentHistory[0]).toMatchObject({
+            operationId,
+            status: 'needs_review',
+        });
+    });
+
     it('blocks a new operation behind an expired applying lock until the original operation is reconciled', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         db.store.set('users/target-user/adminSubscriptionGiftState/lock', {
@@ -546,6 +773,63 @@ describe('admin subscription gift callables', () => {
             previewVersion: preview.previewVersion,
         }))).rejects.toMatchObject({ code: 'failed-precondition' });
         expect(mockStripeUpdate).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the server-owned per-user gift lock is malformed', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        db.store.set('users/target-user/adminSubscriptionGiftState/lock', {
+            status: 'corrupt',
+            operationId: 'unexpected',
+        });
+
+        await expect(grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }))).rejects.toMatchObject({
+            code: 'failed-precondition',
+            message: 'The subscription gift lock requires manual review.',
+        });
+        expect(mockStripeUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite another operation lock when an old retry cannot reload Stripe state', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        mockStripeUpdate.mockRejectedValueOnce({
+            type: 'StripeInvalidRequestError',
+            statusCode: 400,
+        });
+        expect((await grantGift(request)).status).toBe('failed');
+
+        db.store.set('users/target-user/adminSubscriptionGiftState/lock', {
+            status: 'applying',
+            operationId: secondOperationId,
+            leaseToken: 'other-operation-lease',
+            leaseExpiresAt: new Date('2026-08-30T12:01:30Z'),
+        });
+        mockStripeRetrieve.mockRejectedValueOnce({ type: 'StripeConnectionError' });
+
+        await expect(grantGift(request)).rejects.toMatchObject({ code: 'aborted' });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock')).toEqual({
+            status: 'applying',
+            operationId: secondOperationId,
+            leaseToken: 'other-operation-lease',
+            leaseExpiresAt: new Date('2026-08-30T12:01:30Z'),
+        });
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'failed', resultCode: 'stripe_request_rejected' });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
     it('reconciles an ambiguous retry when Stripe shows the stored operation was applied', async () => {
@@ -584,12 +868,78 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps an applied ambiguous retry in review when protected subscription settings changed', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const grantRequest = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        mockStripeUpdate.mockRejectedValueOnce({ type: 'StripeConnectionError' });
+        expect((await grantGift(grantRequest)).status).toBe('needs_review');
+
+        const target = unixSeconds('2026-10-30T12:00:00Z');
+        currentSubscription = buildSubscription({
+            status: 'trialing',
+            trial_end: target,
+            automatic_tax: { enabled: false, disabled_reason: null, liability: null },
+            metadata: {
+                firebaseUID: 'target-user',
+                retained: 'yes',
+                qs_gift_type: 'subscription_time',
+                qs_gift_operation_id: operationId,
+                qs_gift_months: '1',
+                qs_gift_access_until: `${target}`,
+            },
+            items: {
+                ...currentSubscription.items,
+                data: currentSubscription.items.data.map(item => ({ ...item, current_period_end: target })),
+            },
+        });
+
+        const retried = await grantGift(grantRequest);
+
+        expect(retried.status).toBe('needs_review');
+        expect(retried.message).toContain('subscription settings changed');
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'needs_review', resultCode: 'stripe_reconciliation_invariant_failed' });
+    });
+
     it('moves to review when the subscription changes between locking and Stripe update', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const changed = buildSubscription({ trial_end: unixSeconds('2026-10-15T12:00:00Z') });
         mockStripeRetrieve
             .mockResolvedValueOnce(currentSubscription)
             .mockResolvedValueOnce(changed);
+
+        const response = await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }));
+
+        expect(response.status).toBe('needs_review');
+        expect(mockStripeUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not mutate Stripe when the subscription item list becomes truncated after locking', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const truncated = buildSubscription({
+            items: {
+                ...currentSubscription.items,
+                has_more: true,
+            },
+        });
+        mockStripeRetrieve
+            .mockResolvedValueOnce(currentSubscription)
+            .mockResolvedValueOnce(truncated);
 
         const response = await grantGift(callableRequest({
             uid: 'target-user',

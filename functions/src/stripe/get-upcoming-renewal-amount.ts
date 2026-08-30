@@ -28,23 +28,36 @@ type UpcomingInvoiceShape = {
 };
 
 type StripeInvoicesApi = {
-    createPreview?: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
-    retrieveUpcoming?: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
+    createPreview: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
+};
+
+type StripeCouponShape = {
+    deleted?: unknown;
+    duration?: unknown;
+};
+
+type StripeDiscountShape = string | {
+    deleted?: unknown;
+    source?: {
+        coupon?: string | StripeCouponShape | null;
+    };
 };
 
 type StripeSubscriptionShape = {
-    discounts?: Array<string | {
-        deleted?: unknown;
-        source?: {
-            coupon?: string | {
-                duration?: unknown;
-            } | null;
-        };
-    }>;
+    discounts?: StripeDiscountShape[];
+    items?: {
+        data?: Array<{
+            discounts?: StripeDiscountShape[];
+        }>;
+    };
 };
 
 type StripeSubscriptionsApi = {
     retrieve: (subscriptionId: string, options?: unknown) => Promise<StripeSubscriptionShape>;
+};
+
+type StripeCouponsApi = {
+    retrieve: (couponId: string) => Promise<StripeCouponShape>;
 };
 
 function normalizeToDate(value: unknown): Date | null {
@@ -152,19 +165,12 @@ async function fetchUpcomingInvoicePreview(
     invoicesApi: StripeInvoicesApi,
     subscriptionId: string
 ): Promise<UpcomingInvoiceShape> {
-    if (typeof invoicesApi.createPreview === 'function') {
-        return invoicesApi.createPreview({ subscription: subscriptionId });
-    }
-
-    if (typeof invoicesApi.retrieveUpcoming === 'function') {
-        return invoicesApi.retrieveUpcoming({ subscription: subscriptionId });
-    }
-
-    throw new Error('Stripe invoices API does not support createPreview or retrieveUpcoming.');
+    return invoicesApi.createPreview({ subscription: subscriptionId });
 }
 
 async function resolveNextPaymentAmountForZeroDueInvoice(
     subscriptionsApi: StripeSubscriptionsApi,
+    couponsApi: StripeCouponsApi,
     subscriptionId: string,
     upcomingInvoice: UpcomingInvoiceShape
 ): Promise<number> {
@@ -177,20 +183,32 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
 
     try {
         const subscription = await subscriptionsApi.retrieve(subscriptionId, {
-            expand: ['discounts.source.coupon']
+            expand: ['discounts.source.coupon', 'items.data.discounts']
         });
-        const hasLongRunningDiscount = (subscription.discounts || []).some(discount => {
-            if (typeof discount === 'string' || discount.deleted === true) {
-                return false;
+        const discounts = [
+            ...(subscription.discounts || []),
+            ...(subscription.items?.data || []).flatMap(item => item.discounts || []),
+        ];
+        for (const discount of discounts) {
+            if (typeof discount === 'string') {
+                throw new Error('Stripe returned an unexpanded discount.');
+            }
+            if (discount.deleted === true) {
+                continue;
             }
             const coupon = discount.source?.coupon;
-            if (!coupon || typeof coupon === 'string') {
-                return false;
+            if (!coupon) {
+                continue;
             }
-            return coupon.duration === 'forever' || coupon.duration === 'repeating';
-        });
-        if (hasLongRunningDiscount) {
-            return 0;
+            const resolvedCoupon = typeof coupon === 'string'
+                ? await couponsApi.retrieve(coupon)
+                : coupon;
+            if (resolvedCoupon.deleted === true) {
+                continue;
+            }
+            if (resolvedCoupon.duration === 'forever' || resolvedCoupon.duration === 'repeating') {
+                return 0;
+            }
         }
     } catch (error) {
         logger.warn('[getUpcomingRenewalAmount] Could not inspect subscription discount while resolving zero-due invoice.', {
@@ -258,6 +276,7 @@ export const getUpcomingRenewalAmount = onCall({
         const stripe = await getStripe();
         const invoicesApi = stripe.invoices as unknown as StripeInvoicesApi;
         const subscriptionsApi = stripe.subscriptions as unknown as StripeSubscriptionsApi;
+        const couponsApi = stripe.coupons as unknown as StripeCouponsApi;
         try {
             const upcomingInvoice = await fetchUpcomingInvoicePreview(invoicesApi, subscriptionId);
 
@@ -278,6 +297,7 @@ export const getUpcomingRenewalAmount = onCall({
             if (amountDue <= 0) {
                 amountDue = await resolveNextPaymentAmountForZeroDueInvoice(
                     subscriptionsApi,
+                    couponsApi,
                     subscriptionId,
                     upcomingInvoice
                 );

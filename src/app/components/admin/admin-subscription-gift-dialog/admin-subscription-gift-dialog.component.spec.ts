@@ -131,7 +131,7 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
         }));
     });
 
-    it('surfaces needs-review outcomes and prevents another grant', async () => {
+    it('surfaces needs-review outcomes and allows only the same operation to reconcile', async () => {
         adminService.grantSubscriptionGift.mockReturnValueOnce(of({
             operationId: '123e4567-e89b-42d3-a456-426614174000',
             status: 'needs_review',
@@ -146,11 +146,63 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
         component.reason.set('Community thank-you');
 
         await component.grant();
+        const originalRequest = adminService.grantSubscriptionGift.mock.calls[0][0];
 
         expect(component.requiresReview()).toBe(true);
         expect(component.error()).toBe('Stripe outcome needs review.');
-        expect(component.canGrant()).toBe(false);
+        expect(component.requestLockedForRetry()).toBe(true);
+        expect(component.canGrant()).toBe(true);
         expect(dialogRef.close).not.toHaveBeenCalled();
+
+        await component.grant();
+
+        expect(adminService.grantSubscriptionGift.mock.calls[1][0]).toEqual(originalRequest);
+        expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+            response: expect.objectContaining({ status: 'succeeded' }),
+        }));
+    });
+
+    it('restores a server-stored needs-review operation after the dialog is reopened', async () => {
+        adminService.previewSubscriptionGift.mockReturnValueOnce(of({
+            ...preview,
+            resumableOperation: {
+                operationId: '123e4567-e89b-42d3-a456-426614174099',
+                months: 4,
+                reason: 'Recovered service credit',
+                notifyUser: false,
+                previewVersion: 'pv1_recoveredabcdefghijklmnopqrst',
+                role: 'pro',
+                cadence: 'yearly',
+                status: 'needs_review',
+                previousAccessEnd: '2026-09-30T00:00:00.000Z',
+                newAccessEnd: '2027-01-31T00:00:00.000Z',
+                cancelAtPeriodEnd: true,
+                notificationStatus: 'not_requested',
+            },
+        }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(component.months()).toBe(4);
+        expect(component.reason()).toBe('Recovered service credit');
+        expect(component.notifyUser()).toBe(false);
+        expect(component.requiresReview()).toBe(true);
+        expect(component.requestLockedForRetry()).toBe(true);
+        expect(component.canGrant()).toBe(true);
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Operation to reconcile');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Stored target end');
+
+        await component.grant();
+
+        expect(adminService.grantSubscriptionGift).toHaveBeenCalledWith({
+            uid: user.uid,
+            months: 4,
+            reason: 'Recovered service credit',
+            notifyUser: false,
+            operationId: '123e4567-e89b-42d3-a456-426614174099',
+            previewVersion: 'pv1_recoveredabcdefghijklmnopqrst',
+        });
     });
 
     it('reuses the same operation after an uncertain callable response', async () => {

@@ -79,7 +79,11 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
     readonly identityLabel = computed(() => this.data.user.displayName?.trim() || this.data.user.email);
     readonly reasonLength = computed(() => this.reason().trim().length);
     readonly reasonValid = computed(() => this.reasonLength() >= 3 && this.reasonLength() <= 500);
-    readonly requiresReview = computed(() => this.outcome()?.status === 'needs_review');
+    readonly resumableOperation = computed(() => this.preview()?.resumableOperation ?? null);
+    readonly requiresReview = computed(() => (
+        this.outcome()?.status === 'needs_review'
+        || this.resumableOperation()?.status === 'needs_review'
+    ));
     readonly closeResult = computed<AdminSubscriptionGiftDialogResult | null>(() => {
         const outcome = this.outcome();
         return outcome?.status === 'succeeded'
@@ -94,11 +98,12 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
         !!this.preview() && this.previewedMonths() === this.months()
     ));
     readonly canGrant = computed(() => (
-        this.hasFreshPreview()
-        && this.reasonValid()
-        && !this.previewLoading()
+        !this.previewLoading()
         && !this.submitting()
-        && !this.requiresReview()
+        && (
+            this.requestLockedForRetry()
+            || (this.hasFreshPreview() && this.reasonValid() && !this.requiresReview())
+        )
     ));
 
     ngOnInit(): void {
@@ -159,7 +164,23 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
                 return;
             }
             this.preview.set(preview);
-            this.previewedMonths.set(requestedMonths);
+            const resumableOperation = preview.resumableOperation;
+            if (resumableOperation) {
+                this.months.set(resumableOperation.months);
+                this.reason.set(resumableOperation.reason);
+                this.notifyUser.set(resumableOperation.notifyUser);
+                this.previewedMonths.set(null);
+                this.retryRequest.set({
+                    uid: this.data.user.uid,
+                    months: resumableOperation.months,
+                    reason: resumableOperation.reason,
+                    notifyUser: resumableOperation.notifyUser,
+                    operationId: resumableOperation.operationId,
+                    previewVersion: resumableOperation.previewVersion,
+                });
+            } else {
+                this.previewedMonths.set(requestedMonths);
+            }
         } catch (error) {
             if (!this.destroyed && requestSequence === this.previewRequestSequence) {
                 this.error.set(this.errorMessage(error, 'Could not preview this subscription gift.'));
