@@ -295,21 +295,21 @@ describe('service-connection-meta', () => {
   });
 
   it('does not create Health lifecycle state for providers outside this integration', async () => {
-    await expect(markServiceConnected('user-1', ServiceNames.GarminAPI)).resolves.toBe(true);
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
 
     expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
   });
 
-  it('mirrors staged Garmin connection and terminal-auth transitions to Health state', async () => {
-    const stagedUserID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+  it('mirrors Garmin connection and terminal-auth transitions to Health state for every user', async () => {
+    const garminUserID = 'garmin-health-user';
 
     await expect(markServiceConnected(
-      stagedUserID,
+      garminUserID,
       ServiceNames.GarminAPI,
       'garmin-account',
     )).resolves.toBe(true);
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
-      stagedUserID,
+      garminUserID,
       'GarminAPI',
       { status: 'ready', lastErrorCode: null },
       expect.any(Number),
@@ -319,14 +319,14 @@ describe('service-connection-meta', () => {
 
     hoisted.updateHealthSyncState.mockClear();
     await expect(markServiceReconnectRequired(
-      stagedUserID,
+      garminUserID,
       ServiceNames.GarminAPI,
       'invalid_grant',
       'Reconnect required',
       123,
     )).resolves.toBe(true);
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
-      stagedUserID,
+      garminUserID,
       'GarminAPI',
       {
         status: 'reconnect_required',

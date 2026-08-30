@@ -9,7 +9,6 @@ import {
   HealthProvider,
   HealthSyncStatus,
 } from '../../shared/health';
-import { isGarminHealthSyncUserAllowed } from './garmin/health-rollout';
 import {
   isServiceUnavailableForSyncConnection,
   isReconnectRequiredServiceConnection,
@@ -108,14 +107,9 @@ function getHealthLifecycleProjectionClaim(
   };
 }
 
-function healthProviderForService(
-  userID: string,
-  serviceName: ServiceNames,
-): HealthProvider | null {
+function healthProviderForService(serviceName: ServiceNames): HealthProvider | null {
   if (serviceName === ServiceNames.COROSAPI) return HEALTH_PROVIDERS.COROSAPI;
-  if (serviceName === ServiceNames.GarminAPI && isGarminHealthSyncUserAllowed(userID)) {
-    return HEALTH_PROVIDERS.GarminAPI;
-  }
+  if (serviceName === ServiceNames.GarminAPI) return HEALTH_PROVIDERS.GarminAPI;
   if (serviceName === ServiceNames.SuuntoApp) {
     return HEALTH_PROVIDERS.SuuntoApp;
   }
@@ -285,7 +279,7 @@ export async function retryPendingHealthLifecycleProjection(
   if (meta?.healthLifecycleProjectionPending !== true) return false;
 
   const claim = getHealthLifecycleProjectionClaim(meta);
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   if (!healthProvider) {
     await clearHealthLifecycleProjectionMarker(userID, serviceName, claim);
     return false;
@@ -946,7 +940,7 @@ export async function markServiceReconnectRequired(
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const guardsConnectionGeneration = Object.prototype.hasOwnProperty.call(
     options,
@@ -1201,7 +1195,7 @@ export async function markServiceConnected(
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
 ): Promise<boolean> {
   const normalizedProviderUserId = `${providerUserId || ''}`.trim();
-  const healthProvider = healthProviderForService(userID, serviceName);
+  const healthProvider = healthProviderForService(serviceName);
   const connectionStateGeneration = crypto.randomUUID();
   const nowMs = Date.now();
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {

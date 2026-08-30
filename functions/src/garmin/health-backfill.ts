@@ -39,7 +39,7 @@ import {
   refreshAndCaptureGarminHealthGuards,
   verifyLegacyGarminProviderIdentity,
 } from './health-sync';
-import { isGarminHealthSyncEnabled, isGarminHealthSyncUserAllowed } from './health-rollout';
+import { isGarminHealthSyncEnabled } from './health-flags';
 import {
   advanceGarminHealthBackfillCursor,
   clipGarminHealthBackfillCursorToMinimum,
@@ -595,12 +595,12 @@ export async function processGarminHealthBackfillQueueItem(
     );
   }
 
-  if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(queueItem.userID)) {
+  if (!isGarminHealthSyncEnabled()) {
     return markBackfillSkipped(
       queueItem,
       parsed.total,
-      'user_not_allowed',
-      'GARMIN_HEALTH_ROLLOUT',
+      'provider_disabled',
+      'GARMIN_HEALTH_DISABLED',
     );
   }
 
@@ -665,12 +665,12 @@ export async function processGarminHealthBackfillQueueItem(
     if (!(await isCurrentQueueCursor(queueItem, cursor))) {
       return QueueResult.Processed;
     }
-    if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(queueItem.userID)) {
+    if (!isGarminHealthSyncEnabled()) {
       return markBackfillSkipped(
         queueItem,
         parsed.total,
-        'user_not_allowed',
-        'GARMIN_HEALTH_ROLLOUT',
+        'provider_disabled',
+        'GARMIN_HEALTH_DISABLED',
       );
     }
     let currentGuards: GarminHealthWriteLifecycleGuards;

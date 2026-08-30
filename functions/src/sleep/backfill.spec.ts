@@ -35,7 +35,6 @@ const hoisted = vi.hoisted(() => ({
     getActiveCOROSTokenSnapshot: vi.fn(),
     isSuuntoHealthSyncEnabled: vi.fn(),
     isGarminHealthSyncEnabled: vi.fn(),
-    isGarminHealthSyncUserAllowed: vi.fn(),
     captureGarminHealthLifecycleGuards: vi.fn(),
     garminTokenMatchesLifecycleGuard: vi.fn(),
     suuntoTokenLimit: vi.fn(),
@@ -225,9 +224,8 @@ vi.mock('../suunto/health-flags', () => ({
     isSuuntoHealthSyncEnabled: hoisted.isSuuntoHealthSyncEnabled,
 }));
 
-vi.mock('../garmin/health-rollout', () => ({
+vi.mock('../garmin/health-flags', () => ({
     isGarminHealthSyncEnabled: hoisted.isGarminHealthSyncEnabled,
-    isGarminHealthSyncUserAllowed: hoisted.isGarminHealthSyncUserAllowed,
 }));
 
 vi.mock('../garmin/health-lifecycle', () => ({
@@ -819,7 +817,6 @@ describe('backfillGarminAPIHealth', () => {
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
         hoisted.isGarminHealthSyncEnabled.mockReturnValue(true);
-        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(false);
         hoisted.captureGarminHealthLifecycleGuards.mockResolvedValue(garminLifecycleGuards());
         hoisted.garminTokenMatchesLifecycleGuard.mockReturnValue(true);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
@@ -831,8 +828,9 @@ describe('backfillGarminAPIHealth', () => {
         vi.useRealTimers();
     });
 
-    it('requests Garmin sleep backfill windows from the shared start date to now', async () => {
+    it('keeps Garmin Sleep history available when the Health rollback switch is disabled', async () => {
         seedGarminToken();
+        hoisted.isGarminHealthSyncEnabled.mockReturnValue(false);
         const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
 
         const result = await backfillGarminAPIHealth(createRequest());
@@ -877,9 +875,8 @@ describe('backfillGarminAPIHealth', () => {
         }, nowMs);
     });
 
-    it('queues one durable staged Health cursor alongside the existing Sleep requests', async () => {
+    it('queues one durable Health cursor alongside the existing Sleep requests', async () => {
         seedGarminToken();
-        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(true);
         const expectedSleepWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
         const expectedHealthWindows = countGarminHealthBackfillRequests(startMs, nowMs);
 
@@ -1130,13 +1127,15 @@ describe('backfillGarminAPIHealth', () => {
             lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: 1,
             nextBackfillAllowedAtMs: null,
+            healthBackfillStatus: 'failed',
+            healthBackfillWindowsCompleted: 0,
+            healthBackfillWindowsTotal: countGarminHealthBackfillRequests(startMs, nowMs),
             lastError: 'garmin unavailable',
         }, nowMs, garminLifecycleGuards());
     });
 
     it('fences a failed Health queue admission to the initiating Garmin lifecycle', async () => {
         seedGarminToken();
-        hoisted.isGarminHealthSyncUserAllowed.mockReturnValue(true);
         hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(new Error('lifecycle changed'));
 
         await expect(backfillGarminAPIHealth(createRequest()))
@@ -1305,6 +1304,7 @@ describe('backfillGarminAPIHealth', () => {
 
     it('uses a remembered Garmin provider min start to avoid requesting older windows', async () => {
         seedGarminToken();
+        hoisted.isGarminHealthSyncEnabled.mockReturnValue(false);
         const rememberedStartMs = Date.parse('2026-03-15T08:30:01.000Z');
         hoisted.stateData = {
             providerMinBackfillStartMs: rememberedStartMs,
@@ -1342,6 +1342,7 @@ describe('backfillGarminAPIHealth', () => {
 
     it('ignores a remembered Garmin provider min start from a different provider user', async () => {
         seedGarminToken();
+        hoisted.isGarminHealthSyncEnabled.mockReturnValue(false);
         const rememberedStartMs = Date.parse('2026-03-15T08:30:01.000Z');
         hoisted.stateData = {
             providerMinBackfillStartMs: rememberedStartMs,

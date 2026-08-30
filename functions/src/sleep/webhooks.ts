@@ -23,7 +23,7 @@ import {
     isGarminHealthSummaryType,
     type GarminSupportedSummaryType,
 } from '../garmin/health-summary-types';
-import { isGarminHealthSyncEnabled } from '../garmin/health-rollout';
+import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {

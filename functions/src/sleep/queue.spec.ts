@@ -310,11 +310,8 @@ vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
         hoisted.getSuuntoWebhookWriteLifecycleAuthorityDigest,
 }));
 
-vi.mock('../garmin/health-rollout', () => ({
+vi.mock('../garmin/health-flags', () => ({
     isGarminHealthSyncEnabled: vi.fn(() => true),
-    isGarminHealthSyncUserAllowed: vi.fn((userID: string | null | undefined) => (
-        typeof userID === 'string' && hoisted.allowedUserIDs.includes(userID)
-    )),
 }));
 
 vi.mock('../garmin/health-lifecycle', () => ({
@@ -605,12 +602,12 @@ describe('sleep queue', () => {
         }
     });
 
-    it('captures lifecycle fences and uses the dedicated task for Garmin Health backfill', async () => {
+    it('captures lifecycle fences and uses the dedicated task for production-wide Garmin Health backfill', async () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-05-06T05:30:00.000Z'));
         try {
             const tokenRef = {
-                parent: { parent: { id: 'test-user-uid' } },
+                parent: { parent: { id: 'production-garmin-user' } },
                 get: vi.fn().mockResolvedValue({
                     exists: true,
                     data: () => ({
@@ -674,7 +671,7 @@ describe('sleep queue', () => {
             await addSleepSyncQueueItem({
                 type: 'garmin_health_backfill',
                 provider: 'GarminAPI',
-                userID: 'test-user-uid',
+                userID: 'production-garmin-user',
                 providerUserId: 'garmin-user-1',
                 rangeStartMs,
                 rangeEndMs,
@@ -683,7 +680,7 @@ describe('sleep queue', () => {
                 garminHealthBackfillNextStartMs: rangeStartMs,
                 garminHealthBackfillWindowsCompleted: 0,
                 garminHealthBackfillWindowsTotal: 10,
-                dedupeKey: 'garmin-health-backfill:test-user-uid',
+                dedupeKey: 'garmin-health-backfill:production-garmin-user',
                 dispatchImmediately: true,
             });
 

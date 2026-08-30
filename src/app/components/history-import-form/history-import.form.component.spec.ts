@@ -266,7 +266,7 @@ describe('HistoryImportFormComponent', () => {
         expect(mockUserService.backfillSuuntoSleepForCurrentUser).not.toHaveBeenCalled();
 
         mockUserService.getSuuntoHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(false);
-        component.retryHealthRolloutAvailability();
+        component.retryHealthAvailability();
         expect(component.healthAvailabilityState()).toBe('loading');
         await fixture.whenStable();
         fixture.detectChanges();
@@ -470,7 +470,7 @@ describe('HistoryImportFormComponent', () => {
         expect(component.pendingSleepBackfillResult()?.queued).toBe(43);
     });
 
-    it('requests Garmin Sleep and Health history when the staged rollout is available', async () => {
+    it('requests Garmin Sleep and Health history when Health is available', async () => {
         await fixture.whenStable();
         mockUserService.getGarminHealthSyncAvailabilityForCurrentUser.mockResolvedValueOnce(true);
         mockUserService.backfillGarminHealthForCurrentUser.mockResolvedValueOnce({

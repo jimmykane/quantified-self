@@ -860,7 +860,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
-    expect(serviceConnectionsSection?.content).toContain('Accounts outside that rollout keep **Import Sleep History**');
+    expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep History**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');

@@ -128,10 +128,7 @@ import {
     isGarminSupportedSummaryType,
     type GarminSupportedSummaryType,
 } from '../garmin/health-summary-types';
-import {
-    isGarminHealthSyncEnabled,
-    isGarminHealthSyncUserAllowed,
-} from '../garmin/health-rollout';
+import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import {
     countGarminHealthBackfillRequests,
     GARMIN_HEALTH_BACKFILL_SECOND_MS,
@@ -724,7 +721,7 @@ async function prepareGarminHealthQueueAdmission(
 ): Promise<AddSleepSyncQueueItemInput> {
     if (!isGarminHealthSummaryType(input.garminSummaryType)
         && input.type !== 'garmin_health_backfill') return { ...input, userID };
-    if (!isGarminHealthSyncEnabled() || !isGarminHealthSyncUserAllowed(userID)) {
+    if (!isGarminHealthSyncEnabled()) {
         throw new ProviderQueueUserNotConnectedError(
             ServiceNames.GarminAPI,
             input.providerUserId,
@@ -1987,8 +1984,7 @@ async function fanOutGarminPingBatch(
 }
 
 function isQueueUserAllowed(queueItem: SleepSyncQueueItemInterface, userID: string): boolean {
-    if (isSuuntoHealthQueueItem(queueItem)) return true;
-    if (isGarminHealthQueueItem(queueItem)) return isGarminHealthSyncUserAllowed(userID);
+    if (isSuuntoHealthQueueItem(queueItem) || isGarminHealthQueueItem(queueItem)) return true;
     return isSleepSyncUserAllowed(userID);
 }
 

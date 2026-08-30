@@ -66,7 +66,7 @@ vi.mock('./provider-flags', () => ({
     }),
 }));
 
-vi.mock('../garmin/health-rollout', () => ({
+vi.mock('../garmin/health-flags', () => ({
     isGarminHealthSyncEnabled: vi.fn(() => hoisted.garminHealthEnabled),
 }));
 
