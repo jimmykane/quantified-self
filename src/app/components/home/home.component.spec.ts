@@ -172,36 +172,49 @@ describe('HomeComponent', () => {
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
     });
 
-    it('should surface KPI and derived metric charts in the performance section', () => {
+    it('should surface a concrete Training snapshot and supporting analysis capabilities', () => {
         const text = fixture.nativeElement.textContent as string;
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
+        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-card');
+        const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
+            '.training-preview-card app-metric-indicator'
+        );
         const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
         const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
 
-        expect(performanceCards.length).toBe(6);
-        expect(metricChips.length).toBe(27);
-        expect(metricChipInfoIcons.length).toBe(27);
+        expect(performanceCards.length).toBe(4);
+        expect(trainingPreview).toBeTruthy();
+        expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreviewIndicators.length).toBe(3);
+        expect(metricChips.length).toBe(12);
+        expect(metricChipInfoIcons.length).toBe(12);
         expect(text).toContain('Connect Your Services');
-        expect(text).toContain('Understand Your Performance');
-        expect(text).toContain('Reliable and instant analytics');
-        expect(text).toContain('KPI Lane for Fast Decisions');
-        expect(text).toContain('Load Status');
+        expect(text).toContain('Training Load, Readiness, and Recovery');
+        expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
+        expect(text).toContain('Illustrative data');
+        expect(text).toContain('Your Training Snapshot');
+        expect(text).toContain('Balanced');
+        expect(text).toContain('TSS-only load model');
+        expect(text).toContain('Readiness today');
+        expect(text).toContain('Load + recorded sleep signals');
+        expect(text).toContain('Training time');
+        expect(text).toContain('18h 42m');
+        expect(text).toContain('Workouts');
         expect(text).toContain('ACWR');
-        expect(text).toContain('Ramp Rate');
-        expect(text).toContain('Monotony / Strain');
-        expect(text).toContain('Form Now');
-        expect(text).toContain('Fitness Trend');
-        expect(text).toContain('Fatigue Trend');
-        expect(text).toContain('Recovery Debt');
-        expect(text).toContain('Form +7d');
+        expect(text).toContain('Monotony');
+        expect(text).toContain('Strain');
+        expect(text).toContain('Form now');
+        expect(text).toContain('Form +7 days');
         expect(text).toContain('Fitness (CTL)');
         expect(text).toContain('Fatigue (ATL)');
-        expect(text).toContain('Training Balance');
-        expect(text).toContain('Easy %');
-        expect(text).toContain('Hard %');
-        expect(text).toContain('Efficiency Δ (4w)');
+        expect(text).toContain('Recovery debt');
+        expect(text).toContain('Recovery left');
+        expect(text).toContain('Intensity balance');
+        expect(text).toContain('Efficiency');
+        expect(text).toContain('Explore Training');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
         expect(text).toContain('Recovery');
         expect(text).toContain('Form (TSS)');
         expect(text).toContain('Freshness Forecast');
@@ -211,7 +224,8 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
         expect(text).not.toContain('Form Model (CTL / ATL / TSB)');
-        expect(text).toContain('Dashboard Manager by Category');
+        expect(text).toContain('Charts Behind Every Signal');
+        expect(text).toContain('Build the Dashboard You Need');
         expect(text).toContain('Manual');
         expect(text).toContain('Presets');
         expect(text).toContain('Curated');
@@ -219,11 +233,14 @@ describe('HomeComponent', () => {
         expect(text).toContain('Custom');
         expect(text).toContain('Map');
         expect(text).toContain('clustered heatmaps');
+        expect(text).toContain('Analyze Every Workout');
         expect(text).toContain('Explore Activity Calendar');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/activity-calendar"], a[ng-reflect-router-link="/features/activity-calendar"]')).toBeTruthy();
         expect(text).toContain('Read-only MCP Server');
         expect(text).toContain('activity details and charts, route summaries, and separate location access you approve');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/mcp-server"], a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
+        expect(text).not.toContain('KPI Lane for Fast Decisions');
+        expect(text).not.toContain('Connected Training Data');
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

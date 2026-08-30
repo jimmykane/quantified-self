@@ -12,6 +12,7 @@ import {
 } from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
+import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
 const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
@@ -32,6 +33,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     MatCardModule,
     MatIconModule,
     MatTooltipModule,
+    MetricIndicatorComponent,
     TypedPromptRotatorComponent,
   ],
   providers: [

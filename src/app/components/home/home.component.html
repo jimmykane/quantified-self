@@ -136,158 +136,85 @@
 
   <!-- 3. Key Features Grid -->
   <section class="features-section public-below-fold">
-    <h2 class="section-title animate-on-scroll">Understand Your Performance</h2>
+    <h2 class="section-title animate-on-scroll">Training Load, Readiness, and Recovery</h2>
     <p class="section-subtitle animate-on-scroll">
-      Reliable and instant analytics for training load, readiness, and execution. KPI and derived charts are built in for
-      decision-ready coaching context.
+      See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency—then explore the charts
+      behind every signal.
     </p>
 
-    <div class="features-grid">
-      <!-- Feature 1: KPI Lane -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>speed</mat-icon>
+    <mat-card class="training-preview-card glass-panel animate-on-scroll" appearance="outlined">
+      <div class="training-preview-content" data-nosnippet>
+        <header class="training-preview-header">
+          <div>
+            <span class="training-preview-eyebrow">Illustrative data</span>
+            <h3>Your Training Snapshot</h3>
+            <p>Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy
+              used by Training.</p>
           </div>
-          <mat-card-title>KPI Lane for Fast Decisions</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Compact KPI rows keep key load and readiness indicators visible above your main dashboard grid.</p>
-          <div class="metric-chip-list" aria-label="KPI metrics">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current training state from Form, ramp, fitness, and fatigue."
-              matTooltipPosition="above">
-              Load Status
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Acute 7-day load versus chronic 28-day load to spot risk from sudden load spikes."
-              matTooltipPosition="above">
-              ACWR
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Change in fitness load over 7 days, calculated from CTL(today) minus CTL(7 days ago)."
-              matTooltipPosition="above">
-              Ramp Rate
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Monotony is weekly load mean divided by weekly load variability; strain combines load and monotony."
-              matTooltipPosition="above">
-              Monotony / Strain
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current readiness based on same-day TSB from your derived load model."
-              matTooltipPosition="above">
-              Form Now
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recent CTL direction from your derived Form model."
-              matTooltipPosition="above">
-              Fitness Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recent ATL direction from your derived Form model."
-              matTooltipPosition="above">
-              Fatigue Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Estimated zero-load days until your current Form returns to neutral."
-              matTooltipPosition="above">
-              Recovery Debt
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Projected readiness in 7 days assuming zero additional training load."
-              matTooltipPosition="above">
-              Form +7d
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current 42-day chronic training load from your derived Form model."
-              matTooltipPosition="above">
-              Fitness (CTL)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current 7-day acute training load from your derived Form model."
-              matTooltipPosition="above">
-              Fatigue (ATL)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Latest weekly Easy/Moderate/Hard intensity balance."
-              matTooltipPosition="above">
-              Training Balance
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Percentage of weekly training load that falls in easy intensity ranges."
-              matTooltipPosition="above">
-              Easy %
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Percentage of weekly training load that falls in hard intensity ranges."
-              matTooltipPosition="above">
-              Hard %
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current efficiency against your previous 4-week baseline, shown as absolute and percent delta."
-              matTooltipPosition="above">
-              Efficiency Δ (4w)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
-        </mat-card-content>
-      </mat-card>
+          <a mat-stroked-button routerLink="/features/training-analysis">Explore Training</a>
+        </header>
 
-      <!-- Feature 2: Derived Curated Charts -->
+        <div class="training-preview-overview" aria-label="Illustrative current Training overview">
+          <section class="training-preview-state">
+            <span>State</span>
+            <strong>Balanced</strong>
+            <small>TSS-only load model</small>
+          </section>
+          <section>
+            <span>Readiness today</span>
+            <div class="training-preview-value-row"><strong>78</strong><small>Ready</small></div>
+            <app-metric-indicator label="Illustrative readiness" [value]="78" tone="ready"
+              [showThresholds]="true"></app-metric-indicator>
+            <small>Load + recorded sleep signals</small>
+          </section>
+          <section>
+            <span>Training time</span>
+            <strong class="training-preview-number">18h 42m</strong>
+            <app-metric-indicator variant="deviation" label="Illustrative training time versus usual" [value]="12"
+              [compact]="true"></app-metric-indicator>
+            <small>+12% versus usual 28 days</small>
+          </section>
+          <section>
+            <span>Workouts</span>
+            <strong class="training-preview-number">14</strong>
+            <app-metric-indicator variant="deviation" label="Illustrative workouts versus usual" [value]="17"
+              [compact]="true"></app-metric-indicator>
+            <small>2 more than usual</small>
+          </section>
+        </div>
+
+        <dl class="training-preview-load-grid" aria-label="Illustrative Training load metrics">
+          <div><dt>Fitness (CTL)</dt><dd>62</dd><small>42-day load</small></div>
+          <div><dt>Fatigue (ATL)</dt><dd>54</dd><small>7-day load</small></div>
+          <div><dt>Form now</dt><dd>+8</dd><small>Fitness − fatigue</small></div>
+          <div><dt>Ramp</dt><dd>+1.4</dd><small>7-day fitness change</small></div>
+          <div><dt>ACWR</dt><dd>1.03</dd><small>Acute ÷ chronic load</small></div>
+          <div><dt>Monotony</dt><dd>1.42</dd><small>Weekly load variability</small></div>
+          <div><dt>Strain</dt><dd>684</dd><small>Load × monotony</small></div>
+          <div><dt>Form +7 days</dt><dd>+15</dd><small>No-additional-load scenario</small></div>
+        </dl>
+
+        <dl class="training-preview-context-grid" aria-label="Illustrative Training context">
+          <div><dt>Recovery debt</dt><dd>2 days</dd><small>Estimated to neutral Form</small></div>
+          <div><dt>Recovery left</dt><dd>8h 20m</dd><small>Imported estimate</small></div>
+          <div><dt>Intensity balance</dt><dd>72% easy · 14% hard</dd><small>Latest eligible week</small></div>
+          <div><dt>Efficiency</dt><dd>+3.2%</dd><small>Versus previous 4 weeks</small></div>
+        </dl>
+      </div>
+    </mat-card>
+
+    <div class="features-grid">
+      <!-- Feature 1: Derived Curated Charts -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>query_stats</mat-icon>
           </div>
-          <mat-card-title>Derived Curated Charts</mat-card-title>
+          <mat-card-title>Charts Behind Every Signal</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Use recovery, readiness, execution, and sleep views computed from your stored training history.</p>
+          <p>Open recovery, Form, freshness, intensity, efficiency, and sleep views computed from your stored training
+            history.</p>
           <div class="metric-chip-list" aria-label="Derived curated charts">
             <span
               class="metric-chip"
@@ -347,7 +274,7 @@
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>dashboard_customize</mat-icon>
           </div>
-          <mat-card-title>Dashboard Manager by Category</mat-card-title>
+          <mat-card-title>Build the Dashboard You Need</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <p>Build manually or start from presets across Curated, KPI, Custom, and Map tiles. Tune tile filters, map style, and clustered heatmaps per tile.</p>
@@ -413,23 +340,10 @@
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>layers</mat-icon>
           </div>
-          <mat-card-title>Deep Analysis Toolkit</mat-card-title>
+          <mat-card-title>Analyze Every Workout</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <p>Explore 7 chart types, heatmaps, clustering, and route-level analysis with gradient and speed overlays across 12 map styles.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Feature 5: Connected Training Data -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>insights</mat-icon>
-          </div>
-          <mat-card-title>Connected Training Data</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Import and sync across Garmin, Suunto, COROS, and Wahoo, then analyze your complete activity dataset from one dashboard.</p>
         </mat-card-content>
       </mat-card>
 
