@@ -202,17 +202,15 @@ describe('HomeComponent', () => {
         const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
             '.training-preview-card app-metric-indicator'
         );
-        const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
-        const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
         const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
+        const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
 
         expect(performanceCards.length).toBe(4);
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
         expect(trainingPreviewIndicators.length).toBe(3);
-        expect(metricChips.length).toBe(6);
-        expect(metricChipInfoIcons.length).toBe(6);
         expect(signalPreviews.length).toBe(4);
+        expect(deferredPreviewPlaceholders.length).toBe(2);
         expect(text).toContain('Connect Your Services');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
@@ -248,14 +246,17 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('Form Model (CTL / ATL / TSB)');
         expect(text).toContain('Charts Behind Every Signal');
         expect(text).toContain('Build the Dashboard You Need');
-        expect(text).toContain('Manual');
-        expect(text).toContain('Presets');
+        expect(text).toContain('Start from a preset or arrange');
         expect(text).toContain('Curated');
         expect(text).toContain('KPI');
         expect(text).toContain('Custom');
         expect(text).toContain('Map');
-        expect(text).toContain('clustered heatmaps');
+        expect(text).toContain('clustered-heatmap controls');
         expect(text).toContain('Analyze Every Workout');
+        expect(text).toContain('heart rate, power, pace, altitude');
+        expect(text).toContain('7 chart types');
+        expect(text).toContain('gradient or speed overlays');
+        expect(text).toContain('12 map styles');
         expect(text).toContain('Explore Activity Calendar');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/activity-calendar"], a[ng-reflect-router-link="/features/activity-calendar"]')).toBeTruthy();
         expect(text).toContain('Read-only MCP Server');

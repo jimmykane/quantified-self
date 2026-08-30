@@ -11,6 +11,7 @@
           }
         </div>
 
+        @if (!previewMode) {
         <div class="event-chart-panel__actions">
         @if (showResetChartState) {
         <span [matTooltip]="resetChartStateTooltip">
@@ -45,6 +46,7 @@
         </button>
         }
         </div>
+        }
       </div>
 
       @if (seriesLegendItems.length > 0) {

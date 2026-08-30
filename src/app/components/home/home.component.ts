@@ -15,6 +15,8 @@ import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.component';
+import { HomeDashboardPreviewComponent } from './home-dashboard-preview.component';
+import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
 
 const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
   showDelay: 0,
@@ -34,7 +36,9 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     MatCardModule,
     MatIconModule,
     MatTooltipModule,
+    HomeDashboardPreviewComponent,
     HomeSignalChartsPreviewComponent,
+    HomeWorkoutPreviewComponent,
     MetricIndicatorComponent,
     TypedPromptRotatorComponent,
   ],

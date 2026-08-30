@@ -1,0 +1,113 @@
+:host {
+  display: block;
+  margin-top: 1rem;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dashboard-preview {
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 18px;
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.dashboard-preview__header,
+.dashboard-preview__types {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-preview__header {
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  > div {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  strong {
+    font-size: 0.95rem;
+    line-height: 1.1;
+  }
+}
+
+.dashboard-preview__eyebrow {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dashboard-preview__arrange {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.72rem;
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+}
+
+.dashboard-preview__tiles {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.dashboard-preview__tile {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-lowest);
+}
+
+.dashboard-preview__handle {
+  width: 16px;
+  height: 16px;
+  margin-left: 0.3rem;
+  color: var(--mat-sys-outline);
+  font-size: 16px;
+}
+
+.dashboard-preview__types {
+  justify-content: space-around;
+  gap: 0.35rem;
+  padding: 0.65rem 0.5rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface-variant);
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.67rem;
+    font-weight: 550;
+  }
+
+  mat-icon {
+    width: 15px;
+    height: 15px;
+    color: var(--mat-sys-primary);
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-preview__types span {
+    font-size: 0.62rem;
+  }
+}

@@ -228,6 +228,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
   @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
+  @Input() previewMode = false;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
   @Output() previewRangeChange = new EventEmitter<EventChartRange | null>();
@@ -395,7 +396,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get canToggleFullscreen(): boolean {
-    if (!this.panel || this.showZoomBar) {
+    if (this.previewMode || !this.panel || this.showZoomBar) {
       return false;
     }
 
@@ -422,7 +423,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get canSelectOverlay(): boolean {
-    return !!this.panel && !this.showZoomBar && this.overlayOptions.length > 0;
+    return !this.previewMode && !!this.panel && !this.showZoomBar && this.overlayOptions.length > 0;
   }
 
   public get overlayTooltip(): string {
@@ -489,11 +490,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
-    this.bindFullscreenEvents();
-    this.syncFullscreenState();
-    this.bindWheelPassThrough();
-    this.bindNonPrimaryMouseButtonGuard();
-    this.bindChartEvents();
+    if (!this.previewMode) {
+      this.bindFullscreenEvents();
+      this.syncFullscreenState();
+      this.bindWheelPassThrough();
+      this.bindNonPrimaryMouseButtonGuard();
+      this.bindChartEvents();
+    }
     this.queueChartRefresh('ngAfterViewInit');
   }
 
@@ -597,9 +600,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartRefreshSequence = this.chartRefreshSequence
       .then(async () => {
         await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
-        this.bindChartEvents();
+        if (!this.previewMode) {
+          this.bindChartEvents();
+        }
         this.refreshChart();
-        this.syncViewportObserver();
+        if (!this.previewMode) {
+          this.syncViewportObserver();
+        }
       })
       .catch((error) => {
         this.logger.error('[EventCardChartPanelComponent] Failed to queue chart refresh', {
@@ -764,6 +771,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         emphasis: {
           disabled: true,
         },
+        silent: this.previewMode,
         dimensions: ['x', 'y'],
         data: this.getSeriesLineData(series),
       });
@@ -1270,7 +1278,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private bindChartEvents(): void {
     const chart = this.chartHost.getChart();
-    if (!chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
+    if (this.previewMode || !chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
       return;
     }
 
@@ -2824,7 +2832,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private isInteractionArmed(): boolean {
-    return !this.isMobile || this.mobileInteractionsArmed;
+    return !this.previewMode && (!this.isMobile || this.mobileInteractionsArmed);
   }
 
   private bindMobileInteractionArm(chart: EChartsType): void {

@@ -1,0 +1,35 @@
+<section class="dashboard-preview" role="img"
+  aria-label="Illustrative dashboard preview with Fitness, Form, and Easy intensity KPI tiles">
+  <header class="dashboard-preview__header">
+    <div>
+      <span class="dashboard-preview__eyebrow">Illustrative dashboard</span>
+      <strong>Training preset</strong>
+    </div>
+    <span class="dashboard-preview__arrange"><mat-icon>drag_indicator</mat-icon>Arrange</span>
+  </header>
+
+  <div class="dashboard-preview__tiles" inert aria-hidden="true" data-nosnippet>
+    <article class="dashboard-preview__tile">
+      <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
+      <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="fitnessChartType"
+        [fitnessCtl]="fitnessCtl"></app-kpi-chart>
+    </article>
+    <article class="dashboard-preview__tile">
+      <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
+      <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="formChartType"
+        [formNow]="formNow"></app-kpi-chart>
+    </article>
+    <article class="dashboard-preview__tile">
+      <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
+      <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="easyChartType"
+        [easyPercent]="easyPercent"></app-kpi-chart>
+    </article>
+  </div>
+
+  <footer class="dashboard-preview__types" aria-label="Available dashboard tile categories">
+    <span><mat-icon>insights</mat-icon>Curated</span>
+    <span><mat-icon>speed</mat-icon>KPI</span>
+    <span><mat-icon>show_chart</mat-icon>Custom</span>
+    <span><mat-icon>map</mat-icon>Map</span>
+  </footer>
+</section>

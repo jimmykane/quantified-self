@@ -228,57 +228,13 @@
           <mat-card-title>Build the Dashboard You Need</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Build manually or start from presets across Curated, KPI, Custom, and Map tiles. Tune tile filters, map style, and clustered heatmaps per tile.</p>
-          <div class="metric-chip-list" aria-label="Dashboard manager workflows and categories">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Configure tile settings field by field."
-              matTooltipPosition="above">
-              Manual
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Apply quick-start dashboard tile templates."
-              matTooltipPosition="above">
-              Presets
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Fixed derived tiles such as Recovery, Form, Freshness, Intensity, Efficiency, and Sleep."
-              matTooltipPosition="above">
-              Curated
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Compact Today rows grouped as Load, Readiness, and Execution."
-              matTooltipPosition="above">
-              KPI
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Configurable charts with their own date range and activity filters."
-              matTooltipPosition="above">
-              Custom
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Map tile with its own date range, activity filters, map style, markers, and heatmap."
-              matTooltipPosition="above">
-              Map
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
+          <p>Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters;
+            maps add style and clustered-heatmap controls.</p>
+          @defer (on viewport; prefetch on idle) {
+            <app-home-dashboard-preview></app-home-dashboard-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--dashboard" aria-hidden="true"></div>
+          }
           <a mat-stroked-button class="feature-link" routerLink="/features/activity-calendar">
             Explore Activity Calendar
           </a>
@@ -294,7 +250,13 @@
           <mat-card-title>Analyze Every Workout</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Explore 7 chart types, heatmaps, clustering, and route-level analysis with gradient and speed overlays across 12 map styles.</p>
+          <p>Inspect heart rate, power, pace, altitude, and more across 7 chart types. Then examine routes with heatmaps,
+            clustering, gradient or speed overlays, and 12 map styles.</p>
+          @defer (on viewport; prefetch on idle) {
+            <app-home-workout-preview></app-home-workout-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--workout" aria-hidden="true"></div>
+          }
         </mat-card-content>
       </mat-card>
 

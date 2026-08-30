@@ -762,46 +762,25 @@
             }
         }
 
-        .metric-chip-list {
-            margin-top: 1rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
         .feature-link {
             margin-top: 1rem;
         }
 
-        .metric-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            min-height: 2rem;
-            padding: 0.25rem 0.65rem;
-            border-radius: 999px;
+        .home-preview-placeholder {
+            margin-top: 1rem;
             border: 1px solid var(--mat-sys-outline-variant);
-            background: var(--mat-sys-surface-container-low);
-            color: var(--mat-sys-on-surface-variant);
-            font-size: 0.8rem;
-            line-height: 1.2;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            cursor: help;
+            border-radius: 18px;
+            background: var(--mat-sys-surface-container-lowest);
 
-            .metric-chip-info {
-                width: 0.9rem;
-                height: 0.9rem;
-                font-size: 0.9rem;
-                opacity: 0.75;
+            &--dashboard {
+                min-height: 276px;
             }
 
-            &:hover .metric-chip-info,
-            &:focus-visible .metric-chip-info {
-                opacity: 1;
-                color: var(--mat-sys-primary);
+            &--workout {
+                min-height: 285px;
             }
         }
+
     }
 }
 
