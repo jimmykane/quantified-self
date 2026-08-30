@@ -184,6 +184,10 @@ describe('Health and sleep Sports Lib data migration', () => {
         expect(buildHealthSportsLibDataMigrationDecision(first.update)).toEqual({ status: 'unchanged' });
     });
 
+    it('treats a valid series-only Health record with no scalar metrics as unchanged', () => {
+        expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'unchanged' });
+    });
+
     it('builds an idempotent sleep update while retaining all existing session fields', () => {
         const legacy = sleepDocument();
         const first = buildSleepSportsLibDataMigrationDecision(legacy);
@@ -301,7 +305,6 @@ describe('Health and sleep Sports Lib data migration', () => {
                 metrics: { duration: { 'Sleep Duration': Number.NaN } },
             },
         })).toEqual({ status: 'invalid' });
-        expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'invalid' });
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [{}] })).toEqual({ status: 'invalid' });
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [null] })).toEqual({ status: 'invalid' });
     });

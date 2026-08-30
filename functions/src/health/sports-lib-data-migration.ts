@@ -169,11 +169,14 @@ export function parseSportsLibDataMigrationOptions(argv: readonly string[]): Spo
 export function buildHealthSportsLibDataMigrationDecision(value: unknown): SportsLibDataMigrationDecision {
     const metrics = asRecord(value).metrics;
     if (!Array.isArray(metrics)
-        || metrics.length === 0
         || metrics.length > HEALTH_MAX_METRICS_PER_SOURCE_RECORD
         || metrics.some(metric => !metric || typeof metric !== 'object' || Array.isArray(metric))) {
         return { status: 'invalid' };
     }
+    // Series-only Health source records intentionally persist no scalar
+    // metrics. Their sample chunks contain no Sports Lib scalar envelope to
+    // migrate, so they are already unchanged rather than malformed.
+    if (metrics.length === 0) return { status: 'unchanged' };
     try {
         const decoded = metrics.map(metric => decodeHealthMetricSportsLibData(metric as HealthMetricEntry));
         const encoded = decoded.map(encodeHealthMetricSportsLibData);
