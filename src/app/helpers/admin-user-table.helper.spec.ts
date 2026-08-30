@@ -25,6 +25,7 @@ describe('admin user table helper', () => {
         expect(rows[0]).toMatchObject({
             role: 'pro',
             isAdmin: false,
+            isSubscriptionGiftEligible: true,
             subscriptionState: 'scheduled',
             subscriptionLabel: 'Cancel Scheduled',
             subscriptionDetails: expect.stringContaining('Ends'),
@@ -43,5 +44,17 @@ describe('admin user table helper', () => {
 
         expect(rows[0]).toMatchObject({ subscriptionState: 'canceled', subscriptionLabel: 'Canceled' });
         expect(rows[1]).toMatchObject({ subscriptionState: 'never', subscriptionLabel: 'Never Subscribed', isAdmin: true });
+    });
+
+    it('offers subscription gifts only to enabled non-admin Basic or Pro users in an eligible status', () => {
+        const rows = buildAdminUserTableRows([
+            user({ uid: 'basic', customClaims: { stripeRole: 'basic' }, subscription: { status: 'trialing' } }),
+            user({ uid: 'past-due', customClaims: { stripeRole: 'pro' }, subscription: { status: 'past_due' } }),
+            user({ uid: 'free', customClaims: { stripeRole: 'free' }, subscription: { status: 'active' } }),
+            user({ uid: 'admin', customClaims: { stripeRole: 'pro', admin: true }, subscription: { status: 'active' } }),
+            user({ uid: 'disabled', disabled: true, customClaims: { stripeRole: 'pro' }, subscription: { status: 'active' } }),
+        ], 'en-US');
+
+        expect(rows.map(row => row.isSubscriptionGiftEligible)).toEqual([true, false, false, false, false]);
     });
 });

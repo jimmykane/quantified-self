@@ -33,11 +33,14 @@ type StripeInvoicesApi = {
 };
 
 type StripeSubscriptionShape = {
-    discount?: {
-        coupon?: {
-            duration?: unknown;
+    discounts?: Array<string | {
+        deleted?: unknown;
+        source?: {
+            coupon?: string | {
+                duration?: unknown;
+            } | null;
         };
-    } | null;
+    }>;
 };
 
 type StripeSubscriptionsApi = {
@@ -174,10 +177,18 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
 
     try {
         const subscription = await subscriptionsApi.retrieve(subscriptionId, {
-            expand: ['discount.coupon']
+            expand: ['discounts.source.coupon']
         });
-        const couponDuration = subscription.discount?.coupon?.duration;
-        const hasLongRunningDiscount = couponDuration === 'forever' || couponDuration === 'repeating';
+        const hasLongRunningDiscount = (subscription.discounts || []).some(discount => {
+            if (typeof discount === 'string' || discount.deleted === true) {
+                return false;
+            }
+            const coupon = discount.source?.coupon;
+            if (!coupon || typeof coupon === 'string') {
+                return false;
+            }
+            return coupon.duration === 'forever' || coupon.duration === 'repeating';
+        });
         if (hasLongRunningDiscount) {
             return 0;
         }

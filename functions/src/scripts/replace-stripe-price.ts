@@ -189,8 +189,18 @@ function resolveDefaultPriceId(defaultPrice: string | Stripe.Price | null | unde
 }
 
 function buildRecurringCreateParams(recurring: Stripe.Price.Recurring): Stripe.PriceCreateParams.Recurring {
+    const interval: Stripe.PriceCreateParams.Recurring.Interval = recurring.interval === 'day'
+        ? 'day'
+        : recurring.interval === 'week'
+            ? 'week'
+            : recurring.interval === 'month'
+                ? 'month'
+                : recurring.interval === 'year'
+                    ? 'year'
+                    : (() => { throw new Error(`Unsupported recurring interval '${recurring.interval}'.`); })();
+
     const recurringParams: Stripe.PriceCreateParams.Recurring = {
-        interval: recurring.interval,
+        interval,
     };
 
     if (typeof recurring.interval_count === 'number') {
@@ -199,8 +209,10 @@ function buildRecurringCreateParams(recurring: Stripe.Price.Recurring): Stripe.P
     if (typeof recurring.trial_period_days === 'number') {
         recurringParams.trial_period_days = recurring.trial_period_days;
     }
-    if (recurring.usage_type) {
-        recurringParams.usage_type = recurring.usage_type;
+    if (recurring.usage_type === 'licensed') {
+        recurringParams.usage_type = 'licensed';
+    } else if (recurring.usage_type === 'metered') {
+        recurringParams.usage_type = 'metered';
     }
     if (recurring.meter) {
         recurringParams.meter = recurring.meter;

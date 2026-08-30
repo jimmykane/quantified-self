@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -22,6 +23,10 @@ import { AdminService, AdminUser, ListUsersParams } from '../../../services/admi
 import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { ServiceSourceIconComponent } from '../../event-summary/service-source-icon/service-source-icon.component';
+import {
+    AdminSubscriptionGiftDialogComponent,
+    AdminSubscriptionGiftDialogResult,
+} from '../admin-subscription-gift-dialog/admin-subscription-gift-dialog.component';
 
 const ADMIN_USER_SEARCH_DEBOUNCE_MS = 750;
 type AdminServiceFilter = 'garmin' | 'suunto' | 'coros' | 'wahoo' | undefined;
@@ -42,6 +47,7 @@ type AdminServiceSelection = Exclude<AdminServiceFilter, undefined> | 'all';
         MatPaginatorModule,
         MatProgressSpinnerModule,
         MatSelectModule,
+        MatSnackBarModule,
         MatSortModule,
         MatTableModule,
         MatTooltipModule,
@@ -55,6 +61,7 @@ export class AdminUserTableComponent implements OnInit, OnDestroy {
     private readonly adminService = inject(AdminService);
     private readonly impersonationService = inject(AppImpersonationService);
     private readonly dialog = inject(MatDialog);
+    private readonly snackBar = inject(MatSnackBar);
     private readonly logger = inject(LoggerService);
     private readonly locale = inject(LOCALE_ID);
     private readonly searchSubject = new Subject<string>();
@@ -205,6 +212,31 @@ export class AdminUserTableComponent implements OnInit, OnDestroy {
                 email: user.email,
                 displayName: user.displayName,
             }).catch(() => undefined).finally(() => this.loading.set(false));
+        });
+    }
+
+    onGiftSubscriptionTime(user: AdminUser): void {
+        const dialogRef = this.dialog.open<
+            AdminSubscriptionGiftDialogComponent,
+            { user: AdminUser },
+            AdminSubscriptionGiftDialogResult | null
+        >(AdminSubscriptionGiftDialogComponent, {
+            width: '720px',
+            maxWidth: '96vw',
+            maxHeight: '92vh',
+            disableClose: true,
+            data: { user },
+        });
+
+        dialogRef.afterClosed().pipe(takeUntil(this.destroy$)).subscribe(result => {
+            if (!result) {
+                return;
+            }
+            this.fetchUsers();
+            const message = result.response.notificationStatus === 'failed'
+                ? 'Subscription time was granted, but the optional email needs retrying.'
+                : 'Subscription time was granted successfully.';
+            this.snackBar.open(message, undefined, { duration: 5000 });
         });
     }
 }

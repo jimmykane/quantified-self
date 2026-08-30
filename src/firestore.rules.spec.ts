@@ -535,6 +535,39 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Admin Subscription Gifts', () => {
+            const operationPath = `users/${userId}/adminSubscriptionGifts/gift-operation`;
+            const lockPath = `users/${userId}/adminSubscriptionGiftState/lock`;
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(operationPath).set({
+                        status: 'succeeded',
+                        reason: 'private admin reason',
+                    });
+                    await context.firestore().doc(lockPath).set({
+                        status: 'idle',
+                    });
+                });
+            });
+
+            it('denies owners, other users, and unauthenticated clients from reading gift audit state', async () => {
+                await assertFails(testEnv.authenticatedContext(userId).firestore().doc(operationPath).get());
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(operationPath).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(operationPath).get());
+                await assertFails(testEnv.authenticatedContext(userId).firestore().doc(lockPath).get());
+            });
+
+            it('denies every browser mutation of gift operations and locks', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(ownerDb.doc(operationPath).set({ status: 'succeeded' }));
+                await assertFails(ownerDb.doc(operationPath).update({ reason: 'forged' }));
+                await assertFails(ownerDb.doc(operationPath).delete());
+                await assertFails(ownerDb.doc(lockPath).set({ status: 'idle' }));
+                await assertFails(ownerDb.doc(lockPath).delete());
+            });
+        });
+
         describe('Activity sync outbound fingerprints', () => {
             const fingerprintPath = `users/${userId}/activitySyncOutboundFingerprints/exact-v1-private`;
 

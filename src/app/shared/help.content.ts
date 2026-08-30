@@ -639,6 +639,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.
 
+## Complimentary extensions
+
+Support may occasionally add complimentary calendar months to an existing Basic or Pro membership as a thank-you or service credit. The time is added after the later of the current paid period or an existing trial. It postpones the next renewal date, or the final access date if cancellation is already scheduled, without changing the plan, creating a charge or proration, or turning automatic renewal back on.
+
+During gifted time, the subscription page shows **Complimentary extension** instead of an ordinary trial label. The optional notification email states the plan, gifted time, and new access date; internal admin notes are never included.
+
 ## Downgrades and grace period
 
 If you downgrade from a paid plan, the app keeps your access through the current billing period and then applies a **30-day grace period**.

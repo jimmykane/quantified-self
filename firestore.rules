@@ -110,6 +110,17 @@ service cloud.firestore {
          allow read, write: if false;
       }
 
+      // Admin-issued subscription gifts contain private audit reasons,
+      // idempotency state, and per-user operation locks. Browser clients use
+      // App-Check-protected admin callables and never access these directly.
+      match /adminSubscriptionGifts/{operationID} {
+         allow read, write: if false;
+      }
+
+      match /adminSubscriptionGiftState/{stateID} {
+         allow read, write: if false;
+      }
+
       // Short-lived provider-echo fingerprints are server-owned operational
       // receipts and never exposed to browser clients.
       match /activitySyncOutboundFingerprints/{fingerprintID} {

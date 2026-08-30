@@ -47,6 +47,52 @@ describe('AdminService', () => {
         expect(users.users).toEqual(mockUsers);
     });
 
+    it('should preview an admin subscription gift through the typed callable', async () => {
+        const response = {
+            uid: 'user-1',
+            subscriptionId: 'sub_123',
+            role: 'pro',
+            cadence: 'monthly',
+            status: 'active',
+            currentAccessEnd: '2026-09-30T00:00:00.000Z',
+            proposedGiftedEnd: '2026-11-30T00:00:00.000Z',
+            cancelAtPeriodEnd: false,
+            previewVersion: 'pv1_abcdefghijklmnopqrstuvwxyz',
+            recentHistory: [],
+        };
+        functionsServiceMock.call.mockResolvedValue({ data: response });
+
+        await expect(firstValueFrom(service.previewSubscriptionGift({ uid: 'user-1', months: 2 })))
+            .resolves.toEqual(response);
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('previewAdminSubscriptionGift', {
+            uid: 'user-1',
+            months: 2,
+        });
+    });
+
+    it('should grant an admin subscription gift through the typed callable', async () => {
+        const request = {
+            uid: 'user-1',
+            months: 2,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId: '123e4567-e89b-42d3-a456-426614174000',
+            previewVersion: 'pv1_abcdefghijklmnopqrstuvwxyz',
+        };
+        const response = {
+            operationId: request.operationId,
+            status: 'succeeded',
+            previousAccessEnd: '2026-09-30T00:00:00.000Z',
+            newAccessEnd: '2026-11-30T00:00:00.000Z',
+            cancelAtPeriodEnd: false,
+            notificationStatus: 'queued',
+        };
+        functionsServiceMock.call.mockResolvedValue({ data: response });
+
+        await expect(firstValueFrom(service.grantSubscriptionGift(request))).resolves.toEqual(response);
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('grantAdminSubscriptionGift', request);
+    });
+
     it('should call getQueueStats Cloud Function', async () => {
         const mockStats = {
             pending: 5,

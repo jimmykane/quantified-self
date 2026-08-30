@@ -52,6 +52,7 @@ describe('refreshed email template catalog', () => {
             subscription_upgrade: 'You’re now on {{new_role}}',
             subscription_downgrade: 'Your membership is now {{new_role}}',
             subscription_cancellation: 'Your {{role}} membership will end on {{expiration_date}}',
+            subscription_time_gift: 'We’ve added {{gifted_period_label}} to your {{role}} membership',
             subscription_expiring_soon: 'Reminder: your {{role}} membership ends on {{expiration_date}}',
             account_deleted_confirmation: 'Your Quantified Self account has been deleted',
         });
@@ -112,6 +113,10 @@ describe('refreshed email template catalog', () => {
         expect(render('subscription_downgrade', 'pro-to-basic')).toContain('Device sync is not included');
         expect(render('subscription_downgrade', 'basic-to-free')).not.toContain('Device sync is not included');
         expect(render('subscription_downgrade', 'unknown-role')).not.toContain('Up to');
+        const subscriptionGift = render('subscription_time_gift', 'basic-three-months');
+        expect(subscriptionGift).toContain('<strong>3 months</strong> of complimentary Basic access');
+        expect(subscriptionGift).toContain('30 November 2026');
+        expect(subscriptionGift).not.toContain('internal reason');
     });
 
     it('renders the manual COROS campaign in founder voice with general-availability route copy', () => {

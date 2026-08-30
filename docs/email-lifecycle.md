@@ -12,11 +12,14 @@ This document is the source of truth for Quantified Self transactional email own
 | Subscription downgrade | `onSubscriptionUpdated` + Trigger Email extension | `subscription_downgrade` | Standard transactional sender | Standard transactional reply address |
 | Cancellation scheduled | `onSubscriptionUpdated` + Trigger Email extension | `subscription_cancellation` | Standard transactional sender | Standard transactional reply address |
 | Subscription expiring soon | `checkSubscriptionNotifications` + Trigger Email extension | `subscription_expiring_soon` | Standard transactional sender | Standard transactional reply address |
+| Admin grants complimentary subscription time | `grantAdminSubscriptionGift` + Trigger Email extension | `subscription_time_gift` | Standard transactional sender | Standard transactional reply address |
 | Account deletion accepted | `deleteSelf` + Trigger Email extension | `account_deleted_confirmation` | Standard transactional sender | Standard transactional reply address |
 | Passwordless sign-in | Firebase Authentication | Firebase email-link template | `Quantified Self <noreply@quantified-self.io>` | `support@quantified-self.io` |
 | Password reset | Firebase Authentication | Firebase password-reset template | Firebase Auth sender above | `support@quantified-self.io` |
 
 The founder welcome is sent once, only when `users/{uid}.onboardingCompleted` first changes to `true`. It combines a formal welcome to the Quantified Self platform with Dimitrios's personal introduction and asks which one question the recipient would ask their training history. The hypothetical wording does not claim that connected data is complete, and the invitation to reply also covers support needs, feature requests, and other product feedback. The copy deliberately avoids assuming why someone joined or how they intend to use the platform. Its recipient and greeting come from Firebase Auth, not profile email data supplied by the client. The TTL-managed mail document is `registration_welcome_{uid}`; durable deduplication is stored in the server-owned `users/{uid}/system/emailLifecycle` document and is created atomically with the mail item. There is no existing-user backfill, generic registration email, delayed follow-up, or marketing-consent dependency.
+
+The subscription-time gift email is optional and defaults on in the admin dialog. It names the existing plan, gifted calendar-month count, and new access date, but never receives or renders the internal admin reason. Mail is queued only after Stripe is confirmed successful. Its deterministic document ID includes a digest of the user and operation plus a bounded attempt number; a retry reuses the same operation, deduplicates a pending or delivered message, and creates a new attempt only after the Trigger Email extension records an error. Email failure is recorded on the audit operation and never rolls back access. The mail item carries `toUids` so normal account deletion can remove it even if the Auth email lookup later becomes unavailable.
 
 ## Firestore template source of truth
 
@@ -153,7 +156,7 @@ All steps below require separate operational approval.
 4. Deploy only the functions whose email behavior changed:
 
    ```bash
-   firebase deploy --only functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated,functions:checkSubscriptionNotifications,functions:deleteSelf
+   firebase deploy --only functions:sendRegistrationWelcomeEmail,functions:onSubscriptionUpdated,functions:checkSubscriptionNotifications,functions:previewAdminSubscriptionGift,functions:grantAdminSubscriptionGift,functions:deleteSelf
    ```
 
 5. Queue all refreshed plan/trial variants to a controlled inbox:
@@ -162,10 +165,10 @@ All steps below require separate operational approval.
    npm --prefix functions run test-emails -- controlled-inbox@example.com --project=quantified-self-io
    ```
 
-6. Verify From, Reply-To, subject, plaintext alternative, links, 390px mobile layout, desktop layout, trial copy, Free/Basic/Pro limits, grace dates, and device-sync conditions.
+6. Verify From, Reply-To, subject, plaintext alternative, links, 390px mobile layout, desktop layout, trial copy, complimentary gift copy, Free/Basic/Pro limits, grace dates, and device-sync conditions.
 
 Do not deploy functions before the required Firestore templates and partials exist. Do not seed templates before reviewing the generated local previews.
 
 ## Help-page review
 
-The in-app Help content was reviewed for magic-link troubleshooting, membership management, marketing consent, and account deletion. No Help copy change is required: this refresh changes delivery and email wording, not the in-app workflow or user-visible product behavior.
+The in-app Help content covers magic-link troubleshooting, membership management, complimentary subscription-time gifts, marketing consent, and account deletion. Gift help explains that the plan, tax handling, and cancellation choice do not change and that the subscription page labels the gifted period as a complimentary extension.

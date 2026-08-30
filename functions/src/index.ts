@@ -212,7 +212,23 @@ export {
   listMcpConnections,
   revokeMcpConnection,
 } from './mcp/callables';
-export { listUsers, getQueueStats, setSportsLibReparseSettings, getUserCount, getAdminDashboardHistory, scheduleAdminDashboardSnapshot, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
+export {
+  listUsers,
+  getQueueStats,
+  setSportsLibReparseSettings,
+  getUserCount,
+  getAdminDashboardHistory,
+  scheduleAdminDashboardSnapshot,
+  getSubscriptionHistoryTrend,
+  getUserGrowthTrend,
+  setMaintenanceMode,
+  getMaintenanceStatus,
+  impersonateUser,
+  stopImpersonation,
+  getFinancialStats,
+  previewAdminSubscriptionGift,
+  grantAdminSubscriptionGift,
+} from './admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

@@ -1416,6 +1416,34 @@ describe('PricingComponent', () => {
         expect(content).toContain('Amount unavailable');
     });
 
+    it('should distinguish a gifted extension from an ordinary trial', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_gifted',
+            status: 'trialing',
+            current_period_end: { seconds: 1798675200, nanoseconds: 0 },
+            current_period_start: { seconds: 1767225600, nanoseconds: 0 },
+            cancel_at_period_end: false,
+            metadata: {
+                qs_gift_type: 'subscription_time',
+                qs_gift_months: '3',
+            },
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Complimentary extension');
+        expect(content).not.toContain('Trialing');
+    });
+
     it('should show yearly cadence in manage container when active subscription is yearly', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);

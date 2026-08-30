@@ -1,0 +1,125 @@
+<h2 mat-dialog-title>Gift subscription time</h2>
+
+<mat-dialog-content class="gift-dialog-content">
+    <section class="identity-block" aria-label="Gift recipient">
+        <mat-icon aria-hidden="true">redeem</mat-icon>
+        <div>
+            <h3>{{ identityLabel() }}</h3>
+            <p>{{ data.user.email }}</p>
+            <span class="uid">{{ data.user.uid }}</span>
+        </div>
+    </section>
+
+    @if (error()) {
+    <div class="message-block error-message" role="alert">
+        <mat-icon aria-hidden="true">error</mat-icon>
+        <span>{{ error() }}</span>
+    </div>
+    }
+
+    @if (requestLockedForRetry()) {
+    <div class="message-block retry-message" role="status">
+        <mat-icon aria-hidden="true">sync</mat-icon>
+        <span>The original request is locked for a safe, idempotent retry.</span>
+    </div>
+    }
+
+    <div class="gift-form-grid">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Complimentary months</mat-label>
+            <mat-select [value]="months()" [disabled]="controlsDisabled()"
+                (selectionChange)="onMonthsChange($event.value)">
+                @for (option of monthsOptions; track option) {
+                <mat-option [value]="option">{{ option }} {{ option === 1 ? 'month' : 'months' }}</mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        <mat-checkbox [checked]="notifyUser()" [disabled]="controlsDisabled()"
+            (change)="onNotifyUserChange($event)">
+            Email the user
+        </mat-checkbox>
+    </div>
+
+    @if (previewLoading()) {
+    <div class="loading-block" role="status">
+        <mat-progress-spinner diameter="28" mode="indeterminate"></mat-progress-spinner>
+        <span>Checking the live Stripe subscription…</span>
+    </div>
+    } @else if (preview(); as giftPreview) {
+    <section class="preview-section" aria-labelledby="gift-preview-title">
+        <div class="section-title-row">
+            <h3 id="gift-preview-title">Fresh preview</h3>
+            <mat-chip selected>Ready</mat-chip>
+        </div>
+        <div class="preview-grid">
+            <div>
+                <span>Plan</span>
+                <strong>{{ giftPreview.role | titlecase }}</strong>
+            </div>
+            <div>
+                <span>Cadence</span>
+                <strong>{{ giftPreview.cadence | titlecase }}</strong>
+            </div>
+            <div>
+                <span>Status</span>
+                <strong>{{ giftPreview.status | titlecase }}</strong>
+            </div>
+            <div>
+                <span>Renewal</span>
+                <strong>{{ giftPreview.cancelAtPeriodEnd ? 'Will remain canceled' : 'Renews automatically' }}</strong>
+            </div>
+            <div>
+                <span>Current access end</span>
+                <strong>{{ giftPreview.currentAccessEnd | date:'medium':'UTC' }} UTC</strong>
+            </div>
+            <div class="gifted-date">
+                <span>New access end</span>
+                <strong>{{ giftPreview.proposedGiftedEnd | date:'medium':'UTC' }} UTC</strong>
+            </div>
+        </div>
+        <p class="preview-note">No charge or proration is created. The current plan and cancellation choice stay unchanged.</p>
+    </section>
+
+    <section class="history-section" aria-labelledby="gift-history-title">
+        <h3 id="gift-history-title">Recent grants</h3>
+        @for (gift of giftPreview.recentHistory; track gift.operationId) {
+        <article class="history-item">
+            <div class="history-heading">
+                <strong>{{ gift.months }} {{ gift.months === 1 ? 'month' : 'months' }}</strong>
+                <mat-chip>{{ gift.status | titlecase }}</mat-chip>
+            </div>
+            <p>{{ gift.previousAccessEnd | date:'medium':'UTC' }} → {{ gift.newAccessEnd | date:'medium':'UTC' }} UTC</p>
+            <p class="history-reason">{{ gift.reason }}</p>
+            <span>{{ gift.createdAt ? (gift.createdAt | date:'medium':'UTC') : 'Pending timestamp' }}</span>
+        </article>
+        } @empty {
+        <p class="empty-history">No previous subscription-time gifts.</p>
+        }
+    </section>
+    }
+
+    <mat-form-field appearance="outline" class="reason-field">
+        <mat-label>Internal reason</mat-label>
+        <textarea matInput rows="3" maxlength="500" [value]="reason()" [disabled]="controlsDisabled()"
+            (input)="onReasonInput($event)" placeholder="Why is this time being gifted?"></textarea>
+        <mat-hint>This is stored in the admin audit only and is never sent to the user.</mat-hint>
+        <mat-hint align="end">{{ reasonLength() }}/500</mat-hint>
+    </mat-form-field>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+    <button mat-button type="button" [mat-dialog-close]="closeResult()" [disabled]="submitting()">Close</button>
+    <button mat-button type="button" [disabled]="controlsDisabled()" (click)="refreshPreview()">
+        <mat-icon>refresh</mat-icon>
+        Refresh preview
+    </button>
+    <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="!canGrant()" (click)="grant()">
+        <span class="action-content">
+            @if (submitting()) {
+            <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+            }
+            <span>{{ requestLockedForRetry() ? 'Retry same gift' : 'Grant time' }}</span>
+        </span>
+    </button>
+</mat-dialog-actions>
