@@ -201,6 +201,50 @@ describe('Garmin Health API summary mapping', () => {
     });
   });
 
+  it.each([undefined, null])('accepts an omitted Body Battery event duration (%s)', duration => {
+    const [result] = map('stressDetails', [{
+      summaryId: 'stress-optional-event-duration',
+      calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000,
+      startTimeOffsetInSeconds: 0,
+      durationInSeconds: 540,
+      bodyBatteryActivityEvents: [{
+        eventType: 'RECOVERY',
+        eventStartTimeInSeconds: -1_760_000_180,
+        eventStartTimeOffsetInSeconds: 0,
+        duration,
+        bodyBatteryImpact: 3,
+      }],
+    }]);
+
+    expect(result.input.metrics).toEqual([
+      expect.objectContaining({
+        native: expect.objectContaining({
+          qualifiers: expect.objectContaining({
+            durationSeconds: null,
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it('still rejects an invalid provided Body Battery event duration', () => {
+    expect(() => map('stressDetails', [{
+      summaryId: 'stress-invalid-event-duration',
+      calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000,
+      startTimeOffsetInSeconds: 0,
+      durationInSeconds: 540,
+      bodyBatteryActivityEvents: [{
+        eventType: 'RECOVERY',
+        eventStartTimeInSeconds: -1_760_000_180,
+        eventStartTimeOffsetInSeconds: 0,
+        duration: -1,
+        bodyBatteryImpact: 3,
+      }],
+    }])).toThrow('bodyBatteryActivityEvents[0].duration is outside the supported numeric range');
+  });
+
   it('still validates Body Battery events that exceed the emitted metric budget', () => {
     const bodyBatteryActivityEvents = Array.from({ length: 129 }, (_, index) => ({
       eventType: index === 128 ? 'UNKNOWN' : 'ACTIVITY',

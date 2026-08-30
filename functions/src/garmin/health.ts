@@ -878,7 +878,15 @@ function mapStressDetails(
       const offsetSeconds = eventOffset === undefined
         ? null
         : requiredNumber(eventOffset, `${field}.bodyBatteryActivityEvents offset`, -86_399, 86_399, true);
-      const durationSeconds = requiredNumber(event.duration, `${field}.bodyBatteryActivityEvents[${eventIndex}].duration`, 0, MAX_DURATION_SECONDS, true);
+      const durationSeconds = event.duration === undefined || event.duration === null
+        ? null
+        : requiredNumber(
+          event.duration,
+          `${field}.bodyBatteryActivityEvents[${eventIndex}].duration`,
+          0,
+          MAX_DURATION_SECONDS,
+          true,
+        );
       const impact = requiredNumber(event.bodyBatteryImpact, `${field}.bodyBatteryActivityEvents[${eventIndex}].bodyBatteryImpact`, -1_000, 1_000, true);
       if (eventIndex >= availableEventMetricSlots) return;
       metrics.push(nativeNumberMetric({
