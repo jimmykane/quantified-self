@@ -132,6 +132,27 @@
   gap: 0.2rem;
 }
 
+.health-range-save-status {
+  align-items: center;
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  font: var(--mat-sys-body-small);
+  gap: 0.4rem;
+  justify-content: flex-end;
+  margin: -0.35rem 0 0.65rem;
+  min-height: 28px;
+}
+
+.health-range-save-status mat-icon {
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
+}
+
+.health-range-save-status-error {
+  color: var(--mat-sys-error);
+}
+
 .health-range-selector {
   --mat-standard-button-toggle-height: 40px;
 }
@@ -333,6 +354,11 @@
   .health-window-navigation {
     justify-content: space-between;
     width: 100%;
+  }
+
+  .health-range-save-status {
+    justify-content: flex-start;
+    margin-top: -0.15rem;
   }
 
   .health-range-selector {

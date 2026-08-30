@@ -29,7 +29,9 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHealthWorkspaceRange } from '../../models/app-user.interface';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthWorkspaceComponent } from './health-workspace.component';
@@ -162,11 +164,25 @@ describe('HealthWorkspaceComponent', () => {
   let component: HealthWorkspaceComponent;
   let router: Router;
   let loadMetricRange: ReturnType<typeof vi.fn>;
+  let updateHealthWorkspaceRange: ReturnType<typeof vi.fn>;
+  let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let syncStates: BehaviorSubject<HealthSyncState[]>;
 
-  async function createComponent(loadImplementation?: (metricId: HealthMetricId) => Promise<HealthWorkspaceRangeLoad>): Promise<void> {
+  async function createComponent(
+    loadImplementation?: (metricId: HealthMetricId) => Promise<HealthWorkspaceRangeLoad>,
+    savedRange?: AppHealthWorkspaceRange,
+  ): Promise<void> {
     loadMetricRange = vi.fn().mockImplementation((_uid: string, request: { metricId: HealthMetricId }) =>
       loadImplementation ? loadImplementation(request.metricId) : Promise.resolve(rangeLoad(request.metricId)));
+    updateHealthWorkspaceRange = vi.fn().mockResolvedValue(undefined);
+    const user = signal({
+      uid: 'user-1',
+      settings: savedRange ? { appSettings: { healthWorkspace: { range: savedRange } } } : {},
+    });
+    hydrateSavedRange = range => user.set({
+      uid: 'user-1',
+      settings: { appSettings: { healthWorkspace: { range } } },
+    });
     syncStates = new BehaviorSubject<HealthSyncState[]>([{
       provider: HEALTH_PROVIDERS.GarminAPI,
       status: HEALTH_SYNC_STATUSES.Ready,
@@ -179,7 +195,11 @@ describe('HealthWorkspaceComponent', () => {
       providers: [
         provideRouter([]),
         { provide: AppEventService, useValue: { getEventMetaDataKeys: () => of([]) } },
-        { provide: AppUserService, useValue: { user: signal({ uid: 'user-1' }) } },
+        {
+          provide: AppUserService,
+          useValue: { user },
+        },
+        { provide: AppUserSettingsQueryService, useValue: { updateHealthWorkspaceRange } },
         { provide: AppHealthService, useValue: { loadMetricRange, watchSyncStates: () => syncStates.asObservable() } },
         { provide: AppSleepService, useValue: { watchForDashboard: () => of([sleepSession()]) } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
@@ -212,9 +232,35 @@ describe('HealthWorkspaceComponent', () => {
     });
     expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate', 'HRV']);
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
-    expect(router.url).toContain('metric=resting_heart_rate');
-    expect(router.url).toContain('range=30d');
+    expect(router.url).not.toContain('?');
+    expect(updateHealthWorkspaceRange).not.toHaveBeenCalled();
   }, 10_000);
+
+  it('restores and persists the account-owned range without adding query parameters', async () => {
+    await createComponent(undefined, '90d');
+
+    expect(component.routeState().range).toBe('90d');
+    component.selectRange('14d');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().range).toBe('14d');
+    expect(updateHealthWorkspaceRange).toHaveBeenCalledWith('user-1', '14d');
+    expect(router.url).not.toContain('?');
+    expect(component.isSavingRange()).toBe(false);
+  });
+
+  it('restores a saved range when settings hydrate after the signed-in account', async () => {
+    await createComponent();
+
+    hydrateSavedRange('1y');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.routeState().range).toBe('1y');
+    expect(updateHealthWorkspaceRange).not.toHaveBeenCalled();
+  });
 
   it('renders providers as separate series, exposes an accessible source table, and filters locally', async () => {
     await createComponent();
@@ -238,23 +284,22 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange).toHaveBeenCalledTimes(3);
   });
 
-  it('supports Sleep URL state and reuses the normalized Sleep trend surface', async () => {
+  it('opens Sleep as local workspace state and reuses the normalized Sleep trend surface', async () => {
     await createComponent();
-    await router.navigate([], {
-      queryParams: { metric: 'sleep', range: '14d', end: todayDate },
-    });
+    component.selectMetric('sleep');
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(component.routeState()).toEqual({ metric: 'sleep', range: '14d', endDate: todayDate });
+    expect(component.routeState()).toEqual({ metric: 'sleep', range: '30d', endDate: todayDate });
+    expect(router.url).not.toContain('?');
     expect((fixture.nativeElement as HTMLElement).querySelector('.sleep-chart-stub')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('table caption')?.textContent)
       .toContain('Normalized Sleep sessions by source');
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('secret-provider-user');
   });
 
-  it('ignores a stale in-flight metric response after URL navigation changes', async () => {
+  it('ignores a stale in-flight metric response after local metric navigation changes', async () => {
     await createComponent();
     let resolveSteps: ((value: HealthWorkspaceRangeLoad) => void) | null = null;
     const stepsPromise = new Promise<HealthWorkspaceRangeLoad>(resolve => {
@@ -265,11 +310,12 @@ describe('HealthWorkspaceComponent', () => {
         ? stepsPromise
         : Promise.resolve(rangeLoad(request.metricId)));
 
-    await router.navigate([], { queryParams: { metric: HEALTH_METRIC_IDS.Steps, range: '30d', end: todayDate } });
+    component.selectMetric(HEALTH_METRIC_IDS.Steps);
     fixture.detectChanges();
-    await router.navigate([], { queryParams: { metric: HEALTH_METRIC_IDS.HeartRateVariability, range: '30d', end: todayDate } });
     await Promise.resolve();
+    component.selectMetric(HEALTH_METRIC_IDS.HeartRateVariability);
     fixture.detectChanges();
+    await Promise.resolve();
     resolveSteps?.(rangeLoad(HEALTH_METRIC_IDS.Steps));
     await Promise.resolve();
     fixture.detectChanges();
@@ -314,9 +360,8 @@ describe('HealthWorkspaceComponent', () => {
       hasSampleBackedMetric: true,
     }));
 
-    await router.navigate([], {
-      queryParams: { metric: HEALTH_METRIC_IDS.HeartRate, range: '90d', end: todayDate },
-    });
+    component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
+    component.selectRange('90d');
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -325,5 +370,25 @@ describe('HealthWorkspaceComponent', () => {
     expect(text).toContain('This metric is stored as detailed samples');
     expect(text).toContain('Detailed samples load only for 14-day and 30-day windows');
     expect(text).not.toContain('No Heart rate data in this window');
+  });
+
+  it('keeps a selected range active and offers retry when preference persistence fails', async () => {
+    await createComponent();
+    updateHealthWorkspaceRange.mockRejectedValueOnce(new Error('offline'));
+
+    component.selectRange('1y');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().range).toBe('1y');
+    expect(component.rangeSaveFailed()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('This range is active, but it was not saved');
+
+    component.retryRangeSave();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(updateHealthWorkspaceRange).toHaveBeenLastCalledWith('user-1', '1y');
+    expect(component.rangeSaveFailed()).toBe(false);
   });
 });

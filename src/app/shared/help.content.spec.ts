@@ -74,12 +74,15 @@ describe('help.content', () => {
     expect(healthSection?.title).toBe('Health');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('**14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for 14-day and 30-day windows');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
     expect(healthSection?.content).toContain('Connectivity');
+    expect(healthSection?.content).not.toContain('URL retains the metric');
     expect(healthSection?.links).toContainEqual({
       label: 'Open Health',
       icon: 'cardiology',

@@ -26,7 +26,7 @@ import {
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
   navigateHealthWorkspaceWindow,
-  normalizeHealthWorkspaceRouteState,
+  normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
 } from './health-workspace.helper';
@@ -159,26 +159,11 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
 }
 
 describe('Health workspace helpers', () => {
-  it('falls back invalid URL state to Resting HR, 30 days, and today', () => {
-    expect(normalizeHealthWorkspaceRouteState({
-      metric: 'not-a-metric',
-      range: 'forever',
-      end: '2030-01-01',
-    }, '2026-08-30')).toEqual({
-      metric: HEALTH_METRIC_IDS.RestingHeartRate,
-      range: '30d',
-      endDate: '2026-08-30',
-    });
-
-    expect(normalizeHealthWorkspaceRouteState({
-      metric: 'sleep',
-      range: 'forever',
-      end: '2026-08-01',
-    }, '2026-08-30')).toEqual({
-      metric: HEALTH_METRIC_IDS.RestingHeartRate,
-      range: '30d',
-      endDate: '2026-08-30',
-    });
+  it('normalizes saved Health ranges and falls back invalid settings to 30 days', () => {
+    expect(normalizeHealthWorkspaceRange('14d')).toBe('14d');
+    expect(normalizeHealthWorkspaceRange('1y')).toBe('1y');
+    expect(normalizeHealthWorkspaceRange('forever')).toBe('30d');
+    expect(normalizeHealthWorkspaceRange(null)).toBe('30d');
   });
 
   it('builds bounded windows and older/newer navigation without moving into the future', () => {

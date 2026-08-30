@@ -110,6 +110,19 @@
           </div>
         </header>
 
+        @if (isSavingRange()) {
+          <div class="health-range-save-status" role="status" aria-live="polite">
+            <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
+            <span>Saving range preference…</span>
+          </div>
+        } @else if (rangeSaveFailed()) {
+          <div class="health-range-save-status health-range-save-status-error" role="alert">
+            <mat-icon aria-hidden="true">cloud_off</mat-icon>
+            <span>This range is active, but it was not saved.</span>
+            <button mat-button type="button" (click)="retryRangeSave()">Retry</button>
+          </div>
+        }
+
         @if (providerFilterOptions().length > 0) {
           <div class="health-provider-filters" role="group" aria-label="Filter Health sources">
             <button

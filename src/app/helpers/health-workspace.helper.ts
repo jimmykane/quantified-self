@@ -18,12 +18,15 @@ import {
   HealthValueOrigin,
   HealthValueType,
   getHealthMetricDefinition,
-  isHealthMetricId,
 } from '@shared/health';
 import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
+import {
+  APP_HEALTH_WORKSPACE_RANGES,
+  AppHealthWorkspaceRange,
+} from '../models/app-user.interface';
 
-export const HEALTH_WORKSPACE_RANGES = ['14d', '30d', '90d', '1y'] as const;
-export type HealthWorkspaceRange = typeof HEALTH_WORKSPACE_RANGES[number];
+export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
+export type HealthWorkspaceRange = AppHealthWorkspaceRange;
 export type HealthWorkspaceMetricSelection = 'sleep' | HealthMetricId;
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
@@ -191,28 +194,10 @@ export function localCalendarDate(nowMs = Date.now()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function normalizeHealthWorkspaceRouteState(
-  value: Partial<Record<'metric' | 'range' | 'end', string | null | undefined>>,
-  todayDate = localCalendarDate(),
-): HealthWorkspaceRouteState {
-  const metricValue = value.metric;
-  const todayMs = parseCalendarDate(todayDate) ?? Date.now();
-  const requestedEndMs = parseCalendarDate(value.end);
-  const metricValid = metricValue === 'sleep' || isHealthMetricId(metricValue);
-  const rangeValid = HEALTH_WORKSPACE_RANGES.includes(value.range as HealthWorkspaceRange);
-  const endValid = requestedEndMs !== null && requestedEndMs <= todayMs;
-  if (!metricValid || !rangeValid || !endValid) {
-    return {
-      metric: HEALTH_WORKSPACE_DEFAULT_METRIC,
-      range: HEALTH_WORKSPACE_DEFAULT_RANGE,
-      endDate: todayDate,
-    };
-  }
-  return {
-    metric: metricValue,
-    range: value.range as HealthWorkspaceRange,
-    endDate: value.end as string,
-  };
+export function normalizeHealthWorkspaceRange(value: unknown): HealthWorkspaceRange {
+  return HEALTH_WORKSPACE_RANGES.includes(value as HealthWorkspaceRange)
+    ? value as HealthWorkspaceRange
+    : HEALTH_WORKSPACE_DEFAULT_RANGE;
 }
 
 export function healthWorkspaceRangeDays(range: HealthWorkspaceRange): number {

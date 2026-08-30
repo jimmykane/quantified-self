@@ -200,6 +200,42 @@ describe('AppUserSettingsQueryService', () => {
         });
     });
 
+    describe('Health workspace range', () => {
+        it('writes the selected range to the client-owned Health workspace settings', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+
+            await service.updateHealthWorkspaceRange('test-uid', '90d');
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: {
+                    appSettings: {
+                        healthWorkspace: { range: '90d' },
+                    },
+                },
+            });
+        });
+
+        it('rejects unsupported ranges and queued writes after an account switch', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'different-user' }));
+
+            await expect(service.updateHealthWorkspaceRange('test-uid', 'all' as never))
+                .rejects.toThrow('supported Health range');
+            await expect(service.updateHealthWorkspaceRange('test-uid', '30d'))
+                .rejects.toThrow('account changed');
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
+        it('propagates Health range persistence failures', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('offline'));
+
+            await expect(service.updateHealthWorkspaceRange('test-uid', '1y'))
+                .rejects.toThrow('offline');
+        });
+    });
+
     describe('Training workspace preferences', () => {
         it('writes only the requested client-owned Training preference map', async () => {
             const user = createMockUser({ uid: 'test-uid' });

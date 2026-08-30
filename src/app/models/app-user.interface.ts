@@ -44,6 +44,13 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
 
 export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
+export const APP_HEALTH_WORKSPACE_RANGES = ['14d', '30d', '90d', '1y'] as const;
+export type AppHealthWorkspaceRange = typeof APP_HEALTH_WORKSPACE_RANGES[number];
+
+export interface AppHealthWorkspaceSettingsInterface {
+    range?: AppHealthWorkspaceRange;
+}
+
 export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;
 }
@@ -188,6 +195,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     unitSetupCompleted?: boolean;
     dashboardActionPrompts?: AppDashboardActionPrompts;
     trainingWorkspace?: TrainingWorkspacePreferences;
+    healthWorkspace?: AppHealthWorkspaceSettingsInterface;
 }
 
 export interface TrainingWorkspacePreferences {

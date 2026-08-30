@@ -1,5 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -7,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
@@ -28,6 +27,7 @@ import {
 } from '../../services/app.health.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
@@ -38,6 +38,7 @@ import {
 } from './health-priority-summary.component';
 import { HealthSourceObservationTableComponent } from './health-source-observation-table.component';
 import {
+  HEALTH_WORKSPACE_DEFAULT_RANGE,
   HEALTH_WORKSPACE_RANGES,
   HealthMetricCatalogGroup,
   HealthMetricWorkspaceView,
@@ -55,7 +56,7 @@ import {
   filterHealthRangeResultByProviders,
   localCalendarDate,
   navigateHealthWorkspaceWindow,
-  normalizeHealthWorkspaceRouteState,
+  normalizeHealthWorkspaceRange,
   providerLabel,
   resolveHealthWorkspaceWindow,
 } from '../../helpers/health-workspace.helper';
@@ -78,6 +79,12 @@ interface HealthSyncStateView extends HealthProviderView {
   message: string;
   actionRequired: boolean;
   error: boolean;
+}
+
+interface QueuedHealthRangeWrite {
+  uid: string;
+  range: HealthWorkspaceRange;
+  generation: number;
 }
 
 const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
@@ -111,10 +118,8 @@ const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthWorkspaceComponent {
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly userService = inject(AppUserService);
+  private readonly userSettingsService = inject(AppUserSettingsQueryService);
   private readonly healthService = inject(AppHealthService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
@@ -122,10 +127,24 @@ export class HealthWorkspaceComponent {
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
   private latestSyncStateTimestamp: number | null = null;
+  private rangePreferenceUserID: string | null = null;
+  private rangePreferenceTouched = false;
+  private rangeWriteGeneration = 0;
+  private rangeWriteInFlight = false;
+  private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({ range, label: RANGE_LABELS[range] }));
   readonly metricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
-  readonly routeState = signal<HealthWorkspaceRouteState>(normalizeHealthWorkspaceRouteState({}, this.todayDate));
+  readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
+  readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
+  readonly selectedEndDate = signal(this.todayDate);
+  readonly routeState = computed<HealthWorkspaceRouteState>(() => ({
+    metric: this.selectedMetric(),
+    range: this.selectedRange(),
+    endDate: this.selectedEndDate(),
+  }));
+  readonly isSavingRange = signal(false);
+  readonly rangeSaveFailed = signal(false);
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
@@ -280,23 +299,28 @@ export class HealthWorkspaceComponent {
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
-    this.route.queryParamMap
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(params => {
-        const raw = {
-          metric: params.get('metric'),
-          range: params.get('range'),
-          end: params.get('end'),
-        };
-        const normalized = normalizeHealthWorkspaceRouteState(raw, this.todayDate);
-        const current = this.routeState();
-        if (current.metric !== normalized.metric || current.range !== normalized.range || current.endDate !== normalized.endDate) {
-          this.routeState.set(normalized);
+    effect(() => {
+      const user = this.userService.user();
+      const uid = `${user?.uid || ''}`.trim() || null;
+      const savedRange = normalizeHealthWorkspaceRange(
+        user?.settings?.appSettings?.healthWorkspace?.range,
+      );
+      if (uid === this.rangePreferenceUserID) {
+        if (!this.rangePreferenceTouched) {
+          this.selectedRange.set(savedRange);
         }
-        if (raw.metric !== normalized.metric || raw.range !== normalized.range || raw.end !== normalized.endDate) {
-          void this.writeRouteState(normalized, true);
-        }
-      });
+        return;
+      }
+      this.rangePreferenceUserID = uid;
+      this.rangePreferenceTouched = false;
+      this.rangeWriteGeneration += 1;
+      this.queuedRangeWrite = null;
+      this.isSavingRange.set(false);
+      this.rangeSaveFailed.set(false);
+      this.selectedMetric.set(HEALTH_METRIC_IDS.RestingHeartRate);
+      this.selectedEndDate.set(this.todayDate);
+      this.selectedRange.set(savedRange);
+    });
 
     effect(onCleanup => {
       const uid = this.userService.user()?.uid || null;
@@ -404,22 +428,35 @@ export class HealthWorkspaceComponent {
   }
 
   selectPriorityMetric(metric: HealthWorkspaceMetricSelection): void {
-    void this.writeRouteState({ ...this.routeState(), metric });
+    this.selectedMetric.set(metric);
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
-    void this.writeRouteState({ ...this.routeState(), metric });
+    this.selectedMetric.set(metric);
   }
 
   selectRange(range: HealthWorkspaceRange): void {
-    void this.writeRouteState({ ...this.routeState(), range });
+    const normalizedRange = normalizeHealthWorkspaceRange(range);
+    if (normalizedRange === this.selectedRange() && !this.rangeSaveFailed()) {
+      return;
+    }
+    this.rangePreferenceTouched = true;
+    this.selectedRange.set(normalizedRange);
+    this.queueRangePreferenceWrite(normalizedRange);
   }
 
   navigateWindow(direction: 'older' | 'newer'): void {
     if (direction === 'newer' && !this.selectedWindow().canNavigateNewer) {
       return;
     }
-    void this.writeRouteState(navigateHealthWorkspaceWindow(this.routeState(), direction, this.todayDate));
+    this.selectedEndDate.set(
+      navigateHealthWorkspaceWindow(this.routeState(), direction, this.todayDate).endDate,
+    );
+  }
+
+  retryRangeSave(): void {
+    this.rangePreferenceTouched = true;
+    this.queueRangePreferenceWrite(this.selectedRange());
   }
 
   showAllProviders(): void {
@@ -474,16 +511,46 @@ export class HealthWorkspaceComponent {
     }
   }
 
-  private writeRouteState(state: HealthWorkspaceRouteState, replaceUrl = false): Promise<boolean> {
-    return this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: {
-        metric: state.metric,
-        range: state.range,
-        end: state.endDate,
-      },
-      replaceUrl,
-    });
+  private queueRangePreferenceWrite(range: HealthWorkspaceRange): void {
+    const uid = `${this.userService.user()?.uid || ''}`.trim();
+    this.rangeSaveFailed.set(false);
+    if (!uid) {
+      return;
+    }
+    this.queuedRangeWrite = {
+      uid,
+      range,
+      generation: this.rangeWriteGeneration,
+    };
+    this.isSavingRange.set(true);
+    void this.flushRangePreferenceWrites();
+  }
+
+  private async flushRangePreferenceWrites(): Promise<void> {
+    if (this.rangeWriteInFlight) {
+      return;
+    }
+    this.rangeWriteInFlight = true;
+    while (this.queuedRangeWrite) {
+      const write = this.queuedRangeWrite;
+      this.queuedRangeWrite = null;
+      if (write.generation !== this.rangeWriteGeneration || write.uid !== this.rangePreferenceUserID) {
+        continue;
+      }
+      try {
+        await this.userSettingsService.updateHealthWorkspaceRange(write.uid, write.range);
+      } catch {
+        if (
+          write.generation === this.rangeWriteGeneration
+          && write.uid === this.rangePreferenceUserID
+          && this.queuedRangeWrite === null
+        ) {
+          this.rangeSaveFailed.set(true);
+        }
+      }
+    }
+    this.rangeWriteInFlight = false;
+    this.isSavingRange.set(false);
   }
 }
 
