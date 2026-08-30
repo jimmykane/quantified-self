@@ -1,5 +1,6 @@
 <main class="health-workspace qs-workspace-page" aria-labelledby="health-title">
   <app-page-header
+    variant="compact"
     title="Health"
     titleId="health-title"
     leadingIcon="cardiology"
@@ -267,7 +268,7 @@
         <p class="health-eyebrow">Source status</p>
         <h2 id="health-sync-title">Health sync</h2>
       </div>
-      <a mat-button routerLink="/services">Manage in Connectivity</a>
+      <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">Connectivity</a>
     </div>
     @if (syncStatesStatus() === 'loading') {
       <mat-card appearance="outlined" class="health-sync-empty">

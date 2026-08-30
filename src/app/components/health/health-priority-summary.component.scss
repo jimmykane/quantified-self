@@ -6,32 +6,35 @@
 .health-section-heading {
   align-items: end;
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   justify-content: space-between;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.5rem;
 }
 
 .health-section-heading h2 {
-  font: var(--mat-sys-headline-small);
+  font: var(--mat-sys-title-large);
+  font-weight: 600;
+  line-height: 1.2;
   margin: 0;
 }
 
 .health-section-heading > p {
   color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-medium);
+  font: var(--mat-sys-body-small);
   margin: 0;
 }
 
 .health-eyebrow {
   color: var(--mat-sys-primary);
-  font: var(--mat-sys-label-medium);
+  font: var(--mat-sys-label-small);
   letter-spacing: 0.045em;
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.1rem;
   text-transform: uppercase;
 }
 
 .health-priority-grid {
   --health-priority-divider: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  --qs-glass-panel-radius: 14px;
 
   display: grid;
   gap: 0;
@@ -42,9 +45,9 @@
 .health-priority-card {
   align-content: start;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
   min-width: 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.5rem 0.625rem;
 }
 
 .health-priority-card + .health-priority-card {
@@ -66,7 +69,7 @@
 .health-priority-card-header {
   gap: 0.5rem;
   justify-content: space-between;
-  min-height: 32px;
+  min-height: 30px;
 }
 
 .health-priority-title-row {
@@ -81,24 +84,24 @@
 
 .health-priority-avatar {
   display: grid;
-  flex: 0 0 24px;
-  height: 24px;
+  flex: 0 0 22px;
+  height: 22px;
   place-items: center;
-  width: 24px;
+  width: 22px;
 }
 
 .health-priority-avatar mat-icon {
   color: var(--mat-sys-primary);
-  font-size: 20px;
-  height: 20px;
-  line-height: 20px;
+  font-size: 18px;
+  height: 18px;
+  line-height: 18px;
   overflow: visible;
-  width: 20px;
+  width: 18px;
 }
 
 .health-priority-open-button {
   flex: 0 0 auto;
-  height: 32px;
+  height: 30px;
   min-width: 0;
   padding-inline: 0.35rem;
 }
@@ -143,9 +146,9 @@
   display: flex;
   gap: 0.5rem;
   justify-content: space-between;
-  min-height: 30px;
+  min-height: 27px;
   min-width: 0;
-  padding: 0.2rem 0;
+  padding: 0.15rem 0;
 }
 
 .health-priority-source-row + .health-priority-source-row {
@@ -195,9 +198,12 @@
   color: var(--mat-sys-on-surface-variant);
   font-size: 0.68rem;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 760px) {
   .health-priority-grid {
     grid-template-columns: 1fr;
   }
@@ -212,6 +218,7 @@
   .health-section-heading {
     align-items: stretch;
     flex-direction: column;
+    gap: 0.5rem;
   }
 
   .health-section-heading > p {
