@@ -14,7 +14,9 @@
         class="health-priority-card"
         [class.health-priority-card-selected]="selectedMetric() === card.metric">
         <mat-card-header>
-          <mat-icon mat-card-avatar aria-hidden="true">{{ card.icon }}</mat-icon>
+          <div mat-card-avatar class="health-priority-avatar">
+            <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
+          </div>
           <mat-card-title>{{ card.label }}</mat-card-title>
         </mat-card-header>
 
@@ -41,7 +43,7 @@
                         [presentation]="row.presentation"
                         [showText]="false"
                         [showTooltip]="false"
-                        [iconWidth]="18"
+                        [iconWidth]="32"
                         [iconHeight]="18">
                       </app-service-source-icon>
                     } @else {

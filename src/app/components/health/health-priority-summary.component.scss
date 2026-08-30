@@ -50,6 +50,19 @@
   color: var(--mat-sys-primary);
 }
 
+.health-priority-avatar {
+  display: grid;
+  place-items: center;
+}
+
+.health-priority-avatar mat-icon {
+  font-size: 24px;
+  height: 24px;
+  line-height: 24px;
+  overflow: visible;
+  width: 24px;
+}
+
 .health-priority-card mat-card-title {
   font: var(--mat-sys-title-medium);
 }
@@ -111,7 +124,12 @@
 .health-source-identity mat-icon {
   font-size: 18px;
   height: 18px;
+  line-height: 18px;
   width: 18px;
+}
+
+.health-source-identity app-service-source-icon {
+  flex: 0 0 auto;
 }
 
 .health-priority-value {

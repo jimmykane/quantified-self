@@ -258,6 +258,13 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')?.tagName).toBe('MAT-CARD');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
+    const providerIcons = fixture.debugElement.queryAll(By.css(
+      '.health-priority-card app-service-source-icon, .health-provider-filter app-service-source-icon, .health-sync-card app-service-source-icon',
+    ));
+    expect(providerIcons.length).toBeGreaterThan(0);
+    expect(providerIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
+    expect(providerIcons.every(icon => icon.componentInstance.iconHeight === 18)).toBe(true);
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspaceRange).not.toHaveBeenCalled();
   }, 10_000);
