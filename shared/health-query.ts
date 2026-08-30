@@ -35,6 +35,7 @@ import {
   isHealthMetricId,
   isHealthProvider,
 } from './health';
+import { decodeHealthSourceRecordSportsLibData } from './sports-lib-health-data';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -535,7 +536,8 @@ function projectHealthRangeInternal(
   mode: HealthRangeProjectionMode,
 ): HealthRangeResult {
   const query = normalizeHealthRangeQuery(queryValue);
-  const matchingSourceRecords = sourceRecords
+  const decodedSourceRecords = sourceRecords.map(decodeHealthSourceRecordSportsLibData);
+  const matchingSourceRecords = decodedSourceRecords
     .filter(sourceRecord => sourceRecord.calendarDate >= query.startDate && sourceRecord.calendarDate <= query.endDate)
     .filter(sourceRecord => providerMatches(sourceRecord.source.provider, query.providers))
     .filter(sourceRecord => query.providers.length > 0
@@ -564,7 +566,7 @@ function projectHealthRangeInternal(
   const selectedChunkPage = mode.aggregateAllPages
     ? primaryMatchingChunks
     : primaryMatchingChunks.slice(0, query.chunkLimit);
-  const sourceRecordsById = new Map(sourceRecords.map(sourceRecord => [sourceRecord.id, sourceRecord]));
+  const sourceRecordsById = new Map(decodedSourceRecords.map(sourceRecord => [sourceRecord.id, sourceRecord]));
   const selectedChunks: HealthSampleChunk[] = [];
   let returnedSamplePoints = 0;
   let pointLimitTruncated = false;

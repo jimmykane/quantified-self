@@ -114,6 +114,10 @@ function healthMetricIdentity(value: unknown): string | null {
 
 function providerValueMetricDefinition(value: unknown): unknown {
     const metric = asRecord(value);
+    const metricDefinition = { ...metric };
+    // The Sports Lib envelope is a derived canonical serialization detail,
+    // not part of the provider metric identity used by this older migration.
+    delete metricDefinition.sportsLibData;
     const native = asRecord(metric.native);
     const canonical = asRecord(metric.canonical);
     const hasCanonicalValue = Boolean(metric.canonical)
@@ -124,7 +128,7 @@ function providerValueMetricDefinition(value: unknown): unknown {
     delete nativeDefinition.value;
     delete canonicalDefinition.value;
     return {
-        ...metric,
+        ...metricDefinition,
         native: nativeDefinition,
         // Validation normalizes an omitted canonical value to null. Treat the
         // two representations as equivalent while keeping a real definition

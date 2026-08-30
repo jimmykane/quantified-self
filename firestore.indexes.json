@@ -2216,6 +2216,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "sleepSessions",
+      "fieldPath": "sportsLibData",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "wahooAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,

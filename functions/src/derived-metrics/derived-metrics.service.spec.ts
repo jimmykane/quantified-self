@@ -357,6 +357,10 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'endTimeMs',
             'timezoneOffsetSeconds',
             'durationSeconds',
+            'sportsLibData.schemaVersion',
+            'sportsLibData.metrics.duration',
+            'sportsLibData.metrics.overnightHrv',
+            'sportsLibData.metrics.averageHrv',
             'isNap',
             'providerFields.suunto.timestamp',
             'vitals.overnightHrvMs',
@@ -431,6 +435,13 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'endTimeMs',
             'timezoneOffsetSeconds',
             'durationSeconds',
+            'sportsLibData.schemaVersion',
+            'sportsLibData.metrics.duration',
+            'sportsLibData.metrics.score',
+            'sportsLibData.metrics.overnightHrv',
+            'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.averageHeartRate',
+            'sportsLibData.metrics.minimumHeartRate',
             'isNap',
             'score.value',
             'providerFields.suunto.timestamp',
@@ -780,6 +791,79 @@ describe('buildTrainingReadinessMetricPayload', () => {
             minimumHeartRateRatio: 0.96,
         });
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
+    });
+
+    it('produces the same readiness evidence from legacy and new-only Sports Lib sleep aggregates', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const common = {
+            source: { provider: 'GarminAPI' },
+            sleepDate: '2026-07-16',
+            startTimeMs: Date.UTC(2026, 6, 15, 22),
+            endTimeMs: Date.UTC(2026, 6, 16, 6),
+            isNap: false,
+        };
+        const legacy = {
+            id: 'same-night',
+            data: () => ({
+                ...common,
+                durationSeconds: 28_800,
+                score: { value: 90 },
+                vitals: {
+                    averageHrvMs: 55,
+                    averageHeartRateBpm: 54,
+                    minimumHeartRateBpm: 48,
+                },
+            }),
+        };
+        const newOnly = {
+            id: 'same-night',
+            data: () => ({
+                ...common,
+                sportsLibData: {
+                    schemaVersion: 1,
+                    metrics: {
+                        duration: { 'Sleep Duration': 28_800 },
+                        score: { 'Sleep Score': 90 },
+                        averageHrv: { 'Average Sleep HRV': 55 },
+                        averageHeartRate: { 'Average Sleep Heart Rate': 54 },
+                        minimumHeartRate: { 'Minimum Sleep Heart Rate': 48 },
+                    },
+                },
+            }),
+        };
+
+        const legacyDocs = [legacy] as unknown as Parameters<typeof buildTrainingReadinessMetricPayload>[2];
+        const newDocs = [newOnly] as unknown as Parameters<typeof buildTrainingReadinessMetricPayload>[2];
+        const legacyResult = buildTrainingReadinessMetricPayload([], 0, legacyDocs, nowMs);
+        const newResult = buildTrainingReadinessMetricPayload([], 0, newDocs, nowMs);
+
+        expect(newResult).toEqual(legacyResult);
+    });
+
+    it('ignores a malformed Sports Lib sleep envelope instead of failing readiness recomputation', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const malformed = {
+            id: 'malformed-sleep',
+            data: () => ({
+                source: { provider: 'GarminAPI' },
+                sleepDate: '2026-07-16',
+                startTimeMs: Date.UTC(2026, 6, 15, 22),
+                endTimeMs: Date.UTC(2026, 6, 16, 6),
+                durationSeconds: 28_800,
+                isNap: false,
+                sportsLibData: {
+                    schemaVersion: 1,
+                    metrics: { duration: { 'Sleep Duration': Number.NaN } },
+                },
+            }),
+        };
+        const malformedDocs = [malformed] as unknown as Parameters<typeof buildTrainingReadinessMetricPayload>[2];
+
+        expect(buildTrainingReadinessMetricPayload([], 0, malformedDocs, nowMs)).toEqual(
+            buildTrainingReadinessMetricPayload([], 0, [], nowMs),
+        );
     });
 
     it('matches live Suunto local-date grouping before choosing readiness baselines', async () => {

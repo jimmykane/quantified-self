@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
 import { SLEEP_PROVIDERS, SLEEP_STAGES, SleepSession } from '../../../shared/sleep';
+import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -240,23 +241,48 @@ describe('sleep writer', () => {
             durationSeconds: 33300,
             inBedDurationSeconds: 34260,
             isNap: false,
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: expect.objectContaining({
+                    duration: { 'Sleep Duration': 33300 },
+                    inBedDuration: { 'Sleep In-Bed Duration': 34260 },
+                    deepDuration: { 'Deep Sleep Duration': 6210 },
+                }),
+            },
             createdAtMs: 1000,
             updatedAtMs: 3000,
         }), { merge: true });
     });
 
+    it('derives Sports Lib JSON instead of trusting mapper-supplied JSON', async () => {
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { duration: { 'Sleep Duration': 999 } },
+            },
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            sportsLibData: expect.objectContaining({
+                metrics: expect.objectContaining({ duration: { 'Sleep Duration': 33300 } }),
+            }),
+        }), { merge: true });
+    });
+
     it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
+        const existingSession = buildExistingSuuntoSession({
+            source: {
+                provider: SLEEP_PROVIDERS.GarminAPI,
+                providerUserId: 'garmin-user-1',
+                sourceSessionKey: 'garmin-summary-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
+                receivedAtMs: 2000,
+            },
+        });
         hoisted.docGet.mockResolvedValue({
             exists: true,
-            data: () => buildExistingSuuntoSession({
-                source: {
-                    provider: SLEEP_PROVIDERS.GarminAPI,
-                    providerUserId: 'garmin-user-1',
-                    sourceSessionKey: 'garmin-summary-1',
-                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
-                    receivedAtMs: 2000,
-                },
-            }),
+            data: () => encodeSleepSessionSportsLibData(existingSession),
         });
 
         const result = await upsertSleepSessions('user-1', [buildMapperResult({

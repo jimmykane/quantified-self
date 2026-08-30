@@ -35,6 +35,12 @@ The reference validator requires the stable health metric ID to match the refere
 Provider disconnect retains both normalized Sleep sessions and imported unified health history.
 Account deletion recursively removes both because they remain below `users/{uid}`.
 
+Sports Lib 20.3 is the canonical scalar JSON boundary for normalized Health values and Sleep aggregates. New server
+writes persist its versioned `toJSON()` envelope alongside the current legacy scalar fields, while Dashboard, Health,
+Training, derived-metric, and MCP readers strictly rehydrate it through the matching `fromJSON()` class and continue to
+accept legacy-only documents. Session structure, timestamps, stages, samples, provenance, and provider fields remain in
+the existing Sleep model. This storage transition changes no provider polling, OAuth, callback, or disconnect behavior.
+
 Suunto Activity, daily-statistics, and Recovery values are separate Health source records. They do not
 modify `sleepSessions`, workout events, FIT activity metrics, readiness, Training, or MCP output. Signed
 Suunto Activity/Recovery notifications resolve every active server-owned account binding before compact per-UID ingress persistence and
@@ -277,6 +283,34 @@ so the source fields remain for operator review. Aggregate Sleep vitals and timi
 Health change fails the cleanup closed, and rerunning is idempotent. Malformed, out-of-window, or inconsistent
 legacy samples/vitals also remain untouched and are counted as invalid so an operator can review them without
 data loss.
+
+## Health and Sleep Sports Lib JSON Migration
+
+After the Sports Lib 20.3 dual-reader/new-writer release is deployed, migrate one user and one collection at a time. The
+command is dry-run by default, accepts at most 250 documents, and returns an opaque `nextStartAfter` document ID only
+when another page exists:
+
+```bash
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --uid <uid> --kind health --limit 100
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --uid <uid> --kind sleep --limit 100
+
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind sleep --limit 100
+
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --start-after <opaque-document-id>
+```
+
+For each candidate, execution rechecks account deletion and re-reads the exact document in the update transaction. It
+updates only the derived canonical field and never changes provider revisions, receipt timestamps, source metadata,
+stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a deletion race becomes
+`skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. Re-running the same
+page is safe. Finish by repeating both dry runs and require `candidates: 0`, `skippedInvalid: 0`, and `failed: 0`.
+
+The migration does not require provider reconnects or history refetches. Ordinary disconnect intentionally retains
+imported history, so disconnecting during the migration does not remove a valid historical candidate. Account deletion
+still removes the complete user subtree and prevents the migration from recreating descendants. Sleep-document updates
+use the existing per-user coalesced derived-metric ingress, so keep the documented user-scoped batches and allow that
+queue to settle during rollout rather than running overlapping pages for the same user.
 
 ## Temporarily Disable A Provider
 

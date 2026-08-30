@@ -144,6 +144,37 @@ Chunks are permanent leaf documents by schema. Firestore Rules do not grant acce
 
 This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
 
+### Sports Lib scalar serialization boundary
+
+Quantified Self pins `@sports-alliance/sports-lib@20.3.0` and uses its exported Health and Sleep data classes as the
+canonical scalar serialization boundary. A canonical Health `value` metric stores a versioned `sportsLibData` envelope
+inside that metric entry; a normalized Sleep session stores one versioned aggregate envelope at the session root. Each
+entry in the envelope is the exact single-key JSON returned by the explicitly mapped class's `toJSON()` method:
+
+```ts
+{
+  schemaVersion: 1;
+  metrics: {
+    value?: { Steps: 10000 };                 // Health metric entry
+    duration?: { 'Sleep Duration': 28800 };  // Sleep session aggregate
+  };
+}
+```
+
+The field keys outside the Sports Lib JSON are Quantified Self semantic slots, not alternate Sports Lib type aliases.
+Readers accept legacy scalar-only documents and the versioned representation. When the new representation exists, they
+require the exact envelope version, allowlisted semantic key, canonical Sports Lib type key, one finite scalar, matching
+value type, and an exact `fromJSON()`/`toJSON()` round trip. Unknown, alias, additional, ambiguous, non-finite, or
+legacy-conflicting values fail closed. Successful reads consume and remove the internal envelope before projecting the
+existing domain/result shape. New writers derive the envelope server-side after provider validation; adapters cannot
+supply or override it.
+
+Legacy canonical fields remain beside the new representation during the rollback window. Quantified Self still owns
+timestamps, provider/source attribution, opaque account identity, revisions, quality, coverage, conflicts, stages,
+bounded sample series, and raw provider fields. Sports Lib JSON never wraps a complete source record or Sleep session,
+and no JSON object is added per sample point. Native-only and non-comparable values remain outside this canonical scalar
+boundary.
+
 ## Hard bounds
 
 Bounds protect Firestore document size, transaction limits, client reads, and projection memory. They are not a time-based retention policy.
@@ -256,6 +287,12 @@ When a health source record needs a Sleep relationship, it stores a typed `sleep
 
 The validator also requires the health metric ID to match the referenced Sleep field. For example, `durationSeconds` maps to `sleep_duration`, while `vitals.averageHeartRateBpm` maps to `heart_rate`. The referenced value is resolved by the Sleep consumer; it is not copied into the health source record.
 
+Sleep duration, in-bed duration, stage-duration totals, score, aggregate sleep heart rate, aggregate/overnight HRV and
+sample count, maximum SpO₂, and average respiration use the same Sports Lib 20.3 scalar boundary described above.
+Exact stage intervals, sample arrays, provider fields, dates, and session identity remain ordinary normalized Sleep
+fields. Dashboard, Health, Training, derived-metric, and MCP readers all dual-read the representation without changing
+their existing public result shapes.
+
 ## Security and privacy
 
 - Firestore Rules permit owners to get their own health documents and issue only explicitly bounded list queries.
@@ -295,11 +332,21 @@ The Health foundation receives production COROS, Suunto, and Garmin records, and
 
 A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. Issue #614 changes no Firestore schema, Rules, indexes, Functions, ingestion, or backfill behavior.
 
+The Sports Lib 20.3 transition uses a separate user-scoped admin migration; it does not refetch provider history,
+change OAuth credentials, reconnect accounts, or alter webhooks. Deploy dual readers before new writers, then run
+`migrate-health-sleep-sports-lib-data` in dry-run and bounded execution modes for `health` and `sleep` independently.
+Every execution transaction re-reads the document and account-deletion guard, updates only `metrics` for Health or
+`sportsLibData` for Sleep, and is idempotent. An opaque document ID returned as `nextStartAfter` resumes the next page.
+After execution, repeat the dry run and require zero candidates and zero invalid documents before beginning the
+observation window. The `sleepSessions.sportsLibData` map is excluded from automatic indexing; Health already disables
+automatic indexing for the whole source-record document. A later reviewed cleanup must stop legacy writes first and
+remove legacy reads only after migration and rollback verification.
+
 Useful local verification:
 
 ```bash
-npx vitest run src/app/shared/health.shared.spec.ts src/app/services/app.health.service.spec.ts src/app/helpers/health-workspace.helper.spec.ts src/app/helpers/health-metric-chart.helper.spec.ts src/app/components/health/health-workspace.component.spec.ts --reporter=verbose
-npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/firestore-indexes.spec.ts
+npx vitest run src/app/shared/health.shared.spec.ts src/app/shared/sports-lib-health-data.shared.spec.ts src/app/services/app.health.service.spec.ts src/app/services/app.sleep.service.spec.ts src/app/helpers/health-workspace.helper.spec.ts src/app/helpers/health-metric-chart.helper.spec.ts src/app/components/health/health-workspace.component.spec.ts --reporter=verbose
+npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/health/sports-lib-data-migration.spec.ts src/sleep/writer.spec.ts src/firestore-indexes.spec.ts
 npm run test:rules
 npm --prefix functions run build
 npm run build

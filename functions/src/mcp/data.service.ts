@@ -75,10 +75,16 @@ import {
 } from '../../../shared/sports-lib-metric-semantics';
 import {
   SLEEP_PROVIDERS,
+  SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SLEEP_STAGES,
   SleepProvider,
+  SleepSession,
   SleepStage,
 } from '../../../shared/sleep';
+import {
+  decodeSleepSessionSportsLibData,
+  SportsLibDataValidationError,
+} from '../../../shared/sports-lib-health-data';
 import {
   buildReadinessEvaluation,
   READINESS_FORMULA_VERSION,
@@ -685,6 +691,9 @@ const defaultDependencies: McpDataServiceDependencies = {
         'startTimeMs',
         'endTimeMs',
         'durationSeconds',
+        new FieldPath('sportsLibData', 'schemaVersion'),
+        ...Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)
+          .map(field => new FieldPath('sportsLibData', 'metrics', field)),
         'inBedDurationSeconds',
         'timezoneOffsetSeconds',
         'isNap',
@@ -725,6 +734,13 @@ const defaultDependencies: McpDataServiceDependencies = {
         'startTimeMs',
         'endTimeMs',
         'durationSeconds',
+        new FieldPath('sportsLibData', 'schemaVersion'),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Score),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate),
         'timezoneOffsetSeconds',
         'isNap',
         new FieldPath('score', 'value'),
@@ -735,6 +751,11 @@ const defaultDependencies: McpDataServiceDependencies = {
         ...(includeDailyReportFields
           ? [
               'inBedDurationSeconds',
+              new FieldPath(
+                'sportsLibData',
+                'metrics',
+                SLEEP_SPORTS_LIB_METRIC_FIELDS.InBedDuration,
+              ),
               new FieldPath('score', 'qualifier'),
             ]
           : []),
@@ -3307,14 +3328,23 @@ export interface SafeSleepSession {
 }
 
 function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | null {
-  const source = data.source && typeof data.source === 'object'
-    ? data.source as Record<string, unknown>
+  let normalizedData: Record<string, unknown>;
+  try {
+    normalizedData = decodeSleepSessionSportsLibData(
+      data as unknown as SleepSession,
+    ) as unknown as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof SportsLibDataValidationError) return null;
+    throw error;
+  }
+  const source = normalizedData.source && typeof normalizedData.source === 'object'
+    ? normalizedData.source as Record<string, unknown>
     : {};
   const provider = normalizeSleepProvider(source.provider);
-  const startTimeMs = asFiniteNumber(data.startTimeMs);
-  const endTimeMs = asFiniteNumber(data.endTimeMs);
-  const durationSeconds = asNonNegativeNumber(data.durationSeconds);
-  const sleepDate = normalizeCalendarDate(data.sleepDate);
+  const startTimeMs = asFiniteNumber(normalizedData.startTimeMs);
+  const endTimeMs = asFiniteNumber(normalizedData.endTimeMs);
+  const durationSeconds = asNonNegativeNumber(normalizedData.durationSeconds);
+  const sleepDate = normalizeCalendarDate(normalizedData.sleepDate);
   if (
     !provider
     || startTimeMs === null
@@ -3327,8 +3357,8 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     return null;
   }
 
-  const rawScore = data.score && typeof data.score === 'object'
-    ? data.score as Record<string, unknown>
+  const rawScore = normalizedData.score && typeof normalizedData.score === 'object'
+    ? normalizedData.score as Record<string, unknown>
     : null;
   const scoreValue = rawScore ? asNonNegativeNumber(rawScore.value) : null;
   const scoreQualifier = typeof rawScore?.qualifier === 'string'
@@ -3343,14 +3373,14 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     startTimeMs,
     endTimeMs,
     durationSeconds,
-    inBedDurationSeconds: asNonNegativeNumber(data.inBedDurationSeconds),
-    isNap: data.isNap === true,
-    stageDurationsSeconds: normalizeStageDurations(data.stageDurationsSeconds),
+    inBedDurationSeconds: asNonNegativeNumber(normalizedData.inBedDurationSeconds),
+    isNap: normalizedData.isNap === true,
+    stageDurationsSeconds: normalizeStageDurations(normalizedData.stageDurationsSeconds),
     score: rawScore ? {
       value: scoreValue,
       qualifier: scoreQualifier,
     } : null,
-    vitals: normalizeSleepVitals(data.vitals),
+    vitals: normalizeSleepVitals(normalizedData.vitals),
   };
 }
 

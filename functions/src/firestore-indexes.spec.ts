@@ -712,4 +712,15 @@ describe('firestore indexes', () => {
             && override.ttl === true
         ))).toBe(false);
     });
+
+    it('does not index the internal Sports Lib sleep aggregate envelope', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'sleepSessions',
+            fieldPath: 'sportsLibData',
+            ttl: false,
+            indexes: [],
+        });
+    });
 });

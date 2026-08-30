@@ -178,8 +178,35 @@ describe('health writer', () => {
         expect(built.chunks.map(chunk => chunk.coverage.sampleCount)).toEqual([1441, 1441]);
         expect(built.sourceRecord.sampleChunkIds).toEqual(built.chunks.map(chunk => chunk.id));
         expect(built.sourceRecord.metricIds).toEqual([HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.Steps]);
+        expect(built.sourceRecord.metrics[0]).toMatchObject({
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { value: { Steps: 100 } },
+            },
+        });
         expect(JSON.stringify(built)).not.toContain('secret-provider-account');
         expect(built.sourceRecord.source.accountKey).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('derives Sports Lib JSON after validation instead of trusting adapter-supplied JSON', async () => {
+        const input = validInput();
+        (input.metrics as Array<Record<string, unknown>>)[0].sportsLibData = {
+            schemaVersion: 1,
+            metrics: { value: { Steps: 999_999 } },
+        };
+
+        const built = await buildHealthSourceRecordWrite('user-1', input, 10_000, fakeId);
+        const baseline = await buildHealthSourceRecordWrite('user-1', validInput(), 10_000, fakeId);
+
+        expect(built.sourceRecord.metrics[0]).toMatchObject({
+            canonical: { value: 100, unit: HEALTH_UNITS.Count },
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { value: { Steps: 100 } },
+            },
+        });
+        expect(JSON.stringify(built.sourceRecord)).not.toContain('999999');
+        expect(built.sourceRecord.source.revision).toEqual(baseline.sourceRecord.source.revision);
     });
 
     it('persists an opaque source key when an adapter key contains the raw provider account ID', async () => {

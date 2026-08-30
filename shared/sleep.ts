@@ -1,3 +1,5 @@
+import type { SportsLibDataEnvelope } from './sports-lib-data';
+
 export const SLEEP_SESSIONS_COLLECTION_ID = 'sleepSessions';
 export const SLEEP_SYNC_STATE_COLLECTION_ID = 'sleepSyncState';
 
@@ -73,6 +75,30 @@ export interface SleepProviderFields {
   coros?: Record<string, unknown>;
 }
 
+export const SLEEP_SPORTS_LIB_METRIC_FIELDS = {
+  Duration: 'duration',
+  InBedDuration: 'inBedDuration',
+  DeepDuration: 'deepDuration',
+  LightDuration: 'lightDuration',
+  RemDuration: 'remDuration',
+  AwakeDuration: 'awakeDuration',
+  UnmeasurableDuration: 'unmeasurableDuration',
+  UnknownDuration: 'unknownDuration',
+  Score: 'score',
+  AverageHeartRate: 'averageHeartRate',
+  MinimumHeartRate: 'minimumHeartRate',
+  RestingHeartRate: 'restingHeartRate',
+  AverageHrv: 'averageHrv',
+  OvernightHrv: 'overnightHrv',
+  HrvSampleCount: 'hrvSampleCount',
+  MaximumSpo2: 'maximumSpo2',
+  AverageRespiration: 'averageRespiration',
+} as const;
+
+export type SleepSportsLibMetricField = typeof SLEEP_SPORTS_LIB_METRIC_FIELDS[
+  keyof typeof SLEEP_SPORTS_LIB_METRIC_FIELDS
+];
+
 export interface SleepSession {
   id?: string;
   userID: string;
@@ -93,6 +119,8 @@ export interface SleepSession {
   spo2Samples?: SleepSamplePoint[] | null;
   hrvSamples?: SleepSamplePoint[] | null;
   providerFields?: SleepProviderFields | null;
+  /** Canonical aggregate JSON produced and validated by Sports Lib. */
+  sportsLibData?: SportsLibDataEnvelope<SleepSportsLibMetricField>;
   createdAtMs: number;
   updatedAtMs: number;
 }

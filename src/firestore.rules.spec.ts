@@ -1395,6 +1395,31 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('keeps mixed legacy and Sports Lib sleep storage owner-readable and server-written', async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().collection('users').doc(userId)
+                        .collection('sleepSessions').doc('mixed-sleep').set({
+                            durationSeconds: 28800,
+                            sportsLibData: {
+                                schemaVersion: 1,
+                                metrics: { duration: { 'Sleep Duration': 28800 } },
+                            },
+                        });
+                });
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+
+                const snapshot = await assertSucceeds(ownerDb.collection('users').doc(userId)
+                    .collection('sleepSessions').doc('mixed-sleep').get());
+                expect(snapshot.data()?.sportsLibData?.schemaVersion).toBe(1);
+                await assertFails(otherDb.collection('users').doc(userId)
+                    .collection('sleepSessions').doc('mixed-sleep').get());
+                await assertFails(ownerDb.collection('users').doc(userId)
+                    .collection('sleepSessions').doc('mixed-sleep').update({
+                        'sportsLibData.metrics.duration.Sleep Duration': 1,
+                    }));
+            });
+
             it('should allow owners to read their own sleep sync state docs', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.collection('users').doc(userId).collection('sleepSyncState').doc('GarminAPI').get());
@@ -1451,6 +1476,32 @@ describe('Firestore Security Rules', () => {
                 await assertFails(userRef.collection('healthSourceRecords').doc('record-1').set({ calendarDate: '2026-01-01' }));
                 await assertFails(userRef.collection('healthSampleChunks').doc('chunk-1').set({ offsetMs: [0] }));
                 await assertFails(userRef.collection('healthSyncState').doc('GarminAPI').set({ status: 'ready' }));
+            });
+
+            it('keeps mixed legacy and Sports Lib Health storage owner-readable and server-written', async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().collection('users').doc(userId)
+                        .collection('healthSourceRecords').doc('mixed-health').set({
+                            calendarDate: '2026-01-01',
+                            metrics: [{
+                                canonical: { value: 100, unit: 'count' },
+                                sportsLibData: {
+                                    schemaVersion: 1,
+                                    metrics: { value: { Steps: 100 } },
+                                },
+                            }],
+                        });
+                });
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+
+                const snapshot = await assertSucceeds(ownerDb.collection('users').doc(userId)
+                    .collection('healthSourceRecords').doc('mixed-health').get());
+                expect(snapshot.data()?.metrics?.[0]?.sportsLibData?.schemaVersion).toBe(1);
+                await assertFails(otherDb.collection('users').doc(userId)
+                    .collection('healthSourceRecords').doc('mixed-health').get());
+                await assertFails(ownerDb.collection('users').doc(userId)
+                    .collection('healthSourceRecords').doc('mixed-health').update({ metrics: [] }));
             });
 
             it('forbids descendants beneath permanent health leaf documents', async () => {

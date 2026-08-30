@@ -12,6 +12,10 @@ import {
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
 import {
+    decodeSleepSessionSportsLibData,
+    encodeSleepSessionSportsLibData,
+} from '../../../shared/sports-lib-health-data';
+import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
@@ -237,6 +241,10 @@ function comparableSleepSessionPayload(session: SleepSession | SleepMapperResult
     delete payload.userID;
     delete payload.createdAtMs;
     delete payload.updatedAtMs;
+    // The bounded migration owns conversion of legacy documents. Ignoring the
+    // additive codec envelope here prevents routine provider redeliveries from
+    // becoming an unbounded incidental migration.
+    delete payload.sportsLibData;
 
     const source = payload.source && typeof payload.source === 'object'
         ? payload.source as Record<string, unknown>
@@ -293,14 +301,15 @@ export async function upsertSleepSession(
     lifecycleGuardSkipped?: true;
 }> {
     validateSleepLifecycleWriterDependencies(dependencies);
-    const provider = mapperResult.session.source.provider;
+    const incomingSession = encodeSleepSessionSportsLibData(mapperResult.session);
+    const provider = incomingSession.source.provider;
     const id = await buildSleepSessionDocumentId(
         userID,
         provider,
         mapperResult.sourceSessionKey,
     );
     const skippedSession: SleepSession = {
-        ...mapperResult.session,
+        ...incomingSession,
         id,
         userID,
         createdAtMs: nowMs,
@@ -340,12 +349,14 @@ export async function upsertSleepSession(
         }
 
         const existing = await transaction.get(docRef);
-        const existingSession = existing.exists ? existing.data() as SleepSession : null;
-        if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
+        const existingSession = existing.exists
+            ? decodeSleepSessionSportsLibData(existing.data() as SleepSession)
+            : null;
+        if (existingSession && shouldKeepExistingSleepSession(existingSession, incomingSession)) {
             logger.info(`[SleepSync] Preserved fuller ${provider} sleep session ${id} for ${userID}`);
             return { id, session: existingSession, written: false };
         }
-        if (existingSession && isIdempotentSleepSessionWrite(existingSession, mapperResult.session)) {
+        if (existingSession && isIdempotentSleepSessionWrite(existingSession, incomingSession)) {
             logger.info(`[SleepSync] Skipped unchanged ${provider} sleep session ${id} for ${userID}`);
             return { id, session: existingSession, written: false };
         }
@@ -354,7 +365,7 @@ export async function upsertSleepSession(
             ? existingSession.createdAtMs
             : nowMs;
         const session: SleepSession = {
-            ...mapperResult.session,
+            ...incomingSession,
             id,
             userID,
             createdAtMs,

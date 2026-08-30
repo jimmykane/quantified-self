@@ -19,6 +19,7 @@ import {
     HealthSyncStatus,
     isHealthProvider,
 } from '../../../shared/health';
+import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
 import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
@@ -373,7 +374,7 @@ export async function buildHealthSourceRecordWrite(
         startTimeMs: input.startTimeMs,
         endTimeMs: input.endTimeMs,
         timezoneOffsetSeconds: input.timezoneOffsetSeconds,
-        metrics: input.metrics,
+        metrics: input.metrics.map(encodeHealthMetricSportsLibData),
         metricIds,
         coverage: input.coverage,
         device: input.device,

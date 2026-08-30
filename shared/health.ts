@@ -1,3 +1,5 @@
+import type { SportsLibDataEnvelope } from './sports-lib-data';
+
 export const HEALTH_SCHEMA_VERSION = 1 as const;
 
 export const HEALTH_SOURCE_RECORDS_COLLECTION_ID = 'healthSourceRecords';
@@ -275,6 +277,8 @@ export interface HealthMetricValue extends HealthMetricBase {
   native: HealthNativeValue;
   canonical?: HealthCanonicalValue | null;
   goal?: HealthMetricGoal | null;
+  /** Canonical scalar JSON produced and validated by Sports Lib. */
+  sportsLibData?: SportsLibDataEnvelope<'value' | 'goal'>;
 }
 
 export const HEALTH_SLEEP_REFERENCE_FIELDS = {

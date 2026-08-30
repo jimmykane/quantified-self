@@ -1,6 +1,51 @@
 import {
+  DataActiveDuration,
+  DataActiveEnergy,
+  DataBasalEnergy,
+  DataBloodOxygenSaturation,
+  DataBloodPressureDiastolic,
+  DataBloodPressureSystolic,
+  DataBodyEnergy,
+  DataBodyEnergyChange,
+  DataBodyFat,
+  DataBodyMassIndex,
+  DataBodyWater,
+  DataBoneMass,
+  DataFloorsClimbed,
+  DataHeartRateVariability,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
+  DataModerateIntensityDuration,
+  DataMuscleMass,
+  DataPulseRate,
+  DataRecoveryScore,
+  DataRespirationRate,
+  DataRestingHeartRate,
+  DataSkinTemperatureDeviation,
+  DataSleepAwakeDuration,
+  DataSleepBloodOxygenSaturationMax,
+  DataSleepDeepDuration,
+  DataSleepDuration,
+  DataSleepHeartRateAvg,
+  DataSleepHeartRateMin,
+  DataSleepHRVAvg,
+  DataSleepHRVOvernight,
+  DataSleepHRVSampleCount,
+  DataSleepInBedDuration,
+  DataSleepLightDuration,
+  DataSleepRemDuration,
+  DataSleepRespirationRateAvg,
+  DataSleepRestingHeartRate,
+  DataSleepScore,
+  DataSleepUnknownDuration,
+  DataSleepUnmeasurableDuration,
+  DataStressDuration,
+  DataStressLevel,
+  DataStressState,
+  DataTotalEnergy,
+  DataVigorousIntensityDuration,
+  DataWheelchairPushDistance,
+  DataWheelchairPushes,
   DataStore,
   DynamicDataLoader,
   UnitSystem,
@@ -27,9 +72,61 @@ export interface McpMetricDescriptor {
   unitSystem: 'metric' | 'imperial';
 }
 
-const SENSITIVE_NUMERIC_TYPES = new Set([
+// Sports Lib 20.3 registers these normalized Health/Sleep classes in the
+// global DataStore. Registration is not authorization to expose a same-named
+// event stat through the activity-metrics scope.
+export const MCP_NON_ACTIVITY_SPORTS_LIB_TYPES = Object.freeze([
+  DataActiveDuration.type,
+  DataActiveEnergy.type,
+  DataBasalEnergy.type,
+  DataBloodOxygenSaturation.type,
+  DataBloodPressureDiastolic.type,
+  DataBloodPressureSystolic.type,
+  DataBodyEnergy.type,
+  DataBodyEnergyChange.type,
+  DataBodyFat.type,
+  DataBodyMassIndex.type,
+  DataBodyWater.type,
+  DataBoneMass.type,
+  DataFloorsClimbed.type,
+  DataHeartRateVariability.type,
+  DataModerateIntensityDuration.type,
+  DataMuscleMass.type,
+  DataPulseRate.type,
+  DataRecoveryScore.type,
+  DataRespirationRate.type,
+  DataRestingHeartRate.type,
+  DataSkinTemperatureDeviation.type,
+  DataSleepAwakeDuration.type,
+  DataSleepBloodOxygenSaturationMax.type,
+  DataSleepDeepDuration.type,
+  DataSleepDuration.type,
+  DataSleepHeartRateAvg.type,
+  DataSleepHeartRateMin.type,
+  DataSleepHRVAvg.type,
+  DataSleepHRVOvernight.type,
+  DataSleepHRVSampleCount.type,
+  DataSleepInBedDuration.type,
+  DataSleepLightDuration.type,
+  DataSleepRemDuration.type,
+  DataSleepRespirationRateAvg.type,
+  DataSleepRestingHeartRate.type,
+  DataSleepScore.type,
+  DataSleepUnknownDuration.type,
+  DataSleepUnmeasurableDuration.type,
+  DataStressDuration.type,
+  DataStressLevel.type,
+  DataStressState.type,
+  DataTotalEnergy.type,
+  DataVigorousIntensityDuration.type,
+  DataWheelchairPushDistance.type,
+  DataWheelchairPushes.type,
+] as const);
+
+const EXCLUDED_NUMERIC_TYPES = new Set([
   DataLatitudeDegrees.type,
   DataLongitudeDegrees.type,
+  ...MCP_NON_ACTIVITY_SPORTS_LIB_TYPES,
 ]);
 
 function asNonEmptyString(value: unknown): string | null {
@@ -39,7 +136,7 @@ function asNonEmptyString(value: unknown): string | null {
 
 function buildNumericDescriptor(DataClass: SportsLibDataClass): McpMetricDescriptor | null {
   const type = asNonEmptyString(DataClass?.type);
-  if (!type || SENSITIVE_NUMERIC_TYPES.has(type)) {
+  if (!type || EXCLUDED_NUMERIC_TYPES.has(type)) {
     return null;
   }
 
@@ -113,7 +210,7 @@ export function resolveSportsLibNumericMetric(
   try {
     const DataClass = DynamicDataLoader.getDataClassFromDataType(normalized) as unknown as SportsLibDataClass;
     const canonicalType = asNonEmptyString(DataClass?.type);
-    if (!canonicalType || SENSITIVE_NUMERIC_TYPES.has(canonicalType)) {
+    if (!canonicalType || EXCLUDED_NUMERIC_TYPES.has(canonicalType)) {
       return null;
     }
     return catalogByType.get(canonicalType) || null;

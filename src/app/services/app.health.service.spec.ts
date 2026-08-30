@@ -220,6 +220,34 @@ describe('AppHealthService', () => {
         expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.HeartRate);
     });
 
+    it('strictly rehydrates new-format Health scalars before projection', async () => {
+        const sourceRecord = healthSourceRecord();
+        sourceRecord.metrics = [{
+            ...sourceRecord.metrics[0],
+            canonical: undefined,
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { value: { Steps: 100 } },
+            },
+        }];
+        vi.mocked(collectionData).mockImplementation((target: unknown) => {
+            const path = (target as { collectionRef?: { path?: string[] } }).collectionRef?.path || [];
+            return of(path.at(-1) === 'healthSourceRecords' ? [sourceRecord] : []) as never;
+        });
+
+        const result = await firstValueFrom(service.watchRange('user-1', {
+            startDate: '2026-01-01',
+            endDate: '2026-01-01',
+            metricIds: [HEALTH_METRIC_IDS.Steps],
+        }));
+
+        expect(result.observations[0].entry).toMatchObject({
+            canonical: { value: 100, unit: HEALTH_UNITS.Count },
+        });
+        expect(JSON.stringify(result)).not.toContain('sportsLibData');
+        expect(JSON.stringify(result)).not.toContain('Steps');
+    });
+
     it('offers the authenticated callable as an explicit server-read alternative', async () => {
         const expected = { observations: [] };
         functions.call.mockResolvedValue({ data: expected });
