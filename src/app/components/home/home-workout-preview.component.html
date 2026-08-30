@@ -1,26 +1,27 @@
 <section class="workout-preview" role="img"
-  aria-label="Illustrative workout analysis preview with Heart Rate and Power charts">
+  aria-label="Illustrative workout analysis with zone-colored Heart Rate and Power, grade-colored Altitude, and an inverse Depth profile">
   <header class="workout-preview__header">
     <div>
-      <span class="workout-preview__eyebrow">Illustrative workout</span>
-      <strong>Morning Ride</strong>
+      <span class="workout-preview__eyebrow">Illustrative analysis</span>
+      <strong>Recorded streams</strong>
     </div>
-    <span class="workout-preview__summary">54:18 <i aria-hidden="true">·</i> 24.8 km</span>
+    <span class="workout-preview__summary">Synchronized by time</span>
   </header>
 
   <div class="workout-preview__charts" inert aria-hidden="true" data-nosnippet>
     <app-event-card-chart-panel [panel]="heartRatePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
       [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
       [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+    <app-event-card-chart-panel [panel]="altitudePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+      [showSwimLengths]="false" [colorAltitudeByGrade]="true"
+      [previewMode]="true"></app-event-card-chart-panel>
     <app-event-card-chart-panel [panel]="powerPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
       [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
       [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+    <app-event-card-chart-panel [panel]="depthPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+      [showSwimLengths]="false" [fillOpacity]="1" [areaFillOrigin]="depthAreaFillOrigin"
+      [areaFillColor]="depthFillColor()" [previewMode]="true"></app-event-card-chart-panel>
   </div>
-
-  <footer class="workout-preview__capabilities" aria-label="Workout analysis capabilities">
-    <span>7 chart types</span>
-    <span>Heatmaps</span>
-    <span>Gradient + speed overlays</span>
-    <span>12 map styles</span>
-  </footer>
 </section>

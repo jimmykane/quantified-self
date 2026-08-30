@@ -1020,6 +1020,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       emphasis: {
         disabled: true,
       },
+      silent: this.previewMode,
       dimensions: ['x', 'y'],
       data: this.getSeriesLineData(series),
     }));
@@ -1068,6 +1069,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         emphasis: {
           disabled: true,
         },
+        silent: this.previewMode,
         dimensions: ['x', 'y'],
         data: new Float64Array(group.data) as unknown as ChartLineSeriesOption['data'],
       }));

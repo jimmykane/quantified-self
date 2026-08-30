@@ -6,6 +6,7 @@
 }
 
 .workout-preview {
+  container-type: inline-size;
   overflow: hidden;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 18px;
@@ -54,12 +55,13 @@
 
 .workout-preview__charts {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
-  padding: 0.65rem 0.75rem 0.45rem;
+  padding: 0.65rem 0.75rem;
   background: var(--mat-sys-surface-container-low);
 
   app-event-card-chart-panel {
-    --event-chart-panel-height: 76px;
+    --event-chart-panel-height: 70px;
     display: block;
     padding: 0.55rem 0.65rem 0.25rem;
     border: 1px solid var(--mat-sys-outline-variant);
@@ -68,29 +70,8 @@
   }
 }
 
-.workout-preview__capabilities {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.8rem;
-  padding: 0.65rem 0.75rem;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  color: var(--mat-sys-on-surface-variant);
-
-  span {
-    position: relative;
-    padding-left: 0.55rem;
-    font-size: 0.66rem;
-    font-weight: 550;
-
-    &::before {
-      position: absolute;
-      top: 0.4em;
-      left: 0;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--mat-sys-primary);
-      content: '';
-    }
+@container (max-width: 440px) {
+  .workout-preview__charts {
+    grid-template-columns: 1fr;
   }
 }

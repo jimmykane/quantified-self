@@ -253,10 +253,13 @@ describe('HomeComponent', () => {
         expect(text).toContain('Map');
         expect(text).toContain('clustered-heatmap controls');
         expect(text).toContain('Analyze Every Workout');
-        expect(text).toContain('heart rate, power, pace, altitude');
-        expect(text).toContain('7 chart types');
+        expect(text).toContain('heart rate and power by zone');
+        expect(text).toContain('altitude colored by grade');
+        expect(text).toContain('inverse depth profiles');
+        expect(text).toContain('pace, cadence, temperature, and more');
         expect(text).toContain('gradient or speed overlays');
         expect(text).toContain('12 map styles');
+        expect(text).not.toContain('7 chart types');
         expect(text).toContain('Explore Activity Calendar');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/activity-calendar"], a[ng-reflect-router-link="/features/activity-calendar"]')).toBeTruthy();
         expect(text).toContain('Read-only MCP Server');

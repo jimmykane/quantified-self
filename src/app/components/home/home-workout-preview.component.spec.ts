@@ -3,13 +3,15 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, AppThemes } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventCardChartPanelComponent } from '../event/chart/panel/event.card.chart.panel.component';
 import { AppShareService } from '../../services/app.share.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
+import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
 import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
 
@@ -73,27 +75,83 @@ describe('HomeWorkoutPreviewComponent', () => {
     const options = loader.setOption.mock.calls
       .map(call => call[1] as {
         tooltip?: { show: boolean };
-        series?: Array<{ silent: boolean; lineStyle: { color: string } }>;
+        visualMap?: Array<{
+          pieces: Array<{ color: string; label: string }>;
+          outOfRange: { color: string };
+        }>;
+        yAxis?: { inverse?: boolean };
+        series?: Array<{
+          id: string;
+          silent: boolean;
+          lineStyle: { color?: string };
+          areaStyle?: { color?: string; opacity?: number; origin?: string };
+        }>;
       })
       .filter(option => !!option.tooltip && !!option.series?.length) as Array<{
         tooltip: { show: boolean };
-        series: Array<{ silent: boolean; lineStyle: { color: string } }>;
+        visualMap?: Array<{
+          pieces: Array<{ color: string; label: string }>;
+          outOfRange: { color: string };
+        }>;
+        yAxis: { inverse?: boolean };
+        series: Array<{
+          id: string;
+          silent: boolean;
+          lineStyle: { color?: string };
+          areaStyle?: { color?: string; opacity?: number; origin?: string };
+        }>;
       }>;
+    const optionFor = (dataType: string) => options.find(option =>
+      option.series.some(series => series.id.includes(`::${dataType}`))
+    );
+    const heartRateOption = optionFor('Heart Rate');
+    const altitudeOption = optionFor('Altitude');
+    const powerOption = optionFor('Power');
+    const depthOption = optionFor('Depth');
 
-    expect(panels).toHaveLength(2);
-    expect(options).toHaveLength(2);
+    expect(panels).toHaveLength(4);
+    expect(options).toHaveLength(4);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
-    expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Power']);
+    expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
     expect(options.every(option => option.tooltip.show === false)).toBe(true);
-    expect(options.map(option => option.series[0]?.lineStyle.color)).toEqual([
-      AppDataColors['Heart Rate'],
-      AppDataColors.Power,
-    ]);
     expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
+    expect(heartRateOption?.visualMap?.[0]?.pieces.map(piece => piece.color)).toEqual([
+      AppColors.LightBlue,
+      AppColors.Blue,
+      AppColors.Green,
+      AppColors.Yellow,
+      AppColors.LightestRed,
+    ]);
+    expect(heartRateOption?.visualMap?.[0]?.outOfRange.color).toBe(AppDataColors['Heart Rate']);
+    expect(powerOption?.visualMap?.[0]?.pieces.map(piece => piece.color)).toEqual([
+      AppColors.LightBlue,
+      AppColors.Blue,
+      AppColors.Green,
+      AppColors.Yellow,
+      AppColors.LightestRed,
+    ]);
+    expect(powerOption?.visualMap?.[0]?.outOfRange.color).toBe(AppDataColors.Power);
+    expect(altitudeOption?.series.map(series => series.lineStyle.color)).toEqual(expect.arrayContaining([
+      '#1E88E5',
+      '#43A047',
+      '#F9A825',
+      '#E64A19',
+      '#B71C1C',
+      '#7F1D1D',
+    ]));
+    expect(depthOption?.yAxis.inverse).toBe(true);
+    expect(depthOption?.series[0]?.areaStyle).toEqual(expect.objectContaining({
+      color: AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup].end,
+      opacity: 1,
+      origin: 'start',
+    }));
     expect(chart.on).not.toHaveBeenCalled();
-    expect(text).toContain('Morning Ride');
-    expect(text).toContain('54:18');
-    expect(text).toContain('7 chart types');
-    expect(text).toContain('Gradient + speed overlays');
+    expect(text).toContain('Recorded streams');
+    expect(text).toContain('Synchronized by time');
+    expect(text).toContain('Heart Rate');
+    expect(text).toContain('Altitude');
+    expect(text).toContain('Power');
+    expect(text).toContain('Depth');
+    expect(text).not.toContain('7 chart types');
   });
 });
