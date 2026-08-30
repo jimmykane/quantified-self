@@ -4,6 +4,7 @@ import {
     collection,
     collectionData,
     documentId,
+    getDocs,
     limit,
     orderBy,
     query,
@@ -17,6 +18,8 @@ import {
     HEALTH_SYNC_STATE_COLLECTION_ID,
     HealthRangeQuery,
     HealthRangeResult,
+    HealthMetricId,
+    HealthQueryCursor,
     HealthSampleChunk,
     HealthSourceRecord,
     HealthSyncState,
@@ -25,8 +28,43 @@ import {
     HealthFirestoreQueryPlan,
     planHealthFirestoreQueries,
 } from '@shared/health-firestore-query';
-import { projectHealthRange } from '@shared/health-query';
+import { projectHealthRange, projectLoadedHealthRange } from '@shared/health-query';
 import { AppFunctionsService } from './app.functions.service';
+
+export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
+    sourceRecords: 2_048,
+    sampleChunks: 256,
+    samplePoints: 100_000,
+    serializedBytes: 16 * 1024 * 1024,
+});
+
+export type HealthWorkspaceLoadLimit = 'source_records' | 'sample_chunks' | 'sample_points' | 'serialized_bytes';
+
+export interface HealthWorkspaceRangeRequest {
+    startDate: string;
+    endDate: string;
+    metricId: HealthMetricId;
+    includeSamples: boolean;
+}
+
+export interface HealthWorkspaceRangeLoad {
+    result: HealthRangeResult;
+    limitReached: HealthWorkspaceLoadLimit | null;
+    sourceRecordCount: number;
+    sampleChunkCount: number;
+    samplePointCount: number;
+    serializedBytes: number;
+    hasMatchingSourceRecords: boolean;
+    hasSampleBackedMetric: boolean;
+}
+
+interface LoadedCollectionPage<T> {
+    values: T[];
+    complete: boolean;
+    cursor: HealthQueryCursor | null;
+    serializedBytes: number;
+    limitReached: HealthWorkspaceLoadLimit | null;
+}
 
 @Injectable({
     providedIn: 'root',
@@ -38,7 +76,7 @@ export class AppHealthService {
     private functions = inject(AppFunctionsService);
 
     /**
-     * Default Health Hub read path. Firestore supplies bounded source pages and
+     * Default Health read path. Firestore supplies bounded source pages and
      * the shared projector produces the exact same result shape as the callable.
      */
     watchRange(
@@ -79,6 +117,55 @@ export class AppHealthService {
         return collectionData(stateQuery, { idField: 'provider' }) as Observable<HealthSyncState[]>;
     }
 
+    /**
+     * Owner-scoped one-shot reader for the Health workspace. It always queries
+     * the selected metric first, walks every bounded Firestore page, and only
+     * then projects the aggregate so cross-page conflicts and sample revisions
+     * remain correct.
+     */
+    async loadMetricRange(
+        userID: string | null | undefined,
+        request: HealthWorkspaceRangeRequest,
+    ): Promise<HealthWorkspaceRangeLoad> {
+        const uid = `${userID || ''}`.trim();
+        const queryValue: HealthRangeQuery = {
+            startDate: request.startDate,
+            endDate: request.endDate,
+            metricIds: [request.metricId],
+            providers: [],
+            includeSamples: request.includeSamples,
+        };
+        const normalizedQuery = planHealthFirestoreQueries(queryValue).query;
+        if (!uid) {
+            return this.buildWorkspaceLoad([], [], normalizedQuery, true, true, null, null, 0);
+        }
+
+        const sourcePage = await this.loadSourceRecordPages(uid, normalizedQuery);
+        let chunkPage: LoadedCollectionPage<HealthSampleChunk> = {
+            values: [],
+            complete: !normalizedQuery.includeSamples,
+            cursor: null,
+            serializedBytes: sourcePage.serializedBytes,
+            limitReached: sourcePage.limitReached,
+        };
+        if (normalizedQuery.includeSamples && sourcePage.complete) {
+            chunkPage = await this.loadSampleChunkPages(uid, normalizedQuery, sourcePage.serializedBytes);
+        }
+
+        const limitReached = sourcePage.limitReached || chunkPage.limitReached;
+        return this.buildWorkspaceLoad(
+            sourcePage.values,
+            chunkPage.values,
+            normalizedQuery,
+            sourcePage.complete,
+            chunkPage.complete,
+            sourcePage.cursor,
+            chunkPage.cursor,
+            chunkPage.serializedBytes,
+            limitReached,
+        );
+    }
+
     private watchCollection<T>(userID: string, plan: HealthFirestoreQueryPlan): Observable<T[]> {
         const targetCollection = collection(this.firestore, 'users', userID, plan.collectionId);
         const constraints: QueryConstraint[] = [
@@ -99,4 +186,150 @@ export class AppHealthService {
         const targetQuery = query(targetCollection, ...constraints);
         return collectionData(targetQuery, { idField: 'id' }) as Observable<T[]>;
     }
+
+    private async loadSourceRecordPages(
+        userID: string,
+        queryValue: HealthRangeQuery,
+    ): Promise<LoadedCollectionPage<HealthSourceRecord>> {
+        const values: HealthSourceRecord[] = [];
+        let cursor: HealthQueryCursor | null = null;
+        let serializedBytes = 0;
+        while (true) {
+            const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }).sourceRecords;
+            const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
+            const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
+            for (const documentSnapshot of page) {
+                if (values.length >= HEALTH_WORKSPACE_LOAD_LIMITS.sourceRecords) {
+                    return { values, complete: false, cursor, serializedBytes, limitReached: 'source_records' };
+                }
+                const value = { ...(documentSnapshot.data() as HealthSourceRecord), id: documentSnapshot.id };
+                const valueBytes = serializedUtf8Bytes(value);
+                if (serializedBytes + valueBytes > HEALTH_WORKSPACE_LOAD_LIMITS.serializedBytes) {
+                    return { values, complete: false, cursor, serializedBytes, limitReached: 'serialized_bytes' };
+                }
+                values.push(value);
+                serializedBytes += valueBytes;
+                cursor = { calendarDate: value.calendarDate, id: value.id };
+            }
+            if (snapshot.docs.length <= page.length) {
+                return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
+            }
+            if (!cursor) {
+                return { values, complete: false, cursor: null, serializedBytes, limitReached: 'source_records' };
+            }
+        }
+    }
+
+    private async loadSampleChunkPages(
+        userID: string,
+        queryValue: HealthRangeQuery,
+        initialSerializedBytes: number,
+    ): Promise<LoadedCollectionPage<HealthSampleChunk>> {
+        const values: HealthSampleChunk[] = [];
+        let cursor: HealthQueryCursor | null = null;
+        let serializedBytes = initialSerializedBytes;
+        let samplePoints = 0;
+        while (true) {
+            const plan = planHealthFirestoreQueries({ ...queryValue, chunkCursor: cursor }).chunks;
+            if (!plan) {
+                return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
+            }
+            const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
+            const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
+            for (const documentSnapshot of page) {
+                if (values.length >= HEALTH_WORKSPACE_LOAD_LIMITS.sampleChunks) {
+                    return { values, complete: false, cursor, serializedBytes, limitReached: 'sample_chunks' };
+                }
+                const value = { ...(documentSnapshot.data() as HealthSampleChunk), id: documentSnapshot.id };
+                const pointCount = Array.isArray(value.offsetMs) ? value.offsetMs.length : 0;
+                if (samplePoints + pointCount > HEALTH_WORKSPACE_LOAD_LIMITS.samplePoints) {
+                    return { values, complete: false, cursor, serializedBytes, limitReached: 'sample_points' };
+                }
+                const valueBytes = serializedUtf8Bytes(value);
+                if (serializedBytes + valueBytes > HEALTH_WORKSPACE_LOAD_LIMITS.serializedBytes) {
+                    return { values, complete: false, cursor, serializedBytes, limitReached: 'serialized_bytes' };
+                }
+                values.push(value);
+                samplePoints += pointCount;
+                serializedBytes += valueBytes;
+                cursor = { calendarDate: value.calendarDate, id: value.id };
+            }
+            if (snapshot.docs.length <= page.length) {
+                return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
+            }
+            if (!cursor) {
+                return { values, complete: false, cursor: null, serializedBytes, limitReached: 'sample_chunks' };
+            }
+        }
+    }
+
+    private buildCollectionQuery(userID: string, plan: HealthFirestoreQueryPlan) {
+        const targetCollection = collection(this.firestore, 'users', userID, plan.collectionId);
+        const constraints: QueryConstraint[] = [
+            where('calendarDate', '>=', plan.startDate),
+            where('calendarDate', '<=', plan.endDate),
+        ];
+        if (plan.filter) {
+            constraints.push(where(plan.filter.field, plan.filter.operator, plan.filter.value));
+        }
+        constraints.push(orderBy('calendarDate', 'asc'), orderBy(documentId(), 'asc'));
+        if (plan.cursor) {
+            constraints.push(startAfter(plan.cursor.calendarDate, plan.cursor.id));
+        }
+        constraints.push(limit(plan.fetchLimit));
+        return query(targetCollection, ...constraints);
+    }
+
+    private buildWorkspaceLoad(
+        sourceRecords: readonly HealthSourceRecord[],
+        chunks: readonly HealthSampleChunk[],
+        queryValue: HealthRangeQuery,
+        sourceRecordsComplete: boolean,
+        samplesComplete: boolean,
+        sourceRecordCursor: HealthQueryCursor | null,
+        chunkCursor: HealthQueryCursor | null,
+        serializedBytes: number,
+        limitReached: HealthWorkspaceLoadLimit | null = null,
+    ): HealthWorkspaceRangeLoad {
+        const result = projectLoadedHealthRange(sourceRecords, chunks, queryValue, {
+            sourceRecordsComplete,
+            samplesComplete,
+            sourceRecordCursor,
+            chunkCursor,
+        });
+        const metricId = result.query.metricIds[0];
+        return {
+            result,
+            limitReached,
+            sourceRecordCount: sourceRecords.length,
+            sampleChunkCount: result.sampleChunks.length,
+            samplePointCount: result.pageInfo.returnedSamplePoints,
+            serializedBytes,
+            hasMatchingSourceRecords: sourceRecords.length > 0,
+            hasSampleBackedMetric: !!metricId && sourceRecords.some(record =>
+                record.metricIds.includes(metricId) && record.sampleChunkIds.length > 0),
+        };
+    }
+}
+
+function serializedUtf8Bytes(value: unknown): number {
+    const serialized = JSON.stringify(value);
+    let bytes = 0;
+    for (let index = 0; index < serialized.length; index += 1) {
+        const codePoint = serialized.charCodeAt(index);
+        if (codePoint < 0x80) {
+            bytes += 1;
+        } else if (codePoint < 0x800) {
+            bytes += 2;
+        } else if (codePoint >= 0xd800 && codePoint <= 0xdbff
+            && index + 1 < serialized.length
+            && serialized.charCodeAt(index + 1) >= 0xdc00
+            && serialized.charCodeAt(index + 1) <= 0xdfff) {
+            bytes += 4;
+            index += 1;
+        } else {
+            bytes += 3;
+        }
+    }
+    return bytes;
 }

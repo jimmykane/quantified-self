@@ -1,0 +1,299 @@
+<main class="health-workspace qs-workspace-page" aria-labelledby="health-title">
+  <app-page-header
+    title="Health"
+    titleId="health-title"
+    leadingIcon="cardiology"
+    eyebrow="Cross-service health history"
+    subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
+    <div pageHeaderActions class="health-header-actions">
+      <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">
+        <mat-icon aria-hidden="true">hub</mat-icon>
+        <span>Connectivity</span>
+      </a>
+      <a mat-button routerLink="/dashboard" aria-label="Return to dashboard">
+        <mat-icon aria-hidden="true">dashboard</mat-icon>
+        <span>Dashboard</span>
+      </a>
+    </div>
+  </app-page-header>
+
+  <app-health-priority-summary
+    [cards]="priorityCards()"
+    [selectedMetric]="routeState().metric"
+    (metricSelected)="selectPriorityMetric($event)">
+  </app-health-priority-summary>
+
+  <section class="health-explorer" aria-labelledby="health-explorer-title">
+    <div class="health-section-heading health-explorer-heading">
+      <div>
+        <p class="health-eyebrow">Metric explorer</p>
+        <h2 id="health-explorer-title">Complete Health catalog</h2>
+      </div>
+      <p>Choose a metric, range, and optional source filter.</p>
+    </div>
+
+    <div class="health-mobile-metric-selector">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Health metric</mat-label>
+        <mat-select [value]="routeState().metric" (selectionChange)="selectMetric($event.value)">
+          <mat-option value="sleep">Sleep overview</mat-option>
+          @for (group of metricCatalogGroups; track group.id) {
+            <mat-optgroup [label]="group.label">
+              @for (metric of group.metrics; track metric.id) {
+                <mat-option [value]="metric.id">{{ metric.label }}</mat-option>
+              }
+            </mat-optgroup>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="health-explorer-layout">
+      <nav class="health-metric-list" aria-label="Health metrics">
+        <button
+          mat-button
+          type="button"
+          class="health-metric-option health-metric-option-sleep"
+          [class.health-metric-option-selected]="routeState().metric === 'sleep'"
+          [attr.aria-current]="routeState().metric === 'sleep' ? 'page' : null"
+          (click)="selectMetric('sleep')">
+          <mat-icon aria-hidden="true">bedtime</mat-icon>
+          <span>Sleep overview</span>
+        </button>
+        @for (group of metricCatalogGroups; track group.id) {
+          <section class="health-metric-group" [attr.aria-labelledby]="'health-metric-group-' + group.id">
+            <h3 [id]="'health-metric-group-' + group.id">{{ group.label }}</h3>
+            @for (metric of group.metrics; track metric.id) {
+              <button
+                mat-button
+                type="button"
+                class="health-metric-option"
+                [class.health-metric-option-selected]="routeState().metric === metric.id"
+                [attr.aria-current]="routeState().metric === metric.id ? 'page' : null"
+                (click)="selectMetric(metric.id)">
+                <span>{{ metric.label }}</span>
+              </button>
+            }
+          </section>
+        }
+      </nav>
+
+      <article class="health-detail" aria-labelledby="health-detail-title">
+        <header class="health-detail-header">
+          <div>
+            <h2 id="health-detail-title">{{ detailTitle() }}</h2>
+            <p>{{ detailSubtitle() }}</p>
+          </div>
+          <div class="health-window-navigation" aria-label="Health data window">
+            <button mat-icon-button type="button" matTooltip="Older window" aria-label="Show older Health data" (click)="navigateWindow('older')">
+              <mat-icon aria-hidden="true">chevron_left</mat-icon>
+            </button>
+            <mat-button-toggle-group
+              class="health-range-selector"
+              [value]="routeState().range"
+              hideSingleSelectionIndicator
+              aria-label="Health range"
+              (change)="selectRange($event.value)">
+              @for (option of ranges; track option.range) {
+                <mat-button-toggle [value]="option.range">{{ option.range }}</mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+            <button
+              mat-icon-button
+              type="button"
+              matTooltip="Newer window"
+              aria-label="Show newer Health data"
+              [disabled]="!selectedWindow().canNavigateNewer"
+              (click)="navigateWindow('newer')">
+              <mat-icon aria-hidden="true">chevron_right</mat-icon>
+            </button>
+          </div>
+        </header>
+
+        @if (providerFilterOptions().length > 0) {
+          <div class="health-provider-filters" role="group" aria-label="Filter Health sources">
+            <button
+              mat-button
+              type="button"
+              class="health-provider-filter"
+              [class.health-provider-filter-selected]="allProvidersSelected()"
+              [attr.aria-pressed]="allProvidersSelected()"
+              (click)="showAllProviders()">
+              All sources
+            </button>
+            @for (option of providerFilterOptions(); track option.provider) {
+              <button
+                mat-button
+                type="button"
+                class="health-provider-filter"
+                [class.health-provider-filter-selected]="option.selected && !allProvidersSelected()"
+                [attr.aria-pressed]="option.selected && !allProvidersSelected()"
+                (click)="toggleProvider(option.provider)">
+                @if (option.presentation) {
+                  <app-service-source-icon
+                    [presentation]="option.presentation"
+                    [showText]="false"
+                    [showTooltip]="false"
+                    [iconWidth]="18"
+                    [iconHeight]="18">
+                  </app-service-source-icon>
+                }
+                <span>{{ option.label }}</span>
+              </button>
+            }
+          </div>
+        }
+
+        @if (incompleteNotice()) {
+          <div class="health-notice health-notice-warning" role="alert">
+            <mat-icon aria-hidden="true">warning</mat-icon>
+            <span>{{ incompleteNotice() }}</span>
+          </div>
+        }
+        @if (revisionNotice()) {
+          <div class="health-notice health-notice-warning" role="status">
+            <mat-icon aria-hidden="true">history</mat-icon>
+            <span>{{ revisionNotice() }}</span>
+          </div>
+        }
+        @if (partialCoverageNotice()) {
+          <div class="health-notice" role="status">
+            <mat-icon aria-hidden="true">data_usage</mat-icon>
+            <span>{{ partialCoverageNotice() }}</span>
+          </div>
+        }
+        @if (!selectedIsSleep() && metricView().conflictCount > 0) {
+          <div class="health-notice health-notice-conflict" role="alert">
+            <mat-icon aria-hidden="true">difference</mat-icon>
+            <span>{{ metricView().conflictCount }} conflicting source {{ metricView().conflictCount === 1 ? 'window is' : 'windows are' }} highlighted. Values remain separate.</span>
+          </div>
+        }
+        @if (!selectedIsSleep() && metricView().hasNativeOnlySeries) {
+          <div class="health-notice" role="status">
+            <mat-icon aria-hidden="true">category</mat-icon>
+            <span>Native-only or non-comparable readings are isolated from canonical series.</span>
+          </div>
+        }
+
+        @if (isLoading()) {
+          <div class="health-detail-state" role="status" aria-live="polite">
+            <mat-spinner diameter="34" aria-hidden="true"></mat-spinner>
+            <div>
+              <strong>Loading {{ detailTitle() }}</strong>
+              <span>Collecting bounded source pages before calculating coverage and conflicts.</span>
+            </div>
+          </div>
+        } @else if (isDenied()) {
+          <div class="health-detail-state health-detail-state-error" role="alert">
+            <mat-icon aria-hidden="true">lock</mat-icon>
+            <div>
+              <strong>Health data access was denied</strong>
+              <span>Review this provider’s permissions and connection.</span>
+              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+            </div>
+          </div>
+        } @else if (hasLoadError()) {
+          <div class="health-detail-state health-detail-state-error" role="alert">
+            <mat-icon aria-hidden="true">sync_problem</mat-icon>
+            <div>
+              <strong>Health data could not be loaded</strong>
+              <span>Check Connectivity and try this view again after the source is ready.</span>
+              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+            </div>
+          </div>
+        } @else if (sampleOnlyLongRange()) {
+          <div class="health-detail-state">
+            <mat-icon aria-hidden="true">timeline</mat-icon>
+            <div>
+              <strong>This metric is stored as detailed samples</strong>
+              <span>Detailed samples load only for 14-day and 30-day windows. Choose a shorter range to view them.</span>
+              <button mat-stroked-button type="button" (click)="selectRange('30d')">View 30 days</button>
+            </div>
+          </div>
+        } @else if (isEmpty()) {
+          <div class="health-detail-state">
+            <mat-icon aria-hidden="true">monitor_heart</mat-icon>
+            <div>
+              <strong>No {{ detailTitle() }} data in this window</strong>
+              <span>Choose another window or review which providers support this metric.</span>
+              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+            </div>
+          </div>
+        } @else if (selectedIsSleep()) {
+          <section class="health-sleep-chart" aria-label="Normalized Sleep trend">
+            <app-sleep-trend-chart
+              [darkTheme]="isDarkTheme()"
+              [isLoading]="false"
+              [sleepTrend]="sleepTrend()"
+              [sleepRange]="routeState().range"
+              [sleepWindowLabel]="selectedWindow().label"
+              [canNavigateOlder]="true"
+              [canNavigateNewer]="selectedWindow().canNavigateNewer"
+              infoTooltip="Sleep sessions stay in the normalized Sleep model. Health resolves references to that model and keeps providers separate.">
+            </app-sleep-trend-chart>
+          </section>
+        } @else {
+          <app-health-metric-chart
+            [series]="metricView().series"
+            [startTimeMs]="selectedWindow().startTimeMs"
+            [endTimeMs]="selectedWindow().endTimeMs">
+          </app-health-metric-chart>
+        }
+
+        @if (!isLoading() && !isDenied() && !hasLoadError() && hasData()) {
+          <app-health-source-observation-table
+            [sleep]="selectedIsSleep()"
+            [detailTitle]="detailTitle()"
+            [sleepRows]="sleepRows()"
+            [metricRows]="metricRows()"
+            [truncationText]="tableTruncationText()">
+          </app-health-source-observation-table>
+        }
+      </article>
+    </div>
+  </section>
+
+  <section class="health-sync-section" aria-labelledby="health-sync-title">
+    <div class="health-section-heading">
+      <div>
+        <p class="health-eyebrow">Source status</p>
+        <h2 id="health-sync-title">Health sync</h2>
+      </div>
+      <a mat-button routerLink="/services">Manage in Connectivity</a>
+    </div>
+    @if (syncStateViews().length === 0) {
+      <div class="health-sync-empty">
+        <mat-icon aria-hidden="true">hub</mat-icon>
+        <span>No Health sync state is available yet. Connected providers populate this after supported data is received.</span>
+      </div>
+    } @else {
+      <div class="health-sync-grid">
+        @for (state of syncStateViews(); track state.provider) {
+          <article class="health-sync-card" [class.health-sync-card-error]="state.error">
+            <div class="health-sync-provider">
+              @if (state.presentation) {
+                <app-service-source-icon
+                  [presentation]="state.presentation"
+                  [showText]="false"
+                  [showTooltip]="false"
+                  [iconWidth]="22"
+                  [iconHeight]="22">
+                </app-service-source-icon>
+              } @else {
+                <mat-icon aria-hidden="true">monitor_heart</mat-icon>
+              }
+              <div>
+                <h3>{{ state.label }}</h3>
+                <strong>{{ state.statusLabel }}</strong>
+              </div>
+            </div>
+            <p>{{ state.message }}</p>
+            @if (state.actionRequired) {
+              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+            }
+          </article>
+        }
+      </div>
+    }
+  </section>
+</main>

@@ -153,6 +153,21 @@ describe('AppRoutingModule routes', () => {
     expect(trainingRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('keeps Health authenticated, available to every onboarded user, and noindexed', () => {
+    const healthRoute = routes.find(route => route.path === 'health');
+
+    expect(healthRoute).toBeTruthy();
+    expect(healthRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(healthRoute?.loadComponent).toBeTypeOf('function');
+    expect(healthRoute?.data).toMatchObject({
+      title: 'Health',
+      preload: true,
+      animation: 'Health',
+      robots: 'noindex, follow',
+    });
+    expect(healthRoute?.data?.['description']).toContain('source-separated');
+  });
+
   it('should keep the activity calendar authenticated and noindexed', () => {
     const calendarRoute = routes.find(route => route.path === 'calendar');
 

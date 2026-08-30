@@ -288,12 +288,14 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/calendar</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
     expect(robotsTxt).toContain('Disallow: /calendar');
     expect(robotsTxt).toContain('Disallow: /training');
+    expect(robotsTxt).toContain('Disallow: /health');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Disallow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');

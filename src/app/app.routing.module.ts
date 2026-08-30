@@ -565,6 +565,19 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'health',
+    loadComponent: () => import('./components/health/health-workspace.component')
+      .then(module => module.HealthWorkspaceComponent),
+    data: {
+      title: 'Health',
+      animation: 'Health',
+      preload: true,
+      description: 'Cross-service Sleep, heart rate, HRV, and health metric history with source-separated comparisons.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'calendar',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
       .then(module => module.CalendarPageComponent),

@@ -1,0 +1,107 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.health-chart-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.health-chart-panel {
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.health-chart-panel-native {
+  border-style: dashed;
+}
+
+.health-chart-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.health-chart-header h3 {
+  font: var(--mat-sys-title-small);
+  margin: 0;
+}
+
+.health-chart-header p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  margin: 0.15rem 0 0;
+}
+
+.health-chart-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.health-chart-badge {
+  background: var(--mat-sys-secondary-container);
+  border-radius: 999px;
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--mat-sys-label-small);
+  padding: 0.18rem 0.45rem;
+  white-space: nowrap;
+}
+
+.health-chart-badge-conflict {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.health-chart-svg {
+  display: block;
+  height: auto;
+  margin-top: 0.35rem;
+  overflow: visible;
+  width: 100%;
+}
+
+.health-chart-gridline,
+.health-chart-axis {
+  stroke: var(--mat-sys-outline-variant);
+  stroke-width: 1;
+}
+
+.health-chart-gridline {
+  stroke-dasharray: 3 5;
+}
+
+.health-chart-axis-label {
+  fill: var(--mat-sys-on-surface-variant);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+}
+
+.health-chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.health-chart-footer {
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  flex-wrap: wrap;
+  font: var(--mat-sys-body-small);
+  gap: 0.25rem 0.75rem;
+}
+
+.health-chart-footer span:first-child {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}

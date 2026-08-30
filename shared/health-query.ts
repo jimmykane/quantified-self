@@ -481,6 +481,59 @@ export function projectHealthRange(
   queryValue: HealthRangeQuery | NormalizedHealthRangeQuery,
   nowMs = Date.now(),
 ): HealthRangeResult {
+  return projectHealthRangeInternal(sourceRecords, chunks, queryValue, nowMs, {
+    aggregateAllPages: false,
+    sourceRecordsComplete: true,
+    samplesComplete: true,
+    sourceRecordCursor: null,
+    chunkCursor: null,
+  });
+}
+
+export interface LoadedHealthRangeProjectionOptions {
+  sourceRecordsComplete: boolean;
+  samplesComplete: boolean;
+  sourceRecordCursor?: HealthQueryCursor | null;
+  chunkCursor?: HealthQueryCursor | null;
+}
+
+/**
+ * Projects a bounded set that has already been collected across Firestore
+ * pages. Unlike `projectHealthRange`, this does not apply the per-page limits
+ * a second time. That lets clients recompute revision filtering, coverage,
+ * freshness, and conflicts over the complete loaded aggregate.
+ */
+export function projectLoadedHealthRange(
+  sourceRecords: readonly HealthSourceRecord[],
+  chunks: readonly HealthSampleChunk[],
+  queryValue: HealthRangeQuery | NormalizedHealthRangeQuery,
+  options: LoadedHealthRangeProjectionOptions,
+  nowMs = Date.now(),
+): HealthRangeResult {
+  return projectHealthRangeInternal(sourceRecords, chunks, queryValue, nowMs, {
+    aggregateAllPages: true,
+    sourceRecordsComplete: options.sourceRecordsComplete,
+    samplesComplete: options.samplesComplete,
+    sourceRecordCursor: options.sourceRecordCursor ?? null,
+    chunkCursor: options.chunkCursor ?? null,
+  });
+}
+
+interface HealthRangeProjectionMode {
+  aggregateAllPages: boolean;
+  sourceRecordsComplete: boolean;
+  samplesComplete: boolean;
+  sourceRecordCursor: HealthQueryCursor | null;
+  chunkCursor: HealthQueryCursor | null;
+}
+
+function projectHealthRangeInternal(
+  sourceRecords: readonly HealthSourceRecord[],
+  chunks: readonly HealthSampleChunk[],
+  queryValue: HealthRangeQuery | NormalizedHealthRangeQuery,
+  nowMs: number,
+  mode: HealthRangeProjectionMode,
+): HealthRangeResult {
   const query = normalizeHealthRangeQuery(queryValue);
   const matchingSourceRecords = sourceRecords
     .filter(sourceRecord => sourceRecord.calendarDate >= query.startDate && sourceRecord.calendarDate <= query.endDate)
@@ -490,8 +543,12 @@ export function projectHealthRange(
       || sourceRecord.metricIds.some(metricId => metricMatches(metricId, query.metricIds)))
     .filter(sourceRecord => isAfterCursor(sourceRecord, query.sourceRecordCursor))
     .sort(compareDateAndId);
-  const sourceRecordsTruncated = matchingSourceRecords.length > query.sourceRecordLimit;
-  const selectedSourceRecords = matchingSourceRecords.slice(0, query.sourceRecordLimit);
+  const sourceRecordsTruncated = mode.aggregateAllPages
+    ? !mode.sourceRecordsComplete
+    : matchingSourceRecords.length > query.sourceRecordLimit;
+  const selectedSourceRecords = mode.aggregateAllPages
+    ? matchingSourceRecords
+    : matchingSourceRecords.slice(0, query.sourceRecordLimit);
 
   const primaryMatchingChunks = query.includeSamples
     ? chunks
@@ -501,8 +558,12 @@ export function projectHealthRange(
       .filter(chunk => isAfterCursor(chunk, query.chunkCursor))
       .sort(compareDateAndId)
     : [];
-  const chunkPageTruncated = primaryMatchingChunks.length > query.chunkLimit;
-  const selectedChunkPage = primaryMatchingChunks.slice(0, query.chunkLimit);
+  const chunkPageTruncated = mode.aggregateAllPages
+    ? !mode.samplesComplete
+    : primaryMatchingChunks.length > query.chunkLimit;
+  const selectedChunkPage = mode.aggregateAllPages
+    ? primaryMatchingChunks
+    : primaryMatchingChunks.slice(0, query.chunkLimit);
   const sourceRecordsById = new Map(sourceRecords.map(sourceRecord => [sourceRecord.id, sourceRecord]));
   const selectedChunks: HealthSampleChunk[] = [];
   let returnedSamplePoints = 0;
@@ -520,7 +581,7 @@ export function projectHealthRange(
       continue;
     }
     const pointCount = chunk.offsetMs.length;
-    if (returnedSamplePoints + pointCount > query.samplePointLimit) {
+    if (!mode.aggregateAllPages && returnedSamplePoints + pointCount > query.samplePointLimit) {
       pointLimitTruncated = true;
       break;
     }
@@ -721,11 +782,19 @@ export function projectHealthRange(
       sourceRecordsTruncated,
       samplesTruncated,
       sampleRevisionMismatchCount,
-      sourceRecordAggregateComplete: query.sourceRecordCursor === null && !sourceRecordsTruncated,
+      sourceRecordAggregateComplete: mode.aggregateAllPages
+        ? mode.sourceRecordsComplete
+        : query.sourceRecordCursor === null && !sourceRecordsTruncated,
       sampleAggregateComplete: !query.includeSamples
-        || (query.chunkCursor === null && !samplesTruncated && sampleRevisionMismatchCount === 0),
-      sourceRecordCursor: sourceRecordsTruncated ? cursorForLast(selectedSourceRecords) : null,
-      chunkCursor: samplesTruncated && lastConsumedChunk ? cursorForLast([lastConsumedChunk]) : null,
+        || (mode.aggregateAllPages
+          ? mode.samplesComplete && sampleRevisionMismatchCount === 0
+          : query.chunkCursor === null && !samplesTruncated && sampleRevisionMismatchCount === 0),
+      sourceRecordCursor: sourceRecordsTruncated
+        ? mode.sourceRecordCursor || cursorForLast(selectedSourceRecords)
+        : null,
+      chunkCursor: samplesTruncated
+        ? mode.chunkCursor || (lastConsumedChunk ? cursorForLast([lastConsumedChunk]) : null)
+        : null,
       returnedSamplePoints,
     },
   };

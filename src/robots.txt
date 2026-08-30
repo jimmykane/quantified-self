@@ -37,6 +37,7 @@ Disallow: /.well-known/oauth-protected-resource
 Disallow: /.well-known/oauth-authorization-server
 Disallow: /settings
 Disallow: /dashboard
+Disallow: /health
 Disallow: /calendar
 Disallow: /training
 Disallow: /routes
