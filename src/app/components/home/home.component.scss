@@ -590,7 +590,7 @@
 
     .ai-insights-header {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
 
         .section-title {
             margin-bottom: 1rem;
@@ -606,6 +606,8 @@
             max-width: 760px;
             margin: 0 auto;
             line-height: 1.6;
+            opacity: 1;
+            transform: none;
         }
     }
 
