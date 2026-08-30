@@ -18,8 +18,7 @@
   gap: 0.25rem;
 }
 
-.health-explorer,
-.health-sync-section {
+.health-explorer {
   min-width: 0;
 }
 
@@ -243,62 +242,70 @@
   padding: 0.35rem;
 }
 
-.health-sync-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-}
-
-.health-sync-card-error {
-  border-color: var(--mat-sys-error);
-}
-
-.health-sync-card {
-  --mat-card-subtitle-text-line-height: 1rem;
-  --mat-card-subtitle-text-size: 0.75rem;
-  --mat-card-title-text-line-height: 1.25rem;
-  --mat-card-title-text-size: 0.875rem;
-  --qs-glass-panel-radius: 12px;
-
-  box-shadow: none !important;
-}
-
-.health-sync-avatar {
+.health-sync-footer,
+.health-sync-list,
+.health-sync-item,
+.health-sync-state {
   align-items: center;
   display: flex;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
 }
 
-.health-sync-card p,
-.health-sync-empty mat-card-content {
+.health-sync-footer {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  gap: 0.75rem;
+  padding-top: 0.65rem;
+}
+
+.health-sync-footer > a {
+  margin-left: auto;
+}
+
+.health-sync-list {
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.health-sync-item,
+.health-sync-state {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
+  gap: 0.35rem;
 }
 
-.health-sync-card p {
-  margin: 0.35rem 0 0;
+.health-sync-dot {
+  background: var(--mat-sys-outline);
+  border-radius: 50%;
+  flex: none;
+  height: 8px;
+  width: 8px;
 }
 
-.health-sync-card mat-card-header {
-  padding: 0.6rem 0.7rem 0;
+.health-sync-dot[data-tone='current'] {
+  background: var(--qs-theme-success);
 }
 
-.health-sync-card mat-card-content {
-  padding: 0 0.7rem 0.6rem;
+.health-sync-dot[data-tone='delayed'] {
+  background: var(--mat-sys-tertiary);
 }
 
-.health-sync-card mat-card-actions {
-  min-height: 0;
-  padding: 0 0.4rem 0.4rem;
+.health-sync-dot[data-tone='stale'],
+.health-sync-dot[data-tone='error'] {
+  background: var(--mat-sys-error);
 }
 
-.health-sync-empty mat-card-content {
-  align-items: center;
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.7rem 0.8rem;
+.health-sync-provider {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+}
+
+.health-sync-status,
+.health-sync-update {
+  font: var(--mat-sys-label-medium);
 }
 
 @media (max-width: 980px) {
@@ -353,11 +360,6 @@
     display: none;
   }
 
-  .health-sync-section .health-section-heading {
-    align-items: center;
-    flex-direction: row;
-  }
-
   .health-window-navigation {
     justify-content: space-between;
     width: 100%;
@@ -388,6 +390,22 @@
 
   .health-sleep-chart {
     height: 330px;
+  }
+
+  .health-sync-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .health-sync-list {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .health-sync-update {
+    margin-left: auto;
+    text-align: right;
   }
 }
 

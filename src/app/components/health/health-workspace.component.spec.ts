@@ -259,11 +259,12 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-header')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-actions')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')?.tagName).toBe('MAT-CARD');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer')?.tagName).toBe('FOOTER');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
     const providerIcons = fixture.debugElement.queryAll(By.css(
-      '.health-priority-card app-service-source-icon, .health-provider-filter app-service-source-icon, .health-sync-card app-service-source-icon',
+      '.health-priority-card app-service-source-icon, .health-provider-filter app-service-source-icon',
     ));
     expect(providerIcons.length).toBeGreaterThan(0);
     expect(providerIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
@@ -399,7 +400,7 @@ describe('HealthWorkspaceComponent', () => {
       hour: 'numeric',
       minute: '2-digit',
     }).format(new Date(newestTimestamp));
-    expect(component.syncStateViews()[0].message).toContain(expectedDate);
+    expect(component.syncStateViews()[0].lastUpdateText).toContain(expectedDate);
   });
 
   it('maps sync-state permission failures to Connectivity instead of emitting an unhandled error', async () => {
@@ -411,7 +412,52 @@ describe('HealthWorkspaceComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(component.syncStatesStatus()).toBe('denied');
     expect(host.textContent).toContain('Health sync status access was denied');
-    expect(host.querySelector('.health-sync-section [routerlink="/services"]')).toBeTruthy();
+    expect(host.querySelector('.health-sync-footer [routerlink="/services"]')).toBeTruthy();
+  });
+
+  it('maps ready source recency to current, delayed, stale, and waiting footer states', async () => {
+    await createComponent();
+    const nowMs = Date.now();
+    syncStates.next([
+      {
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: nowMs - (2 * 60 * 60 * 1000),
+        updatedAtMs: 4,
+      },
+      {
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: nowMs - (2 * 24 * 60 * 60 * 1000),
+        updatedAtMs: 3,
+      },
+      {
+        provider: HEALTH_PROVIDERS.COROSAPI,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: nowMs - (8 * 24 * 60 * 60 * 1000),
+        updatedAtMs: 2,
+      },
+      {
+        provider: HEALTH_PROVIDERS.WahooAPI,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        updatedAtMs: 1,
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect(Object.fromEntries(component.syncStateViews().map(state => [state.provider, {
+      statusLabel: state.statusLabel,
+      tone: state.tone,
+    }]))).toEqual({
+      [HEALTH_PROVIDERS.COROSAPI]: { statusLabel: 'Stale', tone: 'stale' },
+      [HEALTH_PROVIDERS.GarminAPI]: { statusLabel: 'Current', tone: 'current' },
+      [HEALTH_PROVIDERS.SuuntoApp]: { statusLabel: 'Delayed', tone: 'delayed' },
+      [HEALTH_PROVIDERS.WahooAPI]: { statusLabel: 'Waiting', tone: 'neutral' },
+    });
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-sync-item')).toHaveLength(4);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="current"]')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="delayed"]')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="stale"]')).toBeTruthy();
   });
 
   it('refreshes when one provider advances below another provider timestamp', async () => {

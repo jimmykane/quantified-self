@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -78,10 +77,12 @@ interface HealthProviderFilterView extends HealthProviderView {
 
 interface HealthSyncStateView extends HealthProviderView {
   statusLabel: string;
-  message: string;
-  actionRequired: boolean;
-  error: boolean;
+  lastUpdateText: string;
+  lastUpdateDateTime: string | null;
+  tone: HealthSyncTone;
 }
+
+type HealthSyncTone = 'current' | 'delayed' | 'stale' | 'error' | 'neutral';
 
 interface QueuedHealthRangeWrite {
   uid: string;
@@ -104,6 +105,9 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
   'lastWebhookAtMs',
 ] as const;
 
+const HEALTH_SYNC_CURRENT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 @Component({
   selector: 'app-health-workspace',
   standalone: true,
@@ -111,7 +115,6 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
-    MatCardModule,
     MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
@@ -634,32 +637,64 @@ function priorityCard(
   };
 }
 
-function syncStateView(state: HealthSyncState): HealthSyncStateView {
+function syncStateView(state: HealthSyncState, nowMs = Date.now()): HealthSyncStateView {
   const provider = providerView(state.provider);
-  const lastSyncMs = Math.max(
+  const candidateLastUpdateAtMs = Math.max(
     0,
     Number(state.lastSyncedAtMs) || 0,
     Number(state.lastObservedAtMs) || 0,
     Number(state.lastPollAtMs) || 0,
     Number(state.lastWebhookAtMs) || 0,
   );
-  const lastSyncText = Number.isFinite(lastSyncMs) && lastSyncMs > 0
-    ? `Last update ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(lastSyncMs))}.`
-    : 'No completed Health update reported yet.';
+  const lastUpdateAtMs = Number.isFinite(candidateLastUpdateAtMs) && candidateLastUpdateAtMs > 0
+    ? candidateLastUpdateAtMs
+    : null;
+  const lastUpdateText = lastUpdateAtMs === null
+    ? 'No update yet'
+    : new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(lastUpdateAtMs));
+  const baseView = {
+    ...provider,
+    lastUpdateText,
+    lastUpdateDateTime: lastUpdateAtMs === null ? null : new Date(lastUpdateAtMs).toISOString(),
+  };
   switch (state.status) {
-    case HEALTH_SYNC_STATUSES.Ready:
-      return { ...provider, statusLabel: 'Ready', message: lastSyncText, actionRequired: false, error: false };
+    case HEALTH_SYNC_STATUSES.Ready: {
+      const recency = healthSyncRecency(lastUpdateAtMs, nowMs);
+      return { ...baseView, statusLabel: recency.statusLabel, tone: recency.tone };
+    }
     case HEALTH_SYNC_STATUSES.PermissionMissing:
-      return { ...provider, statusLabel: 'Permission needed', message: 'Grant Health permissions in Connectivity, then reconnect if requested.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Permission needed', tone: 'error' };
     case HEALTH_SYNC_STATUSES.ReconnectRequired:
-      return { ...provider, statusLabel: 'Reconnect required', message: 'Reconnect this service in Connectivity to resume Health sync.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Reconnect required', tone: 'error' };
     case HEALTH_SYNC_STATUSES.Failed:
-      return { ...provider, statusLabel: 'Sync failed', message: 'The latest Health sync failed. Review the connection in Connectivity.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Sync failed', tone: 'error' };
     case HEALTH_SYNC_STATUSES.Unsupported:
-      return { ...provider, statusLabel: 'Not supported', message: 'This connected service does not currently provide Health metrics here.', actionRequired: false, error: false };
+      return { ...baseView, statusLabel: 'Not supported', tone: 'neutral' };
     case HEALTH_SYNC_STATUSES.Disconnected:
-      return { ...provider, statusLabel: 'Disconnected', message: 'Connect this service in Connectivity to import supported Health data.', actionRequired: true, error: false };
+      return { ...baseView, statusLabel: 'Disconnected', tone: 'neutral' };
   }
+}
+
+function healthSyncRecency(
+  lastUpdateAtMs: number | null,
+  nowMs: number,
+): Pick<HealthSyncStateView, 'statusLabel' | 'tone'> {
+  if (lastUpdateAtMs === null) {
+    return { statusLabel: 'Waiting', tone: 'neutral' };
+  }
+  const ageMs = Math.max(0, nowMs - lastUpdateAtMs);
+  if (ageMs <= HEALTH_SYNC_CURRENT_MAX_AGE_MS) {
+    return { statusLabel: 'Current', tone: 'current' };
+  }
+  if (ageMs <= HEALTH_SYNC_DELAYED_MAX_AGE_MS) {
+    return { statusLabel: 'Delayed', tone: 'delayed' };
+  }
+  return { statusLabel: 'Stale', tone: 'stale' };
 }
 
 function loadErrorStatus(error: unknown): HealthLoadStatus {

@@ -262,68 +262,39 @@
     </div>
   </section>
 
-  <section class="health-sync-section" aria-labelledby="health-sync-title">
-    <div class="health-section-heading">
-      <div>
-        <p class="health-eyebrow">Source status</p>
-        <h2 id="health-sync-title">Health sync</h2>
-      </div>
-      <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">Connectivity</a>
-    </div>
+  <footer class="health-sync-footer" aria-label="Health source sync status">
     @if (syncStatesStatus() === 'loading') {
-      <mat-card appearance="outlined" class="health-sync-empty">
-        <mat-card-content role="status" aria-live="polite">
-          <mat-spinner diameter="22" aria-hidden="true"></mat-spinner>
-          <span>Loading Health sync status…</span>
-        </mat-card-content>
-      </mat-card>
+      <span class="health-sync-state" role="status" aria-live="polite">
+        <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
+        Loading source status…
+      </span>
     } @else if (syncStatesStatus() === 'denied' || syncStatesStatus() === 'error') {
-      <mat-card appearance="outlined" class="health-sync-empty health-sync-card-error">
-        <mat-card-content role="alert">
-          <mat-icon aria-hidden="true">sync_problem</mat-icon>
-          <span>{{ syncStatesStatus() === 'denied' ? 'Health sync status access was denied.' : 'Health sync status could not be loaded.' }}</span>
-          <a mat-button routerLink="/services">Open Connectivity</a>
-        </mat-card-content>
-      </mat-card>
+      <span class="health-sync-state" role="alert">
+        <span class="health-sync-dot" data-tone="error" aria-hidden="true"></span>
+        {{ syncStatesStatus() === 'denied' ? 'Health sync status access was denied' : 'Source status could not be loaded' }}
+      </span>
     } @else if (syncStateViews().length === 0) {
-      <mat-card appearance="outlined" class="health-sync-empty">
-        <mat-card-content>
-          <mat-icon aria-hidden="true">hub</mat-icon>
-          <span>No Health sync state is available yet. Connected providers populate this after supported data is received.</span>
-        </mat-card-content>
-      </mat-card>
+      <span class="health-sync-state" data-tone="neutral">
+        <span class="health-sync-dot" aria-hidden="true"></span>
+        No source updates yet
+      </span>
     } @else {
-      <div class="health-sync-grid">
+      <ul class="health-sync-list" aria-label="Connected Health sources">
         @for (state of syncStateViews(); track state.provider) {
-          <mat-card appearance="outlined" class="health-sync-card" [class.health-sync-card-error]="state.error">
-            <mat-card-header>
-              <div mat-card-avatar class="health-sync-avatar">
-                @if (state.presentation) {
-                  <app-service-source-icon
-                    [presentation]="state.presentation"
-                    [showText]="false"
-                    [showTooltip]="false"
-                    [iconWidth]="32"
-                    [iconHeight]="18">
-                  </app-service-source-icon>
-                } @else {
-                  <mat-icon aria-hidden="true">monitor_heart</mat-icon>
-                }
-              </div>
-              <mat-card-title>{{ state.label }}</mat-card-title>
-              <mat-card-subtitle>{{ state.statusLabel }}</mat-card-subtitle>
-            </mat-card-header>
-            <mat-card-content>
-              <p>{{ state.message }}</p>
-            </mat-card-content>
-            @if (state.actionRequired) {
-              <mat-card-actions align="end">
-                <a mat-button routerLink="/services">Open Connectivity</a>
-              </mat-card-actions>
+          <li class="health-sync-item">
+            <span class="health-sync-dot" [attr.data-tone]="state.tone" aria-hidden="true"></span>
+            <strong class="health-sync-provider">{{ state.label }}</strong>
+            <span class="health-sync-status">{{ state.statusLabel }}</span>
+            <span aria-hidden="true">·</span>
+            @if (state.lastUpdateDateTime) {
+              <time class="health-sync-update" [attr.datetime]="state.lastUpdateDateTime">{{ state.lastUpdateText }}</time>
+            } @else {
+              <span class="health-sync-update">{{ state.lastUpdateText }}</span>
             }
-          </mat-card>
+          </li>
         }
-      </div>
+      </ul>
     }
-  </section>
+    <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">Connectivity</a>
+  </footer>
 </main>
