@@ -116,7 +116,7 @@ function analyticsStore() {
         events: { total: 100 },
         routes: { total: 10 },
         connections: { serviceUsers: 8, mcpUsers: 3, both: 2, providers: {} },
-        authActivity: { last24Hours: 2, last7Days: 5, last30Days: 10, computedAt: null },
+        authActivity: { last24Hours: 2, last7Days: 5, last30Days: 10, computedAt: null, byPlan: null },
     };
     const growth: UserGrowthTrendResponse = {
         months: 12,

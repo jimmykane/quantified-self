@@ -65,21 +65,22 @@ describe('AdminUserHistoryComponent', () => {
         expect(loader.init).not.toHaveBeenCalled();
     });
 
-    it('renders three focused charts once enough daily snapshots exist', async () => {
+    it('renders four focused charts once enough current daily snapshots exist', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Authentication activity');
+        expect(text).toContain('Active users by plan');
         expect(text).toContain('User and plan mix');
         expect(text).toContain('Paid subscription cadence');
         expect(text).toContain('History is current');
         expect(text).toContain('1y');
 
         const chartElements = (fixture.nativeElement as HTMLElement).querySelectorAll('.history-chart[role="img"]');
-        expect(chartElements).toHaveLength(3);
+        expect(chartElements).toHaveLength(4);
         chartElements.forEach(element => expect(element.getAttribute('aria-label')).toBeTruthy());
 
         const options = loader.setOption.mock.calls.map(call => call[1] as {
@@ -102,15 +103,54 @@ describe('AdminUserHistoryComponent', () => {
             'triangle',
         ]);
 
-        const userMixOption = options.find(option => option.series?.some(series => series.name === 'Free'));
+        const activePlanOption = options.find(option => option.series?.some(series => (
+            (series as { id?: string }).id === 'active-plan-free'
+        )));
+        expect(activePlanOption?.series?.map(series => series.name)).toEqual(['Free', 'Basic', 'Pro']);
+
+        const userMixOption = options.find(option => option.series?.some(series => series.name === 'Onboarding complete'));
         expect(new Set(userMixOption?.series?.slice(0, 3).map(series => series.areaStyle?.opacity)).size).toBe(3);
+    });
+
+    it('switches the active-plan rolling window locally', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+
+        component.selectActivePlanWindow('last24Hours');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
+
+        const activePlanOption = loader.setOption.mock.calls
+            .map(call => call[1] as { series?: Array<{ id?: string; data?: Array<number | null> }> })
+            .filter(option => option.series?.some(series => series.id === 'active-plan-free'))
+            .at(-1);
+        const proData = activePlanOption?.series?.find(series => series.id === 'active-plan-pro')?.data;
+        expect(component.selectedActivePlanWindow()).toBe('last24Hours');
+        expect(proData?.filter(value => value !== null)).toEqual(Array(8).fill(0));
+    });
+
+    it('keeps legacy charts visible while current plan history collects', async () => {
+        const legacyHistory = history(8);
+        legacyHistory.snapshots.forEach(snapshot => { snapshot.authActivity.byPlan = null; });
+        fixture.componentRef.setInput('history', legacyHistory);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+
+        const text = (fixture.nativeElement as HTMLElement).textContent || '';
+        expect(text).toContain('0 of 8 plan snapshots');
+        expect(text).toContain('Legacy snapshots remain in the other charts');
+        expect((fixture.nativeElement as HTMLElement).querySelectorAll('.history-chart[role="img"]')).toHaveLength(3);
     });
 
     it('keeps unknown cadence series hidden until an unknown value occurs', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
 
         let cadenceOption = loader.setOption.mock.calls
             .map(call => call[1] as { series?: Array<{ name?: string }> })
@@ -122,7 +162,7 @@ describe('AdminUserHistoryComponent', () => {
         fixture.componentRef.setInput('history', withUnknown);
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(6));
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
 
         cadenceOption = loader.setOption.mock.calls
             .map(call => call[1] as {
@@ -158,12 +198,12 @@ describe('AdminUserHistoryComponent', () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
 
         const disposeCallsBeforeDestroy = loader.dispose.mock.calls.length;
         component.ngOnDestroy();
 
-        expect(loader.dispose.mock.calls.length - disposeCallsBeforeDestroy).toBe(3);
+        expect(loader.dispose.mock.calls.length - disposeCallsBeforeDestroy).toBe(4);
     });
 });
 
@@ -185,7 +225,17 @@ function point(date: string): AdminDashboardHistoryPoint {
         date,
         computedAt: `${date}T00:12:00.000Z`,
         users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
-        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+        authActivity: {
+            eligibleAccounts: 9,
+            last24Hours: 2,
+            last7Days: 5,
+            last30Days: 8,
+            byPlan: {
+                free: { last24Hours: 1, last7Days: 3, last30Days: 4 },
+                basic: { last24Hours: 1, last7Days: 1, last30Days: 3 },
+                pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+            },
+        },
         subscriptionCadence: {
             pro: { monthly: 1, yearly: 1, unknown: 0 },
             basic: { monthly: 2, yearly: 1, unknown: 0 },

@@ -99,6 +99,7 @@ describe('AdminDashboardComponent', () => {
             last7Days: 42,
             last30Days: 60,
             computedAt: '2026-06-01T10:05:00.000Z',
+            byPlan: null,
         },
     };
 
@@ -339,7 +340,8 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('sign-in or ID token refresh');
         expect(text).toContain('Monthly 18 · Yearly 11 · Unknown 1');
         expect(text).toContain('Monthly 22 · Yearly 3');
-        expect(text).toContain('Pro and Basic totals show active monthly and yearly subscription cadence');
+        expect(text).toContain('split into Free, Basic, and Pro');
+        expect(text).toContain('Paid totals also show monthly and yearly subscription cadence');
         expect(text).toContain('aggregate snapshots without user identifiers');
         expect(text).toContain('Collecting daily history');
         expect(text).toContain('Total Users');

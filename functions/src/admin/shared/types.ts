@@ -35,11 +35,21 @@ export interface ConnectionCountStats {
     expireAt?: string | null;
 }
 
-export interface AuthActivityStats {
+export interface AuthActivityWindowStats {
     last24Hours: number;
     last7Days: number;
     last30Days: number;
+}
+
+export interface AuthActivityPlanBreakdown {
+    free: AuthActivityWindowStats;
+    basic: AuthActivityWindowStats;
+    pro: AuthActivityWindowStats;
+}
+
+export interface AuthActivityStats extends AuthActivityWindowStats {
     computedAt: string;
+    byPlan: AuthActivityPlanBreakdown;
 }
 
 export interface SubscriptionCadenceTierStats {
@@ -145,6 +155,7 @@ export interface AdminDashboardHistoryPoint {
         last24Hours: number;
         last7Days: number;
         last30Days: number;
+        byPlan: AuthActivityPlanBreakdown | null;
     };
     subscriptionCadence: SubscriptionCadenceStats;
 }

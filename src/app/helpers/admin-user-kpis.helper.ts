@@ -1,4 +1,6 @@
 import type {
+    AuthActivityPlanBreakdown,
+    AuthActivityWindowKey,
     SubscriptionCadenceTierStats,
     SubscriptionHistoryTrendResponse,
     UserCountStats,
@@ -40,6 +42,12 @@ export interface AdminUserKpiCard {
     valueKind: AdminUserKpiValueKind;
     subtitle?: string;
     severity?: AdminUserKpiSeverity;
+    breakdown?: readonly AdminUserKpiBreakdownItem[];
+}
+
+export interface AdminUserKpiBreakdownItem {
+    label: 'Free' | 'Basic' | 'Pro';
+    value: number;
 }
 
 const AUTH_ACTIVITY_BASIS = 'Sign-in or ID token refresh';
@@ -107,10 +115,19 @@ export function buildAdminUserKpiCards(
     const active24Hours = safeCount(stats.authActivity?.last24Hours);
     const active7Days = safeCount(stats.authActivity?.last7Days);
     const active30Days = safeCount(stats.authActivity?.last30Days);
+    const activeByPlan = stats.authActivity?.byPlan;
     const marketingConsent = safeCount(stats.marketingConsent);
 
     const cards: AdminUserKpiCard[] = [
-        numberCard('active-24h', 'Active 24h', 'schedule', active24Hours, undefined, AUTH_ACTIVITY_BASIS),
+        numberCard(
+            'active-24h',
+            'Active 24h',
+            'schedule',
+            active24Hours,
+            undefined,
+            AUTH_ACTIVITY_BASIS,
+            authActivityBreakdown(activeByPlan, 'last24Hours', active24Hours),
+        ),
         numberCard(
             'active-7d',
             'Active 7d',
@@ -118,8 +135,17 @@ export function buildAdminUserKpiCards(
             active7Days,
             undefined,
             authActivity7DaySubtitle(active7Days, active30Days),
+            authActivityBreakdown(activeByPlan, 'last7Days', active7Days),
         ),
-        numberCard('active-30d', 'Active 30d', 'calendar_view_month', active30Days, undefined, AUTH_ACTIVITY_BASIS),
+        numberCard(
+            'active-30d',
+            'Active 30d',
+            'calendar_view_month',
+            active30Days,
+            undefined,
+            AUTH_ACTIVITY_BASIS,
+            authActivityBreakdown(activeByPlan, 'last30Days', active30Days),
+        ),
         numberCard('total-users', 'Total Users', 'people', stats.total),
         numberCard(
             'pro-users',
@@ -216,9 +242,10 @@ function numberCard(
     value: number | null,
     severity?: AdminUserKpiSeverity,
     subtitle?: string,
+    breakdown?: readonly AdminUserKpiBreakdownItem[],
 ): AdminUserKpiCard {
     const normalizedValue = safeCount(value);
-    return normalizedNumberCard(id, label, icon, normalizedValue, severity, subtitle);
+    return normalizedNumberCard(id, label, icon, normalizedValue, severity, subtitle, breakdown);
 }
 
 function signedNumberCard(
@@ -239,6 +266,7 @@ function normalizedNumberCard(
     normalizedValue: number | null,
     severity?: AdminUserKpiSeverity,
     subtitle?: string,
+    breakdown?: readonly AdminUserKpiBreakdownItem[],
 ): AdminUserKpiCard {
     return {
         id,
@@ -248,6 +276,7 @@ function normalizedNumberCard(
         valueKind: 'number',
         severity: normalizedValue === null ? undefined : severity,
         subtitle,
+        ...(breakdown ? { breakdown } : {}),
     };
 }
 
@@ -306,6 +335,27 @@ function authActivity7DaySubtitle(active7Days: number | null, active30Days: numb
     }
     const share = Math.min(100, Math.max(0, Math.round((active7Days / active30Days) * 100)));
     return `${AUTH_ACTIVITY_BASIS} · ${share}% of 30-day active`;
+}
+
+function authActivityBreakdown(
+    breakdown: AuthActivityPlanBreakdown | null | undefined,
+    window: AuthActivityWindowKey,
+    total: number | null,
+): readonly AdminUserKpiBreakdownItem[] | undefined {
+    if (!breakdown || total === null) {
+        return undefined;
+    }
+    const free = safeCount(breakdown.free?.[window]);
+    const basic = safeCount(breakdown.basic?.[window]);
+    const pro = safeCount(breakdown.pro?.[window]);
+    if (free === null || basic === null || pro === null || free + basic + pro !== total) {
+        return undefined;
+    }
+    return [
+        { label: 'Free', value: free },
+        { label: 'Basic', value: basic },
+        { label: 'Pro', value: pro },
+    ];
 }
 
 function subscriptionCadenceSubtitle(stats: SubscriptionCadenceTierStats | undefined): string | undefined {

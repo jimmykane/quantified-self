@@ -33,6 +33,11 @@ function buildStats(overrides: Partial<UserCountStats> = {}): UserCountStats {
             last7Days: 40,
             last30Days: 50,
             computedAt: '2026-06-01T10:05:00.000Z',
+            byPlan: {
+                free: { last24Hours: 7, last7Days: 24, last30Days: 30 },
+                basic: { last24Hours: 3, last7Days: 10, last30Days: 13 },
+                pro: { last24Hours: 2, last7Days: 6, last30Days: 7 },
+            },
         },
         ...overrides,
     };
@@ -78,6 +83,11 @@ describe('admin user KPI helper', () => {
         expect(cards.find(card => card.id === 'active-7d')).toMatchObject({
             value: 40,
             subtitle: 'Sign-in or ID token refresh · 80% of 30-day active',
+            breakdown: [
+                { label: 'Free', value: 24 },
+                { label: 'Basic', value: 10 },
+                { label: 'Pro', value: 6 },
+            ],
         });
         expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
             value: 35,
@@ -118,6 +128,7 @@ describe('admin user KPI helper', () => {
                 last7Days: 0,
                 last30Days: 0,
                 computedAt: null,
+                byPlan: null,
             },
         }), null, null);
 
@@ -197,6 +208,7 @@ describe('admin user KPI helper', () => {
                 last7Days: 2.5,
                 last30Days: 8,
                 computedAt: null,
+                byPlan: null,
             },
             connections: {
                 serviceUsers: -1,
@@ -211,5 +223,18 @@ describe('admin user KPI helper', () => {
         expect(cards.find(card => card.id === 'active-30d')?.value).toBe(8);
         expect(cards.find(card => card.id === 'service-connected-users')?.value).toBeNull();
         expect(cards.find(card => card.id === 'any-connected-users')?.value).toBeNull();
+    });
+
+    it('omits an active-plan breakdown that does not reconcile with the card total', () => {
+        const stats = buildStats();
+        stats.authActivity!.byPlan = {
+            ...stats.authActivity!.byPlan!,
+            pro: { last24Hours: 1, last7Days: 6, last30Days: 7 },
+        };
+
+        const cards = buildAdminUserKpiCards('full', stats, null, null);
+
+        expect(cards.find(card => card.id === 'active-24h')?.breakdown).toBeUndefined();
+        expect(cards.find(card => card.id === 'active-7d')?.breakdown).toBeDefined();
     });
 });

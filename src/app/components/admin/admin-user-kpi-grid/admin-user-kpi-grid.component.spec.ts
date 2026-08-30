@@ -17,16 +17,33 @@ describe('AdminUserKpiGridComponent', () => {
 
     it('renders KPI values, unavailable values, and subtitles', () => {
         component.cards = [
-            { id: 'total-users', label: 'Total Users', icon: 'people', value: 1234, valueKind: 'number' },
+            {
+                id: 'active-24h',
+                label: 'Active 24h',
+                icon: 'schedule',
+                value: 1234,
+                valueKind: 'number',
+                breakdown: [
+                    { label: 'Free', value: 1000 },
+                    { label: 'Basic', value: 200 },
+                    { label: 'Pro', value: 34 },
+                ],
+            },
             { id: 'marketing-consent', label: 'Marketing Opt-ins', icon: 'mail', value: null, valueKind: 'number', subtitle: 'Unavailable' },
         ];
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Total Users');
+        expect(text).toContain('Active 24h');
         expect(text).toContain('1,234');
         expect(text).toContain('Marketing Opt-ins');
         expect(text).toContain('Unavailable');
+        const breakdown = (fixture.nativeElement as HTMLElement).querySelector('.kpi-breakdown');
+        expect(breakdown?.getAttribute('aria-label')).toBe('Active users by plan');
+        expect(breakdown?.textContent).toContain('Free');
+        expect(breakdown?.textContent).toContain('1,000');
+        expect(breakdown?.textContent).toContain('Basic');
+        expect(breakdown?.textContent).toContain('Pro');
     });
 
     it('emits refresh actions only for the corresponding cards', () => {

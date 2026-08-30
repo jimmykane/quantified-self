@@ -48,6 +48,22 @@
     color: var(--mat-sys-on-surface-variant);
 }
 
+.chart-collection-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    min-height: 300px;
+    padding: 1rem;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+.chart-collection-state mat-icon {
+    flex: 0 0 auto;
+}
+
 .history-error {
     justify-content: flex-start;
     min-height: auto;
@@ -124,6 +140,12 @@
     .history-header {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .chart-heading-with-controls {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 0.5rem;
     }
 
     .history-chart-grid {

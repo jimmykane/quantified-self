@@ -54,6 +54,16 @@
                 {{ card.value | number }}
                 }
             </div>
+            @if (card.breakdown) {
+            <dl class="kpi-breakdown" aria-label="Active users by plan">
+                @for (item of card.breakdown; track item.label) {
+                <div>
+                    <dt>{{ item.label }}</dt>
+                    <dd>{{ item.value | number }}</dd>
+                </div>
+                }
+            </dl>
+            }
             @if (card.subtitle) {
             <div class="kpi-subtitle">{{ card.subtitle }}</div>
             }

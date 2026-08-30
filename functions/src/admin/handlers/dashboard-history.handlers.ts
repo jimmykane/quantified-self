@@ -10,6 +10,8 @@ import type {
     AdminDashboardHistoryDays,
     AdminDashboardHistoryPoint,
     AdminDashboardHistoryResponse,
+    AuthActivityPlanBreakdown,
+    AuthActivityWindowStats,
     GetAdminDashboardHistoryRequest,
     SubscriptionCadenceTierStats,
 } from '../shared/types';
@@ -19,8 +21,10 @@ import {
 } from '../shared/user-metrics';
 
 export const ADMIN_DASHBOARD_SNAPSHOTS_COLLECTION = 'adminDashboardSnapshots';
-const ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
-const ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 1;
+const ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 2;
+const ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 2;
+const LEGACY_ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
+const LEGACY_ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 1;
 const ADMIN_DASHBOARD_SNAPSHOT_RETENTION_DAYS = 730;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_HISTORY_DAYS: AdminDashboardHistoryDays = 90;
@@ -41,6 +45,19 @@ interface StoredAdminDashboardSnapshot {
 interface StoredSnapshotDocument {
     id: string;
     data: () => Record<string, unknown>;
+}
+
+interface SnapshotValidationMetrics {
+    total: number;
+    free: number;
+    basic: number;
+    pro: number;
+    onboardingCompleted: number;
+    eligibleAccounts: number;
+    authActivity: AuthActivityWindowStats & {
+        byPlan: AuthActivityPlanBreakdown | null;
+    };
+    subscriptionCadence: AdminDashboardHistoryPoint['subscriptionCadence'];
 }
 
 function toUtcDateKey(date: Date): string {
@@ -96,11 +113,29 @@ function requireCadenceTier(value: unknown, field: string): SubscriptionCadenceT
     };
 }
 
+function requireAuthActivityWindows(value: unknown, field: string): AuthActivityWindowStats {
+    const record = requireObject(value, field);
+    return {
+        last24Hours: requireSafeCount(record['last24Hours'], `${field}.last24Hours`),
+        last7Days: requireSafeCount(record['last7Days'], `${field}.last7Days`),
+        last30Days: requireSafeCount(record['last30Days'], `${field}.last30Days`),
+    };
+}
+
+function requireAuthActivityPlanBreakdown(value: unknown, field: string): AuthActivityPlanBreakdown {
+    const record = requireObject(value, field);
+    return {
+        free: requireAuthActivityWindows(record['free'], `${field}.free`),
+        basic: requireAuthActivityWindows(record['basic'], `${field}.basic`),
+        pro: requireAuthActivityWindows(record['pro'], `${field}.pro`),
+    };
+}
+
 function cadenceTotal(value: SubscriptionCadenceTierStats): number {
     return value.monthly + value.yearly + value.unknown;
 }
 
-function validateSnapshotMetrics(metrics: UserPlanActivityMetrics): void {
+function validateSnapshotMetrics(metrics: SnapshotValidationMetrics): void {
     const counts = {
         total: requireSafeCount(metrics.total, 'users.total'),
         free: requireSafeCount(metrics.free, 'users.free'),
@@ -125,6 +160,35 @@ function validateSnapshotMetrics(metrics: UserPlanActivityMetrics): void {
         || counts.last30Days > counts.eligibleAccounts
     ) {
         throw new Error('Admin dashboard authentication activity counts do not reconcile.');
+    }
+
+    const byPlan = metrics.authActivity.byPlan;
+    if (byPlan) {
+        const windows: ReadonlyArray<keyof AuthActivityWindowStats> = [
+            'last24Hours',
+            'last7Days',
+            'last30Days',
+        ];
+        const plans: ReadonlyArray<keyof AuthActivityPlanBreakdown> = ['free', 'basic', 'pro'];
+        plans.forEach((plan) => {
+            const planCounts = byPlan[plan];
+            windows.forEach(window => requireSafeCount(planCounts[window], `authActivity.byPlan.${plan}.${window}`));
+            if (
+                planCounts.last24Hours > planCounts.last7Days
+                || planCounts.last7Days > planCounts.last30Days
+            ) {
+                throw new Error(`Admin dashboard ${plan} authentication activity counts do not reconcile.`);
+            }
+        });
+        windows.forEach((window) => {
+            const planTotal = plans.reduce((total, plan) => total + byPlan[plan][window], 0);
+            if (planTotal !== metrics.authActivity[window]) {
+                throw new Error(`Admin dashboard ${window} plan activity does not reconcile.`);
+            }
+        });
+        if (byPlan.basic.last30Days > counts.basic || byPlan.pro.last30Days > counts.pro) {
+            throw new Error('Admin dashboard paid plan activity exceeds active paid users.');
+        }
     }
     if (cadenceTotal(metrics.subscriptionCadence.pro) !== counts.pro) {
         throw new Error('Admin dashboard Pro cadence does not reconcile.');
@@ -160,6 +224,7 @@ function buildStoredSnapshot(
             last24Hours: metrics.authActivity.last24Hours,
             last7Days: metrics.authActivity.last7Days,
             last30Days: metrics.authActivity.last30Days,
+            byPlan: metrics.authActivity.byPlan,
         },
         subscriptionCadence: metrics.subscriptionCadence,
     };
@@ -168,10 +233,15 @@ function buildStoredSnapshot(
 function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHistoryPoint | null {
     try {
         const data = document.data();
-        if (
-            data['schemaVersion'] !== ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION
-            || data['metricDefinitionVersion'] !== ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION
-        ) {
+        const isCurrentVersion = (
+            data['schemaVersion'] === ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION
+            && data['metricDefinitionVersion'] === ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION
+        );
+        const isLegacyVersion = (
+            data['schemaVersion'] === LEGACY_ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION
+            && data['metricDefinitionVersion'] === LEGACY_ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION
+        );
+        if (!isCurrentVersion && !isLegacyVersion) {
             throw new Error('Snapshot schema or metric-definition version is unsupported.');
         }
         if (data['snapshotDate'] !== document.id || !isUtcDateKey(document.id)) {
@@ -212,6 +282,9 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
                 last24Hours: requireSafeCount(authRecord['last24Hours'], 'authActivity.last24Hours'),
                 last7Days: requireSafeCount(authRecord['last7Days'], 'authActivity.last7Days'),
                 last30Days: requireSafeCount(authRecord['last30Days'], 'authActivity.last30Days'),
+                byPlan: isCurrentVersion
+                    ? requireAuthActivityPlanBreakdown(authRecord['byPlan'], 'authActivity.byPlan')
+                    : null,
             },
             subscriptionCadence: {
                 pro: requireCadenceTier(cadenceRecord['pro'], 'subscriptionCadence.pro'),
@@ -221,18 +294,9 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
 
         validateSnapshotMetrics({
             ...point.users,
-            monthlyPaid: point.subscriptionCadence.pro.monthly + point.subscriptionCadence.basic.monthly,
-            yearlyPaid: point.subscriptionCadence.pro.yearly + point.subscriptionCadence.basic.yearly,
             subscriptionCadence: point.subscriptionCadence,
-            cancelScheduled: 0,
-            authActivity: {
-                last24Hours: point.authActivity.last24Hours,
-                last7Days: point.authActivity.last7Days,
-                last30Days: point.authActivity.last30Days,
-                computedAt: point.computedAt,
-            },
+            authActivity: point.authActivity,
             eligibleAccounts: point.authActivity.eligibleAccounts,
-            providers: {},
         });
         return point;
     } catch (error) {

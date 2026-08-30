@@ -33,6 +33,38 @@
     margin-top: 0.35rem;
 }
 
+.kpi-breakdown {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin: 0.45rem 0 0;
+}
+
+.kpi-breakdown > div {
+    min-width: 0;
+    padding: 0.35rem 0.3rem;
+    border-radius: 0.4rem;
+    background: var(--mat-sys-surface-container-low);
+    text-align: center;
+}
+
+.kpi-breakdown dt {
+    overflow: hidden;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.66rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kpi-breakdown dd {
+    margin: 0.1rem 0 0;
+    color: var(--mat-sys-on-surface);
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
 .kpi-value-muted {
     color: var(--mat-sys-on-surface-variant);
 }

@@ -123,6 +123,11 @@ describe('AdminService', () => {
                 last7Days: 42,
                 last30Days: 60,
                 computedAt: '2026-08-07T13:15:00.000Z',
+                byPlan: {
+                    free: { last24Hours: 8, last7Days: 25, last30Days: 35 },
+                    basic: { last24Hours: 4, last7Days: 12, last30Days: 18 },
+                    pro: { last24Hours: 2, last7Days: 5, last30Days: 7 },
+                },
             },
             providers: {}
         };
@@ -207,6 +212,7 @@ describe('AdminService', () => {
             last7Days: null,
             last30Days: null,
             computedAt: null,
+            byPlan: null,
         });
     });
 
@@ -231,6 +237,37 @@ describe('AdminService', () => {
             last7Days: null,
             last30Days: null,
             computedAt: '2026-08-07T13:15:00.000Z',
+            byPlan: null,
+        });
+    });
+
+    it('should preserve valid activity totals but discard a non-reconciling plan breakdown', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                count: 20,
+                providers: {},
+                authActivity: {
+                    last24Hours: 4,
+                    last7Days: 8,
+                    last30Days: 10,
+                    computedAt: '2026-08-07T13:15:00.000Z',
+                    byPlan: {
+                        free: { last24Hours: 2, last7Days: 3, last30Days: 4 },
+                        basic: { last24Hours: 1, last7Days: 2, last30Days: 3 },
+                        pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                    },
+                },
+            },
+        });
+
+        const stats = await firstValueFrom(service.getTotalUserCount());
+
+        expect(stats.authActivity).toEqual({
+            last24Hours: 4,
+            last7Days: 8,
+            last30Days: 10,
+            computedAt: '2026-08-07T13:15:00.000Z',
+            byPlan: null,
         });
     });
 
@@ -358,6 +395,74 @@ describe('AdminService', () => {
         expect(functionsServiceMock.call).toHaveBeenCalledWith('getAdminDashboardHistory', { days: 365 });
         expect(history.snapshots).toHaveLength(1);
         expect(history.snapshots[0].authActivity.last30Days).toBe(8);
+        expect(history.snapshots[0].authActivity.byPlan).toBeNull();
+    });
+
+    it('should map a reconciling active-user plan breakdown from current history snapshots', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [{
+                    date: '2026-08-27',
+                    computedAt: '2026-08-27T00:12:00.000Z',
+                    users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                    authActivity: {
+                        eligibleAccounts: 9,
+                        last24Hours: 2,
+                        last7Days: 5,
+                        last30Days: 8,
+                        byPlan: {
+                            free: { last24Hours: 1, last7Days: 3, last30Days: 4 },
+                            basic: { last24Hours: 1, last7Days: 1, last30Days: 3 },
+                            pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                        },
+                    },
+                    subscriptionCadence: {
+                        pro: { monthly: 1, yearly: 1, unknown: 0 },
+                        basic: { monthly: 2, yearly: 1, unknown: 0 },
+                    },
+                }],
+            },
+        });
+
+        const history = await firstValueFrom(service.getAdminDashboardHistory(30));
+
+        expect(history.snapshots[0].authActivity.byPlan?.basic.last30Days).toBe(3);
+    });
+
+    it('should reject history with a non-reconciling active-user plan breakdown', async () => {
+        functionsServiceMock.call.mockResolvedValue({
+            data: {
+                days: 30,
+                startDate: '2026-07-29',
+                endDate: '2026-08-27',
+                snapshots: [{
+                    date: '2026-08-27',
+                    computedAt: '2026-08-27T00:12:00.000Z',
+                    users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
+                    authActivity: {
+                        eligibleAccounts: 9,
+                        last24Hours: 2,
+                        last7Days: 5,
+                        last30Days: 8,
+                        byPlan: {
+                            free: { last24Hours: 1, last7Days: 3, last30Days: 4 },
+                            basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+                            pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                        },
+                    },
+                    subscriptionCadence: {
+                        pro: { monthly: 1, yearly: 1, unknown: 0 },
+                        basic: { monthly: 2, yearly: 1, unknown: 0 },
+                    },
+                }],
+            },
+        });
+
+        await expect(firstValueFrom(service.getAdminDashboardHistory(30)))
+            .rejects.toThrow('inconsistent activity plan totals');
     });
 
     it('should reject malformed dashboard history instead of charting inconsistent totals', async () => {
