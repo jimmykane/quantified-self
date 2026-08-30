@@ -1,58 +1,43 @@
 <div class="health-chart-grid" aria-label="Source-separated metric charts">
   @for (model of models(); track model.series.id) {
-    <article class="health-chart-panel" [class.health-chart-panel-native]="model.series.nativeOnly">
-      <header class="health-chart-header">
-        <div>
-          <h3>{{ model.series.sourceLabel }}</h3>
-          <p>{{ model.series.semanticLabel }}</p>
+    <mat-card
+      appearance="outlined"
+      class="health-chart-panel"
+      [class.health-chart-panel-native]="model.series.nativeOnly">
+      <mat-card-header class="health-chart-header">
+        <div class="health-chart-heading">
+          <mat-card-title>{{ model.series.sourceLabel }}</mat-card-title>
+          <mat-card-subtitle>{{ model.series.semanticLabel }}</mat-card-subtitle>
         </div>
-        <div class="health-chart-badges">
-          @if (model.series.nativeOnly) {
-            <span class="health-chart-badge">Native only</span>
-          }
-          @if (model.series.hasConflict) {
-            <span class="health-chart-badge health-chart-badge-conflict">Conflict</span>
-          }
-        </div>
-      </header>
-
-      <svg class="health-chart-svg" [attr.viewBox]="viewBox" role="img" [attr.aria-label]="model.ariaLabel">
-        <line class="health-chart-gridline" x1="48" y1="16" x2="624" y2="16"></line>
-        <line class="health-chart-gridline" x1="48" y1="101" x2="624" y2="101"></line>
-        <line class="health-chart-axis" x1="48" y1="186" x2="624" y2="186"></line>
-        <text class="health-chart-axis-label" x="44" y="20" text-anchor="end">{{ model.yMaxLabel }}</text>
-        <text class="health-chart-axis-label" x="44" y="190" text-anchor="end">{{ model.yMinLabel }}</text>
-        <text class="health-chart-axis-label" x="48" y="211">{{ model.startLabel }}</text>
-        <text class="health-chart-axis-label" x="624" y="211" text-anchor="end">{{ model.endLabel }}</text>
-
-        @for (bar of model.bars; track $index) {
-          <rect
-            [attr.x]="bar.x - (bar.width / 2)"
-            [attr.y]="bar.top"
-            [attr.width]="bar.width"
-            [attr.height]="bar.height"
-            [attr.fill]="model.color"
-            rx="2">
-          </rect>
+        @if (model.series.nativeOnly || model.series.hasConflict) {
+          <mat-chip-set class="health-chart-status" aria-label="Series status">
+            @if (model.series.nativeOnly) {
+              <mat-chip>Native only</mat-chip>
+            }
+            @if (model.series.hasConflict) {
+              <mat-chip>Conflict</mat-chip>
+            }
+          </mat-chip-set>
         }
-        @for (path of model.linePaths; track $index) {
-          <path class="health-chart-line" [attr.d]="path" [attr.stroke]="model.color"></path>
-        }
-        @if (model.series.chartKind === 'point' || model.series.chartKind === 'line' || model.series.chartKind === 'step') {
-          @for (point of model.points; track $index) {
-            <circle [attr.cx]="point.x" [attr.cy]="point.y" [attr.r]="model.series.chartKind === 'point' ? 5 : 2.5" [attr.fill]="model.color"></circle>
-          }
-        }
-      </svg>
+      </mat-card-header>
 
-      <footer class="health-chart-footer">
+      <mat-card-content class="health-chart-content">
+        <app-health-metric-series-chart
+          [model]="model"
+          [startTimeMs]="startTimeMs()"
+          [endTimeMs]="endTimeMs()"
+          [darkTheme]="darkTheme()">
+        </app-health-metric-series-chart>
+      </mat-card-content>
+
+      <mat-card-footer class="health-chart-footer">
         <span>{{ model.series.unit }}</span>
         <span>{{ model.series.coverageText }}</span>
         <span>{{ model.series.freshnessText }}</span>
         @if (model.omittedPointCount > 0) {
           <span>{{ model.displayedPointCount }} of {{ model.displayedPointCount + model.omittedPointCount }} points shown</span>
         }
-      </footer>
-    </article>
+      </mat-card-footer>
+    </mat-card>
   }
 </div>

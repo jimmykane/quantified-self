@@ -9,59 +9,67 @@
 
   <div class="health-priority-grid">
     @for (card of cards(); track card.id) {
-      <button
-        type="button"
+      <mat-card
+        appearance="outlined"
         class="health-priority-card"
-        [class.health-priority-card-selected]="selectedMetric() === card.metric"
-        [attr.aria-pressed]="selectedMetric() === card.metric"
-        (click)="metricSelected.emit(card.metric)">
-        <span class="health-priority-card-title">
-          <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
-          <span>{{ card.label }}</span>
-        </span>
-        @if (card.loading) {
-          <span class="health-priority-state">
-            <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
-            Loading sources…
-          </span>
-        } @else if (card.error) {
-          <span class="health-priority-state health-priority-error">
-            <mat-icon aria-hidden="true">error_outline</mat-icon>
-            Source status needs attention
-          </span>
-        } @else if (card.rows.length === 0) {
-          <span class="health-priority-state">{{ card.emptyText }}</span>
-        } @else {
-          <span class="health-priority-source-list">
-            @for (row of card.rows; track row.id) {
-              <span class="health-priority-source-row">
-                <span class="health-source-identity">
-                  @if (row.presentation) {
-                    <app-service-source-icon
-                      [presentation]="row.presentation"
-                      [showText]="false"
-                      [showTooltip]="false"
-                      [iconWidth]="18"
-                      [iconHeight]="18">
-                    </app-service-source-icon>
-                  } @else {
-                    <mat-icon aria-hidden="true">monitor_heart</mat-icon>
-                  }
-                  <span>{{ row.sourceLabel }}</span>
+        [class.health-priority-card-selected]="selectedMetric() === card.metric">
+        <mat-card-header>
+          <mat-icon mat-card-avatar aria-hidden="true">{{ card.icon }}</mat-icon>
+          <mat-card-title>{{ card.label }}</mat-card-title>
+        </mat-card-header>
+
+        <mat-card-content class="health-priority-content">
+          @if (card.loading) {
+            <span class="health-priority-state">
+              <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+              Loading sources…
+            </span>
+          } @else if (card.error) {
+            <span class="health-priority-state health-priority-error">
+              <mat-icon aria-hidden="true">error_outline</mat-icon>
+              Source status needs attention
+            </span>
+          } @else if (card.rows.length === 0) {
+            <span class="health-priority-state">{{ card.emptyText }}</span>
+          } @else {
+            <span class="health-priority-source-list">
+              @for (row of card.rows; track row.id) {
+                <span class="health-priority-source-row">
+                  <span class="health-source-identity">
+                    @if (row.presentation) {
+                      <app-service-source-icon
+                        [presentation]="row.presentation"
+                        [showText]="false"
+                        [showTooltip]="false"
+                        [iconWidth]="18"
+                        [iconHeight]="18">
+                      </app-service-source-icon>
+                    } @else {
+                      <mat-icon aria-hidden="true">monitor_heart</mat-icon>
+                    }
+                    <span>{{ row.sourceLabel }}</span>
+                  </span>
+                  <span class="health-priority-value">
+                    <strong>{{ row.valueText }}</strong>
+                    <small>{{ row.contextText }}</small>
+                  </span>
                 </span>
-                <span class="health-priority-value">
-                  <strong>{{ row.valueText }}</strong>
-                  <small>{{ row.contextText }}</small>
-                </span>
-              </span>
-            }
-          </span>
-        }
-        <span class="health-priority-open-label">
-          Open {{ card.label }}
-          <mat-icon aria-hidden="true">arrow_forward</mat-icon>
-        </span>
-      </button>
+              }
+            </span>
+          }
+        </mat-card-content>
+
+        <mat-card-actions align="end">
+          <button
+            mat-button
+            type="button"
+            [attr.aria-pressed]="selectedMetric() === card.metric"
+            (click)="metricSelected.emit(card.metric)">
+            <span>Open {{ card.label }}</span>
+            <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+          </button>
+        </mat-card-actions>
+      </mat-card>
     }
   </div>
 </section>

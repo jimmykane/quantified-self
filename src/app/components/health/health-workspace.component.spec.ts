@@ -32,8 +32,9 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHealthWorkspaceRange } from '../../models/app-user.interface';
-import { localCalendarDate } from '../../helpers/health-workspace.helper';
+import { HealthWorkspaceSeries, localCalendarDate } from '../../helpers/health-workspace.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthWorkspaceComponent } from './health-workspace.component';
 
 @Component({
@@ -63,6 +64,25 @@ class ServiceSourceIconStubComponent {
   @Input() showTooltip = false;
   @Input() iconWidth: number | null = null;
   @Input() iconHeight = 20;
+}
+
+@Component({
+  selector: 'app-health-metric-chart',
+  standalone: true,
+  template: `
+    @for (item of series; track item.id) {
+      <article class="health-chart-panel">
+        <span>{{ item.sourceLabel }}</span>
+        <div class="health-echarts-stub" role="img" [attr.aria-label]="item.semanticLabel"></div>
+      </article>
+    }
+  `,
+})
+class HealthMetricChartStubComponent {
+  @Input() series: readonly HealthWorkspaceSeries[] = [];
+  @Input() startTimeMs = 0;
+  @Input() endTimeMs = 0;
+  @Input() darkTheme = false;
 }
 
 const todayDate = localCalendarDate();
@@ -206,8 +226,8 @@ describe('HealthWorkspaceComponent', () => {
       ],
     })
       .overrideComponent(HealthWorkspaceComponent, {
-        remove: { imports: [AppChartsModule, ServiceSourceIconComponent] },
-        add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent] },
+        remove: { imports: [AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent] },
+        add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent] },
       })
       .overrideComponent(ServiceSourceIconComponent, {
         set: { template: '<span class="source-icon-stub" aria-hidden="true"></span>' },
@@ -232,6 +252,9 @@ describe('HealthWorkspaceComponent', () => {
     });
     expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate', 'HRV']);
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card')?.tagName).toBe('MAT-CARD');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')?.tagName).toBe('MAT-CARD');
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspaceRange).not.toHaveBeenCalled();
   }, 10_000);
@@ -266,6 +289,8 @@ describe('HealthWorkspaceComponent', () => {
     await createComponent();
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelectorAll('.health-chart-panel')).toHaveLength(2);
+    expect(nativeElement.querySelectorAll('.health-echarts-stub')).toHaveLength(2);
+    expect(nativeElement.querySelector('.health-chart-svg')).toBeNull();
     expect(nativeElement.textContent).toContain('Garmin');
     expect(nativeElement.textContent).toContain('COROS');
     expect(nativeElement.textContent).not.toContain('secret-account');

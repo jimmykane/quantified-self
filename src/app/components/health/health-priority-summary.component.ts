@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ProviderPresentation } from '@shared/provider-presentation';
@@ -26,7 +28,7 @@ export interface HealthPriorityCardView {
 @Component({
   selector: 'app-health-priority-summary',
   standalone: true,
-  imports: [MatIconModule, MatProgressSpinnerModule, ServiceSourceIconComponent],
+  imports: [MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, ServiceSourceIconComponent],
   templateUrl: './health-priority-summary.component.html',
   styleUrls: ['./health-priority-summary.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

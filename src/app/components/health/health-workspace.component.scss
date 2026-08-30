@@ -52,16 +52,7 @@
   text-transform: uppercase;
 }
 
-.health-metric-option:focus-visible,
-.health-provider-filter:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--mat-sys-primary) 55%, transparent);
-  outline-offset: 2px;
-}
-
 .health-explorer {
-  background: var(--mat-sys-surface-container-lowest);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px;
   padding: 1rem;
 }
 
@@ -164,16 +155,7 @@
 }
 
 .health-provider-filter {
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 999px;
   gap: 0.35rem;
-  min-height: 34px;
-}
-
-.health-provider-filter-selected {
-  background: var(--mat-sys-secondary-container);
-  border-color: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
 }
 
 .health-notice {
@@ -203,9 +185,6 @@
 
 .health-detail-state {
   align-items: center;
-  background: var(--mat-sys-surface-container-low);
-  border: 1px dashed var(--mat-sys-outline-variant);
-  border-radius: 12px;
   display: flex;
   gap: 0.9rem;
   justify-content: center;
@@ -247,9 +226,6 @@
 }
 
 .health-sleep-chart {
-  background: var(--mat-sys-surface-container-low);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
   box-sizing: border-box;
   height: 440px;
   min-width: 0;
@@ -262,36 +238,18 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
 
-.health-sync-card,
-.health-sync-empty {
-  background: var(--mat-sys-surface-container-low);
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
-  padding: 0.85rem;
-}
-
 .health-sync-card-error {
   border-color: var(--mat-sys-error);
 }
 
-.health-sync-provider {
+.health-sync-avatar {
   align-items: center;
   display: flex;
-  gap: 0.55rem;
-}
-
-.health-sync-provider h3 {
-  font: var(--mat-sys-title-small);
-  margin: 0;
-}
-
-.health-sync-provider strong {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-label-medium);
+  justify-content: center;
 }
 
 .health-sync-card p,
-.health-sync-empty {
+.health-sync-empty mat-card-content {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
 }
@@ -300,10 +258,11 @@
   min-height: 2.6em;
 }
 
-.health-sync-empty {
+.health-sync-empty mat-card-content {
   align-items: center;
   display: flex;
   gap: 0.6rem;
+  padding-top: 1rem;
 }
 
 @media (max-width: 980px) {
@@ -342,13 +301,6 @@
 
   .health-section-heading > p {
     display: none;
-  }
-
-  .health-explorer {
-    border-inline: 0;
-    border-radius: 0;
-    margin-inline: calc(var(--qs-workspace-inline-padding) * -1);
-    padding-inline: var(--qs-workspace-inline-padding);
   }
 
   .health-window-navigation {

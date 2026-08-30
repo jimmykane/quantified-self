@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -101,6 +103,8 @@ const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
+    MatCardModule,
+    MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
     MatProgressSpinnerModule,

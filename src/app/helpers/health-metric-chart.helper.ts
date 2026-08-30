@@ -1,24 +1,25 @@
+import type { EChartsType } from 'echarts/core';
+import {
+  DashboardEChartsStyleTokens,
+  buildDashboardEChartsTooltipChrome,
+  renderDashboardEChartsTooltipCard,
+} from './dashboard-echarts-style.helper';
+import {
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from './echarts-tooltip-interaction.helper';
+import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
 import { HealthWorkspaceSeries, HealthWorkspaceSeriesPoint, formatHealthValue } from './health-workspace.helper';
 
-export interface HealthChartPointModel {
-  x: number;
-  y: number;
-  value: number | string | boolean;
-  timestampMs: number;
-}
+type ChartOption = Parameters<EChartsType['setOption']>[0];
 
-export interface HealthChartBarModel extends HealthChartPointModel {
-  width: number;
-  height: number;
-  top: number;
-}
+export type HealthChartDatum = [timestampMs: number, value: number | string | null];
 
 export interface HealthChartSeriesModel {
   series: HealthWorkspaceSeries;
-  color: string;
-  linePaths: string[];
-  points: HealthChartPointModel[];
-  bars: HealthChartBarModel[];
+  data: HealthChartDatum[];
+  displayedPoints: HealthWorkspaceSeriesPoint[];
+  numericBounds: { min: number; max: number } | null;
   yMinLabel: string;
   yMaxLabel: string;
   startLabel: string;
@@ -29,18 +30,12 @@ export interface HealthChartSeriesModel {
   ariaLabel: string;
 }
 
-export const HEALTH_CHART_VIEWBOX = Object.freeze({ width: 640, height: 220 });
-const PLOT = Object.freeze({ left: 48, right: 16, top: 16, bottom: 34 });
 const MAX_DISPLAY_POINTS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const PROVIDER_COLORS: Record<string, string> = {
-  GarminAPI: '#1976d2',
-  SuuntoApp: '#ef6c00',
-  COROSAPI: '#c62828',
-  WahooAPI: '#6a1b9a',
-  QuantifiedSelf: '#2e7d32',
-};
+interface HealthTooltipParam {
+  value?: unknown;
+}
 
 export function buildHealthChartModels(
   seriesValues: readonly HealthWorkspaceSeries[],
@@ -50,114 +45,200 @@ export function buildHealthChartModels(
   return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs));
 }
 
+export function buildHealthMetricEChartsOption(
+  model: HealthChartSeriesModel,
+  startTimeMs: number,
+  endTimeMs: number,
+  style: DashboardEChartsStyleTokens,
+  isMobileTooltipViewport: boolean,
+): ChartOption {
+  const isCategorical = model.series.chartKind === 'step';
+  const isPoint = model.series.chartKind === 'point';
+  const isBar = model.series.chartKind === 'bar';
+  const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
+  const seriesColor = style.trendLineColor;
+  const option = {
+    animation: false,
+    backgroundColor: 'transparent',
+    textStyle: {
+      color: style.textColor,
+      fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+    },
+    grid: {
+      left: 6,
+      right: 12,
+      top: 12,
+      bottom: 6,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
+    },
+    tooltip: {
+      trigger: 'axis',
+      triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
+      renderMode: 'html',
+      axisPointer: { type: 'line', snap: true },
+      ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+      ...buildDashboardEChartsTooltipChrome(style),
+      formatter: (params: HealthTooltipParam | HealthTooltipParam[]) => {
+        const entries = Array.isArray(params) ? params : [params];
+        const datum = entries
+          .map(entry => Array.isArray(entry?.value) ? entry.value : null)
+          .find(value => value && value.length >= 2 && value[1] !== null);
+        const timestampMs = Number(datum?.[0]);
+        const point = Number.isFinite(timestampMs) ? pointsByTimestamp.get(timestampMs) : null;
+        if (!point) {
+          return '';
+        }
+        return renderDashboardEChartsTooltipCard(style, {
+          title: formatTooltipDate(point.timestampMs),
+          subtitle: model.series.sourceLabel,
+          rows: [{
+            label: 'Reading',
+            value: formatHealthValue(point.value, model.series.unit),
+            markerColor: seriesColor,
+          }],
+          notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
+          stackHeader: true,
+        });
+      },
+    },
+    xAxis: {
+      type: 'time',
+      min: startTimeMs,
+      max: endTimeMs,
+      boundaryGap: false,
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: style.axisColor } },
+      splitLine: { show: false },
+      axisLabel: {
+        color: style.secondaryTextColor,
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: style.axisFontSize,
+        formatter: (value: number) => formatAxisDate(value),
+      },
+    },
+    yAxis: isCategorical
+      ? {
+        type: 'category',
+        data: model.categoryLabels,
+        axisTick: { show: false },
+        axisLine: { show: false },
+        splitLine: { lineStyle: { color: style.gridColor } },
+        axisLabel: {
+          color: style.secondaryTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: style.axisFontSize,
+        },
+      }
+      : {
+        type: 'value',
+        min: model.numericBounds?.min,
+        max: model.numericBounds?.max,
+        axisTick: { show: false },
+        axisLine: { show: false },
+        splitNumber: 3,
+        splitLine: { lineStyle: { color: style.gridColor } },
+        axisLabel: {
+          color: style.secondaryTextColor,
+          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+          fontSize: style.axisFontSize,
+          formatter: (value: number) => formatAxisValue(value, model.series.unit),
+        },
+      },
+    series: [{
+      name: model.series.sourceLabel,
+      type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
+      data: model.data,
+      connectNulls: false,
+      step: isCategorical ? 'end' : undefined,
+      showSymbol: isPoint || model.displayedPointCount <= 60,
+      symbol: 'circle',
+      symbolSize: isPoint ? 8 : 5,
+      barMaxWidth: 28,
+      lineStyle: { color: seriesColor, width: 2.25 },
+      itemStyle: { color: seriesColor },
+      emphasis: { scale: 1.25 },
+    }],
+  };
+
+  return option as ChartOption;
+}
+
 function buildSeriesModel(
   series: HealthWorkspaceSeries,
   startTimeMs: number,
   endTimeMs: number,
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
-  const displayed = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
-  const plotWidth = HEALTH_CHART_VIEWBOX.width - PLOT.left - PLOT.right;
-  const plotHeight = HEALTH_CHART_VIEWBOX.height - PLOT.top - PLOT.bottom;
-  const safeEndTimeMs = endTimeMs > startTimeMs ? endTimeMs : startTimeMs + 1;
-  const x = (timestampMs: number): number => PLOT.left
-    + (Math.max(0, Math.min(1, (timestampMs - startTimeMs) / (safeEndTimeMs - startTimeMs))) * plotWidth);
-
+  const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
   const categoryLabels = series.chartKind === 'step'
-    ? [...new Set(displayed.map(point => categoryValueLabel(point.value)))]
+    ? [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))]
     : [];
-  const numericValues = displayed
+  const numericValues = displayedPoints
     .map(point => typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null)
     .filter((value): value is number => value !== null);
-  const bounds = resolveYBounds(numericValues, series.chartKind);
-  const y = (point: HealthWorkspaceSeriesPoint): number => {
-    const value = series.chartKind === 'step'
-      ? Math.max(0, categoryLabels.indexOf(categoryValueLabel(point.value)))
-      : typeof point.value === 'number' ? point.value : 0;
-    const min = series.chartKind === 'step' ? 0 : bounds.min;
-    const max = series.chartKind === 'step' ? Math.max(1, categoryLabels.length - 1) : bounds.max;
-    const ratio = max === min ? 0.5 : (value - min) / (max - min);
-    return PLOT.top + ((1 - Math.max(0, Math.min(1, ratio))) * plotHeight);
-  };
-
-  const points = displayed.map(point => ({
-    x: roundCoordinate(x(point.timestampMs)),
-    y: roundCoordinate(y(point)),
-    value: point.value,
-    timestampMs: point.timestampMs,
-  }));
-  const linePaths = series.chartKind === 'line' || series.chartKind === 'step'
-    ? buildLinePaths(displayed, points, series.chartKind)
-    : [];
-  const zeroPoint = displayed[0]
-    ? { ...displayed[0], value: 0 }
-    : { timestampMs: startTimeMs, calendarDate: '', value: 0, qualityCode: null };
-  const baseline = series.chartKind === 'bar' ? y(zeroPoint) : PLOT.top + plotHeight;
-  const barWidth = resolveBarWidth(points, plotWidth);
-  const bars = series.chartKind === 'bar'
-    ? points.map(point => ({
-      ...point,
-      width: barWidth,
-      height: Math.max(1, Math.abs(baseline - point.y)),
-      top: Math.min(point.y, baseline),
-    }))
-    : [];
+  const numericBounds = series.chartKind === 'step' ? null : resolveYBounds(numericValues, series.chartKind);
   const latest = sortedPoints.at(-1);
   const latestText = latest ? formatHealthValue(latest.value, series.unit) : 'No reading';
-  const yMinLabel = series.chartKind === 'step'
-    ? categoryLabels[0] || ''
-    : formatAxisValue(bounds.min, series.unit);
-  const yMaxLabel = series.chartKind === 'step'
-    ? categoryLabels.at(-1) || ''
-    : formatAxisValue(bounds.max, series.unit);
+  const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
   return {
     series,
-    color: PROVIDER_COLORS[series.provider] || '#546e7a',
-    linePaths,
-    points,
-    bars,
-    yMinLabel,
-    yMaxLabel,
+    data: buildChartData(displayedPoints, series.chartKind),
+    displayedPoints,
+    numericBounds,
+    yMinLabel: series.chartKind === 'step'
+      ? categoryLabels[0] || ''
+      : formatAxisValue(numericBounds?.min ?? 0, series.unit),
+    yMaxLabel: series.chartKind === 'step'
+      ? categoryLabels.at(-1) || ''
+      : formatAxisValue(numericBounds?.max ?? 1, series.unit),
     startLabel: formatAxisDate(startTimeMs),
     endLabel: formatAxisDate(endTimeMs),
     categoryLabels,
-    displayedPointCount: displayed.length,
-    omittedPointCount: Math.max(0, sortedPoints.length - displayed.length),
-    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${sortedPoints.length.toLocaleString()} readings. Latest ${latestText}. Values are not combined with other sources.`,
+    displayedPointCount: displayedPoints.length,
+    omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
+    ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
   };
 }
 
-function buildLinePaths(
-  sourcePoints: readonly HealthWorkspaceSeriesPoint[],
-  points: readonly HealthChartPointModel[],
-  chartKind: 'line' | 'step',
-): string[] {
-  if (!points.length) {
-    return [];
-  }
-  const positiveDeltas = sourcePoints.slice(1)
-    .map((point, index) => point.timestampMs - sourcePoints[index].timestampMs)
+function buildChartData(
+  points: readonly HealthWorkspaceSeriesPoint[],
+  chartKind: HealthWorkspaceSeries['chartKind'],
+): HealthChartDatum[] {
+  const data: HealthChartDatum[] = [];
+  const gapThreshold = resolveGapThreshold(points, chartKind);
+  points.forEach((point, index) => {
+    if (
+      index > 0
+      && (chartKind === 'line' || chartKind === 'step')
+      && point.timestampMs - points[index - 1].timestampMs > gapThreshold
+    ) {
+      const previousTimestampMs = points[index - 1].timestampMs;
+      data.push([previousTimestampMs + Math.max(1, Math.floor((point.timestampMs - previousTimestampMs) / 2)), null]);
+    }
+    data.push([
+      point.timestampMs,
+      chartKind === 'step'
+        ? categoryValueLabel(point.value)
+        : typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null,
+    ]);
+  });
+  return data;
+}
+
+function resolveGapThreshold(
+  points: readonly HealthWorkspaceSeriesPoint[],
+  chartKind: HealthWorkspaceSeries['chartKind'],
+): number {
+  const positiveDeltas = points.slice(1)
+    .map((point, index) => point.timestampMs - points[index].timestampMs)
     .filter(delta => delta > 0)
     .sort((left, right) => left - right);
-  const medianDelta = positiveDeltas.length ? positiveDeltas[Math.floor((positiveDeltas.length - 1) / 2)] : DAY_MS;
-  const gapThreshold = Math.max(medianDelta * 3, chartKind === 'step' ? 1 : 0);
-  const paths: string[] = [];
-  let current = `M ${points[0].x} ${points[0].y}`;
-  for (let index = 1; index < points.length; index += 1) {
-    const point = points[index];
-    const delta = sourcePoints[index].timestampMs - sourcePoints[index - 1].timestampMs;
-    if (delta > gapThreshold) {
-      paths.push(current);
-      current = `M ${point.x} ${point.y}`;
-      continue;
-    }
-    current += chartKind === 'step'
-      ? ` H ${point.x} V ${point.y}`
-      : ` L ${point.x} ${point.y}`;
-  }
-  paths.push(current);
-  return paths;
+  const medianDelta = positiveDeltas.length
+    ? positiveDeltas[Math.floor((positiveDeltas.length - 1) / 2)]
+    : DAY_MS;
+  return Math.max(medianDelta * 3, chartKind === 'step' ? 1 : 0);
 }
 
 function downsamplePoints(
@@ -177,7 +258,10 @@ function downsamplePoints(
   return result;
 }
 
-function resolveYBounds(values: readonly number[], chartKind: HealthWorkspaceSeries['chartKind']): { min: number; max: number } {
+function resolveYBounds(
+  values: readonly number[],
+  chartKind: HealthWorkspaceSeries['chartKind'],
+): { min: number; max: number } {
   if (!values.length) {
     return { min: 0, max: 1 };
   }
@@ -201,19 +285,11 @@ function resolveYBounds(values: readonly number[], chartKind: HealthWorkspaceSer
   return { min, max };
 }
 
-function resolveBarWidth(points: readonly HealthChartPointModel[], plotWidth: number): number {
-  if (points.length <= 1) {
-    return Math.min(28, plotWidth / 4);
-  }
-  const distances = points.slice(1).map((point, index) => Math.max(1, point.x - points[index].x));
-  return Math.max(2, Math.min(28, Math.min(...distances) * 0.65));
-}
-
 function categoryValueLabel(value: number | string | boolean): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }
-  return `${value}`.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Unknown';
+  return humanize(`${value}`) || 'Unknown';
 }
 
 function formatAxisValue(value: number, unit: string): string {
@@ -221,15 +297,26 @@ function formatAxisValue(value: number, unit: string): string {
   if (unit === 'percent') {
     return `${rounded}%`;
   }
-  return `${rounded}`;
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(rounded);
 }
 
 function formatAxisDate(timestampMs: number): string {
-  // Workspace bounds represent UTC calendar dates, not browser-local instants.
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
     .format(new Date(timestampMs));
 }
 
-function roundCoordinate(value: number): number {
-  return Math.round(value * 10) / 10;
+function formatTooltipDate(timestampMs: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  }).format(new Date(timestampMs));
+}
+
+function humanize(value: string): string {
+  return `${value}`.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }

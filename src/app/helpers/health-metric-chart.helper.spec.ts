@@ -5,7 +5,8 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
-import { buildHealthChartModels } from './health-metric-chart.helper';
+import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
+import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -41,13 +42,13 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
-  it('breaks line paths across data gaps instead of connecting missing periods', () => {
+  it('inserts null ECharts data across gaps instead of connecting missing periods', () => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
-    expect(model.linePaths).toHaveLength(2);
+    expect(model.data.filter(([, value]) => value === null)).toHaveLength(1);
     expect(model.ariaLabel).toContain('not combined with other sources');
   });
 
-  it('uses bars for totals and starts positive totals at the baseline', () => {
+  it('uses an ECharts bar series for totals and starts positive totals at zero', () => {
     const model = buildHealthChartModels([series({
       aggregation: 'total',
       chartKind: 'bar',
@@ -57,12 +58,20 @@ describe('Health metric chart helpers', () => {
         { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 200, qualityCode: null },
       ],
     })], 0, DAY_MS)[0];
-    expect(model.bars).toHaveLength(2);
-    expect(model.linePaths).toEqual([]);
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as any;
+    expect(option.series[0].type).toBe('bar');
+    expect(option.series[0].data).toEqual([[0, 100], [DAY_MS, 200]]);
+    expect(model.numericBounds?.min).toBe(0);
     expect(model.yMinLabel).toBe('0');
   });
 
-  it('draws signed totals on opposite sides of a zero baseline', () => {
+  it('keeps signed totals on opposite sides of the ECharts zero baseline', () => {
     const model = buildHealthChartModels([series({
       aggregation: 'total',
       chartKind: 'bar',
@@ -72,12 +81,11 @@ describe('Health metric chart helpers', () => {
         { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 15, qualityCode: null },
       ],
     })], 0, DAY_MS)[0];
-    expect(model.bars).toHaveLength(2);
-    expect(model.bars[0].top).toBeGreaterThan(model.bars[1].top);
-    expect(model.bars.every(bar => bar.height > 0)).toBe(true);
+    expect(model.numericBounds).toEqual({ min: -10, max: 15 });
+    expect(model.data).toEqual([[0, -10], [DAY_MS, 15]]);
   });
 
-  it('creates stepped categorical paths without coercing categories to a common number', () => {
+  it('creates an ECharts stepped categorical series without coercing categories to numbers', () => {
     const model = buildHealthChartModels([series({
       chartKind: 'step',
       valueType: HEALTH_VALUE_TYPES.Category,
@@ -88,8 +96,16 @@ describe('Health metric chart helpers', () => {
       ],
     })], 0, DAY_MS)[0];
     expect(model.categoryLabels).toEqual(['rest', 'high']);
-    expect(model.linePaths[0]).toContain(' H ');
-    expect(model.linePaths[0]).toContain(' V ');
+    expect(model.data).toEqual([[0, 'rest'], [DAY_MS, 'high']]);
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as any;
+    expect(option.series[0]).toMatchObject({ type: 'line', step: 'end', connectNulls: false });
+    expect(option.yAxis).toMatchObject({ type: 'category', data: ['rest', 'high'] });
   });
 
   it('bounds visual DOM points while preserving the first and last reading', () => {
@@ -100,10 +116,11 @@ describe('Health metric chart helpers', () => {
       qualityCode: null,
     }));
     const model = buildHealthChartModels([series({ points })], 0, 999_000)[0];
-    expect(model.points).toHaveLength(600);
+    expect(model.displayedPoints).toHaveLength(600);
+    expect(model.data).toHaveLength(600);
     expect(model.omittedPointCount).toBe(400);
-    expect(model.points[0].value).toBe(0);
-    expect(model.points.at(-1)?.value).toBe(999);
+    expect(model.displayedPoints[0].value).toBe(0);
+    expect(model.displayedPoints.at(-1)?.value).toBe(999);
   });
 
   it('labels calendar-window bounds in UTC so the final day does not roll forward locally', () => {
@@ -114,5 +131,14 @@ describe('Health metric chart helpers', () => {
 
     expect(model.startLabel).toBe(formatter.format(new Date(startTimeMs)));
     expect(model.endLabel).toBe(formatter.format(new Date(endTimeMs)));
+  });
+
+  it('uses singular reading text in the chart accessibility label', () => {
+    const model = buildHealthChartModels([series({
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 50, qualityCode: null }],
+    })], 0, DAY_MS)[0];
+
+    expect(model.ariaLabel).toContain('1 reading.');
+    expect(model.ariaLabel).not.toContain('1 readings.');
   });
 });

@@ -22,6 +22,12 @@ This always-on rule applies to frontend UI changes.
 - When custom CSS is necessary, keep it consistent with nearby app layouts and limit it to structure, density, spacing, and responsive behavior.
 - Prefer reusing existing shared app classes and Material theme tokens over inventing new component-specific visual language.
 
+## Data Visualization
+- Use the shared ECharts loader, host controller, theme, tooltip, resize, and mobile-interaction helpers for product charts.
+- Do not hand-roll SVG or canvas charts, axes, paths, bars, points, tooltips, or chart interaction when ECharts can represent the visualization.
+- Reuse an existing normalized app chart when it already owns the domain model, such as Sleep, instead of creating a second chart implementation.
+- Any exception must be documented next to the implementation with the concrete accessibility or rendering constraint that prevents ECharts use.
+
 ## Dialogs and Overlays
 - Do not add custom `panelClass` unless there is a documented exception.
 - Prefer the global dialog container conventions.
