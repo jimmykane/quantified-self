@@ -116,6 +116,10 @@ describe('refreshed email template catalog', () => {
         const subscriptionGift = render('subscription_time_gift', 'basic-three-months');
         expect(subscriptionGift).toContain('<strong>3 months</strong> of complimentary Basic access');
         expect(subscriptionGift).toContain('30 November 2026');
+        expect(subscriptionGift).toContain('Best regards,<br>Your Quantified Self Team');
+        expect(readTemplate('subscription_time_gift.txt.hbs')).toContain(
+            'Best regards,\nYour Quantified Self Team'
+        );
         expect(subscriptionGift).not.toContain('internal reason');
     });
 
