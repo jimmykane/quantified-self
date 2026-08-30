@@ -30,11 +30,23 @@ export interface ConnectionCountStats {
     expireAt?: string | null;
 }
 
-export interface AuthActivityStats {
+export type AuthActivityWindowKey = 'last24Hours' | 'last7Days' | 'last30Days';
+
+export interface AuthActivityWindowStats {
     last24Hours: number | null;
     last7Days: number | null;
     last30Days: number | null;
+}
+
+export interface AuthActivityPlanBreakdown {
+    free: AuthActivityWindowStats;
+    basic: AuthActivityWindowStats;
+    pro: AuthActivityWindowStats;
+}
+
+export interface AuthActivityStats extends AuthActivityWindowStats {
     computedAt: string | null;
+    byPlan: AuthActivityPlanBreakdown | null;
 }
 
 export interface SubscriptionCadenceTierStats {
@@ -56,6 +68,18 @@ export interface AdminDashboardHistoryCadenceTierStats {
     unknown: number;
 }
 
+export interface AdminDashboardHistoryAuthActivityWindowStats {
+    last24Hours: number;
+    last7Days: number;
+    last30Days: number;
+}
+
+export interface AdminDashboardHistoryAuthActivityPlanBreakdown {
+    free: AdminDashboardHistoryAuthActivityWindowStats;
+    basic: AdminDashboardHistoryAuthActivityWindowStats;
+    pro: AdminDashboardHistoryAuthActivityWindowStats;
+}
+
 export interface AdminDashboardHistoryPoint {
     date: string;
     computedAt: string;
@@ -71,6 +95,7 @@ export interface AdminDashboardHistoryPoint {
         last24Hours: number;
         last7Days: number;
         last30Days: number;
+        byPlan: AdminDashboardHistoryAuthActivityPlanBreakdown | null;
     };
     subscriptionCadence: {
         pro: AdminDashboardHistoryCadenceTierStats;
@@ -446,7 +471,65 @@ export class AdminService {
             last7Days: hasInvalidWindowOrdering ? null : last7Days,
             last30Days: hasInvalidWindowOrdering ? null : last30Days,
             computedAt,
+            byPlan: hasInvalidWindowOrdering
+                ? null
+                : this.mapAuthActivityPlanBreakdown(rawStats['byPlan'], {
+                    last24Hours,
+                    last7Days,
+                    last30Days,
+                }),
         };
+    }
+
+    private mapAuthActivityPlanBreakdown(
+        value: unknown,
+        totals: AuthActivityWindowStats,
+    ): AuthActivityPlanBreakdown | null {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            return null;
+        }
+        if (Object.values(totals).some(count => count === null)) {
+            return null;
+        }
+
+        const rawBreakdown = value as Record<string, unknown>;
+        const mapTier = (plan: 'free' | 'basic' | 'pro'): AuthActivityWindowStats | null => {
+            const rawTier = rawBreakdown[plan];
+            if (!rawTier || typeof rawTier !== 'object' || Array.isArray(rawTier)) {
+                return null;
+            }
+            const tier = rawTier as Record<string, unknown>;
+            const mapCount = (count: unknown): number | null => (
+                typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null
+            );
+            const mappedTier = {
+                last24Hours: mapCount(tier['last24Hours']),
+                last7Days: mapCount(tier['last7Days']),
+                last30Days: mapCount(tier['last30Days']),
+            };
+            if (
+                Object.values(mappedTier).some(count => count === null)
+                || (mappedTier.last24Hours ?? 0) > (mappedTier.last7Days ?? 0)
+                || (mappedTier.last7Days ?? 0) > (mappedTier.last30Days ?? 0)
+            ) {
+                return null;
+            }
+            return mappedTier;
+        };
+
+        const free = mapTier('free');
+        const basic = mapTier('basic');
+        const pro = mapTier('pro');
+        if (!free || !basic || !pro) {
+            return null;
+        }
+        const breakdown = { free, basic, pro };
+        const reconciles = (window: AuthActivityWindowKey) => (
+            free[window]! + basic[window]! + pro[window]! === totals[window]
+        );
+        return reconciles('last24Hours') && reconciles('last7Days') && reconciles('last30Days')
+            ? breakdown
+            : null;
     }
 
     private mapSubscriptionCadenceStats(stats: unknown): SubscriptionCadenceStats | undefined {
@@ -527,6 +610,13 @@ export class AdminService {
         );
         const pro = requireCadenceTier(subscriptionCadence['pro'], `snapshots[${index}].subscriptionCadence.pro`);
         const basic = requireCadenceTier(subscriptionCadence['basic'], `snapshots[${index}].subscriptionCadence.basic`);
+        const rawActivityByPlan = authActivity['byPlan'];
+        const activityByPlan = rawActivityByPlan === undefined || rawActivityByPlan === null
+            ? null
+            : requireHistoryActivityPlanBreakdown(
+                rawActivityByPlan,
+                `snapshots[${index}].authActivity.byPlan`,
+            );
         const mapped: AdminDashboardHistoryPoint = {
             date: requireUtcDateKey(point['date'], `snapshots[${index}].date`),
             computedAt: requireIsoTimestamp(point['computedAt'], `snapshots[${index}].computedAt`),
@@ -557,6 +647,7 @@ export class AdminService {
                     authActivity['last30Days'],
                     `snapshots[${index}].authActivity.last30Days`
                 ),
+                byPlan: activityByPlan,
             },
             subscriptionCadence: { pro, basic },
         };
@@ -573,6 +664,23 @@ export class AdminService {
             || mapped.authActivity.last30Days > mapped.authActivity.eligibleAccounts
         ) {
             throw new Error(`Admin dashboard history snapshot ${index} has inconsistent activity totals.`);
+        }
+        const byPlan = mapped.authActivity.byPlan;
+        if (byPlan) {
+            const plans = ['free', 'basic', 'pro'] as const;
+            const windows: readonly AuthActivityWindowKey[] = ['last24Hours', 'last7Days', 'last30Days'];
+            if (windows.some(window => (
+                plans.reduce((total, plan) => total + byPlan[plan][window], 0)
+                !== mapped.authActivity[window]
+            ))) {
+                throw new Error(`Admin dashboard history snapshot ${index} has inconsistent activity plan totals.`);
+            }
+            if (
+                byPlan.basic.last30Days > mapped.users.basic
+                || byPlan.pro.last30Days > mapped.users.pro
+            ) {
+                throw new Error(`Admin dashboard history snapshot ${index} has activity exceeding its paid plan totals.`);
+            }
         }
         if (
             cadenceTierTotal(pro) !== mapped.users.pro
@@ -688,6 +796,30 @@ function requireCadenceTier(value: unknown, field: string): AdminDashboardHistor
         monthly: requireCount(tier['monthly'], `${field}.monthly`),
         yearly: requireCount(tier['yearly'], `${field}.yearly`),
         unknown: requireCount(tier['unknown'], `${field}.unknown`),
+    };
+}
+
+function requireHistoryActivityPlanBreakdown(
+    value: unknown,
+    field: string,
+): AdminDashboardHistoryAuthActivityPlanBreakdown {
+    const breakdown = requireRecord(value, field);
+    const requireTier = (plan: 'free' | 'basic' | 'pro'): AdminDashboardHistoryAuthActivityWindowStats => {
+        const tier = requireRecord(breakdown[plan], `${field}.${plan}`);
+        const mapped = {
+            last24Hours: requireCount(tier['last24Hours'], `${field}.${plan}.last24Hours`),
+            last7Days: requireCount(tier['last7Days'], `${field}.${plan}.last7Days`),
+            last30Days: requireCount(tier['last30Days'], `${field}.${plan}.last30Days`),
+        };
+        if (mapped.last24Hours > mapped.last7Days || mapped.last7Days > mapped.last30Days) {
+            throw new Error(`Admin dashboard history ${field}.${plan} has inconsistent activity totals.`);
+        }
+        return mapped;
+    };
+    return {
+        free: requireTier('free'),
+        basic: requireTier('basic'),
+        pro: requireTier('pro'),
     };
 }
 

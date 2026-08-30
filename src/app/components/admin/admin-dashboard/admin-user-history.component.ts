@@ -26,6 +26,7 @@ import type {
     AdminDashboardHistoryDays,
     AdminDashboardHistoryPoint,
     AdminDashboardHistoryResponse,
+    AuthActivityWindowKey,
 } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -67,9 +68,11 @@ export class AdminUserHistoryComponent implements OnDestroy {
     private readonly historyState = signal<AdminDashboardHistoryResponse | null>(null);
     private readonly destroy$ = new Subject<void>();
     private readonly authChartHost: EChartsHostController;
+    private readonly activePlanChartHost: EChartsHostController;
     private readonly userMixChartHost: EChartsHostController;
     private readonly cadenceChartHost: EChartsHostController;
     private authChartRef?: ElementRef<HTMLDivElement>;
+    private activePlanChartRef?: ElementRef<HTMLDivElement>;
     private userMixChartRef?: ElementRef<HTMLDivElement>;
     private cadenceChartRef?: ElementRef<HTMLDivElement>;
     private isDark = false;
@@ -99,6 +102,12 @@ export class AdminUserHistoryComponent implements OnDestroy {
         this.handleChartReference(value, this.userMixChartHost);
     }
 
+    @ViewChild('activePlanChart')
+    set activePlanChart(value: ElementRef<HTMLDivElement> | undefined) {
+        this.activePlanChartRef = value;
+        this.handleChartReference(value, this.activePlanChartHost);
+    }
+
     @ViewChild('cadenceChart')
     set cadenceChart(value: ElementRef<HTMLDivElement> | undefined) {
         this.cadenceChartRef = value;
@@ -106,16 +115,25 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     readonly selectedDays = signal<AdminDashboardHistoryDays>(90);
+    readonly selectedActivePlanWindow = signal<AuthActivityWindowKey>('last30Days');
     readonly minimumPoints = ADMIN_DASHBOARD_HISTORY_MINIMUM_POINTS;
     readonly ranges: ReadonlyArray<{ days: AdminDashboardHistoryDays; label: string }> = [
         { days: 30, label: '30d' },
         { days: 90, label: '90d' },
         { days: 365, label: '1y' },
     ];
+    readonly activePlanWindows: ReadonlyArray<{ window: AuthActivityWindowKey; label: string }> = [
+        { window: 'last24Hours', label: '24h' },
+        { window: 'last7Days', label: '7d' },
+        { window: 'last30Days', label: '30d' },
+    ];
     readonly historyView = computed(() => buildAdminDashboardHistoryView(
         this.historyState(),
         this.selectedDays(),
     ));
+    readonly activePlanHistoryPoints = computed(() => this.historyView().observed.filter(
+        snapshot => snapshot.authActivity.byPlan !== null,
+    ).length);
 
     constructor(
         appThemeService: AppThemeService,
@@ -124,6 +142,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
     ) {
         const hostConfig = (logPrefix: string) => ({ eChartsLoader, logger, logPrefix });
         this.authChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:activity]'));
+        this.activePlanChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:active-plans]'));
         this.userMixChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:plans]'));
         this.cadenceChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:cadence]'));
 
@@ -143,6 +162,17 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return;
         }
         this.selectedDays.set(days);
+        this.scheduleRender();
+    }
+
+    selectActivePlanWindow(window: AuthActivityWindowKey): void {
+        if (
+            !this.activePlanWindows.some(option => option.window === window)
+            || this.selectedActivePlanWindow() === window
+        ) {
+            return;
+        }
+        this.selectedActivePlanWindow.set(window);
         this.scheduleRender();
     }
 
@@ -175,6 +205,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
 
         await Promise.all([
             this.renderChart(this.authChartHost, this.authChartRef, () => this.buildAuthActivityOption()),
+            this.renderChart(this.activePlanChartHost, this.activePlanChartRef, () => this.buildActivePlanOption()),
             this.renderChart(this.userMixChartHost, this.userMixChartRef, () => this.buildUserMixOption()),
             this.renderChart(this.cadenceChartHost, this.cadenceChartRef, () => this.buildCadenceOption()),
         ]);
@@ -238,6 +269,72 @@ export class AdminUserHistoryComponent implements OnDestroy {
                 this.lineSeries('Active 24h', CHART_COLORS.active24Hours, view.timeline.map(item => item.snapshot?.authActivity.last24Hours ?? null), 'solid', 'circle'),
                 this.lineSeries('Active 7d', CHART_COLORS.active7Days, view.timeline.map(item => item.snapshot?.authActivity.last7Days ?? null), 'dashed', 'diamond'),
                 this.lineSeries('Active 30d', CHART_COLORS.active30Days, view.timeline.map(item => item.snapshot?.authActivity.last30Days ?? null), 'dotted', 'triangle'),
+            ],
+        };
+    }
+
+    private buildActivePlanOption(): Record<string, unknown> {
+        const view = this.historyView();
+        const style = this.chartStyle(this.activePlanChartRef);
+        const window = this.selectedActivePlanWindow();
+        return {
+            ...this.buildCartesianBase(style, view.timeline.map(item => item.date)),
+            color: [CHART_COLORS.free, CHART_COLORS.basic, CHART_COLORS.pro],
+            tooltip: {
+                ...buildDashboardEChartsTooltipChrome(style),
+                trigger: 'axis',
+                confine: true,
+                formatter: (params: unknown) => {
+                    const snapshot = this.snapshotFromTooltip(params);
+                    const byPlan = snapshot?.authActivity.byPlan;
+                    if (!snapshot || !byPlan) {
+                        return '';
+                    }
+                    return renderDashboardEChartsTooltipCard(style, {
+                        title: this.formatFullDate(snapshot.date),
+                        subtitle: `${this.formatCount(snapshot.authActivity[window])} active · ${this.activePlanWindowLabel(window)}`,
+                        rows: [
+                            { label: 'Free', value: this.formatCount(byPlan.free[window]), markerColor: CHART_COLORS.free },
+                            { label: 'Basic', value: this.formatCount(byPlan.basic[window]), markerColor: CHART_COLORS.basic },
+                            { label: 'Pro', value: this.formatCount(byPlan.pro[window]), markerColor: CHART_COLORS.pro },
+                        ],
+                    });
+                },
+            },
+            series: [
+                {
+                    ...this.areaSeries(
+                        'Free',
+                        CHART_COLORS.free,
+                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.free[window] ?? null),
+                        'active-plans',
+                        'dotted',
+                        0.65,
+                    ),
+                    id: 'active-plan-free',
+                },
+                {
+                    ...this.areaSeries(
+                        'Basic',
+                        CHART_COLORS.basic,
+                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.basic[window] ?? null),
+                        'active-plans',
+                        'dashed',
+                        0.85,
+                    ),
+                    id: 'active-plan-basic',
+                },
+                {
+                    ...this.areaSeries(
+                        'Pro',
+                        CHART_COLORS.pro,
+                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.pro[window] ?? null),
+                        'active-plans',
+                        'solid',
+                        1.1,
+                    ),
+                    id: 'active-plan-pro',
+                },
             ],
         };
     }
@@ -483,6 +580,17 @@ export class AdminUserHistoryComponent implements OnDestroy {
         return `${this.formatCount(count)} (${Math.round((count / eligibleAccounts) * 100)}%)`;
     }
 
+    private activePlanWindowLabel(window: AuthActivityWindowKey): string {
+        switch (window) {
+            case 'last24Hours':
+                return 'rolling 24 hours';
+            case 'last7Days':
+                return 'rolling 7 days';
+            case 'last30Days':
+                return 'rolling 30 days';
+        }
+    }
+
     private formatCount(value: number): string {
         return new Intl.NumberFormat('en-US').format(value);
     }
@@ -508,6 +616,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
 
     private disposeCharts(): void {
         this.authChartHost.dispose();
+        this.activePlanChartHost.dispose();
         this.userMixChartHost.dispose();
         this.cadenceChartHost.dispose();
     }

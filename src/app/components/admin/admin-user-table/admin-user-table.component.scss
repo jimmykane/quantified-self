@@ -1,0 +1,121 @@
+:host {
+    display: block;
+    padding-top: 1.5rem;
+}
+
+.user-table-section,
+.table-card,
+.table-wrapper {
+    min-width: 0;
+}
+
+.section-heading {
+    margin-bottom: 1rem;
+
+    h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0;
+        font: var(--mat-sys-headline-small);
+    }
+
+    p {
+        margin: 0.4rem 0 0;
+        color: var(--mat-sys-on-surface-variant);
+    }
+}
+
+.filter-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+    align-items: start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+}
+
+.search-field,
+.service-filter {
+    min-width: 0;
+    width: 100%;
+}
+
+.table-card {
+    overflow: hidden;
+    position: relative;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+}
+
+table {
+    width: 100%;
+    background: transparent;
+}
+
+.loading-shade {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--mat-sys-surface) 82%, transparent);
+}
+
+.error-message,
+.no-data-cell {
+    padding: 1rem;
+    text-align: center;
+}
+
+.error-message {
+    color: var(--mat-sys-error);
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.mono-cell {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.provider-icons,
+.service-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.services-cell,
+.subscription-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.25rem 0;
+}
+
+.detail-text {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.78rem;
+}
+
+.provider-google { color: #4285f4; }
+.provider-email { color: #34a853; }
+.provider-apple { color: var(--mat-sys-on-surface); }
+.provider-facebook { color: #1877f2; }
+
+@media (max-width: 720px) {
+    .filter-card {
+        grid-template-columns: 1fr;
+    }
+}

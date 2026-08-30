@@ -9,7 +9,12 @@ import {
     SUBSCRIPTION_ROLE_PRO,
 } from './subscription.constants';
 import { toEpochMillis } from './date.utils';
-import type { AuthActivityStats, SubscriptionCadenceStats } from './types';
+import type {
+    AuthActivityPlanBreakdown,
+    AuthActivityStats,
+    AuthActivityWindowStats,
+    SubscriptionCadenceStats,
+} from './types';
 
 const AUTH_ACTIVITY_WINDOW_MS = {
     last24Hours: 24 * 60 * 60 * 1000,
@@ -18,6 +23,7 @@ const AUTH_ACTIVITY_WINDOW_MS = {
 } as const;
 
 interface AuthActivityUserRecord {
+    uid: string;
     disabled?: boolean;
     customClaims?: Record<string, unknown>;
     metadata?: {
@@ -43,6 +49,13 @@ interface CanonicalSubscriptionIdentity {
 interface CanonicalSubscriptionCandidate extends CanonicalSubscriptionIdentity {
     createdAtMs: number | null;
     data: Record<string, unknown>;
+}
+
+type ActivePaidPlan = 'basic' | 'pro';
+
+interface ResolvedActivePaidSubscriptions {
+    summary: ActivePaidSubscriptionSummary;
+    planByOwner: ReadonlyMap<string, ActivePaidPlan>;
 }
 
 export interface ActivePaidSubscriptionSummary {
@@ -135,9 +148,9 @@ function shouldReplaceSubscriptionCandidate(
     return candidate.subscriptionId.localeCompare(current.subscriptionId) > 0;
 }
 
-export function summarizeActivePaidSubscriptions(
+function resolveActivePaidSubscriptions(
     documents: SubscriptionDocumentSnapshotLike[],
-): ActivePaidSubscriptionSummary {
+): ResolvedActivePaidSubscriptions {
     const latestSubscriptionByOwner = new Map<string, CanonicalSubscriptionCandidate>();
     let cancelScheduled = 0;
     let ignoredNonCanonicalDocuments = 0;
@@ -179,12 +192,15 @@ export function summarizeActivePaidSubscriptions(
     let basic = 0;
     let monthlyPaid = 0;
     let yearlyPaid = 0;
+    const planByOwner = new Map<string, ActivePaidPlan>();
     const subscriptionCadence: SubscriptionCadenceStats = {
         pro: { monthly: 0, yearly: 0, unknown: 0 },
         basic: { monthly: 0, yearly: 0, unknown: 0 },
     };
 
-    latestSubscriptionByOwner.forEach(({ data }) => {
+    latestSubscriptionByOwner.forEach(({ data }, ownerId) => {
+        const plan: ActivePaidPlan = data.role === SUBSCRIPTION_ROLE_PRO ? 'pro' : 'basic';
+        planByOwner.set(ownerId, plan);
         const tierCadence = data.role === SUBSCRIPTION_ROLE_PRO
             ? subscriptionCadence.pro
             : subscriptionCadence.basic;
@@ -207,21 +223,54 @@ export function summarizeActivePaidSubscriptions(
     });
 
     return {
-        pro,
-        basic,
-        monthlyPaid,
-        yearlyPaid,
-        subscriptionCadence,
-        cancelScheduled,
-        ignoredNonCanonicalDocuments,
-        duplicateCanonicalDocuments,
+        summary: {
+            pro,
+            basic,
+            monthlyPaid,
+            yearlyPaid,
+            subscriptionCadence,
+            cancelScheduled,
+            ignoredNonCanonicalDocuments,
+            duplicateCanonicalDocuments,
+        },
+        planByOwner,
     };
+}
+
+export function summarizeActivePaidSubscriptions(
+    documents: SubscriptionDocumentSnapshotLike[],
+): ActivePaidSubscriptionSummary {
+    return resolveActivePaidSubscriptions(documents).summary;
+}
+
+function createEmptyAuthActivityWindows(): AuthActivityWindowStats {
+    return {
+        last24Hours: 0,
+        last7Days: 0,
+        last30Days: 0,
+    };
+}
+
+function createEmptyAuthActivityPlanBreakdown(): AuthActivityPlanBreakdown {
+    return {
+        free: createEmptyAuthActivityWindows(),
+        basic: createEmptyAuthActivityWindows(),
+        pro: createEmptyAuthActivityWindows(),
+    };
+}
+
+function incrementAuthActivityWindow(
+    stats: AuthActivityWindowStats,
+    window: keyof AuthActivityWindowStats,
+): void {
+    stats[window] += 1;
 }
 
 function recordAuthActivity(
     stats: AuthActivityStats,
     userRecord: AuthActivityUserRecord,
     computedAtMs: number,
+    planByOwner: ReadonlyMap<string, ActivePaidPlan>,
 ): boolean {
     if (userRecord.disabled === true || userRecord.customClaims?.admin === true) {
         return false;
@@ -236,19 +285,28 @@ function recordAuthActivity(
     }
 
     const latestActivityMs = Math.max(...activityTimes);
+    const plan = planByOwner.get(userRecord.uid) ?? 'free';
+    const planStats = stats.byPlan[plan];
     if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last24Hours) {
-        stats.last24Hours += 1;
+        incrementAuthActivityWindow(stats, 'last24Hours');
+        incrementAuthActivityWindow(planStats, 'last24Hours');
     }
     if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last7Days) {
-        stats.last7Days += 1;
+        incrementAuthActivityWindow(stats, 'last7Days');
+        incrementAuthActivityWindow(planStats, 'last7Days');
     }
     if (latestActivityMs >= computedAtMs - AUTH_ACTIVITY_WINDOW_MS.last30Days) {
-        stats.last30Days += 1;
+        incrementAuthActivityWindow(stats, 'last30Days');
+        incrementAuthActivityWindow(planStats, 'last30Days');
     }
     return true;
 }
 
-async function collectAuthenticationMetrics(auth: Auth, computedAt: Date): Promise<{
+async function collectAuthenticationMetrics(
+    auth: Auth,
+    computedAt: Date,
+    planByOwnerPromise: Promise<ReadonlyMap<string, ActivePaidPlan>>,
+): Promise<{
     authActivity: AuthActivityStats;
     eligibleAccounts: number;
     providers: Record<string, number>;
@@ -259,15 +317,19 @@ async function collectAuthenticationMetrics(auth: Auth, computedAt: Date): Promi
         last7Days: 0,
         last30Days: 0,
         computedAt: computedAt.toISOString(),
+        byPlan: createEmptyAuthActivityPlanBreakdown(),
     };
     const providers: Record<string, number> = {};
     let eligibleAccounts = 0;
-    let nextPageToken: string | undefined;
+    const [planByOwner, firstPage] = await Promise.all([
+        planByOwnerPromise,
+        auth.listUsers(1000, undefined),
+    ]);
+    let listResult = firstPage;
 
-    do {
-        const listResult = await auth.listUsers(1000, nextPageToken);
+    while (true) {
         listResult.users.forEach((userRecord) => {
-            if (recordAuthActivity(authActivity, userRecord, computedAtMs)) {
+            if (recordAuthActivity(authActivity, userRecord, computedAtMs, planByOwner)) {
                 eligibleAccounts += 1;
             }
 
@@ -280,8 +342,11 @@ async function collectAuthenticationMetrics(auth: Auth, computedAt: Date): Promi
                 providers[providerId] = (providers[providerId] || 0) + 1;
             });
         });
-        nextPageToken = listResult.pageToken;
-    } while (nextPageToken);
+        if (!listResult.pageToken) {
+            break;
+        }
+        listResult = await auth.listUsers(1000, listResult.pageToken);
+    }
 
     return { authActivity, eligibleAccounts, providers };
 }
@@ -302,20 +367,28 @@ export async function collectUserPlanActivityMetrics(
         .where('status', 'in', [...ACTIVE_SUBSCRIPTION_STATUSES])
         .select('items', 'cancel_at_period_end', 'role', 'created');
 
+    const activeSubscriptionResolutionPromise = activeSubscriptionQuery.get()
+        .then(snapshot => resolveActivePaidSubscriptions(snapshot.docs));
+    const authenticationMetricsPromise = collectAuthenticationMetrics(
+        auth,
+        computedAt,
+        activeSubscriptionResolutionPromise.then(resolution => resolution.planByOwner),
+    );
+
     const [
         totalSnapshot,
         onboardedSnapshot,
-        activeSubscriptionSnapshot,
+        activeSubscriptionResolution,
         authenticationMetrics,
     ] = await Promise.all([
         totalQuery.get(),
         onboardedQuery.get(),
-        activeSubscriptionQuery.get(),
-        collectAuthenticationMetrics(auth, computedAt),
+        activeSubscriptionResolutionPromise,
+        authenticationMetricsPromise,
     ]);
 
     const total = totalSnapshot.data().count;
-    const subscriptionSummary = summarizeActivePaidSubscriptions(activeSubscriptionSnapshot.docs);
+    const subscriptionSummary = activeSubscriptionResolution.summary;
     const {
         pro,
         basic,
@@ -364,3 +437,7 @@ export async function collectUserPlanActivityMetrics(
         ...authenticationMetrics,
     };
 }
+
+export const adminUserMetricsTestInternals = {
+    collectAuthenticationMetrics,
+};

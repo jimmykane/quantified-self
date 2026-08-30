@@ -99,7 +99,18 @@ describe('getUserCount authentication activity', () => {
             count: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ data: () => ({ count: 100 }) }) }),
             where: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue({ docs: [] }),
+                get: vi.fn().mockResolvedValue({
+                    docs: [
+                        {
+                            ref: { path: 'customers/recent-refresh/subscriptions/sub-pro' },
+                            data: () => ({ role: 'pro', created: 2, items: [{ plan: { interval: 'month' } }] }),
+                        },
+                        {
+                            ref: { path: 'customers/newer-sign-in/subscriptions/sub-basic' },
+                            data: () => ({ role: 'basic', created: 1, items: [{ plan: { interval: 'year' } }] }),
+                        },
+                    ],
+                }),
             }),
             get: vi.fn().mockResolvedValue({ empty: true }),
         });
@@ -111,6 +122,11 @@ describe('getUserCount authentication activity', () => {
             last7Days: 5,
             last30Days: 7,
             computedAt: now.toISOString(),
+            byPlan: {
+                free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
+                basic: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                pro: { last24Hours: 1, last7Days: 1, last30Days: 1 },
+            },
         });
         expect(mockListUsers).toHaveBeenNthCalledWith(1, 1000, undefined);
         expect(mockListUsers).toHaveBeenNthCalledWith(2, 1000, 'next-page');

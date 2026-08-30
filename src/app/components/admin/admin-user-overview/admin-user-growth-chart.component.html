@@ -1,0 +1,13 @@
+<mat-card class="chart-card">
+    <h3 class="chart-header"><mat-icon>show_chart</mat-icon>User &amp; Subscription Growth (Monthly)</h3>
+    <div class="chart-wrapper">
+        <div #chart class="chart-surface chart-surface-tall"></div>
+    </div>
+    @if (loading && !hasData()) {
+    <div class="chart-state" role="status"><mat-spinner diameter="24"></mat-spinner><span>Loading trend data</span></div>
+    } @else if (error && !hasData()) {
+    <div class="chart-state chart-error" role="alert"><mat-icon>error</mat-icon><span>{{ error }}</span></div>
+    } @else if (!hasData()) {
+    <div class="chart-state">No user or subscription trend data available</div>
+    }
+</mat-card>

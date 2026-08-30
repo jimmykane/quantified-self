@@ -89,6 +89,11 @@ function metrics(overrides: Partial<UserPlanActivityMetrics> = {}): UserPlanActi
             last7Days: 5,
             last30Days: 8,
             computedAt: '2026-08-27T00:12:00.000Z',
+            byPlan: {
+                free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
+                basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+                pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+            },
         },
         eligibleAccounts: 9,
         providers: { 'google.com': 6 },
@@ -96,13 +101,17 @@ function metrics(overrides: Partial<UserPlanActivityMetrics> = {}): UserPlanActi
     };
 }
 
-function storedDocument(date: string, overrides: Record<string, unknown> = {}) {
+function storedDocument(
+    date: string,
+    overrides: Record<string, unknown> = {},
+    version: 1 | 2 = 1,
+) {
     const computedAt = new Date(`${date}T00:12:00.000Z`);
     return {
         id: date,
         data: () => ({
-            schemaVersion: 1,
-            metricDefinitionVersion: 1,
+            schemaVersion: version,
+            metricDefinitionVersion: version,
             snapshotDate: date,
             scheduledFor: new Date(`${date}T00:10:00.000Z`),
             computedAt,
@@ -119,6 +128,13 @@ function storedDocument(date: string, overrides: Record<string, unknown> = {}) {
                 last24Hours: 2,
                 last7Days: 5,
                 last30Days: 8,
+                ...(version === 2 ? {
+                    byPlan: {
+                        free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
+                        basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+                        pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                    },
+                } : {}),
             },
             subscriptionCadence: {
                 pro: { monthly: 1, yearly: 1, unknown: 0 },
@@ -172,13 +188,23 @@ describe('admin dashboard history', () => {
         expect(set).toHaveBeenCalledTimes(1);
         const payload = set.mock.calls[0][0];
         expect(payload).toMatchObject({
-            schemaVersion: 1,
-            metricDefinitionVersion: 1,
+            schemaVersion: 2,
+            metricDefinitionVersion: 2,
             snapshotDate: '2026-08-27',
             scheduledFor: new Date('2026-08-27T00:10:00.000Z'),
             computedAt: new Date('2026-08-27T00:12:00.000Z'),
             users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
-            authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+            authActivity: {
+                eligibleAccounts: 9,
+                last24Hours: 2,
+                last7Days: 5,
+                last30Days: 8,
+                byPlan: {
+                    free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
+                    basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+                    pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                },
+            },
         });
         expect(payload.expireAt.getTime() - payload.computedAt.getTime()).toBe(730 * 24 * 60 * 60 * 1000);
         expect(payload).not.toHaveProperty('providers');
@@ -197,6 +223,28 @@ describe('admin dashboard history', () => {
 
         await expect(invokeSchedule({ scheduleTime: '2026-08-27T00:10:00.000Z' } as ScheduledEvent))
             .rejects.toThrow('Pro cadence does not reconcile');
+        expect(set).not.toHaveBeenCalled();
+    });
+
+    it('rejects active plan breakdowns that do not reconcile with activity totals', async () => {
+        const set = vi.fn();
+        mocks.collection.mockReturnValue({ doc: vi.fn(() => ({ set })) });
+        mocks.collectUserPlanActivityMetrics.mockResolvedValue(metrics({
+            authActivity: {
+                last24Hours: 2,
+                last7Days: 5,
+                last30Days: 8,
+                computedAt: '2026-08-27T00:12:00.000Z',
+                byPlan: {
+                    free: { last24Hours: 2, last7Days: 3, last30Days: 5 },
+                    basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+                    pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                },
+            },
+        }));
+
+        await expect(invokeSchedule({ scheduleTime: '2026-08-27T00:10:00.000Z' } as ScheduledEvent))
+            .rejects.toThrow('last24Hours plan activity does not reconcile');
         expect(set).not.toHaveBeenCalled();
     });
 
@@ -244,10 +292,30 @@ describe('admin dashboard history', () => {
             endDate: '2026-08-27',
         });
         expect(result.snapshots.map(point => point.date)).toEqual(['2026-08-25', '2026-08-27']);
+        expect(result.snapshots.every(point => point.authActivity.byPlan === null)).toBe(true);
         expect(mocks.loggerWarn).toHaveBeenCalledWith(
             'Skipped malformed admin dashboard snapshot.',
             expect.objectContaining({ snapshotDate: '2026-08-26' }),
         );
+    });
+
+    it('returns the active plan breakdown from current snapshots', async () => {
+        const query = {
+            orderBy: vi.fn().mockReturnThis(),
+            startAt: vi.fn().mockReturnThis(),
+            endAt: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            get: vi.fn().mockResolvedValue({ docs: [storedDocument('2026-08-27', {}, 2)] }),
+        };
+        mocks.collection.mockReturnValue(query);
+
+        const result = await invokeHistory(historyRequest(30));
+
+        expect(result.snapshots[0].authActivity.byPlan).toEqual({
+            free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
+            basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
+            pro: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+        });
     });
 
     it('logs and skips malformed, incomplete, and unsupported snapshots', async () => {
