@@ -62,6 +62,7 @@ describe('Wahoo connected-service policy', () => {
     expect(topic?.title).toBe('Wahoo Data');
     expect(content).toContain('Only workouts with an available FIT file are imported');
     expect(content).toContain('OAuth credentials are stored server-side');
+    expect(content).toContain('does not currently supply the daily wellness measurements shown in the Health workspace');
     expect(content).toContain('Activities already imported into Quantified Self are retained');
     expect(content).toContain('send a selected FIT activity file or GPX/FIT course/route file directly to Wahoo');
     expect(content).toContain('converts selected GPX routes to FIT in memory');
@@ -81,6 +82,9 @@ describe('COROS connected-service policy', () => {
 
     expect(topic?.title).toBe('COROS Data');
     expect(content).toContain('daily Health metrics');
+    expect(content).toContain('authenticated Health workspace');
+    expect(content).toContain('replaces opaque account keys with local account ordinals');
+    expect(content).toContain('does not save a preferred source or calculate a cross-provider average');
     expect(content).toContain('detailed HRV samples with an interval mean heart rate');
     expect(content).toContain('referenced from Health instead of copied');
     expect(content).toContain('recoverable legacy Sleep copies can remain until the guarded migration completes');
@@ -198,7 +202,20 @@ describe('Suunto Health policy', () => {
     expect(content).toContain('Connected accounts can also import available 24/7');
     expect(content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(content).toContain('raw Health webhook samples are not stored');
+    expect(content).toContain('authenticated Health workspace');
+    expect(content).toContain('replaces opaque account keys with local account ordinals');
     expect(content).toContain('Disconnecting Suunto stops future');
     expect(content).toContain('Deleting your Quantified Self account removes');
+  });
+});
+
+describe('Garmin Health policy', () => {
+  it('documents the source-separated Health workspace presentation', () => {
+    const content = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(item => item.id === POLICIES_GARMIN_DATA_FRAGMENT)?.content.join(' ') || '';
+
+    expect(content).toContain('authenticated Health workspace');
+    expect(content).toContain('replaces opaque account keys with local account ordinals');
+    expect(content).toContain('does not save a preferred source or calculate a cross-provider average');
   });
 });

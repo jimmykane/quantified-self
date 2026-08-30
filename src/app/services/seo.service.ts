@@ -171,7 +171,7 @@ export class SeoService implements OnDestroy {
                 "name": "Quantified Self",
                 "applicationCategory": "HealthApplication",
                 "operatingSystem": "Web",
-                "description": "Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.",
+                "description": "Analyze Garmin, Suunto, COROS, and Wahoo training in one dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.",
                 "featureList": [
                     "Week, Month, and Year activity calendar with duration-scaled activity groups",
                     "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",

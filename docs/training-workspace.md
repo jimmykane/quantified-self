@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `20.2.0`
+- `@sports-alliance/sports-lib`: `20.3.0`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -280,6 +280,13 @@ live and backend paths reject unknown providers or invalid sleep dates, ignore n
 discard unusable timezone offsets instead of letting malformed evidence change or break the result. The backend readiness
 projection must include average and minimum sleep HR as well as HRV fields; the shared formula gives average sleep HR
 priority when building the single Overnight HR driver.
+
+Sports Lib 20.3 stores normalized Sleep aggregates in an internal versioned canonical JSON envelope alongside the
+rollback-safe legacy scalar fields. Both backend Training field masks select only their required nested envelope slots
+and strictly rehydrate them before applying the existing sleep evidence rules; the bounded live frontend path uses the
+same shared decoder. Legacy, mixed, and new-only scalar documents therefore produce the same readiness and Best Build
+inputs. This changes no
+formula, derived payload, schema version, refresh dependency, provider rule, or public MCP projection.
 
 ### Settings
 
@@ -1855,7 +1862,12 @@ Sports Lib `20.2.0` classifies Hand Cycle and Velomobile in the Cycling group. Q
 standard Cycling context, where they use the normal endurance summaries and Cycling durability protocol when their
 recorded evidence qualifies. This group-membership change does not require a derived-schema bump or source reparse.
 
-The repository now pins Sports Lib `20.2.0`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
+Sports Lib `20.3.0` adds canonical Health and Sleep scalar JSON classes. Training uses the shared dual reader for the
+sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes; no Training formula or derived schema
+changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
+and do not require a Training snapshot rebuild solely for this storage transition.
+
+The repository now pins Sports Lib `20.3.0`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
 persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat.
 Existing persisted Resting Calories values remain historical values until a source reparse replaces their source stats.
 They are neither renamed nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM`

@@ -2,7 +2,7 @@
 
 This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion; issue #613 adds production Garmin Health API 1.2.4 ingestion.
 
-The Health Hub product surface remains in #614. COROS, Suunto, and Garmin ingestion do not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate.
+Issue #614 adds the authenticated **Health** workspace on top of this foundation. COROS, Suunto, and Garmin ingestion still does not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate and is resolved through typed references.
 
 ## Goals
 
@@ -50,6 +50,9 @@ direct Firestore   queryHealthRange     account deletion
            shared query plan + projector
                         ▼
                  HealthRangeResult
+                        │
+                        ▼
+          /health source-separated workspace
 ```
 
 The shared implementation is split intentionally:
@@ -60,7 +63,8 @@ The shared implementation is split intentionally:
 - `functions/src/health/validation.ts` validates untrusted adapter input at runtime.
 - `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
 - `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
-- `src/app/services/app.health.service.ts` provides the default direct listener and explicit callable alternative.
+- `src/app/services/app.health.service.ts` provides the default direct listener, the bounded cross-page workspace loader, and the explicit callable alternative.
+- `src/app/components/health/` and `src/app/helpers/health-workspace.helper.ts` provide the authenticated source-separated Health workspace and its view projection.
 
 ## Current provider coverage
 
@@ -136,9 +140,40 @@ Chunks are permanent leaf documents by schema. Firestore Rules do not grant acce
 
 ### Sync state
 
-`users/{uid}/healthSyncState/{provider}` stores the safe aggregate state needed by a future Health Hub: ready, permission missing, reconnect required, failed, unsupported, or disconnected, plus bounded timestamps and an opaque error code. Raw error messages and payload excerpts are rejected.
+`users/{uid}/healthSyncState/{provider}` stores the safe aggregate state shown by Health: ready, permission missing, reconnect required, failed, unsupported, or disconnected, plus bounded timestamps and an opaque error code. Raw error messages and payload excerpts are rejected.
 
 This collection is not the OAuth connection source of truth. Provider credentials and stable raw account identity remain in their existing server-owned integration stores.
+
+### Sports Lib scalar serialization boundary
+
+Quantified Self pins `@sports-alliance/sports-lib@20.3.0` and uses its exported Health and Sleep data classes as the
+canonical scalar serialization boundary. A canonical Health `value` metric stores a versioned `sportsLibData` envelope
+inside that metric entry; a normalized Sleep session stores one versioned aggregate envelope at the session root. Each
+entry in the envelope is the exact single-key JSON returned by the explicitly mapped class's `toJSON()` method:
+
+```ts
+{
+  schemaVersion: 1;
+  metrics: {
+    value?: { Steps: 10000 };                 // Health metric entry
+    duration?: { 'Sleep Duration': 28800 };  // Sleep session aggregate
+  };
+}
+```
+
+The field keys outside the Sports Lib JSON are Quantified Self semantic slots, not alternate Sports Lib type aliases.
+Readers accept legacy scalar-only documents and the versioned representation. When the new representation exists, they
+require the exact envelope version, allowlisted semantic key, canonical Sports Lib type key, one finite scalar, matching
+value type, and an exact `fromJSON()`/`toJSON()` round trip. Unknown, alias, additional, ambiguous, non-finite, or
+legacy-conflicting values fail closed. Successful reads consume and remove the internal envelope before projecting the
+existing domain/result shape. New writers derive the envelope server-side after provider validation; adapters cannot
+supply or override it.
+
+Legacy canonical fields remain beside the new representation during the rollback window. Quantified Self still owns
+timestamps, provider/source attribution, opaque account identity, revisions, quality, coverage, conflicts, stages,
+bounded sample series, and raw provider fields. Sports Lib JSON never wraps a complete source record or Sleep session,
+and no JSON object is added per sample point. Native-only and non-comparable values remain outside this canonical scalar
+boundary.
 
 ## Hard bounds
 
@@ -160,6 +195,9 @@ Bounds protect Firestore document size, transaction limits, client reads, and pr
 | Public chunk page | 1–8 chunks; default 8 |
 | Firestore chunk fetch | Public page plus one look-ahead chunk |
 | Sample points returned | 1,440–11,520; default 10,000 |
+| One Health workspace source aggregate | 2,048 source records |
+| One Health workspace sample aggregate | 256 chunks and 100,000 whole sample points |
+| One Health workspace serialized aggregate | 16 MiB across retained source records and chunks |
 
 The validator counts recognized input JSON-escaped UTF-8 bytes cumulatively while walking aligned metric/sample values, charges raw sample strings before trimming, and stops before retaining the element that would cross 4 MiB. The writer then cleans, measures, and retains one sample chunk at a time with the same cumulative ceiling before applying the exact final source-record-plus-chunks check. This bounds validation and construction amplification; the final estimate remains authoritative because repeated chunk metadata changes the persisted size.
 
@@ -209,7 +247,11 @@ The projector never fills gaps. A metric recorded on one of seven requested days
 
 ### Direct and server reads
 
-`AppHealthService.watchRange()` is the default Health Hub path. It uses owner-scoped Firestore listeners, then runs the shared projector in the app. Separate source-record/chunk listeners can emit one side of an atomic replacement first; the projector suppresses any chunk whose revision disagrees with a parent source record present in the same source page, reports `sampleRevisionMismatchCount`, and marks the sample aggregate incomplete until the listeners converge.
+`AppHealthService.watchRange()` remains the bounded live one-page path. It uses owner-scoped Firestore listeners, then runs the shared projector in the app. Separate source-record/chunk listeners can emit one side of an atomic replacement first; the projector suppresses any chunk whose revision disagrees with a parent source record present in the same source page, reports `sampleRevisionMismatchCount`, and marks the sample aggregate incomplete until the listeners converge.
+
+`AppHealthService.loadMetricRange()` is the `/health` workspace path. It accepts exactly one selected metric, deliberately omits provider predicates, and uses the metric/date indexes so a provider-first page cannot fill with unrelated metric families. It walks source records in pages of 32 and chunks in pages of 8, retaining only the bounded aggregate described above. Provider filters are then applied locally and are never persisted as a preferred source. The loader stops at the first aggregate cap and returns an explicit incomplete state instead of silently projecting a partial result.
+
+After every page is loaded, `projectLoadedHealthRange()` recomputes observations, sample revision filtering, coverage, freshness, daily references, and conflicts over the entire retained aggregate. The workspace ignores results from stale in-flight requests after metric/range navigation and refreshes the selected metric plus its priority summaries when Health sync-state timestamps advance.
 
 `AppHealthService.queryRangeViaServer()` calls `queryHealthRange` for consumers that need an authenticated server read. The server executes source-record and chunk queries in one read-only Firestore transaction so both snapshots share one consistent read time.
 
@@ -221,7 +263,15 @@ Source records remain source-aware. The foundation does not pick a preferred pro
 
 A conflict is emitted only when canonical entries share metric ID, calendar date, aggregation, semantic variant, origin, canonical unit, and overlapping time intervals, come from different provider/account sources, and contain different scalar values. Native-only entries and different semantic variants are not declared conflicts.
 
-A future product layer may define an explicit source-selection policy, but it must operate on these preserved observations and expose that policy to the user.
+The Health workspace deliberately defines no source-selection policy. It gives every provider/account/aggregation/semantic variant/origin/recording method/unit its own labeled series, isolates native-only or non-comparable values, and highlights comparable conflicts without selecting or averaging either value. Multiple accounts use local ordinal labels; opaque account keys are never rendered.
+
+## Health workspace contract
+
+The authenticated `/health` route is client-rendered and `noindex`. It is available to every signed-in, onboarded user; provider connection and history-import plan checks are unchanged. Dashboard exposes a compact **Open Health** action, and Health appears immediately after Dashboard in primary navigation. It is intentionally not a configurable dashboard tile.
+
+The workspace opens on Resting heart rate for the latest 30 days. Its fixed priority order is Sleep, Heart rate, then HRV, with a latest row for each source series so differing semantics stay separate. The complete stable metric catalog remains available below. `/health` does not encode workspace state in query parameters. The selected `14d`, `30d`, `90d`, or `1y` range is validated and stored as the client-owned `appSettings.healthWorkspace.range` account preference; a missing or invalid value falls back to 30 days. The selected metric, older/newer window position, and provider filters remain local to the current workspace session, with metric and window position returning to Resting heart rate and today on the next visit.
+
+Totals render as bars, scalar or point readings as lines/points, and categorical readings as stepped series. Health metric charts use the shared ECharts host, theme, tooltip, resize, and mobile-interaction stack; Sleep continues to reuse its normalized Sleep chart. Detailed chunks load only for 14-day and 30-day windows; 90-day and 1-year views use stored summaries and explain when a metric is sample-only. Coverage, freshness, device attribution, partial results, superseded revisions, conflicts, and safe sync state stay visible. The expandable source-observation table is the accessible textual equivalent of the charts.
 
 ## Sleep compatibility boundary
 
@@ -236,6 +286,12 @@ When a health source record needs a Sleep relationship, it stores a typed `sleep
 - average respiration.
 
 The validator also requires the health metric ID to match the referenced Sleep field. For example, `durationSeconds` maps to `sleep_duration`, while `vitals.averageHeartRateBpm` maps to `heart_rate`. The referenced value is resolved by the Sleep consumer; it is not copied into the health source record.
+
+Sleep duration, in-bed duration, stage-duration totals, score, aggregate sleep heart rate, aggregate/overnight HRV and
+sample count, maximum SpO₂, and average respiration use the same Sports Lib 20.3 scalar boundary described above.
+Exact stage intervals, sample arrays, provider fields, dates, and session identity remain ordinary normalized Sleep
+fields. Dashboard, Health, Training, derived-metric, and MCP readers all dual-read the representation without changing
+their existing public result shapes.
 
 ## Security and privacy
 
@@ -272,15 +328,25 @@ Issues #611–#613 should implement each provider independently against this fou
 
 ## Operational and release notes
 
-The Health foundation now receives production COROS, Suunto, and Garmin records. The Health Hub remains future work; `AppHealthService` already provides the bounded shared query boundary. COROS, Suunto, and Garmin backfills use their existing provider history controls rather than a foundation-wide migration.
+The Health foundation receives production COROS, Suunto, and Garmin records, and `/health` now provides the source-separated product surface. COROS, Suunto, and Garmin backfills keep their existing provider history controls rather than adding a foundation-wide migration.
 
-A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health Hub reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. This implementation does not deploy or mutate production infrastructure.
+A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. Issue #614 changes no Firestore schema, Rules, indexes, Functions, ingestion, or backfill behavior.
+
+The Sports Lib 20.3 transition uses a separate user-scoped admin migration; it does not refetch provider history,
+change OAuth credentials, reconnect accounts, or alter webhooks. Deploy dual readers before new writers, then run
+`migrate-health-sleep-sports-lib-data` in dry-run and bounded execution modes for `health` and `sleep` independently.
+Every execution transaction re-reads the document and account-deletion guard, updates only `metrics` for Health or
+`sportsLibData` for Sleep, and is idempotent. An opaque document ID returned as `nextStartAfter` resumes the next page.
+After execution, repeat the dry run and require zero candidates and zero invalid documents before beginning the
+observation window. The `sleepSessions.sportsLibData` map is excluded from automatic indexing; Health already disables
+automatic indexing for the whole source-record document. A later reviewed cleanup must stop legacy writes first and
+remove legacy reads only after migration and rollback verification.
 
 Useful local verification:
 
 ```bash
-npx vitest run src/app/shared/health.shared.spec.ts src/app/services/app.health.service.spec.ts --reporter=verbose
-npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/firestore-indexes.spec.ts
+npx vitest run src/app/shared/health.shared.spec.ts src/app/shared/sports-lib-health-data.shared.spec.ts src/app/services/app.health.service.spec.ts src/app/services/app.sleep.service.spec.ts src/app/helpers/health-workspace.helper.spec.ts src/app/helpers/health-metric-chart.helper.spec.ts src/app/components/health/health-workspace.component.spec.ts --reporter=verbose
+npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/health/sports-lib-data-migration.spec.ts src/sleep/writer.spec.ts src/firestore-indexes.spec.ts
 npm run test:rules
 npm --prefix functions run build
 npm run build

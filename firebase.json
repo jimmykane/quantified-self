@@ -231,6 +231,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/health",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/calendar",
           "destination": "/index.csr.html"
         },
@@ -491,6 +495,10 @@
         },
         {
           "source": "/dashboard",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/health",
           "destination": "/index.csr.html"
         },
         {

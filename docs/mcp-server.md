@@ -607,11 +607,14 @@ plugin sync remain explicit lifecycle actions.
 2. constructing it with a numeric sentinel produces a finite numeric value;
 3. its validator accepts that numeric value;
 4. aliases resolve through `DynamicDataLoader`; and
-5. the canonical stat appears in a non-benchmark persisted event `stats`.
+5. the canonical stat appears in a non-benchmark persisted event `stats`; and
+6. the class is not restricted to the normalized Health/Sleep storage domains.
 
-This is intentionally not a curated MCP metric list. A correctly exported and persisted new numeric Sports Lib data class
-becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
-expose precise position.
+This is intentionally not a general curated MCP metric list. A correctly exported and persisted new numeric Sports Lib
+activity data class becomes discoverable without adding a second registry. Latitude and longitude remain explicitly
+excluded because they expose precise position. Sports Lib 20.3 Health- and Sleep-only classes are also explicitly
+excluded so a coincidentally named event stat cannot cross data-domain scopes; shared pre-existing activity classes such
+as Distance and Heart Rate retain their established activity behavior.
 
 Sports Lib 19.0.0 adds canonical `Stroke Rate` (`spm`) metrics for swimming, rowing, canoeing, kayaking, paddling, and
 stand-up paddling. Quantified Self includes that class through the same automatic catalog. For pre-19 event/activity
@@ -974,6 +977,18 @@ response. The read projection includes only the provider name, normalized timezo
 date grouping, and fields eligible for the response; raw samples, provider identifiers, provider-specific timestamps,
 and score components do not enter the MCP process. The fixed aggregate-vital allowlist covers average, minimum, and
 resting sleep heart rate; average and overnight HRV plus HRV sample count; maximum SpO₂; and average respiration.
+The field masks also read only the exact internal Sports Lib 20.3 aggregate slots needed by each projection. The loader
+strictly rehydrates their allowlisted scalar classes and projects the same legacy-safe response fields; the envelope,
+Sports Lib canonical type keys, and unified Health source records never enter MCP output. Legacy-only and migrated
+sessions therefore produce the
+same structured content. Negative fixtures cover both formats and prove the storage envelope cannot leak. No tool,
+registered output schema, scope, plugin instruction, or starter prompt changes, so this storage transition causes no
+additional registered ChatGPT app rescan or local plugin sync.
+
+Sports Lib 20.3 Health- and Sleep-only DataStore classes are explicitly excluded from the generic activity metric
+catalog, even if an old or arbitrary event document contains a stat with the same key; exporting a class does not grant
+it activity-metric semantics or bypass the dedicated Sleep projection.
+
 Garmin's maximum SpO₂ is normalized from its valid recorded sleep samples during ingestion so MCP can return the safe
 aggregate without loading or exposing the source series. Non-positive Garmin respiration samples do not contribute to
 its normalized average. Session output may include provider, sleep

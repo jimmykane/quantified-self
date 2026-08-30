@@ -80,12 +80,12 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'garmin',
     label: 'Garmin',
     serviceName: ServiceNames.GarminAPI,
-    h1: 'Garmin Integration and Private Training Dashboard',
-    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities, Sleep, and supported source-attributed Health summaries in a private dashboard, send saved or selected GPX/FIT routes to Garmin Connect, and sync new Garmin activities to Suunto, Wahoo, or COROS.',
+    h1: 'Garmin Integration and Training Dashboard',
+    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities, Sleep, and supported source-attributed Health summaries in one dashboard, send saved or selected GPX/FIT routes to Garmin Connect, and sync new Garmin activities to Suunto, Wahoo, or COROS.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use Quantified Self as a private dashboard for Garmin activities, Sleep, and Health summaries, with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, opt-in activity delivery, and multi-service workout history.',
+    summary: 'Use Quantified Self as a dashboard for Garmin activities, Sleep, and Health summaries, with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, opt-in activity delivery, and multi-service workout history.',
     highlights: [
-      'Private Garmin training dashboard',
+      'Garmin training dashboard',
       'Garmin Sleep and Health summaries',
       'Send saved routes to Garmin Connect',
       'Send selected GPX/FIT routes to Garmin',
@@ -164,8 +164,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
-    dashboardTitle: 'Private Garmin training dashboard',
-    dashboardCopy: 'Quantified Self is designed for Garmin users who want private data ownership, connected Suunto and COROS workouts, and training analysis that does not stop at one ecosystem.',
+    dashboardTitle: 'Garmin training dashboard',
+    dashboardCopy: 'Quantified Self is designed for Garmin users who want data ownership, connected Suunto and COROS workouts, and training analysis that does not stop at one ecosystem.',
     dashboardPoints: [
       {
         icon: 'dashboard_customize',
@@ -174,7 +174,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'security',
-        title: 'Private by design',
+        title: 'Your data stays yours',
         copy: 'Your Garmin data stays in your Quantified Self account with clear support for account deletion, exports, and privacy controls.',
       },
       {
@@ -185,8 +185,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     faqItems: [
       {
-        question: 'What makes Quantified Self a private training dashboard for Garmin data?',
-        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard with original files, maps, load metrics, grounded Assistant answers, exports, and optional Suunto or COROS workouts.',
+        question: 'What can Quantified Self do with Garmin data?',
+        answer: 'Quantified Self combines Garmin original files, maps, load metrics, grounded Assistant answers, exports, and optional Suunto or COROS workouts in one account.',
       },
       {
         question: 'Can Garmin workouts sync to Suunto automatically?',
@@ -210,14 +210,14 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     closingTitle: 'Connect Garmin, then keep every workout in context',
-    closingCopy: 'Start with Garmin, add route sending or Suunto and COROS workflows when needed, and keep sync, history, and analysis in one private training dashboard.',
+    closingCopy: 'Start with Garmin, add route sending or Suunto and COROS workflows when needed, and keep sync, history, and analysis in one training dashboard.',
   },
   suunto: {
     slug: 'suunto',
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
     h1: 'Suunto Integration for Activity and Route Sync',
-    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload GPX or FIT routes, and import source-attributed 24/7 Health data.',
+    heroCopy: 'Use Quantified Self as a training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload GPX or FIT routes, and import source-attributed 24/7 Health data.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX/FIT routes, import existing Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, import Suunto history, and keep training data centralized.',
     highlights: [
@@ -318,7 +318,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     dashboardEyebrow: 'Training Dashboard',
     dashboardTitle: 'Centralize Garmin, Suunto, and COROS workout data',
-    dashboardCopy: 'The Suunto integration works with the rest of Quantified Self, so Garmin files, Suunto history, Suunto route imports, COROS workouts, FIT uploads, GPX route sends, metrics, grounded Assistant answers, and export workflows stay connected in one private dashboard.',
+    dashboardCopy: 'The Suunto integration works with the rest of Quantified Self, so Garmin files, Suunto history, Suunto route imports, COROS workouts, FIT uploads, GPX route sends, metrics, grounded Assistant answers, and export workflows stay connected in one dashboard.',
     dashboardPoints: [
       {
         icon: 'dashboard_customize',
@@ -332,14 +332,14 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'security',
-        title: 'Private by design',
-        copy: 'Quantified Self is built for athletes who want a private training dashboard when Garmin, Suunto, and COROS data all matter.',
+        title: 'Your data stays yours',
+        copy: 'Quantified Self is built for athletes who want one training dashboard when Garmin, Suunto, and COROS data all matter.',
       },
     ],
     faqItems: [
       {
-        question: 'Is Quantified Self a private training dashboard for Garmin data?',
-        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard that keeps original files, maps, load metrics, grounded Assistant answers, and connected Suunto or COROS workflows under their own account.',
+        question: 'How does Quantified Self combine Garmin, Suunto, and COROS data?',
+        answer: 'Quantified Self keeps original files, maps, load metrics, grounded Assistant answers, and connected Garmin, Suunto, or COROS workflows under one account.',
       },
       {
         question: 'Can I centralize Garmin, Suunto, and COROS workout data?',
@@ -468,8 +468,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'security',
-        title: 'Private by design',
-        copy: 'Use Quantified Self as a private training dashboard for connected service data, exports, and account-owned analysis workflows.',
+        title: 'Account-owned workflows',
+        copy: 'Use Quantified Self as a training dashboard for connected service data, exports, and account-owned analysis workflows.',
       },
     ],
     faqItems: [
@@ -499,7 +499,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     closingTitle: 'Connect COROS, then keep service data aligned',
-    closingCopy: 'Use COROS on its own or with Garmin, Suunto, and Wahoo, then keep current and past activity and route delivery, recovery, and analysis in one private training dashboard.',
+    closingCopy: 'Use COROS on its own or with Garmin, Suunto, and Wahoo, then keep current and past activity and route delivery, recovery, and analysis in one training dashboard.',
   },
   wahoo: {
     slug: 'wahoo',
@@ -508,7 +508,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     h1: 'Wahoo Integration for Activity Sync and Training Analysis',
     heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, sync retained Wahoo activities to Suunto or COROS, send FIT activities, GPX/FIT courses/routes, or saved Suunto routes to Wahoo, and analyze every connected activity together.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, Wahoo-to-Suunto/COROS activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and private multi-provider training analysis.',
+    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, Wahoo-to-Suunto/COROS activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and multi-provider training analysis.',
     highlights: [
       'Automatic Wahoo workout imports',
       'FIT-backed Wahoo history import',
@@ -602,7 +602,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
-    dashboardTitle: 'Keep Wahoo workouts in your private training archive',
+    dashboardTitle: 'Keep Wahoo workouts in your training archive',
     dashboardCopy: 'Review Wahoo workouts next to other activity sources using the same event analysis, maps, charts, exports, and training metrics.',
     dashboardPoints: [
       {
@@ -652,7 +652,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
     ],
     closingTitle: 'Connect Wahoo and keep completed workouts in context',
-    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto or COROS, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, optionally deliver saved Suunto routes to Wahoo, add the history range you need, and analyze everything in the same private archive.',
+    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto or COROS, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, optionally deliver saved Suunto routes to Wahoo, add the history range you need, and analyze everything in the same archive.',
     relatedGuideActions: [
       { label: 'Import Activities to Wahoo', routerLink: '/guides/import-activities-to-wahoo' },
     ],
@@ -664,8 +664,8 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     slug: 'garmin',
     label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
     serviceName: ServiceNames.GarminAPI,
-    subtitle: 'Private dashboard, history import, and Suunto sync',
-    summary: 'Connect Garmin to import history, send GPX/FIT routes to Garmin Connect, send new Garmin activities to Suunto, and analyze Garmin data beside Suunto and COROS in one private dashboard.',
+    subtitle: 'Dashboard, history import, and Suunto sync',
+    summary: 'Connect Garmin to import history, send GPX/FIT routes to Garmin Connect, send new Garmin activities to Suunto, and analyze Garmin data beside Suunto and COROS in one dashboard.',
     highlights: [
       'Import Garmin history',
       'Send GPX/FIT routes to Garmin Connect',
@@ -678,7 +678,7 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     serviceName: ServiceNames.SuuntoApp,
     subtitle: 'Activity sync, route imports, and multi-provider route delivery',
-    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, keep Suunto history in one private dashboard, and import source-attributed 24/7 Health data.',
+    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin, Wahoo, or COROS, upload FIT activities and GPX/FIT routes, keep Suunto history in one dashboard, and import source-attributed 24/7 Health data.',
     highlights: [
       'Receive Garmin activities automatically',
       'Receive COROS activities automatically',
@@ -706,7 +706,7 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     label: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
     serviceName: ServiceNames.WahooAPI,
     subtitle: 'FIT import, delivery, and activity sync',
-    summary: 'Connect Wahoo to import completed FIT-backed workouts, sync retained Wahoo activities to Suunto or COROS, send FIT activities and GPX/FIT courses/routes or saved Suunto routes to Wahoo, and analyze them beside Garmin, Suunto, and COROS in one private dashboard.',
+    summary: 'Connect Wahoo to import completed FIT-backed workouts, sync retained Wahoo activities to Suunto or COROS, send FIT activities and GPX/FIT courses/routes or saved Suunto routes to Wahoo, and analyze them beside Garmin, Suunto, and COROS in one dashboard.',
     highlights: [
       'Import new Wahoo workouts automatically',
       'Queue Wahoo history by date range',
@@ -743,7 +743,7 @@ function providerWebPageJsonLd(page: ProviderIntegrationPage, metadataDescriptio
       ...page.highlights,
       page.dashboardTitle,
       'Grounded Assistant for endurance training data',
-      'Private training dashboard',
+      'Training dashboard',
     ],
     mainEntity: [
       {
@@ -776,12 +776,12 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
   title: 'Integrations',
   preload: true,
   animation: 'Integrations',
-  description: 'Explore Garmin, Suunto, COROS, and Wahoo integrations for automatic activity imports and sync, history imports, route sending, uploads, and a private training dashboard.',
+  description: 'Explore Garmin, Suunto, COROS, and Wahoo integrations for automatic activity imports and sync, history imports, route sending, uploads, and a training dashboard.',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'Quantified Self Integrations',
-    description: 'Public integration hub for Garmin, Suunto, COROS, and Wahoo activity imports and sync, history imports, route sending, uploads, and private training analysis.',
+    description: 'Public integration hub for Garmin, Suunto, COROS, and Wahoo activity imports and sync, history imports, route sending, uploads, and training analysis.',
     url: 'https://quantified-self.io/integrations',
     inLanguage: 'en',
     hasPart: INTEGRATION_HUB_CARDS.map(page => ({
@@ -794,13 +794,13 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
 
 export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, IntegrationRouteData> = {
   garmin: {
-    title: 'Private Garmin Training Dashboard',
+    title: 'Garmin Training Dashboard',
     preload: true,
     animation: 'Integrations',
-    description: 'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.',
+    description: 'Use Quantified Self as a Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
-      'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.'
+      'Use Quantified Self as a Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, activity delivery to Wahoo or COROS, and grounded Assistant answers.'
     ),
   },
   suunto: {
@@ -827,10 +827,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Wahoo Activity Sync and Route Delivery',
     preload: true,
     animation: 'Integrations',
-    description: 'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and private training analysis.',
+    description: 'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and training analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.wahoo,
-      'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and private training analysis.',
+      'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and training analysis.',
     ),
   },
 };

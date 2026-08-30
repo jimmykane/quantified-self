@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
 import { SLEEP_PROVIDERS, SLEEP_STAGES, SleepSession } from '../../../shared/sleep';
+import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
     docSet: vi.fn(),
     docIds: [] as string[],
+    deleteField: Object.freeze({ __fieldValue: 'delete' }),
     mockGetUserDeletionGuardState: vi.fn(),
     mockGetUserDeletionGuardStateInTransaction: vi.fn(),
     mockRunTransaction: vi.fn(),
@@ -70,6 +72,12 @@ vi.mock('firebase-admin', () => {
         })),
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: vi.fn(() => hoisted.deleteField),
+    },
+}));
 
 import {
     markSleepSyncError,
@@ -240,23 +248,82 @@ describe('sleep writer', () => {
             durationSeconds: 33300,
             inBedDurationSeconds: 34260,
             isNap: false,
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: expect.objectContaining({
+                    duration: { 'Sleep Duration': 33300 },
+                    inBedDuration: { 'Sleep In-Bed Duration': 34260 },
+                    deepDuration: { 'Deep Sleep Duration': 6210 },
+                }),
+            },
             createdAtMs: 1000,
             updatedAtMs: 3000,
         }), { merge: true });
     });
 
-    it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
+    it('derives Sports Lib JSON instead of trusting mapper-supplied JSON', async () => {
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { duration: { 'Sleep Duration': 999 } },
+            },
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            sportsLibData: expect.objectContaining({
+                metrics: expect.objectContaining({ duration: { 'Sleep Duration': 33300 } }),
+            }),
+        }), { merge: true });
+    });
+
+    it('deletes stale Sports Lib slots when optional sleep aggregates are cleared', async () => {
+        const existingSession = encodeSleepSessionSportsLibData(buildExistingSuuntoSession({
+            score: { value: 88 },
+            vitals: { averageHrvMs: 61, overnightHrvMs: 64 },
+        }));
         hoisted.docGet.mockResolvedValue({
             exists: true,
-            data: () => buildExistingSuuntoSession({
-                source: {
-                    provider: SLEEP_PROVIDERS.GarminAPI,
-                    providerUserId: 'garmin-user-1',
-                    sourceSessionKey: 'garmin-summary-1',
-                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
-                    receivedAtMs: 2000,
-                },
-            }),
+            data: () => existingSession,
+        });
+
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            inBedDurationSeconds: null,
+            score: null,
+            vitals: { averageHrvMs: null },
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        expect(result.session.inBedDurationSeconds).toBeNull();
+        expect(result.session.score).toBeNull();
+        expect(result.session.vitals?.averageHrvMs).toBeNull();
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('inBedDuration');
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('score');
+        expect(result.session.sportsLibData?.metrics).not.toHaveProperty('averageHrv');
+
+        const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
+        const sportsLibData = writePayload.sportsLibData as Record<string, unknown>;
+        const metrics = sportsLibData.metrics as Record<string, unknown>;
+        expect(metrics.inBedDuration).toBe(hoisted.deleteField);
+        expect(metrics.score).toBe(hoisted.deleteField);
+        expect(metrics.averageHrv).toBe(hoisted.deleteField);
+        expect(metrics).not.toHaveProperty('overnightHrv');
+        expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), writePayload, { merge: true });
+    });
+
+    it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
+        const existingSession = buildExistingSuuntoSession({
+            source: {
+                provider: SLEEP_PROVIDERS.GarminAPI,
+                providerUserId: 'garmin-user-1',
+                sourceSessionKey: 'garmin-summary-1',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/sleeps?old=true',
+                receivedAtMs: 2000,
+            },
+        });
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => encodeSleepSessionSportsLibData(existingSession),
         });
 
         const result = await upsertSleepSessions('user-1', [buildMapperResult({

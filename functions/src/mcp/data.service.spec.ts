@@ -3,6 +3,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataActivityTypes,
+  DataActiveEnergy,
   DataAltitudeAvg,
   DataAltitudeMax,
   DataAltitudeMin,
@@ -26,6 +27,7 @@ import {
   DataGradeMax,
   DataGradeMin,
   DataSpeedAvg,
+  DataSleepDuration,
   DataStartPosition,
   DataStrokeRate,
   DataStrokeRateAvg,
@@ -3196,6 +3198,27 @@ describe('MCP data service', () => {
     expect(result.sleepCapabilities.providers).toContain(SLEEP_PROVIDERS.GarminAPI);
   });
 
+  it('does not expose persisted Health or sleep storage types as generic activity metrics', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([{
+      id: 'event-with-non-activity-stats',
+      data: {
+        stats: {
+          [DataActiveEnergy.type]: 500,
+          [DataSleepDuration.type]: 28_800,
+        },
+      },
+    }]);
+
+    const result = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      limit: 50,
+    });
+
+    expect(result.eventMetrics).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain(DataActiveEnergy.type);
+    expect(JSON.stringify(result)).not.toContain(DataSleepDuration.type);
+  });
+
   it('discovers persisted dive summaries without leaking source-hydrated gas or tank records', async () => {
     vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
       {
@@ -6166,6 +6189,18 @@ describe('MCP data service', () => {
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument({
+        sportsLibData: {
+          schemaVersion: 1,
+          metrics: {
+            duration: { 'Sleep Duration': 28800 },
+            inBedDuration: { 'Sleep In-Bed Duration': 30600 },
+            deepDuration: { 'Deep Sleep Duration': 7200 },
+            lightDuration: { 'Light Sleep Duration': 14400 },
+            score: { 'Sleep Score': 82 },
+            averageHeartRate: { 'Average Sleep Heart Rate': 50 },
+            overnightHrv: { 'Overnight HRV': 55 },
+          },
+        },
         healthSourceRecords: [{ source: { accountKey: 'private-health-account' } }],
         healthSampleChunks: [{ nativeMetric: 'hrvList.hrv', nativeValues: [123] }],
       }),
@@ -6207,6 +6242,47 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('healthSourceRecords');
     expect(JSON.stringify(result)).not.toContain('healthSampleChunks');
     expect(JSON.stringify(result)).not.toContain('hrvList.hrv');
+    expect(JSON.stringify(result)).not.toContain('sportsLibData');
+    expect(JSON.stringify(result)).not.toContain('Sleep Duration');
+  });
+
+  it('rehydrates new-only Sports Lib sleep aggregates without exposing their storage envelope', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        durationSeconds: undefined,
+        inBedDurationSeconds: undefined,
+        stageDurationsSeconds: {},
+        score: null,
+        vitals: null,
+        sportsLibData: {
+          schemaVersion: 1,
+          metrics: {
+            duration: { 'Sleep Duration': 28800 },
+            inBedDuration: { 'Sleep In-Bed Duration': 30600 },
+            deepDuration: { 'Deep Sleep Duration': 7200 },
+            score: { 'Sleep Score': 82 },
+            averageHrv: { 'Average Sleep HRV': 55 },
+          },
+        },
+      }),
+    ]);
+
+    const result = await createMcpDataService(dependencies).listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    });
+
+    expect(result.sessions[0]).toMatchObject({
+      durationSeconds: 28800,
+      inBedDurationSeconds: 30600,
+      stageDurationsSeconds: { deep: 7200 },
+      score: { value: 82 },
+      vitals: { averageHrvMs: 55 },
+    });
+    expect(JSON.stringify(result)).not.toContain('sportsLibData');
+    expect(JSON.stringify(result)).not.toContain('Average Sleep HRV');
   });
 
   it('discovers only recorded aggregate sleep vitals without source or sample data', async () => {

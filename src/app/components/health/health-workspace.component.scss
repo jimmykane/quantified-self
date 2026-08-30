@@ -1,0 +1,335 @@
+:host {
+  display: block;
+}
+
+.health-workspace {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.health-header-actions,
+.health-window-navigation,
+.health-provider-filters {
+  align-items: center;
+  display: flex;
+}
+
+.health-header-actions {
+  gap: 0.25rem;
+}
+
+.health-explorer,
+.health-sync-section {
+  min-width: 0;
+}
+
+.health-section-heading {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+
+.health-section-heading h2,
+.health-detail-header h2 {
+  font: var(--mat-sys-headline-small);
+  margin: 0;
+}
+
+.health-section-heading > p,
+.health-detail-header p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+}
+
+.health-eyebrow {
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: 0.045em;
+  margin: 0 0 0.2rem;
+  text-transform: uppercase;
+}
+
+.health-explorer {
+  padding: 1rem;
+}
+
+.health-explorer-heading {
+  padding-inline: 0.2rem;
+}
+
+.health-explorer-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.health-mobile-metric-selector {
+  display: none;
+}
+
+.health-metric-list {
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 12px;
+  box-sizing: border-box;
+  max-height: min(72vh, 920px);
+  overflow: auto;
+  padding: 0.4rem;
+}
+
+.health-metric-group h3 {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0.04em;
+  margin: 0.75rem 0.6rem 0.2rem;
+  text-transform: uppercase;
+}
+
+.health-metric-option {
+  border-radius: 8px;
+  justify-content: flex-start;
+  min-height: 38px;
+  padding-inline: 0.6rem;
+  text-align: left;
+  width: 100%;
+}
+
+.health-metric-option-sleep {
+  gap: 0.35rem;
+}
+
+.health-metric-option-selected {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.health-detail {
+  min-width: 0;
+}
+
+.health-detail-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.health-window-navigation {
+  flex: 0 0 auto;
+  gap: 0.2rem;
+}
+
+.health-range-save-status {
+  align-items: center;
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  font: var(--mat-sys-body-small);
+  gap: 0.4rem;
+  justify-content: flex-end;
+  margin: -0.35rem 0 0.65rem;
+  min-height: 28px;
+}
+
+.health-range-save-status mat-icon {
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
+}
+
+.health-range-save-status-error {
+  color: var(--mat-sys-error);
+}
+
+.health-range-selector {
+  --mat-standard-button-toggle-height: 40px;
+}
+
+.health-provider-filters {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.health-provider-filter {
+  gap: 0.35rem;
+}
+
+.health-notice {
+  align-items: flex-start;
+  background: var(--mat-sys-surface-container);
+  border-radius: 9px;
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  font: var(--mat-sys-body-small);
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.health-notice mat-icon {
+  flex: 0 0 auto;
+  font-size: 19px;
+  height: 19px;
+  width: 19px;
+}
+
+.health-notice-warning,
+.health-notice-conflict {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.health-detail-state {
+  align-items: center;
+  display: flex;
+  gap: 0.9rem;
+  justify-content: center;
+  min-height: 250px;
+  padding: 1.25rem;
+  text-align: left;
+}
+
+.health-detail-state > mat-icon {
+  color: var(--mat-sys-primary);
+  font-size: 40px;
+  height: 40px;
+  width: 40px;
+}
+
+.health-detail-state > div {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 520px;
+}
+
+.health-detail-state strong {
+  font: var(--mat-sys-title-medium);
+}
+
+.health-detail-state span {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
+.health-detail-state a,
+.health-detail-state button {
+  justify-self: start;
+  margin-top: 0.25rem;
+}
+
+.health-detail-state-error > mat-icon {
+  color: var(--mat-sys-error);
+}
+
+.health-sleep-chart {
+  box-sizing: border-box;
+  height: 440px;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.health-sync-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.health-sync-card-error {
+  border-color: var(--mat-sys-error);
+}
+
+.health-sync-avatar {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.health-sync-card p,
+.health-sync-empty mat-card-content {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.health-sync-card p {
+  min-height: 2.6em;
+}
+
+.health-sync-empty mat-card-content {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 1rem;
+}
+
+@media (max-width: 980px) {
+  .health-explorer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .health-metric-list {
+    display: none;
+  }
+
+  .health-mobile-metric-selector {
+    display: block;
+    margin-bottom: 0.75rem;
+  }
+
+  .health-mobile-metric-selector mat-form-field {
+    width: min(100%, 420px);
+  }
+}
+
+@media (max-width: 720px) {
+  .health-workspace {
+    gap: 1rem;
+  }
+
+  .health-header-actions span {
+    display: none;
+  }
+
+  .health-section-heading,
+  .health-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .health-section-heading > p {
+    display: none;
+  }
+
+  .health-window-navigation {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .health-range-save-status {
+    justify-content: flex-start;
+    margin-top: -0.15rem;
+  }
+
+  .health-range-selector {
+    flex: 1 1 auto;
+  }
+
+  .health-range-selector mat-button-toggle {
+    flex: 1 1 25%;
+  }
+
+  .health-sleep-chart {
+    height: 390px;
+  }
+}
+
+@media (max-width: 480px) {
+  .health-detail-state {
+    align-items: flex-start;
+    flex-direction: column;
+    min-height: 210px;
+  }
+}

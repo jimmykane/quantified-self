@@ -149,8 +149,24 @@ describe('AppRoutingModule routes', () => {
     expect(trainingRoute).toBeTruthy();
     expect(trainingRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(trainingRoute?.data?.['disableRouteAnimation']).toBe(true);
-    expect(trainingRoute?.data?.['description']).toContain('Private training analysis');
+    expect(trainingRoute?.data?.['description']).toContain('Training analysis');
+    expect(trainingRoute?.data?.['description']).not.toMatch(/\bprivate\b/i);
     expect(trainingRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
+  it('keeps Health authenticated, available to every onboarded user, and noindexed', () => {
+    const healthRoute = routes.find(route => route.path === 'health');
+
+    expect(healthRoute).toBeTruthy();
+    expect(healthRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(healthRoute?.loadComponent).toBeTypeOf('function');
+    expect(healthRoute?.data).toMatchObject({
+      title: 'Health',
+      preload: true,
+      animation: 'Health',
+      robots: 'noindex, follow',
+    });
+    expect(healthRoute?.data?.['description']).toContain('source-separated');
   });
 
   it('should keep the activity calendar authenticated and noindexed', () => {
@@ -158,7 +174,8 @@ describe('AppRoutingModule routes', () => {
 
     expect(calendarRoute).toBeTruthy();
     expect(calendarRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
-    expect(calendarRoute?.data?.['description']).toContain('Private Week, Month, and Year activity calendar');
+    expect(calendarRoute?.data?.['description']).toContain('Week, Month, and Year activity calendar');
+    expect(calendarRoute?.data?.['description']).not.toMatch(/\bprivate\b/i);
     expect(calendarRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
@@ -257,7 +274,7 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', async () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private Garmin training dashboard' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'Garmin training dashboard' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
       { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
       { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'Automatic FIT activity imports' },
@@ -284,7 +301,7 @@ describe('AppRoutingModule routes', () => {
     }
 
     const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
-    expect((await resolvedRouteData(garminRoute))['title']).toBe('Private Garmin Training Dashboard');
+    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Dashboard');
   });
 
   it('should define public tools routes with compare workflow metadata', () => {
@@ -550,10 +567,10 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.canMatch).toBeUndefined();
     expect(homeRoute?.pathMatch).toBe('full');
     expect(homeRoute?.data).toMatchObject({
-      title: 'Private Training Dashboard',
+      title: 'Training Dashboard',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS, and Wahoo in one private training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.');
+    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',

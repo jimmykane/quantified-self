@@ -89,7 +89,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore an activity calendar, training analysis, the grounded Quantified Self Assistant, read-only MCP access, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a private dashboard.',
+    description: 'Explore an activity calendar, training analysis, the grounded Quantified Self Assistant, read-only MCP access, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a unified dashboard.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
     chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
@@ -138,8 +138,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'dashboard_customize',
-            title: 'Private training dashboard',
-            copy: 'Keep activities, files, maps, exports, derived charts, sleep context, and cross-service sync workflows in one private account.',
+            title: 'Unified training dashboard',
+            copy: 'Keep activities, files, maps, exports, derived charts, sleep context, and cross-service sync workflows in one account.',
           },
         ],
       },
@@ -187,7 +187,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can I compare custom files and provider data?',
-        answer: 'Yes. Quantified Self can compare compatible Garmin, Suunto, COROS, Wahoo, and uploaded FIT, TCX, GPX, JSON, and SML activity data in the same private dashboard.',
+        answer: 'Yes. Quantified Self can compare compatible Garmin, Suunto, COROS, Wahoo, and uploaded FIT, TCX, GPX, JSON, and SML activity data in the same dashboard.',
       },
       {
         question: 'Which features are available on the free plan?',
@@ -208,8 +208,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'Activity Calendar for Endurance Training',
     description: 'Review running, cycling, swimming, skiing, and other workouts in Week, Month, and Year calendar views with duration-scaled circles and period totals.',
     h1: 'Activity calendar for endurance training',
-    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a private visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
-    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Private activity data'],
+    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
+    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Account activity data'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Open Calendar', '/calendar', 'stroked', 'calendar_month'),
@@ -264,7 +264,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Which activities appear in the calendar?',
-        answer: 'The calendar uses normal activity events already imported or uploaded to your private Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
+        answer: 'The calendar uses normal activity events already imported or uploaded to your Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
       },
       {
         question: 'What do the calendar circle colors and sizes mean?',
@@ -372,7 +372,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What data does Training use?',
-        answer: 'Training uses derived snapshots built from activities already imported or uploaded to your private Quantified Self account. The browser does not reparse source files or query raw activity history to calculate the workspace.',
+        answer: 'Training uses derived snapshots built from activities already imported or uploaded to your Quantified Self account. The browser does not reparse source files or query raw activity history to calculate the workspace.',
       },
       {
         question: 'Which sports does Training support?',
@@ -654,7 +654,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Is Quantified Self a FIT, TCX, or GPX file viewer?',
-        answer: 'Quantified Self can keep FIT, TCX, GPX, JSON, and SML files useful after import, but it is a private training dashboard rather than a standalone public file viewer.',
+        answer: 'Quantified Self can keep FIT, TCX, GPX, JSON, and SML files useful after import, but it is an account-based training dashboard rather than a standalone public file viewer.',
       },
       {
         question: 'Can I compare custom files with Garmin, Suunto, and COROS activities?',
@@ -678,9 +678,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
     eyebrow: 'Workout File Analyzer',
     title: 'FIT, GPX, TCX File Analyzer',
-    description: `Use Quantified Self as a private FIT file analyzer, GPX file analyzer, and TCX workout file analyzer with maps, charts, source-file context, exports, reprocessing, and free-plan manual uploads for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+    description: `Use Quantified Self as a FIT file analyzer, GPX file analyzer, and TCX workout file analyzer with maps, charts, source-file context, exports, reprocessing, and free-plan manual uploads for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
     h1: 'Analyze FIT, GPX, and TCX workout files',
-    intro: `Upload FIT, GPX, TCX, JSON, or SML activity files and turn them into private maps, charts, stats, exports, and source-file context. Manual uploads and core analysis are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+    intro: `Upload FIT, GPX, TCX, JSON, or SML activity files and turn them into maps, charts, stats, exports, and source-file context. Manual uploads and core analysis are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
     chips: ['FIT file analyzer', 'GPX file analyzer', 'TCX file analyzer', 'Maps', 'Charts', 'Free uploads'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -713,7 +713,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Supported Workflows',
         title: 'Analyze files from services, devices, tests, and custom exports',
-        copy: 'The same private dashboard can hold provider imports and standalone files from unsupported tools or review workflows.',
+        copy: 'The same dashboard can hold provider imports and standalone files from unsupported tools or review workflows.',
         items: [
           {
             icon: 'upload_file',
@@ -736,7 +736,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I analyze FIT files?',
-        answer: 'Yes. Upload a FIT activity file to Quantified Self to inspect available maps, charts, statistics, original-file context, exports, and reprocessing options in a private dashboard.',
+        answer: 'Yes. Upload a FIT activity file to Quantified Self to inspect available maps, charts, statistics, original-file context, exports, and reprocessing options in your account dashboard.',
       },
       {
         question: 'Can I analyze GPX and TCX files too?',
@@ -744,7 +744,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Is this a public FIT or GPX file viewer?',
-        answer: 'No. Quantified Self is a private training dashboard. Imported files are tied to your account so they can support analysis, exports, reprocessing, and comparisons without becoming a public upload.',
+        answer: 'No. Quantified Self is an account-based training dashboard. Imported files support analysis, exports, reprocessing, and comparisons without becoming a public upload.',
       },
       {
         question: 'Is workout file analysis free?',
@@ -764,9 +764,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
     title: 'FIT and GPX Route Files with Multi-Provider Delivery',
-    description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    description: `Save FIT course files and GPX route or track files in a route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
     h1: 'Save FIT and GPX route files, then send them to connected services',
-    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into one dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
     chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route send'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -801,7 +801,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Send Routes',
         title: 'Move routes between Quantified Self and connected services',
-        copy: 'Use Routes as the private route library between planning files, saved provider routes, and connected device ecosystems without turning planned courses into completed activities.',
+        copy: 'Use Routes as the route library between planning files, saved provider routes, and connected device ecosystems without turning planned courses into completed activities.',
         items: [
           {
             icon: 'published_with_changes',
@@ -879,7 +879,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Is this a public route planner?',
-        answer: 'No. Quantified Self stores uploaded route files privately in your account. It is not a public route sharing site or route editor.',
+        answer: 'No. Quantified Self stores uploaded route files in your account and does not publish them. It is not a public route sharing site or route editor.',
       },
     ],
     closingTitle: 'Save the route file, then send it where it needs to go',
@@ -925,7 +925,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'ios_share',
             title: 'Shareable context',
-            copy: 'Use benchmark outputs to support YouTube videos, blog posts, coaching summaries, and private QA notes without publishing raw training history.',
+            copy: 'Use benchmark outputs to support YouTube videos, blog posts, coaching summaries, and internal QA notes without publishing raw training history.',
           },
         ],
       },
@@ -967,7 +967,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Create a cleaner benchmark before publishing a device opinion',
-    closingCopy: 'Use the same private archive for test files, service imports, comparison reports, and follow-up analysis as firmware and devices change.',
+    closingCopy: 'Use the same archive for test files, service imports, comparison reports, and follow-up analysis as firmware and devices change.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
@@ -978,7 +978,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.hub,
     eyebrow: 'Guides',
     title: 'Training Data Sync Guides',
-    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one private dashboard.',
+    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
     h1: 'Training data sync guides',
     intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
     chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
@@ -1060,7 +1060,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Which guide should I use first?',
-        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for a private dashboard across providers and uploaded files.',
+        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for one dashboard across providers and uploaded files.',
       },
       {
         question: 'Does automatic activity sync include old workouts?',
@@ -1220,7 +1220,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'dashboard_customize',
             title: 'Keep analysis centralized',
-            copy: 'Review COROS, Suunto, Garmin, uploaded files, maps, and benchmark reports from the same private dashboard.',
+            copy: 'Review COROS, Suunto, Garmin, uploaded files, maps, and benchmark reports from the same dashboard.',
           },
         ],
       },
@@ -1240,7 +1240,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Keep COROS and Suunto connected without losing the archive',
-    closingCopy: 'Use Quantified Self as the private hub for COROS to Suunto activity sync, recent history imports, and training analysis.',
+    closingCopy: 'Use Quantified Self as the integration hub for COROS to Suunto activity sync, recent history imports, and training analysis.',
     closingActions: [
       routeAction('COROS Integration', '/integrations/coros', 'flat', 'arrow_forward'),
       routeAction('All Integrations', '/integrations'),
@@ -1351,7 +1351,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'Import Activities to Suunto: FIT Files and Sync',
     description: 'Import FIT activities to Suunto manually, or sync new and past Garmin, COROS, and Wahoo activities with Quantified Self.',
     h1: 'How to import activities to Suunto',
-    intro: 'Use Quantified Self to send a selected FIT activity to Suunto, automatically deliver eligible new Garmin, COROS, or Wahoo activities, or choose a date range for activities already in your private archive.',
+    intro: 'Use Quantified Self to send a selected FIT activity to Suunto, automatically deliver eligible new Garmin, COROS, or Wahoo activities, or choose a date range for activities already in your account archive.',
     chips: ['Suunto', 'FIT activities', 'Garmin', 'COROS', 'Wahoo', 'Pro'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
@@ -1443,7 +1443,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'Import Activities to Wahoo: FIT Files and Sync',
     description: 'Import FIT activities to Wahoo manually, or send new and past FIT-backed Garmin, COROS, and Suunto activities with Quantified Self.',
     h1: 'How to import activities to Wahoo',
-    intro: 'Use Quantified Self to send a selected FIT activity to Wahoo, automatically deliver eligible new Garmin, COROS, or Suunto activities, or choose a date range for FIT-backed activities already in your private archive.',
+    intro: 'Use Quantified Self to send a selected FIT activity to Wahoo, automatically deliver eligible new Garmin, COROS, or Suunto activities, or choose a date range for FIT-backed activities already in your account archive.',
     chips: ['Wahoo', 'FIT activities', 'Garmin', 'COROS', 'Suunto', 'Pro'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
@@ -1535,7 +1535,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'How to Send Suunto Routes to Garmin Courses',
     description: 'Learn how to send Suunto routes to Garmin Connect as courses, connect both accounts, allow Garmin Course Import, and send routes already saved in Quantified Self.',
     h1: 'How to send Suunto routes to Garmin courses',
-    intro: 'Quantified Self can send Suunto routes from your private Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
+    intro: 'Quantified Self can send Suunto routes from your Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
     chips: ['Suunto routes', 'Garmin courses', 'Course Import', 'Automatic route sending', 'Saved routes'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
@@ -1552,7 +1552,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'login',
             title: 'Connect Suunto',
-            copy: 'Connect Suunto so new and updated Suunto routes can be imported into the private Routes library.',
+            copy: 'Connect Suunto so new and updated Suunto routes can be imported into the Routes library.',
           },
           {
             icon: 'vpn_key',
@@ -1630,7 +1630,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Import Suunto routes once, then send them to Garmin when needed',
-    closingCopy: 'Use Quantified Self as the private route library between Suunto route imports, manual route files, and Garmin Connect.',
+    closingCopy: 'Use Quantified Self as the route library between Suunto route imports, manual route files, and Garmin Connect.',
     closingActions: [
       routeAction('Suunto Integration', '/integrations/suunto', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin'),
@@ -1649,9 +1649,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
     eyebrow: 'Training Data Hub',
     title: 'Centralize Garmin, Suunto, COROS, and Wahoo Workout Data',
-    description: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data in one private training dashboard with source files, manual uploads, provider sync, benchmark reports, exports, and a grounded Assistant.',
+    description: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data in one training dashboard with source files, manual uploads, provider sync, benchmark reports, exports, and a grounded Assistant.',
     h1: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data',
-    intro: 'Use Quantified Self as the private training hub when your workouts, source files, routes, and analysis are spread across Garmin, Suunto, COROS, Wahoo, and exported activity files.',
+    intro: 'Use Quantified Self as the central training hub when your workouts, source files, routes, and analysis are spread across Garmin, Suunto, COROS, Wahoo, and exported activity files.',
     chips: ['Garmin', 'Suunto', 'COROS', 'Wahoo', 'Source files', 'Exports', 'Benchmarks'],
     actions: [
       routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
@@ -1676,7 +1676,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'dashboard_customize',
-            title: 'One private dashboard',
+            title: 'One dashboard',
             copy: 'Use one dashboard for maps, routes, load, readiness, sleep context, file uploads, benchmark reports, and grounded Assistant questions.',
           },
         ],
@@ -1707,7 +1707,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I centralize Garmin, Suunto, COROS, and Wahoo workout data?',
-        answer: 'Yes. Quantified Self is designed to keep Garmin, Suunto, COROS, Wahoo, and uploaded activity files in one private training dashboard.',
+        answer: 'Yes. Quantified Self is designed to keep Garmin, Suunto, COROS, Wahoo, and uploaded activity files in one training dashboard.',
       },
       {
         question: 'Do I have to connect every service?',

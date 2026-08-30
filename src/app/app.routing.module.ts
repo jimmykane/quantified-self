@@ -19,7 +19,7 @@ import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one private training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
+const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
 const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
 
@@ -284,7 +284,7 @@ const topLevelRoutes: Routes = [
       title: 'Workout Data Tools',
       preload: true,
       animation: 'Tools',
-      description: 'Use Quantified Self tools to compare FIT, GPX, TCX, JSON, and SML files, create saved benchmark reports, and review device test results in a private training dashboard.',
+      description: 'Use Quantified Self tools to compare FIT, GPX, TCX, JSON, and SML files, create saved benchmark reports, and review device test results in one training dashboard.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'CollectionPage',
@@ -565,6 +565,19 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'health',
+    loadComponent: () => import('./components/health/health-workspace.component')
+      .then(module => module.HealthWorkspaceComponent),
+    data: {
+      title: 'Health',
+      animation: 'Health',
+      preload: true,
+      description: 'Cross-service Sleep, heart rate, HRV, and health metric history with source-separated comparisons.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'calendar',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
       .then(module => module.CalendarPageComponent),
@@ -572,7 +585,7 @@ const topLevelRoutes: Routes = [
       title: 'Calendar',
       animation: 'Calendar',
       preload: true,
-      description: 'Private Week, Month, and Year activity calendar with duration-scaled activity groups and period totals.',
+      description: 'Week, Month, and Year activity calendar with duration-scaled activity groups and period totals.',
       robots: 'noindex, follow',
     },
     canMatch: [authGuard, onboardingGuard]
@@ -585,7 +598,7 @@ const topLevelRoutes: Routes = [
       animation: 'Training',
       disableRouteAnimation: true,
       preload: true,
-      description: 'Private training analysis for readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
+      description: 'Training analysis for readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
       robots: 'noindex, follow',
     },
     canMatch: [authGuard, onboardingGuard]
@@ -712,7 +725,7 @@ const topLevelRoutes: Routes = [
     path: '',
     loadComponent: () => import('./components/home/home.component').then(component => component.HomeComponent),
     data: {
-      title: 'Private Training Dashboard',
+      title: 'Training Dashboard',
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
       jsonLd: {

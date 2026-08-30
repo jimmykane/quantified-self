@@ -1,5 +1,6 @@
 import {
   DataActivityTypes,
+  DataActiveEnergy,
   DataAirTimeRemaining,
   DataDepthAvg,
   DataDepthAvgFeet,
@@ -10,6 +11,7 @@ import {
   DataMetabolicCalories,
   DataPressureSACAvg,
   DataRestingCalories,
+  DataSleepDuration,
   DataStrokeRate,
   DynamicDataLoader,
   UnitSystem,
@@ -18,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSportsLibNumericMetricCatalog,
   getSportsLibNumericMetricCatalog,
+  MCP_NON_ACTIVITY_SPORTS_LIB_TYPES,
   projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
   resolveSportsLibNumericMetric,
@@ -81,6 +84,15 @@ describe('MCP Sports Lib metric catalog', () => {
     expect(resolveSportsLibNumericMetric(DataActivityTypes.type)).toBeNull();
     expect(resolveSportsLibNumericMetric(DataLatitudeDegrees.type)).toBeNull();
     expect(resolveSportsLibNumericMetric('unknown metric')).toBeNull();
+  });
+
+  it('keeps 20.3 Health and sleep storage classes out of generic activity metrics', () => {
+    expect(MCP_NON_ACTIVITY_SPORTS_LIB_TYPES).toHaveLength(45);
+    expect(new Set(MCP_NON_ACTIVITY_SPORTS_LIB_TYPES).size).toBe(45);
+    for (const type of MCP_NON_ACTIVITY_SPORTS_LIB_TYPES) {
+      expect(resolveSportsLibNumericMetric(type)).toBeNull();
+    }
+    expect(buildSportsLibNumericMetricCatalog({ DataActiveEnergy, DataSleepDuration })).toEqual([]);
   });
 
   it('projects only finite values accepted by the canonical Sports Lib class', () => {

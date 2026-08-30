@@ -81,6 +81,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'tools/compare/saved',
   'services',
   'dashboard',
+  'health',
   'calendar',
   'training',
   'mytracks',

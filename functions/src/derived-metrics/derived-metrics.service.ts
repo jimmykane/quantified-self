@@ -154,8 +154,14 @@ import {
     normalizeSleepProvider,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
+    SLEEP_SPORTS_LIB_METRIC_FIELDS,
     type SleepProvider,
+    type SleepSession,
 } from '../../../shared/sleep';
+import {
+    decodeSleepSessionSportsLibData,
+    SportsLibDataValidationError,
+} from '../../../shared/sports-lib-health-data';
 import {
     createTrainingSportRecord,
     getTrainingProfileMetricDefinition,
@@ -189,6 +195,10 @@ const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
     'endTimeMs',
     'timezoneOffsetSeconds',
     'durationSeconds',
+    'sportsLibData.schemaVersion',
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
     'isNap',
     'providerFields.suunto.timestamp',
     'vitals.overnightHrvMs',
@@ -201,6 +211,13 @@ const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
     'endTimeMs',
     'timezoneOffsetSeconds',
     'durationSeconds',
+    'sportsLibData.schemaVersion',
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Score}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate}`,
+    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate}`,
     'isNap',
     'score.value',
     'providerFields.suunto.timestamp',
@@ -3414,12 +3431,29 @@ function hasValidTrainingSleepEndTime(startTimeMs: number, endTimeMs: number | n
         && spanSeconds <= DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS;
 }
 
+function decodeTrainingSleepDocument(
+    doc: FirestoreQueryDocumentSnapshot,
+): Record<string, unknown> | null {
+    try {
+        return decodeSleepSessionSportsLibData(
+            (doc.data() || {}) as unknown as SleepSession,
+        ) as unknown as Record<string, unknown>;
+    } catch (error) {
+        if (!(error instanceof SportsLibDataValidationError)) throw error;
+        logger.warn('[derived-metrics] Ignored invalid Sports Lib sleep aggregate.', {
+            failure: error.code,
+        });
+        return null;
+    }
+}
+
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
     const candidates = new Map<string, TrainingSleepNightCandidate>();
     sleepDocs.forEach((doc) => {
-        const data = (doc.data() || {}) as Record<string, unknown>;
+        const data = decodeTrainingSleepDocument(doc);
+        if (!data) return;
         if (data.isNap !== false) {
             return;
         }
@@ -3521,7 +3555,8 @@ function resolveTrainingReadinessSleepEvidence(
 ): ReadinessSleepEvidencePoint[] {
     const groups = new Map<string, ReadinessSleepEvidencePoint[]>();
     sleepDocs.forEach((doc) => {
-        const data = (doc.data() || {}) as Record<string, unknown>;
+        const data = decodeTrainingSleepDocument(doc);
+        if (!data) return;
         if (data.isNap === true) {
             return;
         }

@@ -1,0 +1,68 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.health-chart-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.health-chart-panel {
+  min-width: 0;
+}
+
+.health-chart-panel-native {
+  border-style: dashed;
+}
+
+.health-chart-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.health-chart-heading {
+  min-width: 0;
+}
+
+.health-chart-heading mat-card-title {
+  font: var(--mat-sys-title-small);
+}
+
+.health-chart-heading mat-card-subtitle {
+  font: var(--mat-sys-body-small);
+  margin-top: 0.15rem;
+}
+
+.health-chart-status {
+  flex: 0 0 auto;
+}
+
+.health-chart-content {
+  padding-top: 0.35rem;
+}
+
+.health-chart-footer {
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  flex-wrap: wrap;
+  font: var(--mat-sys-body-small);
+  gap: 0.25rem 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+.health-chart-footer span:first-child {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+@media (max-width: 480px) {
+  .health-chart-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

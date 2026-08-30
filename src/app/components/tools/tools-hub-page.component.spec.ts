@@ -27,6 +27,7 @@ describe('ToolsHubPageComponent', () => {
 
     expect(text).toContain('Workout data tools');
     expect(text).toContain('File comparison');
+    expect(text).not.toMatch(/\bprivate\b/i);
     expect(compareLink).toBeTruthy();
 
     fixture.componentInstance.logCompareEntry('tools_hub_hero');

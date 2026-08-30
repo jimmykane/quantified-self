@@ -74,12 +74,13 @@ describe('HomeComponent', () => {
         const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
         const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
         expect(heroText).toContain('Your Training Data, Connected.');
-        expect(heroText).toContain('One Private Dashboard. Every Activity in Context.');
+        expect(heroText).toContain('One Dashboard. Every Activity in Context.');
         expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activities together.');
         expect(heroText).toContain('Understand readiness, training load, sleep, routes,');
         expect(heroText).toContain('keep supported activities synced across services');
         expect(heroText).toContain('Your Data Stays Yours');
-        expect(heroText).toContain('Private by Design');
+        expect(heroText).toContain('Export Anytime');
+        expect(heroText).not.toMatch(/\bprivate\b/i);
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
         expect(aiSectionText).toContain('Ask about your training. Get answers grounded in your data.');

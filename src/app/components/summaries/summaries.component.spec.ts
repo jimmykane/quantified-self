@@ -457,7 +457,7 @@ describe('SummariesComponent', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('exposes the Training action without a duplicate Calendar action', () => {
+  it('exposes compact Training and Health actions without a duplicate Calendar action', () => {
     component.showActions = true;
 
     fixture.detectChanges();
@@ -466,8 +466,14 @@ describe('SummariesComponent', () => {
     expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
     expect(trainingLink.textContent).toContain('Open Training');
     expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
+    const healthLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-health-link') as HTMLAnchorElement;
+    expect(healthLink).not.toBeNull();
+    expect(healthLink.getAttribute('aria-label')).toBe('Open Health workspace');
+    expect(healthLink.textContent).toContain('Open Health');
+    expect(healthLink.querySelector('mat-icon')?.textContent?.trim()).toBe('cardiology');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html'), 'utf8');
     expect(template).toContain('<a mat-button class="dashboard-training-link"');
+    expect(template).toContain('<a mat-button class="dashboard-health-link"');
     expect(template).not.toContain('<a mat-stroked-button class="dashboard-training-link"');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
   });
@@ -623,6 +629,7 @@ describe('SummariesComponent', () => {
     expect(template).toContain('aria-label="Retry derived metrics update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
+    expect(template).toContain('class="dashboard-health-link-label"');
     expect(template).toContain('class="dashboard-today-calendar-button"');
     expect(template).toContain('class="dashboard-summary-heading"');
     expect(template).toContain('class="dashboard-today-greeting"');
@@ -630,6 +637,7 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
     expect(styles).toContain('.dashboard-training-link-label');
+    expect(styles).toContain('.dashboard-health-link-label');
     expect(styles).toContain('.dashboard-today-calendar-button');
     expect(styles).toContain('font: var(--mat-sys-body-medium);');
     expect(styles).toContain('color: var(--mat-sys-on-surface-variant);');

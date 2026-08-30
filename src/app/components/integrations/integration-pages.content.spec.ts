@@ -49,8 +49,8 @@ describe('integration-pages.content', () => {
   });
 
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Private Garmin Training Dashboard');
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('private Garmin training dashboard');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.title).toBe('Garmin Training Dashboard');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin training dashboard');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('routes sent to Garmin Connect');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('GPX/FIT routes');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.garmin.description).toContain('Garmin to Suunto activity sync');
@@ -73,6 +73,8 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('Sync Garmin and COROS activities to Suunto');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('import Suunto routes');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('send Suunto routes to Garmin');
+    expect(JSON.stringify(PROVIDER_INTEGRATION_PAGES)).not.toMatch(/\bprivate(?:ly)?\b/i);
+    expect(JSON.stringify(PROVIDER_INTEGRATION_ROUTE_DATA)).not.toMatch(/\bprivate(?:ly)?\b/i);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto.description).toContain('GPX/FIT routes');
     expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.summary).toContain('send Suunto routes to Garmin');
     expect(INTEGRATION_HUB_CARDS.find(card => card.slug === 'suunto')?.highlights).toContain('Send Suunto routes to Garmin');

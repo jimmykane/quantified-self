@@ -36,6 +36,7 @@ describe('help.content', () => {
       'getting-started',
       'supported-activities',
       'activity-calendar',
+      'health',
       'training-analysis',
       'ai-insights',
       'plans-and-billing',
@@ -46,8 +47,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define ten unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(10);
+  it('should define eleven unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(11);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -64,6 +65,29 @@ describe('help.content', () => {
         expect(link.icon.trim().length).toBeGreaterThan(0);
         expect(link.target.trim().length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  it('documents the source-separated Health workspace and its bounded metric explorer', () => {
+    const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
+
+    expect(healthSection?.title).toBe('Health');
+    expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
+    expect(healthSection?.content).toContain('**14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
+    expect(healthSection?.content).toContain('never creates a cross-provider headline average');
+    expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
+    expect(healthSection?.content).toContain('Detailed sample streams load for 14-day and 30-day windows');
+    expect(healthSection?.content).toContain('normalized Sleep model');
+    expect(healthSection?.content).toContain('Expand **Source observations**');
+    expect(healthSection?.content).toContain('Connectivity');
+    expect(healthSection?.content).not.toContain('URL retains the metric');
+    expect(healthSection?.links).toContainEqual({
+      label: 'Open Health',
+      icon: 'cardiology',
+      kind: 'route',
+      target: '/health',
     });
   });
 
@@ -235,6 +259,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
     expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
     expect(gettingStartedSection?.content).toContain('Open Training');
+    expect(gettingStartedSection?.content).toContain('Open Health');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');

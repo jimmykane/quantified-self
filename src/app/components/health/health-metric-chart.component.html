@@ -1,0 +1,46 @@
+<div class="health-chart-grid" aria-label="Source-separated metric charts">
+  @for (model of models(); track model.series.id) {
+    <mat-card
+      appearance="outlined"
+      class="health-chart-panel"
+      [class.health-chart-panel-native]="model.series.nativeOnly">
+      <mat-card-header class="health-chart-header">
+        <div class="health-chart-heading">
+          <mat-card-title>{{ model.series.sourceLabel }}</mat-card-title>
+          <mat-card-subtitle>{{ model.series.semanticLabel }}</mat-card-subtitle>
+        </div>
+        @if (model.series.nativeOnly || model.series.hasConflict) {
+          <mat-chip-set class="health-chart-status" aria-label="Series status">
+            @if (model.series.nativeOnly) {
+              <mat-chip>Native only</mat-chip>
+            }
+            @if (model.series.hasConflict) {
+              <mat-chip>Conflict</mat-chip>
+            }
+          </mat-chip-set>
+        }
+      </mat-card-header>
+
+      <mat-card-content class="health-chart-content">
+        <app-health-metric-series-chart
+          [model]="model"
+          [startTimeMs]="startTimeMs()"
+          [endTimeMs]="endTimeMs()"
+          [darkTheme]="darkTheme()">
+        </app-health-metric-series-chart>
+      </mat-card-content>
+
+      <mat-card-footer class="health-chart-footer">
+        <span>{{ model.series.unit }}</span>
+        @if (model.series.deviceLabel) {
+          <span>Device: {{ model.series.deviceLabel }}</span>
+        }
+        <span>{{ model.series.coverageText }}</span>
+        <span>{{ model.series.freshnessText }}</span>
+        @if (model.omittedPointCount > 0) {
+          <span>{{ model.displayedPointCount }} of {{ model.displayedPointCount + model.omittedPointCount }} points shown</span>
+        }
+      </mat-card-footer>
+    </mat-card>
+  }
+</div>

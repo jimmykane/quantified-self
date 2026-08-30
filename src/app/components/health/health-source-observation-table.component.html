@@ -1,0 +1,69 @@
+<mat-expansion-panel class="health-source-table-panel mat-elevation-z0">
+  <mat-expansion-panel-header>
+    <mat-panel-title class="health-source-table-title">Source observations</mat-panel-title>
+  </mat-expansion-panel-header>
+  @if (sleep()) {
+    <div class="health-source-table-scroll">
+      <table>
+        <caption>Normalized Sleep sessions by source. Providers are not blended.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Source</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Score</th>
+            <th scope="col">HRV</th>
+            <th scope="col">Heart rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of sleepRows(); track row.id) {
+            <tr>
+              <td>{{ row.dateText }}</td>
+              <td>{{ row.sourceLabel }}</td>
+              <td>{{ row.durationText }}</td>
+              <td>{{ row.scoreText }}</td>
+              <td>{{ row.hrvText }}</td>
+              <td>{{ row.heartRateText }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    @if (truncationText()) {
+      <p class="health-table-note">{{ truncationText() }}</p>
+    }
+    <div class="health-source-table-scroll">
+      <table>
+        <caption>{{ detailTitle() }} observations and sample chunks by source. Providers are not blended, and account keys are replaced with local ordinals.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Source</th>
+            <th scope="col">Device</th>
+            <th scope="col">Reading</th>
+            <th scope="col">Semantics</th>
+            <th scope="col">Coverage</th>
+            <th scope="col">Freshness</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of metricRows(); track row.id) {
+            <tr [class.health-source-row-conflict]="row.conflict">
+              <td>{{ row.dateText }}</td>
+              <td>{{ row.sourceLabel }}</td>
+              <td>{{ row.deviceLabel }}</td>
+              <td>{{ row.valueText }}</td>
+              <td>{{ row.semanticsText }}</td>
+              <td>{{ row.coverageText }}</td>
+              <td>{{ row.freshnessText }}</td>
+              <td>{{ row.conflict ? 'Conflict' : '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</mat-expansion-panel>

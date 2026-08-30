@@ -52,6 +52,8 @@ describe('public-seo-pages.content', () => {
         inLanguage: 'en',
       });
     }
+
+    expect(JSON.stringify(PUBLIC_SEO_PAGES)).not.toMatch(/\bprivate(?:ly)?\b/i);
   });
 
   it('keeps the new pages focused on separate search intents', () => {

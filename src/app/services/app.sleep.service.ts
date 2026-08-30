@@ -19,6 +19,7 @@ import {
   SLEEP_SESSIONS_COLLECTION_ID,
   SLEEP_SYNC_STATE_COLLECTION_ID,
 } from '@shared/sleep';
+import { decodeSleepSessionSportsLibData } from '@shared/sports-lib-health-data';
 
 @Injectable({
   providedIn: 'root',
@@ -69,6 +70,7 @@ export class AppSleepService {
 
     return (collectionData(sleepQuery, { idField: 'id' }) as Observable<SleepSession[]>).pipe(
       map((sessions) => sessions
+        .map(decodeSleepSessionSportsLibData)
         .filter((session) => this.overlapsDashboardRange(session, startTimeMs, endTimeMs))
         .sort((left, right) => left.startTimeMs - right.startTimeMs)),
     );

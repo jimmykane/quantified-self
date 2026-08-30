@@ -7,6 +7,21 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.3.0 Health and sleep scalar JSON transition
+
+Sports Lib 20.3.0 adds the exported Health and Sleep scalar classes plus strict canonical `fromJSON()` support used by
+Quantified Self's normalized Health and Sleep storage boundary. This is not an event/activity parser migration. Do not
+enable the automatic event/route scanner and do not enqueue original-file reparses solely for 20.3.0. Before deploying
+the dependency update, verify that both automatic scanners are disabled: their strict target version follows the
+installed Sports Lib version, so a scanner left enabled from an earlier rollout would otherwise treat 20.3.0 as a new
+event/route reparse target even though this release has no parser transition.
+
+New Health and Sleep writes add a versioned Sports Lib JSON envelope while retaining legacy scalars for rollback.
+Existing `healthSourceRecords` and `sleepSessions` use the separate dry-run-first, UID-scoped
+`migrate-health-sleep-sports-lib-data` command documented in `docs/sleep-sync-operations.md`. That migration reads only
+already-normalized values; it does not download originals, refetch providers, alter event processing metadata, or
+change `SPORTS_LIB_REPARSE_TARGET_VERSION` behavior.
+
 ### Sports Lib 20.1.1 native dive gas and tank record persistence
 
 Sports Lib 20.1.0 introduced parser-provided FIT `dive_gas`, `tank_summary`, and `tank_update` messages as structured

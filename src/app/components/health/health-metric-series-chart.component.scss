@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.health-metric-series-chart {
+  height: 230px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .health-metric-series-chart {
+    height: 250px;
+  }
+}

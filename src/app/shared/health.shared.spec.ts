@@ -27,6 +27,7 @@ import {
     findHealthConflicts,
     normalizeHealthRangeQuery,
     projectHealthRange,
+    projectLoadedHealthRange,
 } from '@shared/health-query';
 import { planHealthFirestoreQueries } from '@shared/health-firestore-query';
 
@@ -654,6 +655,74 @@ describe('unified health shared contract', () => {
                 observationIds: ['a-garmin:0', 'b-coros:0'],
             }),
         ]);
+    });
+
+    it('projects a complete cross-page aggregate without reapplying page limits', () => {
+        const records = [
+            sourceRecord({
+                id: 'a-garmin',
+                provider: HEALTH_PROVIDERS.GarminAPI,
+                metrics: [valueEntry({ canonical: { value: 100, unit: HEALTH_UNITS.Count } })],
+            }),
+            sourceRecord({
+                id: 'b-coros',
+                provider: HEALTH_PROVIDERS.COROSAPI,
+                metrics: [valueEntry({ canonical: { value: 120, unit: HEALTH_UNITS.Count } })],
+            }),
+        ];
+
+        const result = projectLoadedHealthRange(records, [], {
+            startDate: '2026-01-01',
+            endDate: '2026-01-01',
+            metricIds: [HEALTH_METRIC_IDS.Steps],
+            sourceRecordLimit: 1,
+        }, {
+            sourceRecordsComplete: true,
+            samplesComplete: true,
+        });
+
+        expect(result.observations.map(item => item.sourceRecordId)).toEqual(['b-coros', 'a-garmin']);
+        expect(result.conflicts).toEqual([
+            expect.objectContaining({
+                observationIds: ['a-garmin:0', 'b-coros:0'],
+            }),
+        ]);
+        expect(result.coverage).toHaveLength(2);
+        expect(result.pageInfo).toMatchObject({
+            sourceRecordsTruncated: false,
+            sourceRecordAggregateComplete: true,
+        });
+    });
+
+    it('filters sample revisions across loaded source pages and preserves an incomplete cursor', () => {
+        const record = sourceRecord({
+            id: 'garmin-record',
+            provider: HEALTH_PROVIDERS.GarminAPI,
+            metrics: [valueEntry({ metricId: HEALTH_METRIC_IDS.HeartRate })],
+        });
+        const currentChunk = sampleChunk({ id: 'chunk-1', pointCount: 8 });
+        const staleChunk = sampleChunk({ id: 'chunk-2', pointCount: 8 });
+        staleChunk.revision = { order: 0, token: 'stale', digest: 'stale' };
+
+        const result = projectLoadedHealthRange([record], [currentChunk, staleChunk], {
+            startDate: '2026-01-01',
+            endDate: '2026-01-01',
+            metricIds: [HEALTH_METRIC_IDS.HeartRate],
+            includeSamples: true,
+        }, {
+            sourceRecordsComplete: true,
+            samplesComplete: false,
+            chunkCursor: { calendarDate: '2026-01-01', id: 'chunk-2' },
+        });
+
+        expect(result.sampleChunks.map(chunk => chunk.id)).toEqual(['chunk-1']);
+        expect(result.pageInfo).toMatchObject({
+            returnedSamplePoints: 8,
+            sampleRevisionMismatchCount: 1,
+            sampleAggregateComplete: false,
+            samplesTruncated: true,
+            chunkCursor: { calendarDate: '2026-01-01', id: 'chunk-2' },
+        });
     });
 
     it('mirrors metric-index paging when no provider filter is requested', () => {

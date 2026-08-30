@@ -14,6 +14,7 @@ export type HelpSectionId =
   | 'getting-started'
   | 'supported-activities'
   | 'activity-calendar'
+  | 'health'
   | 'training-analysis'
   | 'ai-insights'
   | 'plans-and-billing'
@@ -51,6 +52,26 @@ export interface HelpSection {
 const SUPPORT_MAILTO = `mailto:${environment.supportEmail}`;
 const PRIVACY_MAILTO = 'mailto:privacy@quantified-self.io';
 const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
+
+const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
+
+- **Health** is the authenticated workspace for source-attributed Sleep, heart rate, HRV, movement, energy, wellness, body, and fitness measurements imported from supported connected services. It is available to every signed-in user; the plan and connection requirements for importing provider history do not change.
+- Open it from the main navigation or use **Open Health** beside **Open Training** on Dashboard. Health is a fixed workspace, not a configurable dashboard tile.
+- The first cards always show **Sleep**, **Heart rate**, then **HRV** for the latest 30 days. Each connected source gets its own row. Health never creates a cross-provider headline average or saves a preferred source.
+
+## Explore a metric
+
+- Health opens on **Resting heart rate · 30d**. Choose any metric in the complete category list, then use **14d**, **30d**, **90d**, or **1y** and the older/newer controls. Your range is saved to your account without adding URL query parameters. The selected metric and older/newer position remain local to the open workspace and reset when you return later.
+- Detailed sample streams load for 14-day and 30-day windows. Longer windows use stored summary observations. If a metric exists only as samples, Health asks you to choose a shorter range instead of showing an empty or misleading aggregate.
+- Totals use bars, scalar readings use lines or points, and categorical states use stepped series. Every provider, connected account, aggregation, semantic variant, origin, recording method, and unit stays in a separate series. Provider-native or non-comparable readings are labeled and isolated from canonical readings.
+- Use the local source filters to focus on one or more providers. Filters are not saved as a preferred source. When one provider has multiple connected accounts, Health shows local labels such as **Garmin account 1** instead of an account identifier.
+
+## Read source quality and status
+
+- Series show device attribution when supplied, coverage, and freshness. Partial coverage, superseded sample revisions, conflicts, and bounded-load limits are stated explicitly. A conflict means comparable source observations disagree; both readings remain visible.
+- Expand **Source observations** for the accessible table. It lists source, device, reading, semantics, coverage, freshness, and conflict state without displaying opaque account keys.
+- **Sleep** continues to use the normalized Sleep model and existing Sleep trend. Health resolves typed references to those sessions rather than copying Sleep values into another model.
+- Loading, empty, permission, reconnect, failure, disconnected, and unsupported states link to **Connectivity** when an account action is available. Disconnecting stops future imports but keeps existing Health history; deleting your Quantified Self account removes user-scoped Health records, samples, sync state, and Sleep sessions as described in Policies.`;
 
 const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
@@ -179,6 +200,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Where things live
 
 - **Dashboard** is your main activity overview.
+- **Health** compares supported Sleep and Health measurements source by source. Open the [Health guide](/help#health) for metric ranges, source separation, and sync-state guidance.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
 - **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
@@ -205,7 +227,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Activity Calendar** is the default 1 x 1 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing editable dashboards that do not contain it receive it once automatically; **Undo** or removing it keeps it dismissed. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header greets the dashboard owner according to browser-local morning, afternoon, or evening time, using the first part of their display name when available and generic copy otherwise; the greeting stays hidden on shared dashboards. Today then begins with the same TSS-only **Training state** shown in Training and shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR alongside the **Open Training** action. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
+- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header greets the dashboard owner according to browser-local morning, afternoon, or evening time, using the first part of their display name when available and generic copy otherwise; the greeting stays hidden on shared dashboards. Today then begins with the same TSS-only **Training state** shown in Training and shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR alongside the **Open Training** and **Open Health** actions. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
 - Today uses the same compact Readiness, sleep-score, evidence-coverage, and personal-baseline indicators as Training. Exact values and labels remain visible, so the indicators add scanability without turning Form, ramp, recovery time, or other unbounded metrics into arbitrary percentages.
 - **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
 - Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
@@ -402,6 +424,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
+      { label: 'Health', icon: 'cardiology', kind: 'route', target: '/health' },
+      { label: 'Health guide', icon: 'school', kind: 'route', target: '/help', fragment: 'health' },
       { label: 'Activity Calendar guide', icon: 'school', kind: 'route', target: '/help', fragment: 'activity-calendar' },
       { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
       { label: 'Training', icon: 'monitoring', kind: 'route', target: '/training' },
@@ -449,6 +473,18 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
       { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
       { label: 'Calendar Settings', icon: 'tune', kind: 'route', target: '/settings' },
+    ],
+  },
+  {
+    id: 'health',
+    icon: 'cardiology',
+    title: 'Health',
+    summary: 'Compare Sleep and the complete Health metric catalog across providers without blending sources.',
+    content: HEALTH_WORKSPACE_HELP_CONTENT,
+    links: [
+      { label: 'Open Health', icon: 'cardiology', kind: 'route', target: '/health' },
+      { label: 'Connectivity', icon: 'hub', kind: 'route', target: '/services' },
+      { label: 'Privacy Policy', icon: 'lock_outline', kind: 'route', target: '/privacy' },
     ],
   },
   {

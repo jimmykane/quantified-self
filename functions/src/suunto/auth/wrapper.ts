@@ -159,7 +159,7 @@ export const deauthorizeSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.deauthorizeSuuntoApp.region,
   secrets: FUNCTION_SECRET_BINDINGS.deauthorizeSuuntoApp,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
 }, async (request): Promise<DeauthorizeResponse> => {
   // App Check verification

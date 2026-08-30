@@ -15,6 +15,10 @@ Always-on rules:
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
 - After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths. Do not push unless the user explicitly asks.
+- Whenever creating a GitHub issue or epic for this repository, add it to the `Quantified Self IO` GitHub Project
+  (`jimmykane` user project 2) in the same task and verify project membership before reporting completion. Add newly
+  created subissues as project items too; preserve existing project status and do not infer a status change unless the
+  user requests one or the agreed workflow clearly requires it.
 - When building a feature, review the app help page and update or add help content when needed.
 - When adding a new indexable public page, add it to `src/sitemap.xml` in the same change. Also verify its `robots.txt` policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,

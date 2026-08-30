@@ -18,6 +18,9 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS } from '@shared/health-workspace-rollout';
+
+const HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID = HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -271,6 +274,38 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
+    it('links the staged Health user immediately after Dashboard', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
+        const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
+        const healthItem = navigationItems.find(item => item.nativeElement.textContent.includes('Health'));
+
+        expect(healthItem).toBeTruthy();
+        expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
+        expect(navigationItems.indexOf(healthItem!)).toBe(navigationItems.indexOf(dashboardItem!) + 1);
+    });
+
+    it('hides Health navigation from signed-in users outside the staged rollout', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'another-user',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const healthItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Health'));
+
+        expect(healthItem).toBeUndefined();
+    });
+
     it('opens the profile section when the signed-in profile shortcut is selected', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
@@ -290,7 +325,7 @@ describe('SideNavComponent', () => {
 
     it('orders signed-in navigation with Assistant last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: 'user-1',
+            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
@@ -298,6 +333,7 @@ describe('SideNavComponent', () => {
         fixture.detectChanges();
         const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
         const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
+        const healthItem = navigationItems.find(item => item.nativeElement.textContent.includes('Health'));
         const calendarItem = navigationItems.find(item => item.nativeElement.textContent.includes('Calendar'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
@@ -306,6 +342,7 @@ describe('SideNavComponent', () => {
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
 
         expect(dashboardItem).toBeTruthy();
+        expect(healthItem).toBeTruthy();
         expect(calendarItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
@@ -315,6 +352,7 @@ describe('SideNavComponent', () => {
         const dashboardIndex = navigationItems.indexOf(dashboardItem!);
         expect([
             navigationItems.indexOf(dashboardItem!),
+            navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(calendarItem!),
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(routesItem!),
@@ -329,6 +367,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 4,
             dashboardIndex + 5,
             dashboardIndex + 6,
+            dashboardIndex + 7,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');

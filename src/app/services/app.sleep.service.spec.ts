@@ -89,6 +89,37 @@ describe('AppSleepService', () => {
     expect(sessions.map(session => session.id)).toEqual(['kept-overnight', 'kept-day']);
   });
 
+  it('strictly rehydrates new-format sleep aggregates for dashboard consumers', async () => {
+    const start = Date.UTC(2026, 0, 5);
+    const end = start + (8 * 60 * 60 * 1000);
+    vi.mocked(collectionData).mockReturnValue(of([{
+      id: 'new-format',
+      startTimeMs: start,
+      endTimeMs: end,
+      stageDurationsSeconds: {},
+      source: { provider: 'GarminAPI' },
+      sportsLibData: {
+        schemaVersion: 1,
+        metrics: {
+          duration: { 'Sleep Duration': 28_800 },
+          deepDuration: { 'Deep Sleep Duration': 3_600 },
+          score: { 'Sleep Score': 90 },
+          averageHrv: { 'Average Sleep HRV': 62 },
+        },
+      },
+    }] as any));
+
+    const sessions = await firstValueFrom(service.watchForDashboard('user-1', start, end));
+
+    expect(sessions[0]).toMatchObject({
+      durationSeconds: 28_800,
+      stageDurationsSeconds: { deep: 3_600 },
+      score: { value: 90 },
+      vitals: { averageHrvMs: 62 },
+    });
+    expect(sessions[0]).not.toHaveProperty('sportsLibData');
+  });
+
   it('does not cap explicit 90-day windows before client-side sorting and filtering', async () => {
     const end = Date.UTC(2026, 3, 30);
     const start = end - (90 * 24 * 60 * 60 * 1000);

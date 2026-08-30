@@ -1,16 +1,23 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     SleepMapperResult,
     SleepProvider,
     SleepSession,
+    SleepSportsLibMetricField,
     SleepSyncStatus,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
+    SLEEP_SPORTS_LIB_METRIC_FIELDS,
     SLEEP_STAGES,
     SLEEP_SYNC_STATE_COLLECTION_ID,
     SLEEP_SYNC_STATUSES,
 } from '../../../shared/sleep';
+import {
+    decodeSleepSessionSportsLibData,
+    encodeSleepSessionSportsLibData,
+} from '../../../shared/sports-lib-health-data';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
@@ -44,6 +51,73 @@ function userSleepSyncStateRef(
 
 function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function nestedSleepValueIsExplicitlyNull(value: unknown, field: string): boolean {
+    if (value === null) return true;
+    return Boolean(value)
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && Object.prototype.hasOwnProperty.call(value, field)
+        && (value as Record<string, unknown>)[field] === null;
+}
+
+function shouldDeleteSleepSportsLibMetric(
+    session: SleepSession,
+    field: SleepSportsLibMetricField,
+): boolean {
+    switch (field) {
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration:
+            return false;
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.InBedDuration:
+            return session.inBedDurationSeconds === null;
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.DeepDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Deep);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.LightDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Light);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.RemDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Rem);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.AwakeDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Awake);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.UnmeasurableDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Unmeasurable);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.UnknownDuration:
+            return nestedSleepValueIsExplicitlyNull(session.stageDurationsSeconds, SLEEP_STAGES.Unknown);
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.Score:
+            return nestedSleepValueIsExplicitlyNull(session.score, 'value');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'averageHeartRateBpm');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'minimumHeartRateBpm');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.RestingHeartRate:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'restingHeartRateBpm');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'averageHrvMs');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'overnightHrvMs');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'hrvSampleCount');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.MaximumSpo2:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'maxSpo2Percent');
+        case SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageRespiration:
+            return nestedSleepValueIsExplicitlyNull(session.vitals, 'averageRespirationBrpm');
+    }
+}
+
+function sleepSessionFirestoreWritePayload(session: SleepSession): Record<string, unknown> {
+    const payload = cleanUndefined(session) as unknown as Record<string, unknown>;
+    const sportsLibData = payload.sportsLibData as Record<string, unknown>;
+    const metrics = sportsLibData.metrics as Record<string, unknown>;
+    for (const field of Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)) {
+        if (shouldDeleteSleepSportsLibMetric(session, field)) {
+            // The session write intentionally merges provider-owned maps. Delete
+            // explicitly cleared canonical slots so a null legacy aggregate
+            // cannot conflict with stale nested Sports Lib JSON. Undefined
+            // fields retain the existing merge-preservation behavior.
+            metrics[field] = FieldValue.delete();
+        }
+    }
+    return payload;
 }
 
 export interface SleepLifecycleWriterDependencies {
@@ -237,6 +311,10 @@ function comparableSleepSessionPayload(session: SleepSession | SleepMapperResult
     delete payload.userID;
     delete payload.createdAtMs;
     delete payload.updatedAtMs;
+    // The bounded migration owns conversion of legacy documents. Ignoring the
+    // additive codec envelope here prevents routine provider redeliveries from
+    // becoming an unbounded incidental migration.
+    delete payload.sportsLibData;
 
     const source = payload.source && typeof payload.source === 'object'
         ? payload.source as Record<string, unknown>
@@ -293,14 +371,15 @@ export async function upsertSleepSession(
     lifecycleGuardSkipped?: true;
 }> {
     validateSleepLifecycleWriterDependencies(dependencies);
-    const provider = mapperResult.session.source.provider;
+    const incomingSession = encodeSleepSessionSportsLibData(mapperResult.session);
+    const provider = incomingSession.source.provider;
     const id = await buildSleepSessionDocumentId(
         userID,
         provider,
         mapperResult.sourceSessionKey,
     );
     const skippedSession: SleepSession = {
-        ...mapperResult.session,
+        ...incomingSession,
         id,
         userID,
         createdAtMs: nowMs,
@@ -340,12 +419,14 @@ export async function upsertSleepSession(
         }
 
         const existing = await transaction.get(docRef);
-        const existingSession = existing.exists ? existing.data() as SleepSession : null;
-        if (existingSession && shouldKeepExistingSleepSession(existingSession, mapperResult.session)) {
+        const existingSession = existing.exists
+            ? decodeSleepSessionSportsLibData(existing.data() as SleepSession)
+            : null;
+        if (existingSession && shouldKeepExistingSleepSession(existingSession, incomingSession)) {
             logger.info(`[SleepSync] Preserved fuller ${provider} sleep session ${id} for ${userID}`);
             return { id, session: existingSession, written: false };
         }
-        if (existingSession && isIdempotentSleepSessionWrite(existingSession, mapperResult.session)) {
+        if (existingSession && isIdempotentSleepSessionWrite(existingSession, incomingSession)) {
             logger.info(`[SleepSync] Skipped unchanged ${provider} sleep session ${id} for ${userID}`);
             return { id, session: existingSession, written: false };
         }
@@ -354,13 +435,13 @@ export async function upsertSleepSession(
             ? existingSession.createdAtMs
             : nowMs;
         const session: SleepSession = {
-            ...mapperResult.session,
+            ...incomingSession,
             id,
             userID,
             createdAtMs,
             updatedAtMs: nowMs,
         };
-        transaction.set(docRef, cleanUndefined(session), { merge: true });
+        transaction.set(docRef, sleepSessionFirestoreWritePayload(session), { merge: true });
         logger.info(`[SleepSync] Upserted ${provider} sleep session ${id} for ${userID}`);
         return { id, session, written: true };
     });

@@ -10,7 +10,7 @@ This always-on rule applies to frontend UI changes.
 
 ## Core Principles
 1. Avoid global utility class sprawl.
-2. Use plain Angular Material components for controls before adding custom UI. For example, use `mat-button-toggle-group` for segmented choices, `mat-icon-button` for icon actions, `mat-slide-toggle` or `mat-checkbox` for booleans, `mat-slider` for numeric ranges, `mat-select` or `mat-menu` for option sets, and `mat-tab-group` for tabs.
+2. Use plain Angular Material components for controls before adding custom UI. For example, use `mat-button-toggle-group` for segmented choices, `mat-icon-button` for icon actions, `mat-slide-toggle` or `mat-checkbox` for booleans, `mat-slider` for numeric ranges, `mat-select` or `mat-menu` for option sets, `mat-tab-group` for tabs, and `mat-expansion-panel` for collapsible application surfaces instead of custom-styled `details` controls.
 3. Use theme tokens (`--mat-sys-*`) for colors and typography.
 4. Refactor custom styles that replicate Material primitives.
 5. Keep component CSS to layout and spacing around Material controls; do not override Material internals with `::ng-deep` or MDC implementation classes unless there is a documented exception.
@@ -21,6 +21,12 @@ This always-on rule applies to frontend UI changes.
 - Do not introduce custom-styled controls, tabs, cards, badges, or decorative surfaces when Angular Material or an existing app pattern already covers the need.
 - When custom CSS is necessary, keep it consistent with nearby app layouts and limit it to structure, density, spacing, and responsive behavior.
 - Prefer reusing existing shared app classes and Material theme tokens over inventing new component-specific visual language.
+
+## Data Visualization
+- Use the shared ECharts loader, host controller, theme, tooltip, resize, and mobile-interaction helpers for product charts.
+- Do not hand-roll SVG or canvas charts, axes, paths, bars, points, tooltips, or chart interaction when ECharts can represent the visualization.
+- Reuse an existing normalized app chart when it already owns the domain model, such as Sleep, instead of creating a second chart implementation.
+- Any exception must be documented next to the implementation with the concrete accessibility or rendering constraint that prevents ECharts use.
 
 ## Dialogs and Overlays
 - Do not add custom `panelClass` unless there is a documented exception.

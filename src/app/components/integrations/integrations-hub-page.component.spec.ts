@@ -42,7 +42,8 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Set up the connection you need');
     expect(text).toContain('importing activities to Suunto or Wahoo');
     expect(text).toContain('syncing Garmin, COROS, or Wahoo activity data to Suunto');
-    expect(text).toContain('Private dashboard, history import, and Suunto sync');
+    expect(text).toContain('Dashboard, history import, and Suunto sync');
+    expect(text).not.toMatch(/\bprivate\b/i);
     expect(text).toContain('Activity sync, route imports, and multi-provider route delivery');
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('sending Suunto routes to Garmin');

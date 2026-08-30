@@ -45,6 +45,13 @@
     <span>Dashboard</span>
   </mat-list-item>
 
+  @if (hasHealthWorkspaceNavigationAccess()) {
+    <mat-list-item routerLinkActive="active" routerLink="/health" (click)="closeSideNav()">
+      <mat-icon>cardiology</mat-icon>
+      <span>Health</span>
+    </mat-list-item>
+  }
+
   <mat-list-item routerLinkActive="active" routerLink="/calendar" (click)="closeSideNav()">
     <mat-icon>calendar_month</mat-icon>
     <span>Calendar</span>

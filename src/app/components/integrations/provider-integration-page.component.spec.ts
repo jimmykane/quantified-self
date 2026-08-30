@@ -41,14 +41,15 @@ describe('ProviderIntegrationPageComponent', () => {
     return fixture;
   }
 
-  it('should render Garmin integration content and private dashboard search intent', () => {
+  it('should render Garmin integration and dashboard search intent', () => {
     const fixture = renderProvider('garmin');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('Garmin Integration and Private Training Dashboard');
-    expect(text).toContain('private training dashboard for Garmin data');
+    expect(text).toContain('Garmin Integration and Training Dashboard');
+    expect(text).toContain('What can Quantified Self do with Garmin data?');
     expect(text).toContain('Garmin to Suunto automatic activity sync');
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
+    expect(text).not.toMatch(/\bprivate\b/i);
   });
 
   it('should render Suunto integration content and sync workflows', () => {

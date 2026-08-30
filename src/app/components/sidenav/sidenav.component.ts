@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { isHealthWorkspaceNavigationUIDAllowed } from '@shared/health-workspace-rollout';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
@@ -38,6 +39,8 @@ export class SideNavComponent {
   public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
+  public readonly hasHealthWorkspaceNavigationAccess = computed(() =>
+    isHealthWorkspaceNavigationUIDAllowed(this.userService.user()?.uid));
 
   constructor(
     public authService: AppAuthService,

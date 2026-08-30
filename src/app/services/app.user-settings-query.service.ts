@@ -16,7 +16,9 @@ import {
     AppMyTracksSettings,
     AppEventDetailsSettingsInterface,
     AppEventLapSportFamily,
+    AppHealthWorkspaceRange,
     AppUserInterface,
+    APP_HEALTH_WORKSPACE_RANGES,
     TrainingWorkspacePreferences,
 } from '../models/app-user.interface';
 import {
@@ -214,6 +216,36 @@ export class AppUserSettingsQueryService {
             throw new Error('A signed-in account and Training preference are required.');
         }
         return normalized;
+    }
+
+    /**
+     * Persists the Health workspace range as an account-owned display
+     * preference. The expected UID fences a queued selection across sign-out
+     * or an account switch.
+     */
+    public async updateHealthWorkspaceRange(
+        expectedUserUID: string,
+        range: AppHealthWorkspaceRange,
+    ): Promise<void> {
+        if (!expectedUserUID || !APP_HEALTH_WORKSPACE_RANGES.includes(range)) {
+            throw new Error('A signed-in account and supported Health range are required.');
+        }
+        const user = await this.getCurrentUser();
+        if (!user?.uid || user.uid !== expectedUserUID) {
+            throw new Error('The signed-in account changed before the Health range could be saved.');
+        }
+
+        this.logger.info('[AppUserSettingsQueryService] Updating Health workspace range.', { range });
+        return this.userService.updateUserProperties(user, {
+            settings: {
+                appSettings: {
+                    healthWorkspace: { range },
+                },
+            },
+        }).catch(err => {
+            this.logger.error('[AppUserSettingsQueryService] Failed to update Health workspace range.', err);
+            throw err;
+        });
     }
 
     /**
