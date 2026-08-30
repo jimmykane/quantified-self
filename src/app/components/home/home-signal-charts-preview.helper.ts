@@ -1,12 +1,14 @@
 import type { EChartsType } from 'echarts/core';
+import { buildOfficialEChartsThemeTokens } from '../../helpers/echarts-theme.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 export interface HomeSignalChartPalette {
-  primary: string;
-  secondary: string;
-  tertiary: string;
-  error: string;
+  trend: string;
+  freshness: string;
+  intensityEasy: string;
+  intensityModerate: string;
+  intensityHard: string;
 }
 
 export interface HomeSignalChartPreview {
@@ -29,6 +31,17 @@ const INTENSITY_POINTS = {
   hard: [3, 4, 3, 3, 2, 2, 2, 2],
 } as const;
 
+export function buildHomeSignalChartPalette(darkTheme: boolean): HomeSignalChartPalette {
+  const theme = buildOfficialEChartsThemeTokens(darkTheme);
+  return {
+    trend: theme.trendLineColor,
+    freshness: '#4caf50',
+    intensityEasy: '#43a047',
+    intensityModerate: '#fb8c00',
+    intensityHard: '#e53935',
+  };
+}
+
 export function buildHomeSignalChartPreviews(
   palette: HomeSignalChartPalette,
 ): readonly HomeSignalChartPreview[] {
@@ -39,7 +52,7 @@ export function buildHomeSignalChartPreviews(
       value: '69',
       context: '14-day score',
       ariaLabel: 'Illustrative readiness trend rising before a small pullback.',
-      option: buildLineOption(READINESS_POINTS, palette.primary, 45, 85),
+      option: buildLineOption(READINESS_POINTS, palette.trend, 45, 85),
     },
     {
       key: 'freshness',
@@ -47,7 +60,7 @@ export function buildHomeSignalChartPreviews(
       value: '+48',
       context: '7-day forecast',
       ariaLabel: 'Illustrative zero-load freshness forecast rising over seven days.',
-      option: buildLineOption(FRESHNESS_POINTS, palette.tertiary, 0, 58),
+      option: buildLineOption(FRESHNESS_POINTS, palette.freshness, 0, 58),
     },
     {
       key: 'intensity',
@@ -63,7 +76,7 @@ export function buildHomeSignalChartPreviews(
       value: '105',
       context: 'indexed trend',
       ariaLabel: 'Illustrative efficiency index improving with week-to-week variation.',
-      option: buildLineOption(EFFICIENCY_POINTS, palette.secondary, 88, 114),
+      option: buildLineOption(EFFICIENCY_POINTS, palette.trend, 88, 114),
     },
   ];
 }
@@ -137,9 +150,9 @@ function buildIntensityOption(palette: HomeSignalChartPalette): ChartOption {
       max: 100,
     },
     series: [
-      buildSeries('Easy', INTENSITY_POINTS.easy, palette.primary),
-      buildSeries('Moderate', INTENSITY_POINTS.moderate, palette.tertiary),
-      buildSeries('Hard', INTENSITY_POINTS.hard, palette.error),
+      buildSeries('Easy', INTENSITY_POINTS.easy, palette.intensityEasy),
+      buildSeries('Moderate', INTENSITY_POINTS.moderate, palette.intensityModerate),
+      buildSeries('Hard', INTENSITY_POINTS.hard, palette.intensityHard),
     ],
   };
 }

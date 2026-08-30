@@ -21,16 +21,9 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import {
+  buildHomeSignalChartPalette,
   buildHomeSignalChartPreviews,
-  type HomeSignalChartPalette,
 } from './home-signal-charts-preview.helper';
-
-const DEFAULT_PALETTE: HomeSignalChartPalette = {
-  primary: '#526ba7',
-  secondary: '#6d6e73',
-  tertiary: '#4e7b68',
-  error: '#ba1a1a',
-};
 
 @Component({
   selector: 'app-home-signal-charts-preview',
@@ -40,7 +33,7 @@ const DEFAULT_PALETTE: HomeSignalChartPalette = {
   standalone: true,
 })
 export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestroy {
-  readonly previews = buildHomeSignalChartPreviews(DEFAULT_PALETTE);
+  readonly previews = buildHomeSignalChartPreviews(buildHomeSignalChartPalette(false));
 
   @ViewChildren('chartDiv') private chartDivs!: QueryList<ElementRef<HTMLDivElement>>;
 
@@ -82,8 +75,7 @@ export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestro
 
   private async renderCharts(darkTheme: boolean): Promise<void> {
     const chartElements = this.chartDivs?.toArray() || [];
-    const palette = this.resolvePalette(chartElements[0]?.nativeElement);
-    const previews = buildHomeSignalChartPreviews(palette);
+    const previews = buildHomeSignalChartPreviews(buildHomeSignalChartPalette(darkTheme));
 
     await Promise.all(chartElements.map(async (chartElement, index) => {
       const host = this.chartHosts[index];
@@ -101,21 +93,5 @@ export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestro
       host.setOption(preview.option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
       host.scheduleResize();
     }));
-  }
-
-  private resolvePalette(element?: HTMLElement): HomeSignalChartPalette {
-    if (!element || typeof getComputedStyle !== 'function') {
-      return DEFAULT_PALETTE;
-    }
-    const styles = getComputedStyle(element);
-    const color = (token: string, fallback: string): string => (
-      styles.getPropertyValue(token).trim() || fallback
-    );
-    return {
-      primary: color('--mat-sys-primary', DEFAULT_PALETTE.primary),
-      secondary: color('--mat-sys-secondary', DEFAULT_PALETTE.secondary),
-      tertiary: color('--mat-sys-tertiary', DEFAULT_PALETTE.tertiary),
-      error: color('--mat-sys-error', DEFAULT_PALETTE.error),
-    };
   }
 }

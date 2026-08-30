@@ -9,6 +9,7 @@ import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.c
 
 describe('HomeSignalChartsPreviewComponent', () => {
   let fixture: ComponentFixture<HomeSignalChartsPreviewComponent>;
+  const appTheme = signal(AppThemes.Normal);
   const chart = {
     dispatchAction: vi.fn(),
     isDisposed: vi.fn(() => false),
@@ -24,10 +25,11 @@ describe('HomeSignalChartsPreviewComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    appTheme.set(AppThemes.Normal);
     await TestBed.configureTestingModule({
       imports: [HomeSignalChartsPreviewComponent],
       providers: [
-        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: AppThemeService, useValue: { appTheme } },
         { provide: EChartsLoaderService, useValue: loader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
       ],
@@ -69,5 +71,36 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(options.every(option => option.tooltip.show === false)).toBe(true);
     expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
     expect(loader.attachMobileSeriesTapFeedback).not.toHaveBeenCalled();
+  });
+
+  it('matches the canonical Training chart colors in light and dark themes', async () => {
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+
+    const readOptions = (start: number) => loader.setOption.mock.calls.slice(start, start + 4).map(call => call[1] as {
+      series: Array<{
+        lineStyle?: { color: string };
+        itemStyle?: { color: string };
+      }>;
+    });
+    const lightOptions = readOptions(0);
+
+    expect(lightOptions[0].series[0].lineStyle?.color).toBe('#6d6e73');
+    expect(lightOptions[1].series[0].lineStyle?.color).toBe('#4caf50');
+    expect(lightOptions[2].series.map(series => series.itemStyle?.color)).toEqual([
+      '#43a047',
+      '#fb8c00',
+      '#e53935',
+    ]);
+    expect(lightOptions[3].series[0].lineStyle?.color).toBe('#6d6e73');
+
+    appTheme.set(AppThemes.Dark);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(8));
+
+    const darkOptions = readOptions(4);
+    expect(darkOptions[0].series[0].lineStyle?.color).toBe('rgba(179,180,183,1)');
+    expect(darkOptions[1].series[0].lineStyle?.color).toBe('#4caf50');
+    expect(darkOptions[3].series[0].lineStyle?.color).toBe('rgba(179,180,183,1)');
   });
 });
