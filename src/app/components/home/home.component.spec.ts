@@ -13,6 +13,11 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { signal } from '@angular/core';
+import { AppThemeService } from '../../services/app.theme.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { LoggerService } from '../../services/logger.service';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -20,9 +25,22 @@ describe('HomeComponent', () => {
     let mockAuthService: any;
     let mockRouter: any;
     let userSubject: BehaviorSubject<any>;
+    const chart = {
+        dispatchAction: vi.fn(),
+        isDisposed: vi.fn(() => false),
+    };
+    const eChartsLoader = {
+        init: vi.fn().mockResolvedValue(chart),
+        setOption: vi.fn(),
+        dispose: vi.fn(),
+        resize: vi.fn(),
+        subscribeToViewportResize: vi.fn(() => vi.fn()),
+        attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
+    };
 
     beforeEach(async () => {
         userSubject = new BehaviorSubject<any>(null);
+        vi.clearAllMocks();
         mockAuthService = {
             getUser: vi.fn().mockResolvedValue(null),
             user$: userSubject.asObservable()
@@ -41,6 +59,9 @@ describe('HomeComponent', () => {
             ],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+                { provide: EChartsLoaderService, useValue: eChartsLoader },
+                { provide: LoggerService, useValue: { error: vi.fn() } },
             ]
         }).compileComponents();
 
@@ -183,13 +204,15 @@ describe('HomeComponent', () => {
         );
         const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
         const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
+        const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
 
         expect(performanceCards.length).toBe(4);
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
         expect(trainingPreviewIndicators.length).toBe(3);
-        expect(metricChips.length).toBe(12);
-        expect(metricChipInfoIcons.length).toBe(12);
+        expect(metricChips.length).toBe(6);
+        expect(metricChipInfoIcons.length).toBe(6);
+        expect(signalPreviews.length).toBe(4);
         expect(text).toContain('Connect Your Services');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
@@ -215,12 +238,11 @@ describe('HomeComponent', () => {
         expect(text).toContain('Efficiency');
         expect(text).toContain('Explore Training');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
-        expect(text).toContain('Recovery');
-        expect(text).toContain('Form (TSS)');
-        expect(text).toContain('Freshness Forecast');
-        expect(text).toContain('Intensity Distribution');
-        expect(text).toContain('Efficiency Trend');
-        expect(text).toContain('Sleep');
+        expect(text).toContain('14-day score');
+        expect(text).toContain('7-day forecast');
+        expect(text).toContain('8-week split');
+        expect(text).toContain('indexed trend');
+        expect(text).toContain('sleep views');
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
         expect(text).not.toContain('Form Model (CTL / ATL / TSB)');

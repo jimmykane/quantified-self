@@ -1,0 +1,120 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.signal-preview {
+  margin-top: 1rem;
+}
+
+.signal-preview-note {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+  color: var(--mat-sys-on-surface-variant);
+
+  span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  small {
+    font-size: 0.68rem;
+    text-align: right;
+  }
+}
+
+.signal-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.signal-preview-widget {
+  min-width: 0;
+  padding: 0.75rem;
+  background: var(--mat-sys-surface-container-lowest);
+
+  &:nth-child(even) {
+    border-left: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  &:nth-child(n + 3) {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  h4,
+  small,
+  strong {
+    display: block;
+  }
+
+  h4 {
+    margin: 0;
+    color: var(--mat-sys-on-surface);
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.2;
+  }
+
+  small {
+    margin-top: 0.15rem;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.65rem;
+    line-height: 1.2;
+  }
+
+  strong {
+    flex: 0 0 auto;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+}
+
+.signal-preview-chart {
+  width: 100%;
+  height: 58px;
+  margin-top: 0.35rem;
+  pointer-events: none;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+@media (max-width: 380px) {
+  .signal-preview-note {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+
+    small {
+      text-align: left;
+    }
+  }
+
+  .signal-preview-widget {
+    padding: 0.65rem;
+
+    header {
+      gap: 0.25rem;
+    }
+
+    h4 {
+      font-size: 0.72rem;
+    }
+  }
+}

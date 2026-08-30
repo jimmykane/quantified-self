@@ -14,6 +14,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
+import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.component';
 
 const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
   showDelay: 0,
@@ -33,6 +34,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     MatCardModule,
     MatIconModule,
     MatTooltipModule,
+    HomeSignalChartsPreviewComponent,
     MetricIndicatorComponent,
     TypedPromptRotatorComponent,
   ],

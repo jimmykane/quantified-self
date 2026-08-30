@@ -1,0 +1,26 @@
+<section class="signal-preview" data-nosnippet aria-label="Illustrative Training chart previews">
+  <div class="signal-preview-note">
+    <span>Illustrative data</span>
+    <small>Same chart families used in Training</small>
+  </div>
+
+  <div class="signal-preview-grid">
+    @for (preview of previews; track preview.key) {
+      <article class="signal-preview-widget">
+        <header>
+          <div>
+            <h4>{{ preview.title }}</h4>
+            <small>{{ preview.context }}</small>
+          </div>
+          <strong>{{ preview.value }}</strong>
+        </header>
+        <div
+          #chartDiv
+          class="signal-preview-chart"
+          role="img"
+          [attr.aria-label]="preview.ariaLabel">
+        </div>
+      </article>
+    }
+  </div>
+</section>

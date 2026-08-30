@@ -213,58 +213,9 @@
           <mat-card-title>Charts Behind Every Signal</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Open recovery, Form, freshness, intensity, efficiency, and sleep views computed from your stored training
-            history.</p>
-          <div class="metric-chip-list" aria-label="Derived curated charts">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recovery left versus elapsed recovery."
-              matTooltipPosition="above">
-              Recovery
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Fitness, fatigue, and form trend from derived training stress."
-              matTooltipPosition="above">
-              Form (TSS)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Forecasts the next 7 days of freshness and form from your latest derived state."
-              matTooltipPosition="above">
-              Freshness Forecast
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Weekly easy/moderate/hard intensity mix using power zones when available, otherwise heart-rate zones."
-              matTooltipPosition="above">
-              Intensity Distribution
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Weekly trend of duration-weighted average power-to-heart-rate efficiency."
-              matTooltipPosition="above">
-              Efficiency Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Sleep duration, stages, and HRV by connected source."
-              matTooltipPosition="above">
-              Sleep
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
+          <p>See how readiness, Form, freshness, intensity, and efficiency change over time, with full recovery and sleep
+            views available in Training.</p>
+          <app-home-signal-charts-preview></app-home-signal-charts-preview>
         </mat-card-content>
       </mat-card>
 
