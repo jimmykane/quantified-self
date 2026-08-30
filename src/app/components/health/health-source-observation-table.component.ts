@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { MatExpansionModule } from '@angular/material/expansion';
 import {
   HealthObservationTableRow,
   HealthSleepObservationRow,
@@ -7,6 +8,7 @@ import {
 @Component({
   selector: 'app-health-source-observation-table',
   standalone: true,
+  imports: [MatExpansionModule],
   templateUrl: './health-source-observation-table.component.html',
   styleUrls: ['./health-source-observation-table.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

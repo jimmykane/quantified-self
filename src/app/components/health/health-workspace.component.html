@@ -55,7 +55,7 @@
           type="button"
           class="health-metric-option health-metric-option-sleep"
           [class.health-metric-option-selected]="routeState().metric === 'sleep'"
-          [attr.aria-current]="routeState().metric === 'sleep' ? 'page' : null"
+          [attr.aria-pressed]="routeState().metric === 'sleep'"
           (click)="selectMetric('sleep')">
           <mat-icon aria-hidden="true">bedtime</mat-icon>
           <span>Sleep overview</span>
@@ -69,7 +69,7 @@
                 type="button"
                 class="health-metric-option"
                 [class.health-metric-option-selected]="routeState().metric === metric.id"
-                [attr.aria-current]="routeState().metric === metric.id ? 'page' : null"
+                [attr.aria-pressed]="routeState().metric === metric.id"
                 (click)="selectMetric(metric.id)">
                 <span>{{ metric.label }}</span>
               </button>
@@ -269,7 +269,22 @@
       </div>
       <a mat-button routerLink="/services">Manage in Connectivity</a>
     </div>
-    @if (syncStateViews().length === 0) {
+    @if (syncStatesStatus() === 'loading') {
+      <mat-card appearance="outlined" class="health-sync-empty">
+        <mat-card-content role="status" aria-live="polite">
+          <mat-spinner diameter="22" aria-hidden="true"></mat-spinner>
+          <span>Loading Health sync status…</span>
+        </mat-card-content>
+      </mat-card>
+    } @else if (syncStatesStatus() === 'denied' || syncStatesStatus() === 'error') {
+      <mat-card appearance="outlined" class="health-sync-empty health-sync-card-error">
+        <mat-card-content role="alert">
+          <mat-icon aria-hidden="true">sync_problem</mat-icon>
+          <span>{{ syncStatesStatus() === 'denied' ? 'Health sync status access was denied.' : 'Health sync status could not be loaded.' }}</span>
+          <a mat-button routerLink="/services">Open Connectivity</a>
+        </mat-card-content>
+      </mat-card>
+    } @else if (syncStateViews().length === 0) {
       <mat-card appearance="outlined" class="health-sync-empty">
         <mat-card-content>
           <mat-icon aria-hidden="true">hub</mat-icon>

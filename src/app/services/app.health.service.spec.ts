@@ -278,6 +278,8 @@ describe('AppHealthService', () => {
         expect(loaded.limitReached).toBeNull();
         expect(loaded.result.pageInfo.sourceRecordAggregateComplete).toBe(true);
         expect(loaded.result.conflicts).toHaveLength(1);
+        expect(loaded.providers).toEqual([HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.GarminAPI]);
+        expect(loaded.sampleBackedProviders).toEqual([]);
         expect(getDocs).toHaveBeenCalledTimes(2);
         expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.Steps);
         expect(where).not.toHaveBeenCalledWith('source.provider', '==', expect.anything());
@@ -336,6 +338,8 @@ describe('AppHealthService', () => {
         expect(loaded.limitReached).toBe('sample_points');
         expect(loaded.sampleChunkCount).toBe(69);
         expect(loaded.samplePointCount).toBe(99_360);
+        expect(loaded.providers).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+        expect(loaded.sampleBackedProviders).toEqual([HEALTH_PROVIDERS.GarminAPI]);
         expect(loaded.result.pageInfo).toMatchObject({
             samplesTruncated: true,
             sampleAggregateComplete: false,

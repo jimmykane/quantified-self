@@ -32,6 +32,9 @@
 
       <mat-card-footer class="health-chart-footer">
         <span>{{ model.series.unit }}</span>
+        @if (model.series.deviceLabel) {
+          <span>Device: {{ model.series.deviceLabel }}</span>
+        }
         <span>{{ model.series.coverageText }}</span>
         <span>{{ model.series.freshnessText }}</span>
         @if (model.omittedPointCount > 0) {

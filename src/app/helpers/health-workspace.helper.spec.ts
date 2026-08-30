@@ -234,6 +234,54 @@ describe('Health workspace helpers', () => {
     expect(view.series[0].coverageText).toContain('/4 days');
   });
 
+  it('keeps coverage and freshness scoped to unit and normalization-separated series', () => {
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'canonical-day',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'one',
+        calendarDate: '2026-08-01',
+        metrics: [valueEntry({
+          coverage: {
+            status: HEALTH_COVERAGE_STATUSES.Complete,
+            expectedUpdateIntervalMs: DAY_MS,
+          },
+        })],
+      }),
+      sourceRecord({
+        id: 'native-day',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'one',
+        calendarDate: '2026-08-02',
+        metrics: [valueEntry({
+          normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly,
+          native: { metric: 'restingHeartRateState', value: 'low', unit: 'state' },
+          canonical: null,
+          valueType: HEALTH_VALUE_TYPES.Category,
+          coverage: {
+            status: HEALTH_COVERAGE_STATUSES.Complete,
+            expectedUpdateIntervalMs: DAY_MS,
+          },
+        })],
+      }),
+    ], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-02',
+      metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+    }, { sourceRecordsComplete: true, samplesComplete: true }, Date.parse('2026-08-03T00:00:00.000Z'));
+
+    const view = buildHealthMetricWorkspaceView(result);
+    const canonical = view.series.find(series => !series.nativeOnly);
+    const native = view.series.find(series => series.nativeOnly);
+
+    expect(canonical?.coverageText).toBe('1/2 days');
+    expect(native?.coverageText).toBe('1/2 days');
+    expect(canonical?.freshnessText).toContain('Stale');
+    expect(canonical?.freshnessText).toContain('Aug 1');
+    expect(native?.freshnessText).toContain('Fresh');
+    expect(native?.freshnessText).toContain('Aug 2');
+  });
+
   it('renders canonical samples as lines and categorical samples as stepped series', () => {
     const result = projectLoadedHealthRange([], [
       sampleChunk({ id: 'numeric' }),

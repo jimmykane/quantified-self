@@ -153,6 +153,8 @@ function rangeLoad(metricId: HealthMetricId, empty = false): HealthWorkspaceRang
     serializedBytes: 1_000,
     hasMatchingSourceRecords: records.length > 0,
     hasSampleBackedMetric: false,
+    providers: [...new Set(records.map(record => record.source.provider))],
+    sampleBackedProviders: [],
   };
 }
 
@@ -255,6 +257,7 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card')?.tagName).toBe('MAT-CARD');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')?.tagName).toBe('MAT-CARD');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspaceRange).not.toHaveBeenCalled();
   }, 10_000);
@@ -296,6 +299,8 @@ describe('HealthWorkspaceComponent', () => {
     expect(nativeElement.textContent).not.toContain('secret-account');
     expect(nativeElement.textContent).toContain('Health never blends providers');
     expect(nativeElement.querySelector('table caption')?.textContent).toContain('Providers are not blended');
+    expect(nativeElement.querySelector('mat-expansion-panel.health-source-table-panel')).toBeTruthy();
+    expect(nativeElement.querySelector('details.health-source-table-panel')).toBeNull();
     expect(nativeElement.textContent).toContain('missing');
     expect(nativeElement.textContent).toContain('source-days');
 
@@ -366,6 +371,79 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('shows the newest provider sync timestamp even when an older field is also present', async () => {
+    await createComponent();
+    const newestTimestamp = todayStartMs + (2 * 60 * 60 * 1000);
+    syncStates.next([{
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      status: HEALTH_SYNC_STATUSES.Ready,
+      lastSyncedAtMs: todayStartMs + (60 * 60 * 1000),
+      lastWebhookAtMs: newestTimestamp,
+      updatedAtMs: 2,
+    }]);
+    fixture.detectChanges();
+
+    const expectedDate = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(newestTimestamp));
+    expect(component.syncStateViews()[0].message).toContain(expectedDate);
+  });
+
+  it('maps sync-state permission failures to Connectivity instead of emitting an unhandled error', async () => {
+    await createComponent();
+
+    syncStates.error({ code: 'permission-denied' });
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(component.syncStatesStatus()).toBe('denied');
+    expect(host.textContent).toContain('Health sync status access was denied');
+    expect(host.querySelector('.health-sync-section [routerlink="/services"]')).toBeTruthy();
+  });
+
+  it('refreshes when one provider advances below another provider timestamp', async () => {
+    await createComponent();
+    syncStates.next([
+      {
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: todayStartMs,
+        updatedAtMs: 30,
+      },
+      {
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: todayStartMs,
+        updatedAtMs: 10,
+      },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const callCountAfterGarminAdvanced = loadMetricRange.mock.calls.length;
+
+    syncStates.next([
+      {
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: todayStartMs,
+        updatedAtMs: 30,
+      },
+      {
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        status: HEALTH_SYNC_STATUSES.Ready,
+        lastSyncedAtMs: todayStartMs,
+        updatedAtMs: 20,
+      },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(callCountAfterGarminAdvanced + 3);
+  });
+
   it('maps denied and empty reads to clear Connectivity actions', async () => {
     await createComponent(() => Promise.reject({ code: 'permission-denied' }));
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Health data access was denied');
@@ -383,6 +461,8 @@ describe('HealthWorkspaceComponent', () => {
       ...rangeLoad(request.metricId, true),
       hasMatchingSourceRecords: true,
       hasSampleBackedMetric: true,
+      providers: [HEALTH_PROVIDERS.GarminAPI],
+      sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI],
     }));
 
     component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
@@ -395,6 +475,32 @@ describe('HealthWorkspaceComponent', () => {
     expect(text).toContain('This metric is stored as detailed samples');
     expect(text).toContain('Detailed samples load only for 14-day and 30-day windows');
     expect(text).not.toContain('No Heart rate data in this window');
+  });
+
+  it('keeps sample-only providers filterable and scopes the long-range explanation', async () => {
+    await createComponent();
+    loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
+      ...rangeLoad(request.metricId, true),
+      hasMatchingSourceRecords: true,
+      hasSampleBackedMetric: true,
+      providers: [HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.COROSAPI],
+      sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI],
+    }));
+
+    component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
+    component.selectRange('90d');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.availableProviders()).toEqual([HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.GarminAPI]);
+    expect(component.sampleOnlyLongRange()).toBe(true);
+
+    component.toggleProvider(HEALTH_PROVIDERS.COROSAPI);
+    fixture.detectChanges();
+
+    expect(component.sampleOnlyLongRange()).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Heart rate data in this window');
   });
 
   it('keeps a selected range active and offers retry when preference persistence fails', async () => {

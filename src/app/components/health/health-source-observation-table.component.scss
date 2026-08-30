@@ -3,16 +3,12 @@
 }
 
 .health-source-table-panel {
-  border-top: 1px solid var(--mat-sys-outline-variant);
   margin-top: 1rem;
-  padding-top: 0.75rem;
 }
 
-summary {
+.health-source-table-title {
   color: var(--mat-sys-primary);
-  cursor: pointer;
   font: var(--mat-sys-label-large);
-  padding: 0.35rem 0;
 }
 
 .health-source-table-scroll {

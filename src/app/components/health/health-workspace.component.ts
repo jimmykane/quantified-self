@@ -96,6 +96,14 @@ const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
   '1y': '1 year',
 };
 
+const HEALTH_SYNC_REFRESH_FIELDS = [
+  'updatedAtMs',
+  'lastSyncedAtMs',
+  'lastObservedAtMs',
+  'lastPollAtMs',
+  'lastWebhookAtMs',
+] as const;
+
 @Component({
   selector: 'app-health-workspace',
   standalone: true,
@@ -130,7 +138,8 @@ export class HealthWorkspaceComponent {
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
-  private latestSyncStateTimestamp: number | null = null;
+  private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
+  private hasSeenSyncStateSnapshot = false;
   private rangePreferenceUserID: string | null = null;
   private rangePreferenceTouched = false;
   private rangeWriteGeneration = 0;
@@ -161,6 +170,7 @@ export class HealthWorkspaceComponent {
   readonly priorityHrvLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly priorityHrvStatus = signal<HealthLoadStatus>('loading');
   readonly syncStates = signal<HealthSyncState[]>([]);
+  readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly selectedProviders = signal<HealthProvider[]>([]);
   readonly refreshRevision = signal(0);
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
@@ -206,6 +216,7 @@ export class HealthWorkspaceComponent {
     const providers = this.selectedIsSleep()
       ? this.selectedSleepSessions().map(session => session.source.provider as HealthProvider)
       : [
+        ...(this.selectedHealthLoad()?.providers || []),
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
       ];
@@ -231,7 +242,10 @@ export class HealthWorkspaceComponent {
   readonly isEmpty = computed(() => this.selectedStatus() === 'ready' && !this.hasData());
   readonly sampleOnlyLongRange = computed(() => !this.selectedIsSleep()
     && !this.selectedWindow().includeSamples
-    && this.selectedHealthLoad()?.hasSampleBackedMetric === true
+    && this.selectedHealthLoad()?.sampleBackedProviders.some(provider => {
+      const selectedProviders = this.effectiveProviderFilters();
+      return selectedProviders.length === 0 || selectedProviders.includes(provider);
+    }) === true
     && this.metricView().series.length === 0);
   readonly incompleteNotice = computed(() => {
     const loaded = this.selectedHealthLoad();
@@ -249,7 +263,7 @@ export class HealthWorkspaceComponent {
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;
     return count > 0
-      ? `${count.toLocaleString()} superseded sample ${count === 1 ? 'chunk was' : 'chunks were'} excluded. The visible sample aggregate is incomplete.`
+      ? `${count.toLocaleString()} superseded sample ${count === 1 ? 'chunk was' : 'chunks were'} excluded. The loaded sample aggregate is incomplete.`
       : null;
   });
   readonly partialCoverageNotice = computed(() => {
@@ -414,16 +428,25 @@ export class HealthWorkspaceComponent {
       const uid = this.userService.user()?.uid || null;
       let subscription: Subscription | null = null;
       this.syncStates.set([]);
-      this.latestSyncStateTimestamp = null;
+      this.syncStatesStatus.set(uid ? 'loading' : 'ready');
+      this.latestSyncStates = new Map<HealthProvider, HealthSyncState>();
+      this.hasSeenSyncStateSnapshot = false;
       if (uid) {
         subscription = this.healthService.watchSyncStates(uid).subscribe({
           next: states => {
             this.syncStates.set(states);
-            const newest = Math.max(0, ...states.map(state => Number(state.updatedAtMs) || 0));
-            if (this.latestSyncStateTimestamp !== null && newest > this.latestSyncStateTimestamp) {
+            this.syncStatesStatus.set('ready');
+            const providerAdvanced = states.some(state =>
+              syncStateAdvanced(state, this.latestSyncStates.get(state.provider)));
+            if (this.hasSeenSyncStateSnapshot && providerAdvanced) {
               this.refreshRevision.update(value => value + 1);
             }
-            this.latestSyncStateTimestamp = newest;
+            this.latestSyncStates = new Map(states.map(state => [state.provider, { ...state }]));
+            this.hasSeenSyncStateSnapshot = true;
+          },
+          error: error => {
+            this.syncStates.set([]);
+            this.syncStatesStatus.set(loadErrorStatus(error));
           },
         });
       }
@@ -613,7 +636,13 @@ function priorityCard(
 
 function syncStateView(state: HealthSyncState): HealthSyncStateView {
   const provider = providerView(state.provider);
-  const lastSyncMs = Number(state.lastSyncedAtMs || state.lastObservedAtMs || state.lastPollAtMs || state.lastWebhookAtMs);
+  const lastSyncMs = Math.max(
+    0,
+    Number(state.lastSyncedAtMs) || 0,
+    Number(state.lastObservedAtMs) || 0,
+    Number(state.lastPollAtMs) || 0,
+    Number(state.lastWebhookAtMs) || 0,
+  );
   const lastSyncText = Number.isFinite(lastSyncMs) && lastSyncMs > 0
     ? `Last update ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(lastSyncMs))}.`
     : 'No completed Health update reported yet.';
@@ -636,4 +665,9 @@ function syncStateView(state: HealthSyncState): HealthSyncStateView {
 function loadErrorStatus(error: unknown): HealthLoadStatus {
   const code = `${(error as { code?: unknown } | null)?.code || ''}`.toLowerCase();
   return code.includes('permission-denied') || code.includes('permission_denied') ? 'denied' : 'error';
+}
+
+function syncStateAdvanced(current: HealthSyncState, previous: HealthSyncState | undefined): boolean {
+  return !previous || HEALTH_SYNC_REFRESH_FIELDS.some(field =>
+    Number(current[field] || 0) > Number(previous[field] || 0));
 }

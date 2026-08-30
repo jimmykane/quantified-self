@@ -1,5 +1,7 @@
-<details class="health-source-table-panel">
-  <summary>Source observations</summary>
+<mat-expansion-panel class="health-source-table-panel mat-elevation-z0">
+  <mat-expansion-panel-header>
+    <mat-panel-title class="health-source-table-title">Source observations</mat-panel-title>
+  </mat-expansion-panel-header>
   @if (sleep()) {
     <div class="health-source-table-scroll">
       <table>
@@ -64,4 +66,4 @@
       </table>
     </div>
   }
-</details>
+</mat-expansion-panel>

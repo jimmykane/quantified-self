@@ -149,6 +149,7 @@ interface MetricDatum {
   rowKind: 'observation' | 'chunk';
   sampleCount: number;
   coverageStatus: HealthCoverageStatus;
+  expectedUpdateIntervalMs: number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -326,26 +327,19 @@ export function buildHealthMetricWorkspaceView(
   const conflictingObservationIds = new Set(result.conflicts.flatMap(conflict => conflict.observationIds));
   const grouped = new Map<string, MetricDatum[]>();
   for (const datum of datums) {
-    const key = JSON.stringify([
-      datum.provider,
-      datum.accountKey,
-      datum.aggregation,
-      datum.semanticVariant,
-      datum.origin,
-      datum.recordingMethod,
-      datum.unit,
-      datum.normalizationStatus,
-      datum.valueType,
-    ]);
+    const key = metricDatumSeriesIdentity(datum);
     grouped.set(key, [...(grouped.get(key) || []), datum]);
   }
 
+  const projectionNowMs = resolveProjectionNowMs(result);
+  const freshnessStatusByRowId = new Map<string, string>();
   const series = [...grouped.values()].map((items, index): HealthWorkspaceSeries => {
     const first = items[0];
     const sourceLabel = accountLabels.get(accountIdentity(first.provider, first.accountKey)) || providerLabel(first.provider);
     const deviceLabels = [...new Set(items.map(item => item.deviceLabel).filter((item): item is string => !!item))];
-    const coverage = result.coverage.find(item => seriesIdentityMatches(first, item));
-    const freshness = result.freshness.find(item => seriesIdentityMatches(first, item));
+    const coverageText = exactSeriesCoverageText(items, result.query.startDate, result.query.endDate);
+    const freshness = exactSeriesFreshness(items, projectionNowMs);
+    items.forEach(item => freshnessStatusByRowId.set(item.rowId, freshness.statusLabel));
     const points = items
       .map(item => ({
         timestampMs: item.timestampMs,
@@ -372,12 +366,8 @@ export function buildHealthMetricWorkspaceView(
       chartKind: resolveChartKind(first, points.length),
       points,
       deviceLabel: deviceLabels.length === 1 ? deviceLabels[0] : deviceLabels.length > 1 ? 'Multiple devices' : null,
-      coverageText: coverage
-        ? `${coverage.recordedDays}/${coverage.requestedDays} days${coverage.partialDays ? ` · ${coverage.partialDays} partial` : ''}`
-        : coverageStatusLabel(first.coverageStatus),
-      freshnessText: freshness
-        ? freshness.status === 'unknown' ? `Last observed ${formatDate(freshness.lastObservedAtMs)}` : `${humanize(freshness.status)} · ${formatDate(freshness.lastObservedAtMs)}`
-        : `Observed ${formatDate(first.timestampMs)}`,
+      coverageText,
+      freshnessText: freshness.text,
       hasConflict: items.some(item => !!item.observationId && conflictingObservationIds.has(item.observationId)),
     };
   }).sort((left, right) => compareText(left.providerLabel, right.providerLabel)
@@ -398,10 +388,9 @@ export function buildHealthMetricWorkspaceView(
       || compareText(left.rowId, right.rowId))
     .map((datum): HealthObservationTableRow => {
     const sourceLabel = accountLabels.get(accountIdentity(datum.provider, datum.accountKey)) || providerLabel(datum.provider);
-    const freshness = result.freshness.find(item => seriesIdentityMatches(datum, item));
     return {
       id: datum.rowId,
-      dateText: formatDateTime(datum.timestampMs),
+      dateText: formatCalendarDate(datum.calendarDate),
       sourceLabel,
       deviceLabel: datum.deviceLabel || 'Not reported',
       valueText: datum.rowKind === 'chunk'
@@ -409,7 +398,7 @@ export function buildHealthMetricWorkspaceView(
         : formatHealthValue(datum.value, datum.unit),
       semanticsText: `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}${datum.nativeOnly ? ' · native only' : ''}`,
       coverageText: coverageStatusLabel(datum.coverageStatus),
-      freshnessText: freshness ? humanize(freshness.status) : 'Unknown',
+      freshnessText: freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
     };
     });
@@ -445,7 +434,7 @@ export function buildHealthPriorityRows(
       providerLabel: series.providerLabel,
       sourceLabel: series.sourceLabel,
       valueText: formatHealthValue(latest.value, series.unit),
-      contextText: `${formatDate(latest.timestampMs)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
+      contextText: `${formatCalendarDate(latest.calendarDate)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
       observedAtMs: latest.timestampMs,
     }];
   });
@@ -612,6 +601,7 @@ function observationDatum(
     rowKind: 'observation',
     sampleCount: 1,
     coverageStatus: observation.coverage.status,
+    expectedUpdateIntervalMs: positiveNumberOrNull(observation.coverage.expectedUpdateIntervalMs),
   };
 }
 
@@ -646,6 +636,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       rowKind: 'chunk',
       sampleCount: values.length,
       coverageStatus: chunk.coverage.status,
+      expectedUpdateIntervalMs: positiveNumberOrNull(chunk.coverage.expectedUpdateIntervalMs),
     } satisfies MetricDatum];
   });
 }
@@ -680,23 +671,83 @@ function accountIdentity(provider: HealthProvider, accountKey: string): string {
   return JSON.stringify([provider, accountKey]);
 }
 
-function seriesIdentityMatches(
-  datum: Pick<MetricDatum, 'provider' | 'accountKey' | 'aggregation' | 'semanticVariant' | 'origin' | 'recordingMethod'>,
-  value: {
-    provider: HealthProvider;
-    accountKey: string;
-    aggregation: string;
-    semanticVariant: string;
-    origin: HealthValueOrigin;
-    recordingMethod: HealthRecordingMethod;
-  },
-): boolean {
-  return datum.provider === value.provider
-    && datum.accountKey === value.accountKey
-    && datum.aggregation === value.aggregation
-    && datum.semanticVariant === value.semanticVariant
-    && datum.origin === value.origin
-    && datum.recordingMethod === value.recordingMethod;
+function metricDatumSeriesIdentity(datum: MetricDatum): string {
+  return JSON.stringify([
+    datum.provider,
+    datum.accountKey,
+    datum.aggregation,
+    datum.semanticVariant,
+    datum.origin,
+    datum.recordingMethod,
+    datum.unit,
+    datum.normalizationStatus,
+    datum.valueType,
+  ]);
+}
+
+function exactSeriesCoverageText(
+  items: readonly MetricDatum[],
+  startDate: string,
+  endDate: string,
+): string {
+  const dates = new Set(items.map(item => item.calendarDate));
+  const partialDates = new Set(items
+    .filter(item => item.coverageStatus === 'partial')
+    .map(item => item.calendarDate));
+  const unknownDates = new Set(items
+    .filter(item => item.coverageStatus === 'unknown' && !partialDates.has(item.calendarDate))
+    .map(item => item.calendarDate));
+  const requestedDays = calendarDayCount(startDate, endDate);
+  const qualifiers = [
+    partialDates.size ? `${partialDates.size} partial` : null,
+    unknownDates.size ? `${unknownDates.size} unknown` : null,
+  ].filter((item): item is string => !!item);
+  return `${dates.size}/${requestedDays} days${qualifiers.length ? ` · ${qualifiers.join(' · ')}` : ''}`;
+}
+
+function exactSeriesFreshness(
+  items: readonly MetricDatum[],
+  nowMs: number,
+): { text: string; statusLabel: string } {
+  const lastObservedAtMs = Math.max(...items.map(item => item.timestampMs));
+  const latestItems = items.filter(item => item.timestampMs === lastObservedAtMs);
+  const lastCalendarDate = latestItems
+    .map(item => item.calendarDate)
+    .sort(compareText)
+    .at(-1) || '';
+  const staleAfterMs = latestItems.reduce<number | null>(
+    (current, item) => item.expectedUpdateIntervalMs ?? current,
+    null,
+  );
+  const status = staleAfterMs === null
+    ? 'unknown'
+    : Math.max(0, nowMs - lastObservedAtMs) > staleAfterMs ? 'stale' : 'fresh';
+  return {
+    text: status === 'unknown'
+      ? `Last observed ${formatCalendarDate(lastCalendarDate)}`
+      : `${humanize(status)} · ${formatCalendarDate(lastCalendarDate)}`,
+    statusLabel: humanize(status),
+  };
+}
+
+function resolveProjectionNowMs(result: HealthRangeResult): number {
+  const candidates = result.freshness
+    .map(item => item.lastObservedAtMs + item.ageMs)
+    .filter(Number.isFinite);
+  return candidates.length ? Math.max(...candidates) : Date.now();
+}
+
+function calendarDayCount(startDate: string, endDate: string): number {
+  const startMs = parseCalendarDate(startDate);
+  const endMs = parseCalendarDate(endDate);
+  return startMs === null || endMs === null
+    ? 1
+    : Math.max(1, Math.floor((endMs - startMs) / DAY_MS) + 1);
+}
+
+function positiveNumberOrNull(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
 function resolveChartKind(datum: MetricDatum, pointCount: number): HealthWorkspaceChartKind {
@@ -740,6 +791,18 @@ function formatWindowLabel(startMs: number, endMs: number): string {
 function formatDate(timestampMs: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     .format(new Date(timestampMs));
+}
+
+function formatCalendarDate(calendarDate: string): string {
+  const timestampMs = parseCalendarDate(calendarDate);
+  return timestampMs === null
+    ? 'Unknown date'
+    : new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(timestampMs));
 }
 
 function formatDateTime(timestampMs: number): string {

@@ -10,7 +10,7 @@ This always-on rule applies to frontend UI changes.
 
 ## Core Principles
 1. Avoid global utility class sprawl.
-2. Use plain Angular Material components for controls before adding custom UI. For example, use `mat-button-toggle-group` for segmented choices, `mat-icon-button` for icon actions, `mat-slide-toggle` or `mat-checkbox` for booleans, `mat-slider` for numeric ranges, `mat-select` or `mat-menu` for option sets, and `mat-tab-group` for tabs.
+2. Use plain Angular Material components for controls before adding custom UI. For example, use `mat-button-toggle-group` for segmented choices, `mat-icon-button` for icon actions, `mat-slide-toggle` or `mat-checkbox` for booleans, `mat-slider` for numeric ranges, `mat-select` or `mat-menu` for option sets, `mat-tab-group` for tabs, and `mat-expansion-panel` for collapsible application surfaces instead of custom-styled `details` controls.
 3. Use theme tokens (`--mat-sys-*`) for colors and typography.
 4. Refactor custom styles that replicate Material primitives.
 5. Keep component CSS to layout and spacing around Material controls; do not override Material internals with `::ng-deep` or MDC implementation classes unless there is a documented exception.

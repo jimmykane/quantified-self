@@ -19,6 +19,7 @@ import {
     HealthRangeQuery,
     HealthRangeResult,
     HealthMetricId,
+    HealthProvider,
     HealthQueryCursor,
     HealthSampleChunk,
     HealthSourceRecord,
@@ -56,6 +57,8 @@ export interface HealthWorkspaceRangeLoad {
     serializedBytes: number;
     hasMatchingSourceRecords: boolean;
     hasSampleBackedMetric: boolean;
+    providers: HealthProvider[];
+    sampleBackedProviders: HealthProvider[];
 }
 
 interface LoadedCollectionPage<T> {
@@ -298,6 +301,13 @@ export class AppHealthService {
             chunkCursor,
         });
         const metricId = result.query.metricIds[0];
+        const matchingRecords = metricId
+            ? sourceRecords.filter(record => record.metricIds.includes(metricId))
+            : [];
+        const providers = uniqueProviders(matchingRecords.map(record => record.source.provider));
+        const sampleBackedProviders = uniqueProviders(matchingRecords
+            .filter(record => record.sampleChunkIds.length > 0)
+            .map(record => record.source.provider));
         return {
             result,
             limitReached,
@@ -306,10 +316,15 @@ export class AppHealthService {
             samplePointCount: result.pageInfo.returnedSamplePoints,
             serializedBytes,
             hasMatchingSourceRecords: sourceRecords.length > 0,
-            hasSampleBackedMetric: !!metricId && sourceRecords.some(record =>
-                record.metricIds.includes(metricId) && record.sampleChunkIds.length > 0),
+            hasSampleBackedMetric: sampleBackedProviders.length > 0,
+            providers,
+            sampleBackedProviders,
         };
     }
+}
+
+function uniqueProviders(providers: readonly HealthProvider[]): HealthProvider[] {
+    return [...new Set(providers)].sort((left, right) => left.localeCompare(right));
 }
 
 function serializedUtf8Bytes(value: unknown): number {
