@@ -79,6 +79,7 @@
     border-radius: 16px;
     width: 48px;
     height: 48px;
+    margin-bottom: 0;
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
     mat-icon {
@@ -101,7 +102,7 @@
         display: flex; // Force flex logic
         align-items: center;
         padding-top: 16px;
-        margin-bottom: 8px;
+        margin-bottom: 0;
 
         // Fix: Strip default margins from internal wrapper to guarantee centering
         ::ng-deep .mat-mdc-card-header-text {
@@ -124,7 +125,6 @@
         font-size: 1.25rem;
         font-weight: 600;
         margin: 0; // Remove all margins
-        margin-left: 16px; // Add spacing between avatar and title
     }
 
     &:hover {
@@ -406,7 +406,6 @@
             @include icon-container-base;
             background-color: var(--mat-sys-primary-container);
             color: var(--mat-sys-on-primary-container);
-            margin-bottom: 0;
 
             &.import {
                 background-color: var(--mat-sys-secondary-container);
@@ -726,7 +725,7 @@
         overflow: hidden;
 
         mat-card-header {
-            padding: 24px 24px 16px;
+            padding: 24px 24px 8px;
         }
 
         mat-card-content {
