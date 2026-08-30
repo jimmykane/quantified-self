@@ -10,7 +10,7 @@ function point(date: string, overrides: Partial<AdminDashboardHistoryPoint> = {}
         date,
         computedAt: `${date}T00:12:00.000Z`,
         users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
-        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8 },
+        authActivity: { eligibleAccounts: 9, last24Hours: 2, last7Days: 5, last30Days: 8, byPlan: null },
         subscriptionCadence: {
             pro: { monthly: 1, yearly: 1, unknown: 0 },
             basic: { monthly: 2, yearly: 1, unknown: 0 },

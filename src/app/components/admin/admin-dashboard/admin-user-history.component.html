@@ -55,6 +55,35 @@
             aria-label="Line chart of active accounts in rolling 24-hour, 7-day, and 30-day windows"></div>
     </mat-card>
 
+    <mat-card class="history-chart-card history-chart-wide">
+        <div class="chart-heading chart-heading-with-controls">
+            <div>
+                <h4>Active users by plan</h4>
+                <p>Free, Basic, and Pro accounts in the selected rolling activity window.</p>
+            </div>
+            <mat-button-toggle-group
+                aria-label="Active user plan history window"
+                [value]="selectedActivePlanWindow()"
+                (change)="selectActivePlanWindow($event.value)">
+                @for (option of activePlanWindows; track option.window) {
+                <mat-button-toggle [value]="option.window">{{ option.label }}</mat-button-toggle>
+                }
+            </mat-button-toggle-group>
+        </div>
+        @if (activePlanHistoryPoints() < minimumPoints) {
+        <div class="chart-collection-state" role="status">
+            <mat-icon>hourglass_top</mat-icon>
+            <span>
+                {{ activePlanHistoryPoints() }} of {{ minimumPoints }} plan snapshots available for this range.
+                Legacy snapshots remain in the other charts while this plan history collects.
+            </span>
+        </div>
+        } @else {
+        <div #activePlanChart class="history-chart" role="img"
+            aria-label="Stacked area chart of active Free, Basic, and Pro users in the selected rolling window"></div>
+        }
+    </mat-card>
+
     <mat-card class="history-chart-card">
         <div class="chart-heading">
             <div>

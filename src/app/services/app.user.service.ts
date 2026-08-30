@@ -115,6 +115,12 @@ import {
   SERVICE_CONNECTION_STATES,
   type ServiceDisconnectRetryDetails,
 } from '@shared/service-connection';
+import {
+  getUserLegalAgreementsPath,
+  OPTIONAL_USER_LEGAL_CONSENT_FIELDS,
+  REQUIRED_USER_LEGAL_AGREEMENT_FIELDS,
+  USER_LEGAL_AGREEMENT_FIELDS,
+} from '@shared/user-profile-firestore';
 
 const SERVICE_DISCONNECT_RETRY_GRACE_MS = 2_000;
 const SERVICE_DISCONNECT_MAX_CLIENT_RETRY_WINDOW_MS = 2 * 60 * 1000;
@@ -729,7 +735,7 @@ export class AppUserService implements OnDestroy {
     userID: string,
     legalUpdates: Partial<Record<typeof AppUserService.legalFields[number], boolean>>
   ): Promise<void> {
-    const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
+    const legalDoc = doc(this.firestore, getUserLegalAgreementsPath(userID));
     return this.retryCurrentUserFirestoreWriteAfterPermissionDenied(
       userID,
       () => setDoc(legalDoc, legalUpdates, { merge: true })
@@ -838,22 +844,11 @@ export class AppUserService implements OnDestroy {
     return appUser;
   }
 
-  private static readonly requiredLegalFields = [
-    'acceptedPrivacyPolicy',
-    'acceptedDataPolicy',
-    'acceptedDiagnosticsPolicy',
-    'acceptedTos',
-  ] as const;
+  private static readonly requiredLegalFields = REQUIRED_USER_LEGAL_AGREEMENT_FIELDS;
 
-  private static readonly optionalLegalConsentFields = [
-    'acceptedTrackingPolicy',
-    'acceptedMarketingPolicy',
-  ] as const;
+  private static readonly optionalLegalConsentFields = OPTIONAL_USER_LEGAL_CONSENT_FIELDS;
 
-  public static readonly legalFields = [
-    ...AppUserService.requiredLegalFields,
-    ...AppUserService.optionalLegalConsentFields,
-  ] as const;
+  public static readonly legalFields = USER_LEGAL_AGREEMENT_FIELDS;
 
 
 
@@ -880,7 +875,8 @@ export class AppUserService implements OnDestroy {
 
   public getUserByID(userID: string, options: UserProfileReadOptions = {}): Observable<AppUserInterface | null> {
     const userDoc = doc(this.firestore, 'users', userID) as any;
-    const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
+    const legalAgreementsPath = getUserLegalAgreementsPath(userID);
+    const legalDoc = doc(this.firestore, legalAgreementsPath) as any;
     const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
     const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
     const snapshotOptions = options.waitForServer ? { waitForServer: true } : undefined;
@@ -895,7 +891,7 @@ export class AppUserService implements OnDestroy {
             return throwError(() => err);
           }
 
-          this.logUserSubDocumentReadError('legal', userID, `users/${userID}/legal/agreements`, err);
+          this.logUserSubDocumentReadError('legal', userID, legalAgreementsPath, err);
           return of({});
         })
       ),

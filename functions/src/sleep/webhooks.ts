@@ -23,7 +23,7 @@ import {
     isGarminHealthSummaryType,
     type GarminSupportedSummaryType,
 } from '../garmin/health-summary-types';
-import { isGarminHealthSyncEnabled } from '../garmin/health-rollout';
+import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import {
@@ -53,6 +53,105 @@ const GARMIN_HEALTH_WEBHOOK_MAX_DESCRIPTORS = 10_000;
 const GARMIN_HEALTH_WEBHOOK_QUEUE_CONCURRENCY = 64;
 const GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH = 512;
 const SUUNTO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/;
+
+type GarminWebhookFamilyCounts = Record<GarminSupportedSummaryType, number>;
+const GARMIN_UNSUPPORTED_WEBHOOK_SUMMARY_TYPES = ['epochs'] as const;
+type GarminUnsupportedWebhookSummaryType =
+    typeof GARMIN_UNSUPPORTED_WEBHOOK_SUMMARY_TYPES[number];
+type GarminUnsupportedWebhookFamilyCounts =
+    Record<GarminUnsupportedWebhookSummaryType, number>;
+
+interface GarminWebhookTelemetry {
+    receivedCountByFamily: GarminWebhookFamilyCounts;
+    validPingCountByFamily: GarminWebhookFamilyCounts;
+    directSummaryCountByFamily: GarminWebhookFamilyCounts;
+    invalidPingCountByFamily: GarminWebhookFamilyCounts;
+    queuedCountByFamily: GarminWebhookFamilyCounts;
+    skippedCountByFamily: GarminWebhookFamilyCounts;
+    disabledCountByFamily: GarminWebhookFamilyCounts;
+    unsupportedReceivedCountByFamily: GarminUnsupportedWebhookFamilyCounts;
+    unsupportedDirectSummaryCountByFamily: GarminUnsupportedWebhookFamilyCounts;
+}
+
+function emptyGarminWebhookFamilyCounts(): GarminWebhookFamilyCounts {
+    return Object.fromEntries(
+        GARMIN_SUPPORTED_SUMMARY_TYPES.map(summaryType => [summaryType, 0]),
+    ) as GarminWebhookFamilyCounts;
+}
+
+function createGarminWebhookTelemetry(): GarminWebhookTelemetry {
+    return {
+        receivedCountByFamily: emptyGarminWebhookFamilyCounts(),
+        validPingCountByFamily: emptyGarminWebhookFamilyCounts(),
+        directSummaryCountByFamily: emptyGarminWebhookFamilyCounts(),
+        invalidPingCountByFamily: emptyGarminWebhookFamilyCounts(),
+        queuedCountByFamily: emptyGarminWebhookFamilyCounts(),
+        skippedCountByFamily: emptyGarminWebhookFamilyCounts(),
+        disabledCountByFamily: emptyGarminWebhookFamilyCounts(),
+        unsupportedReceivedCountByFamily: { epochs: 0 },
+        unsupportedDirectSummaryCountByFamily: { epochs: 0 },
+    };
+}
+
+function nonZeroGarminWebhookFamilyCounts(
+    counts: GarminWebhookFamilyCounts,
+): Partial<GarminWebhookFamilyCounts> {
+    return Object.fromEntries(
+        GARMIN_SUPPORTED_SUMMARY_TYPES
+            .filter(summaryType => counts[summaryType] > 0)
+            .map(summaryType => [summaryType, counts[summaryType]]),
+    );
+}
+
+function nonZeroGarminUnsupportedWebhookFamilyCounts(
+    counts: GarminUnsupportedWebhookFamilyCounts,
+): Partial<GarminUnsupportedWebhookFamilyCounts> {
+    return Object.fromEntries(
+        GARMIN_UNSUPPORTED_WEBHOOK_SUMMARY_TYPES
+            .filter(summaryType => counts[summaryType] > 0)
+            .map(summaryType => [summaryType, counts[summaryType]]),
+    );
+}
+
+function hasGarminDirectSummaryShape(value: ExternalRecord): boolean {
+    return Object.prototype.hasOwnProperty.call(value, 'summaryId')
+        || Object.prototype.hasOwnProperty.call(value, 'startTimeInSeconds')
+        || Object.prototype.hasOwnProperty.call(value, 'measurementTimeInSeconds')
+        || Object.prototype.hasOwnProperty.call(value, 'calendarDate');
+}
+
+function garminWebhookTelemetryLogFields(telemetry: GarminWebhookTelemetry) {
+    return {
+        receivedCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.receivedCountByFamily,
+        ),
+        validPingCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.validPingCountByFamily,
+        ),
+        directSummaryCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.directSummaryCountByFamily,
+        ),
+        invalidPingCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.invalidPingCountByFamily,
+        ),
+        queuedCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.queuedCountByFamily,
+        ),
+        skippedCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.skippedCountByFamily,
+        ),
+        disabledCountByFamily: nonZeroGarminWebhookFamilyCounts(
+            telemetry.disabledCountByFamily,
+        ),
+        unsupportedReceivedCountByFamily: nonZeroGarminUnsupportedWebhookFamilyCounts(
+            telemetry.unsupportedReceivedCountByFamily,
+        ),
+        unsupportedDirectSummaryCountByFamily:
+            nonZeroGarminUnsupportedWebhookFamilyCounts(
+                telemetry.unsupportedDirectSummaryCountByFamily,
+            ),
+    };
+}
 
 function asRecord(value: unknown): ExternalRecord {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -255,6 +354,15 @@ async function handleGarminAPIHealthData(
     }
 
     const body = asRecord(req.body);
+    const telemetry = createGarminWebhookTelemetry();
+    for (const summaryType of GARMIN_UNSUPPORTED_WEBHOOK_SUMMARY_TYPES) {
+        const values = asArray(body[summaryType]);
+        telemetry.unsupportedReceivedCountByFamily[summaryType] += values.length;
+        telemetry.unsupportedDirectSummaryCountByFamily[summaryType] += values.filter(value => {
+            const record = asRecord(value);
+            return !asString(record.callbackURL) && hasGarminDirectSummaryShape(record);
+        }).length;
+    }
     const pingDescriptors: Array<{
         summaryType: GarminSupportedSummaryType;
         providerUserId: string;
@@ -267,11 +375,14 @@ async function handleGarminAPIHealthData(
     for (const summaryType of GARMIN_SUPPORTED_SUMMARY_TYPES) {
         const isHealthSummary = isGarminHealthSummaryType(summaryType);
         if ((isHealthSummary && !healthEnabled) || (!isHealthSummary && !sleepEnabled)) {
-            disabledCount += asArray(body[summaryType]).length;
+            const disabledFamilyCount = asArray(body[summaryType]).length;
+            disabledCount += disabledFamilyCount;
+            telemetry.disabledCountByFamily[summaryType] += disabledFamilyCount;
             continue;
         }
         for (const pingValue of asArray(body[summaryType])) {
             descriptorCount += 1;
+            telemetry.receivedCountByFamily[summaryType] += 1;
             if (descriptorCount > GARMIN_HEALTH_WEBHOOK_MAX_DESCRIPTORS) {
                 logger.warn('[HealthSync][Garmin] Dropped webhook with excessive descriptor count');
                 res.status(200).send();
@@ -279,16 +390,23 @@ async function handleGarminAPIHealthData(
             }
             const ping = asRecord(pingValue);
             const providerUserId = asString(ping.userId) || asString(ping.userID);
+            const callbackURL = asString(ping.callbackURL);
             const trustedCallbackURL = normalizeTrustedGarminCallbackURL(
-                asString(ping.callbackURL),
+                callbackURL,
                 summaryType,
             );
             if (!providerUserId
                 || providerUserId.length > GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH
                 || !trustedCallbackURL) {
                 malformedCount += 1;
+                if (!callbackURL && hasGarminDirectSummaryShape(ping)) {
+                    telemetry.directSummaryCountByFamily[summaryType] += 1;
+                } else {
+                    telemetry.invalidPingCountByFamily[summaryType] += 1;
+                }
                 continue;
             }
+            telemetry.validPingCountByFamily[summaryType] += 1;
             const descriptorKey = JSON.stringify([
                 summaryType,
                 providerUserId,
@@ -320,6 +438,7 @@ async function handleGarminAPIHealthData(
             const firebaseUserID = firebaseUserIDs.get(descriptor.providerUserId);
             if (!firebaseUserID) {
                 skippedCount += 1;
+                telemetry.skippedCountByFamily[descriptor.summaryType] += 1;
                 continue;
             }
             const groupKey = JSON.stringify([
@@ -390,9 +509,17 @@ async function handleGarminAPIHealthData(
                 try {
                     await addSleepSyncQueueItem(queueBatch.input);
                     queuedCount += queueBatch.callbackCount;
+                    const summaryType = queueBatch.input.garminSummaryType;
+                    if (summaryType) {
+                        telemetry.queuedCountByFamily[summaryType] += queueBatch.callbackCount;
+                    }
                 } catch (error) {
                     if (isProviderQueueSkippedWithoutRetryError(error)) {
                         skippedCount += queueBatch.callbackCount;
+                        const summaryType = queueBatch.input.garminSummaryType;
+                        if (summaryType) {
+                            telemetry.skippedCountByFamily[summaryType] += queueBatch.callbackCount;
+                        }
                         return;
                     }
                     throw error;
@@ -404,11 +531,13 @@ async function handleGarminAPIHealthData(
             skippedCount,
             malformedCount,
             disabledCount,
+            ...garminWebhookTelemetryLogFields(telemetry),
         });
         res.status(200).send();
     } catch (error) {
         logger.error('[HealthSync][Garmin] Failed to durably queue webhook payload', {
             errorName: error instanceof Error ? error.name : 'UnknownError',
+            ...garminWebhookTelemetryLogFields(telemetry),
         });
         res.status(500).send();
     }

@@ -2,7 +2,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { GarminHealthSyncAvailabilityResponse } from '../../../shared/sleep-backfill';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
-import { isGarminHealthSyncEnabled, isGarminHealthSyncUserAllowed } from './health-rollout';
+import { isGarminHealthSyncEnabled } from './health-flags';
 
 export const getGarminHealthSyncAvailability = onCall({
   region: FUNCTIONS_MANIFEST.getGarminHealthSyncAvailability.region,
@@ -13,7 +13,6 @@ export const getGarminHealthSyncAvailability = onCall({
     throw new HttpsError('unauthenticated', 'User must be authenticated.');
   }
   return {
-    available: isGarminHealthSyncEnabled()
-      && isGarminHealthSyncUserAllowed(request.auth.uid),
+    available: isGarminHealthSyncEnabled(),
   };
 });

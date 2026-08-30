@@ -341,8 +341,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Sleep & Health history',
-        description: 'Backfill Garmin sleep and, for staged accounts, available Health metrics.',
-        detail: 'Historical Sleep and staged Health backfill · 30-day cooldown',
+        description: 'Backfill Garmin sleep and available Health metrics.',
+        detail: 'Historical Sleep and Health backfill · 30-day cooldown',
         icon: 'bedtime',
         actionLabel: 'Import history',
         tool: 'history',

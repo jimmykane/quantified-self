@@ -5,8 +5,8 @@ Garmin, Suunto, and COROS Sleep for every connected user. COROS daily responses 
 Health writer. Suunto 24/7 Health uses the same queue and worker but has a separate scheduler, kill switch,
 and production-wide account cursor. Garmin Health API 1.2.4 Ping/Pull uses the shared Firestore queue;
 live callback pulls use the ordinary Sleep worker, while user-requested historical Health uses a dedicated
-single-concurrency Cloud Tasks worker. Garmin keeps its own deny-all-when-empty rollout, and enabling either
-Health adapter does not change provider Sleep behavior.
+single-concurrency Cloud Tasks worker. Garmin Health is production-wide behind an independent operational
+switch, and enabling either Health adapter does not change provider Sleep behavior.
 
 COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
 poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
@@ -71,16 +71,17 @@ export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
 ```
 
 This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
-and COROS is unchanged. It also does not disable Suunto 24/7 Health or staged Garmin Health.
+and COROS is unchanged. It also does not disable Suunto 24/7 Health or Garmin Health.
 
 Suunto Health has an independent source-controlled switch in
 `functions/src/suunto/health-flags.ts`. When false, scheduled and webhook ingress stop creating
 Health work, and queued `suunto_health_poll` rows are acknowledged as provider-disabled without
 calling Suunto. Existing Sleep work continues.
 
-Garmin Health has an independent source-controlled switch and deny-all rollout in
-`functions/src/garmin/health-rollout.ts`. Disabled Health families are acknowledged without queue work;
-Garmin Sleep remains controlled by the normal Sleep flags.
+Garmin Health has an independent source-controlled operational switch in
+`functions/src/garmin/health-flags.ts`. It has no UID allowlist. When the switch is disabled, Health
+families are acknowledged without queue work and live Health backfills are safely skipped; Garmin Sleep
+remains controlled by the normal Sleep flags.
 
 ## User Rollout
 
@@ -105,10 +106,10 @@ resolve the bounded server-owned binding index, and eligible Suunto history requ
 Sleep & Health control. Polling advances at most 25 roots per 30-minute invocation and pauses for 24 hours
 after completing a production-wide sweep.
 
-Garmin Health uses the same deny-all rollout rule in `functions/src/garmin/health-rollout.ts`. The
-Garmin handler can continue accepting Sleep for normal Sleep users while acknowledging staged Health
-families only for an explicitly allowed connected UID. The `getGarminHealthSyncAvailability` callable is
-the client-safe source of that decision; clients do not infer rollout membership locally.
+Garmin Health has no UID allowlist. While its independent operational switch is enabled, the Garmin
+handler admits Health work for every uniquely resolved active connected account. The
+`getGarminHealthSyncAvailability` callable reports that global switch to clients; account connection,
+permission, lifecycle, and deletion checks remain server-owned.
 
 ## What Disabled Means
 
@@ -152,7 +153,7 @@ queue row permanently stuck.
    does not provide sleep stages, scores, naps, or in-bed duration.
 4. Check `users/{uid}/healthSourceRecords` for a `coros_daily` daily summary and its bounded
    `healthSampleChunks`. Persisted source/account/revision identities must be opaque hashes.
-5. For Garmin, configure Sleep plus each staged Health family as Ping/Pull notifications to
+5. For Garmin, configure Sleep plus each enabled Health family as Ping/Pull notifications to
    `receiveGarminAPIHealthData`. Direct Push summaries are acknowledged but discarded because the
    provider request is not locally authenticated; the worker persists data only after pulling from
    the exact Garmin callback host with the connected user's OAuth token. Confirm the live queue URL
@@ -165,9 +166,9 @@ queue row permanently stuck.
 
 The Garmin history control calls `backfillGarminAPIHealth`. The legacy `backfillGarminAPISleep` callable is a
 temporary alias for cached clients, with removal tracked by #625. The canonical callable requests Sleep for every eligible connected
-Pro user and, for a UID in the staged Health rollout, adds one durable cursor for all ten Health families.
+Pro user and, while Garmin Health is enabled, adds one durable cursor for all ten Health families.
 The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
-completion from the server response. Sleep-only users retain the prior behavior.
+completion from the server response. If the operational switch is disabled, the same control retains Sleep-only behavior.
 
 Historical Health requests use inclusive windows of at most 90 days from January 1, 2016 to the request
 time. `processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
@@ -175,8 +176,8 @@ at least 1.5 seconds between Garmin requests. It advances its Firestore cursor a
 already-requested window, clips a family when Garmin reports its minimum start, retries network/`429`/`5xx`
 failures, and treats permanent authorization/permission/request errors as terminal. It re-reads and
 expiry-refreshes the exact token before every provider request while retaining the original OAuth and
-connection-generation fence, then rechecks queue revision, account deletion, rollout, provider identity,
-and lifecycle transactionally before progress. Rollout removal atomically skips matching progress. Every
+connection-generation fence, then rechecks queue revision, account deletion, Garmin Health availability,
+provider identity, and lifecycle transactionally before progress. Disabling the operational switch atomically skips matching progress. Every
 terminal DLQ path, including retry exhaustion, authorization failure, and invalid ranges or requests,
 atomically marks the matching progress failed while moving the exact queue revision to the DLQ. Invalid
 callback responses first mark Garmin Health state failed through the captured lifecycle guard; a stale guard

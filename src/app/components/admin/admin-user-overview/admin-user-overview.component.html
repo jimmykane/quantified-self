@@ -1,0 +1,43 @@
+<section class="overview-section" aria-labelledby="admin-user-kpi-title">
+    <div class="section-heading-row">
+        <div>
+            <h2 id="admin-user-kpi-title"><mat-icon>analytics</mat-icon>User KPIs</h2>
+            <p>Account activity, subscription lifecycle, onboarding, marketing consent, connections, and aggregate content totals.</p>
+        </div>
+        <button mat-icon-button type="button" matTooltip="Refresh user analytics" aria-label="Refresh user analytics"
+            [disabled]="refreshInProgress()" (click)="refreshAll()">
+            @if (refreshInProgress()) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            <mat-icon>refresh</mat-icon>
+            }
+        </button>
+    </div>
+
+    @if (analytics.trendWarning()) {
+    <div class="section-warning" role="alert"><mat-icon>warning</mat-icon><span>{{ analytics.trendWarning() }}</span></div>
+    }
+
+    <app-admin-user-kpi-grid [cards]="kpiCards()" [loading]="analytics.loadingKpis()"
+        [error]="analytics.statsError()" [showCountRefreshActions]="true"
+        [actionsDisabled]="refreshInProgress()" [refreshingEventCount]="analytics.refreshingEventCount()"
+        [refreshingRouteCount]="analytics.refreshingRouteCount()"
+        (refreshEventCount)="refreshEventCount()" (refreshRouteCount)="refreshRouteCount()">
+    </app-admin-user-kpi-grid>
+</section>
+
+<section class="overview-section chart-grid" aria-label="User analytics charts">
+    <app-admin-auth-provider-chart [providers]="analytics.stats()?.providers"
+        [loading]="analytics.loadingKpis()" [error]="analytics.statsError()">
+    </app-admin-auth-provider-chart>
+    <app-admin-user-growth-chart [stats]="analytics.stats()" [userGrowthTrend]="analytics.userGrowthTrend()"
+        [subscriptionHistoryTrend]="analytics.subscriptionHistoryTrend()" [loading]="analytics.loadingTrends()"
+        [error]="analytics.trendWarning()">
+    </app-admin-user-growth-chart>
+</section>
+
+<section class="overview-section" aria-label="Daily user history">
+    <app-admin-user-history [history]="analytics.history()" [loading]="analytics.loadingHistory()"
+        [error]="analytics.historyError()">
+    </app-admin-user-history>
+</section>

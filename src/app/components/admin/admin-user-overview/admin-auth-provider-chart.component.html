@@ -1,0 +1,13 @@
+<mat-card class="chart-card">
+    <h3 class="chart-header"><mat-icon>security</mat-icon>Auth Provider Breakdown</h3>
+    <div class="chart-wrapper">
+        <div #chart class="chart-surface"></div>
+    </div>
+    @if (loading && !hasData()) {
+    <div class="chart-state" role="status"><mat-spinner diameter="24"></mat-spinner><span>Loading provider data</span></div>
+    } @else if (error && !hasData()) {
+    <div class="chart-state chart-error" role="alert"><mat-icon>error</mat-icon><span>{{ error }}</span></div>
+    } @else if (!hasData()) {
+    <div class="chart-state">No provider data available</div>
+    }
+</mat-card>

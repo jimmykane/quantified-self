@@ -2,12 +2,11 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AdminDashboardComponent } from '../components/admin/admin-dashboard/admin-dashboard.component';
 import { AdminMaintenanceComponent } from '../components/admin/admin-maintenance/admin-maintenance.component';
-import { AdminUserManagementComponent } from '../components/admin/admin-user-management/admin-user-management.component';
+import { AdminUserWorkspaceComponent } from '../components/admin/admin-user-workspace/admin-user-workspace.component';
 import { AdminChangelogComponent } from '../components/admin/admin-changelog/admin-changelog.component';
 import { AdminQueueMonitorComponent } from '../components/admin/admin-queue-monitor/admin-queue-monitor.component';
 import { RouterModule, Routes } from '@angular/router';
 import { adminGuard } from '../authentication/admin.guard';
-import { adminResolver } from '../resolvers/admin.resolver';
 
 export const adminRoutes: Routes = [
     {
@@ -22,11 +21,8 @@ export const adminRoutes: Routes = [
     },
     {
         path: 'users',
-        component: AdminUserManagementComponent,
-        canActivate: [adminGuard],
-        resolve: {
-            adminData: adminResolver
-        }
+        component: AdminUserWorkspaceComponent,
+        canActivate: [adminGuard]
     },
     {
         path: 'changelog',
@@ -105,7 +101,7 @@ export const adminRoutes: Routes = [
         RouterModule.forChild(adminRoutes),
         AdminDashboardComponent,
         AdminMaintenanceComponent,
-        AdminUserManagementComponent,
+        AdminUserWorkspaceComponent,
         AdminChangelogComponent,
         AdminQueueMonitorComponent
     ]

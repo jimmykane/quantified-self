@@ -11,39 +11,6 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
-    function backendOwnedServiceRootFields() {
-      return [
-        'disconnectState',
-        'disconnectReason',
-        'disconnectAttemptCount',
-        'disconnectNextAttemptAt',
-        'disconnectLastAttemptAt',
-        'disconnectRetryExpiresAt',
-        'disconnectLastStatusCode',
-        'disconnectLastErrorMessage',
-        'disconnectManualReviewRequired',
-        'disconnectOperationGeneration',
-        'activeOAuthCredentialGeneration',
-        'oauthFlowGeneration'
-      ];
-    }
-
-    function serviceRootCreateDoesNotSetBackendFields() {
-      return !request.resource.data.keys().hasAny(backendOwnedServiceRootFields());
-    }
-
-    function serviceRootUpdateDoesNotTouchBackendFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(backendOwnedServiceRootFields());
-    }
-
-    function serviceRootIsNotPendingDisconnect() {
-      return (
-          !('disconnectState' in resource.data)
-          || resource.data.disconnectState != 'disconnect_pending'
-        )
-        && !('disconnectOperationGeneration' in resource.data);
-    }
-
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.

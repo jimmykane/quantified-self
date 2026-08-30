@@ -39,10 +39,7 @@ import {
     SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS,
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
 } from '../suunto/health';
-import {
-    isGarminHealthSyncEnabled,
-    isGarminHealthSyncUserAllowed,
-} from '../garmin/health-rollout';
+import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
 import {
     countGarminHealthBackfillRequests,
     floorToGarminBackfillSecond,
@@ -867,7 +864,7 @@ export const backfillGarminAPIHealth = onCall({
     const startMs = Math.max(sharedStartMs, storedProviderMinStartMs || sharedStartMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
-    const includeHealth = isGarminHealthSyncEnabled() && isGarminHealthSyncUserAllowed(userID);
+    const includeHealth = isGarminHealthSyncEnabled();
     const healthRangeStartMs = sharedStartMs;
     const healthRangeEndMs = floorToGarminBackfillSecond(nowMs);
     const healthQueued = includeHealth

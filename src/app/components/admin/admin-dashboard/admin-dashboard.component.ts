@@ -1,18 +1,14 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import {
-    AdminDashboardHistoryResponse,
     AdminService,
     FinancialStats,
     MaintenanceStatus,
     QueueStats,
-    SubscriptionHistoryTrendResponse,
-    UserCountStats,
-    UserGrowthTrendResponse
 } from '../../../services/admin.service';
 import { RouterModule } from '@angular/router';
 
-import { forkJoin, of, Subject } from 'rxjs';
-import { catchError, takeUntil } from 'rxjs/operators';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
@@ -29,11 +25,13 @@ import {
     buildAdminDashboardChangelogSummary,
     buildAdminDashboardHealthSummary,
     buildAdminDashboardMaintenanceCards,
-    buildAdminDashboardQueueRows,
-    buildAdminDashboardUserKpiCards
+    buildAdminDashboardQueueRows
 } from '../../../helpers/admin-dashboard-summary.helper';
-import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
+import { buildAdminUserKpiCards } from '../../../helpers/admin-user-kpis.helper';
+import { AdminUserAnalyticsStore } from '../../../services/admin-user-analytics.store';
 import { AdminUserHistoryComponent } from './admin-user-history.component';
+import { AdminUserKpiGridComponent } from '../admin-user-kpi-grid/admin-user-kpi-grid.component';
+import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 
 interface AdminDashboardOverview {
     value: string;
@@ -57,26 +55,19 @@ interface AdminDashboardOverview {
         RouterModule,
         AdminFinancialsComponent,
         AdminUserHistoryComponent,
-        CompactCountPipe
+        AdminUserKpiGridComponent,
+        PageHeaderComponent
     ]
 })
 export class AdminDashboardComponent implements OnInit, OnDestroy {
     private readonly adminService = inject(AdminService);
     private readonly logger = inject(LoggerService);
     private readonly whatsNewService = inject(AppWhatsNewService);
+    readonly userAnalytics = inject(AdminUserAnalyticsStore);
 
     readonly financialStats = signal<FinancialStats | null>(null);
     readonly isLoadingFinancials = signal(true);
     readonly financialError = signal<string | null>(null);
-
-    readonly userStats = signal<UserCountStats | null>(null);
-    readonly userGrowthTrend = signal<UserGrowthTrendResponse | null>(null);
-    readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
-    readonly isLoadingUsers = signal(true);
-    readonly userError = signal<string | null>(null);
-    readonly userHistory = signal<AdminDashboardHistoryResponse | null>(null);
-    readonly isLoadingUserHistory = signal(true);
-    readonly userHistoryError = signal<string | null>(null);
 
     readonly queueStats = signal<QueueStats | null>(null);
     readonly isLoadingQueues = signal(true);
@@ -88,11 +79,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
 
     readonly queueDisplayedColumns = ['queue', 'pendingDb', 'cloudTasks', 'completed', 'problems', 'dead', 'throughput', 'lag', 'details', 'actions'];
 
-    readonly userKpiCards = computed(() => buildAdminDashboardUserKpiCards(
-        this.userStats(),
-        this.userGrowthTrend(),
-        this.subscriptionHistoryTrend()
+    readonly userKpiCards = computed(() => buildAdminUserKpiCards(
+        'dashboard',
+        this.userAnalytics.stats(),
+        this.userAnalytics.userGrowthTrend(),
+        this.userAnalytics.subscriptionHistoryTrend()
     ));
+    readonly userKpiError = computed(() => (
+        this.userAnalytics.statsError() || this.userAnalytics.trendWarning()
+    ));
+    readonly refreshingUsers = computed(() => this.userAnalytics.loadingAll() || this.userAnalytics.refreshingAll());
     readonly queueRows = computed(() => buildAdminDashboardQueueRows(this.queueStats()));
     readonly maintenanceCards = computed(() => buildAdminDashboardMaintenanceCards(this.maintenanceStatus()));
     readonly changelogSummary = computed(() => buildAdminDashboardChangelogSummary(this.whatsNewService.changelogs()));
@@ -179,7 +175,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.releaseChangelogAdminMode = this.whatsNewService.requestAdminMode();
         this.fetchFinancialStats();
-        this.fetchUserOverview();
+        this.refreshUserAnalytics();
         this.fetchQueueStats();
         this.fetchMaintenanceStatus();
     }
@@ -200,53 +196,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         });
     }
 
-    fetchUserOverview(): void {
-        this.fetchUserHistory();
-        this.isLoadingUsers.set(true);
-        this.userError.set(null);
-        forkJoin({
-            stats: this.adminService.getTotalUserCount(),
-            userGrowthTrend: this.adminService.getUserGrowthTrend(12).pipe(
-                catchError((err) => {
-                    this.logger.error('Failed to load admin user growth trend:', err);
-                    return of(null);
-                })
-            ),
-            subscriptionHistoryTrend: this.adminService.getSubscriptionHistoryTrend(12).pipe(
-                catchError((err) => {
-                    this.logger.error('Failed to load admin subscription history trend:', err);
-                    return of(null);
-                })
-            ),
-        }).pipe(takeUntil(this.destroy$)).subscribe({
-            next: ({ stats, userGrowthTrend, subscriptionHistoryTrend }) => {
-                this.userStats.set(stats);
-                this.userGrowthTrend.set(userGrowthTrend);
-                this.subscriptionHistoryTrend.set(subscriptionHistoryTrend);
-                this.isLoadingUsers.set(false);
-            },
-            error: (err) => {
-                this.logger.error('Failed to load admin user overview:', err);
-                this.userError.set('User KPIs are unavailable.');
-                this.isLoadingUsers.set(false);
-            }
-        });
-    }
-
-    fetchUserHistory(): void {
-        this.isLoadingUserHistory.set(true);
-        this.userHistoryError.set(null);
-        this.adminService.getAdminDashboardHistory(365).pipe(takeUntil(this.destroy$)).subscribe({
-            next: (history) => {
-                this.userHistory.set(history);
-                this.isLoadingUserHistory.set(false);
-            },
-            error: (err) => {
-                this.logger.error('Failed to load admin user history:', err);
-                this.userHistoryError.set('Daily user history is unavailable. Live user KPIs are unaffected.');
-                this.isLoadingUserHistory.set(false);
-            }
-        });
+    refreshUserAnalytics(): void {
+        void this.userAnalytics.refreshAll();
     }
 
     fetchQueueStats(): void {

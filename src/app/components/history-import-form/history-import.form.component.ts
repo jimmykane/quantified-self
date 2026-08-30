@@ -85,7 +85,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public sleepBackfillSyncState = signal<SleepSyncState | null>(null);
   public healthAvailabilityState = signal<HealthAvailabilityState>('idle');
   public isSleepAndHealthBackfill = false;
-  public isStagedHealthBackfillProvider = false;
+  public checksHealthBackfillAvailability = false;
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -163,9 +163,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
-    this.isStagedHealthBackfillProvider = this.serviceName === ServiceNames.SuuntoApp
+    this.checksHealthBackfillAvailability = this.serviceName === ServiceNames.SuuntoApp
       || this.serviceName === ServiceNames.GarminAPI;
-    this.syncHealthRolloutAvailability();
+    this.syncHealthAvailability();
     this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
@@ -414,7 +414,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   get canSubmitSleepBackfill(): boolean {
-    const healthAvailabilityResolved = !this.isStagedHealthBackfillProvider
+    const healthAvailabilityResolved = !this.checksHealthBackfillAvailability
       || this.healthAvailabilityState() === 'available'
       || this.healthAvailabilityState() === 'unavailable';
     return this.isSleepBackfillVisible
@@ -507,8 +507,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       });
   }
 
-  private syncHealthRolloutAvailability(): void {
-    const key = this.isStagedHealthBackfillProvider && this.currentUserID
+  private syncHealthAvailability(): void {
+    const key = this.checksHealthBackfillAvailability && this.currentUserID
       ? `${this.currentUserID}:${this.serviceName}`
       : null;
     if (this.healthAvailabilityRequestKey === key) {
@@ -545,17 +545,17 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       });
   }
 
-  public retryHealthRolloutAvailability(): void {
-    if (!this.isStagedHealthBackfillProvider
+  public retryHealthAvailability(): void {
+    if (!this.checksHealthBackfillAvailability
       || !this.currentUserID
       || this.healthAvailabilityState() === 'loading') return;
     this.healthAvailabilityRequestKey = null;
-    this.syncHealthRolloutAvailability();
+    this.syncHealthAvailability();
   }
 
   private updateSleepAndHealthBackfillAvailability(): void {
     this.isSleepAndHealthBackfill = this.serviceName === ServiceNames.COROSAPI
-      || (this.isStagedHealthBackfillProvider
+      || (this.checksHealthBackfillAvailability
         && this.healthAvailabilityState() === 'available');
   }
 

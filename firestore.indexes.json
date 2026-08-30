@@ -1499,6 +1499,17 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "legal",
+      "fieldPath": "acceptedMarketingPolicy",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "meta",
       "fieldPath": "wahooReconnectReleasePending",
       "ttl": false,

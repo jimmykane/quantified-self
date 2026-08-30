@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    adminUserMetricsTestInternals,
     getCanonicalSubscriptionIdentity,
     summarizeActivePaidSubscriptions,
     type SubscriptionDocumentSnapshotLike,
@@ -138,5 +139,73 @@ describe('admin user metrics subscription provenance', () => {
         expect(summary.subscriptionCadence.pro.monthly).toBe(1);
         expect(summary.cancelScheduled).toBe(1);
         expect(summary.duplicateCanonicalDocuments).toBe(0);
+    });
+});
+
+describe('admin authentication activity plan breakdown', () => {
+    it('classifies each activity window from the canonical subscription owner map', async () => {
+        const computedAt = new Date('2026-08-26T12:00:00.000Z');
+        const before = (days: number) => new Date(computedAt.getTime() - (days * 24 * 60 * 60 * 1000)).toISOString();
+        const listUsers = async (_pageSize: number, pageToken?: string) => pageToken
+            ? {
+                users: [
+                    {
+                        uid: 'free-30d',
+                        disabled: false,
+                        customClaims: {},
+                        metadata: { lastRefreshTime: before(20) },
+                        providerData: [],
+                    },
+                ],
+                pageToken: undefined,
+            }
+            : {
+                users: [
+                    {
+                        uid: 'pro-24h',
+                        disabled: false,
+                        customClaims: {},
+                        metadata: { lastRefreshTime: before(0.5) },
+                        providerData: [],
+                    },
+                    {
+                        uid: 'basic-7d',
+                        disabled: false,
+                        customClaims: {},
+                        metadata: { lastSignInTime: before(3) },
+                        providerData: [],
+                    },
+                    {
+                        uid: 'free-7d',
+                        disabled: false,
+                        customClaims: {},
+                        metadata: { lastRefreshTime: before(5) },
+                        providerData: [],
+                    },
+                ],
+                pageToken: 'page-2',
+            };
+
+        const result = await adminUserMetricsTestInternals.collectAuthenticationMetrics(
+            { listUsers } as never,
+            computedAt,
+            Promise.resolve(new Map([
+                ['pro-24h', 'pro' as const],
+                ['basic-7d', 'basic' as const],
+            ])),
+        );
+
+        expect(result.authActivity).toEqual({
+            last24Hours: 1,
+            last7Days: 3,
+            last30Days: 4,
+            computedAt: computedAt.toISOString(),
+            byPlan: {
+                free: { last24Hours: 0, last7Days: 1, last30Days: 2 },
+                basic: { last24Hours: 0, last7Days: 1, last30Days: 1 },
+                pro: { last24Hours: 1, last7Days: 1, last30Days: 1 },
+            },
+        });
+        expect(result.eligibleAccounts).toBe(4);
     });
 });

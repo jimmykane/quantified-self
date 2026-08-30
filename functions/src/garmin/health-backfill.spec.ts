@@ -161,14 +161,13 @@ vi.mock('./health-sync', () => {
     verifyLegacyGarminProviderIdentity: hoisted.verifyLegacyIdentity,
   };
 });
-vi.mock('./health-rollout', () => ({
+vi.mock('./health-flags', () => ({
   isGarminHealthSyncEnabled: vi.fn(() => true),
-  isGarminHealthSyncUserAllowed: vi.fn(() => true),
 }));
 
 import { GarminHealthPermissionError } from './health-sync';
 import { GarminHealthAccountValidationError } from './health-lifecycle';
-import { isGarminHealthSyncEnabled } from './health-rollout';
+import { isGarminHealthSyncEnabled } from './health-flags';
 import { processGarminHealthBackfillQueueItem } from './health-backfill';
 
 function createQueueItem(): SleepSyncQueueItemInterface {
@@ -350,7 +349,7 @@ describe('Garmin Health backfill processor', () => {
     }));
   });
 
-  it('stops before the next provider request when the Health rollout is disabled', async () => {
+  it('stops before the next provider request when the Health rollback switch is disabled', async () => {
     vi.mocked(isGarminHealthSyncEnabled)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
@@ -364,8 +363,8 @@ describe('Garmin Health backfill processor', () => {
     expect(hoisted.queueData).toEqual(expect.objectContaining({
       processed: true,
       resultStatus: 'skipped',
-      skippedReason: 'user_not_allowed',
-      skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+      skippedReason: 'provider_disabled',
+      skippedContext: 'GARMIN_HEALTH_DISABLED',
     }));
     expect(hoisted.transactionSet).toHaveBeenLastCalledWith(expect.objectContaining({
       healthBackfillStatus: 'skipped',
@@ -374,7 +373,7 @@ describe('Garmin Health backfill processor', () => {
     expect(hoisted.markSkipped).not.toHaveBeenCalled();
   });
 
-  it('marks queued progress skipped when the Health rollout is disabled before processing', async () => {
+  it('marks queued progress skipped when the Health rollback switch is disabled before processing', async () => {
     vi.mocked(isGarminHealthSyncEnabled).mockReturnValueOnce(false);
 
     await expect(processGarminHealthBackfillQueueItem(createQueueItem()))
@@ -385,8 +384,8 @@ describe('Garmin Health backfill processor', () => {
     expect(hoisted.queueData).toEqual(expect.objectContaining({
       processed: true,
       resultStatus: 'skipped',
-      skippedReason: 'user_not_allowed',
-      skippedContext: 'GARMIN_HEALTH_ROLLOUT',
+      skippedReason: 'provider_disabled',
+      skippedContext: 'GARMIN_HEALTH_DISABLED',
     }));
     expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.objectContaining({
       healthBackfillStatus: 'skipped',

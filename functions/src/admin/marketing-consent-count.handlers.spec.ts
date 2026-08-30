@@ -4,6 +4,7 @@ import type { UserCountResponse } from './shared/types';
 import {
     getUserCount,
     mockCollection,
+    mockFirestore,
     mockListUsers,
 } from './test-utils/admin-test-harness';
 
@@ -13,15 +14,22 @@ describe('getUserCount marketing consent', () => {
         mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
     });
 
-    it('counts only user documents with explicit marketing consent', async () => {
+    it('counts explicit marketing consent from the canonical legal agreement documents', async () => {
         const countSnapshot = (count: number) => ({ data: () => ({ count }) });
-        const userWhere = vi.fn((field: string, operator: string, value: unknown) => ({
+        const userWhere = vi.fn((field: string) => ({
             count: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue(countSnapshot(
-                    field === 'acceptedMarketingPolicy' && operator === '==' && value === true ? 35 : 40
-                )),
+                get: vi.fn().mockResolvedValue(countSnapshot(field === 'onboardingCompleted' ? 40 : 99)),
             }),
         }));
+        const legalCountGet = vi.fn()
+            .mockResolvedValueOnce(countSnapshot(35))
+            .mockRejectedValueOnce(new Error('index not ready'));
+        const legalWhere = vi.fn(() => ({
+            count: vi.fn().mockReturnValue({
+                get: legalCountGet,
+            }),
+        }));
+        const mockCollectionGroup = vi.fn((path: string) => mockCollection(path));
         const emptyCacheDocument = {
             get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
             set: vi.fn().mockResolvedValue(undefined),
@@ -35,6 +43,9 @@ describe('getUserCount marketing consent', () => {
                     }),
                     where: userWhere,
                 };
+            }
+            if (path === 'legal') {
+                return { where: legalWhere };
             }
             if (path === 'adminStats') {
                 return { doc: vi.fn().mockReturnValue(emptyCacheDocument) };
@@ -56,6 +67,11 @@ describe('getUserCount marketing consent', () => {
             query.select.mockReturnValue(query);
             return query;
         });
+        const defaultFirestore = mockFirestore();
+        mockFirestore.mockReturnValue({
+            ...defaultFirestore,
+            collectionGroup: mockCollectionGroup,
+        });
 
         const request = {
             data: {},
@@ -69,6 +85,11 @@ describe('getUserCount marketing consent', () => {
         const result = await handler(request);
 
         expect(result.marketingConsent).toBe(35);
-        expect(userWhere).toHaveBeenCalledWith('acceptedMarketingPolicy', '==', true);
+        expect(mockCollectionGroup).toHaveBeenCalledWith('legal');
+        expect(legalWhere).toHaveBeenCalledWith('acceptedMarketingPolicy', '==', true);
+        expect(userWhere).not.toHaveBeenCalledWith('acceptedMarketingPolicy', '==', true);
+
+        const resultWhileIndexIsUnavailable = await handler(request);
+        expect(resultWhileIndexIsUnavailable.marketingConsent).toBeNull();
     });
 });

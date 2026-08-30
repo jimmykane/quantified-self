@@ -584,6 +584,16 @@
       overflow-wrap: anywhere;
     }
 
+    .renewal-amount {
+      display: flex;
+      align-items: center;
+      min-height: 1.28em;
+
+      mat-progress-bar {
+        width: min(100%, 180px);
+      }
+    }
+
     .meta-helper {
       margin-top: auto;
       font-size: 0.76rem;

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHmac } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
@@ -65,7 +66,7 @@ vi.mock('./provider-flags', () => ({
     }),
 }));
 
-vi.mock('../garmin/health-rollout', () => ({
+vi.mock('../garmin/health-flags', () => ({
     isGarminHealthSyncEnabled: vi.fn(() => hoisted.garminHealthEnabled),
 }));
 
@@ -327,6 +328,84 @@ describe('sleep webhooks', () => {
 
         expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Webhook accepted',
+            expect.objectContaining({
+                malformedCount: 2,
+                receivedCountByFamily: { dailies: 2 },
+                validPingCountByFamily: {},
+                directSummaryCountByFamily: { dailies: 2 },
+                invalidPingCountByFamily: {},
+                queuedCountByFamily: {},
+                skippedCountByFamily: {},
+                disabledCountByFamily: {},
+                unsupportedReceivedCountByFamily: {},
+                unsupportedDirectSummaryCountByFamily: {},
+            }),
+        );
+    });
+
+    it('logs privacy-safe Garmin delivery outcomes by summary family', async () => {
+        hoisted.garminHealthEnabled = true;
+        hoisted.resolveGarminPingFirebaseUserIDs.mockResolvedValueOnce(new Map([
+            ['connected-garmin-user', 'test-user-uid'],
+        ]));
+        const response = createResponse();
+
+        await receiveGarminAPIHealthData({
+            method: 'POST',
+            rawBody: Buffer.from('{}'),
+            body: {
+                dailies: [{
+                    userId: 'connected-garmin-user',
+                    callbackURL: garminCallbackURL('dailies'),
+                }],
+                hrv: [{
+                    userId: 'unresolved-garmin-user',
+                    callbackURL: garminCallbackURL('hrv'),
+                }],
+                stressDetails: [{
+                    userId: 'push-garmin-user',
+                    summaryId: 'push-summary',
+                    startTimeInSeconds: 1760000000,
+                }],
+                bodyComps: [{
+                    userId: 'invalid-ping-user',
+                    callbackURL: 'https://attacker.example/wellness-api/rest/bodyComps?token=secret',
+                }],
+            },
+        } as any, response as any);
+
+        expect(response.status).toHaveBeenCalledWith(200);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Webhook accepted',
+            expect.objectContaining({
+                queuedCount: 1,
+                skippedCount: 1,
+                malformedCount: 2,
+                receivedCountByFamily: {
+                    dailies: 1,
+                    stressDetails: 1,
+                    hrv: 1,
+                    bodyComps: 1,
+                },
+                validPingCountByFamily: { dailies: 1, hrv: 1 },
+                directSummaryCountByFamily: { stressDetails: 1 },
+                invalidPingCountByFamily: { bodyComps: 1 },
+                queuedCountByFamily: { dailies: 1 },
+                skippedCountByFamily: { hrv: 1 },
+                disabledCountByFamily: {},
+                unsupportedReceivedCountByFamily: {},
+                unsupportedDirectSummaryCountByFamily: {},
+            }),
+        );
+        const telemetry = vi.mocked(logger.info).mock.calls.find(
+            ([message]) => message === '[HealthSync][Garmin] Webhook accepted',
+        )?.[1];
+        expect(JSON.stringify(telemetry)).not.toContain('connected-garmin-user');
+        expect(JSON.stringify(telemetry)).not.toContain('garmin-token');
+        expect(JSON.stringify(telemetry)).not.toContain('test-user-uid');
     });
 
     it.each([
@@ -363,7 +442,14 @@ describe('sleep webhooks', () => {
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
-                epochs: [{ userId: 'garmin-user-1', callbackURL: garminCallbackURL('epochs') }],
+                epochs: [
+                    { userId: 'garmin-user-1', callbackURL: garminCallbackURL('epochs') },
+                    {
+                        userId: 'garmin-user-1',
+                        summaryId: 'unsupported-push-summary',
+                        startTimeInSeconds: 1760000000,
+                    },
+                ],
                 dailies: [{ userId: 'garmin-user-1', callbackURL }],
             },
         } as any, response as any);
@@ -373,6 +459,13 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             garminSummaryType: 'dailies',
         }));
+        expect(logger.info).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Webhook accepted',
+            expect.objectContaining({
+                unsupportedReceivedCountByFamily: { epochs: 2 },
+                unsupportedDirectSummaryCountByFamily: { epochs: 1 },
+            }),
+        );
     });
 
     it('accepts the documented 10 MiB payload boundary and drops larger payloads', async () => {
@@ -413,6 +506,17 @@ describe('sleep webhooks', () => {
         } as any, response as any);
 
         expect(response.status).toHaveBeenCalledWith(500);
+        expect(logger.error).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Failed to durably queue webhook payload',
+            expect.objectContaining({
+                errorName: 'Error',
+                receivedCountByFamily: { dailies: 1 },
+                validPingCountByFamily: { dailies: 1 },
+                queuedCountByFamily: {},
+            }),
+        );
+        expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('garmin-token');
+        expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('garmin-user-1');
     });
 
     it('validates Suunto HMAC before queueing sleep samples', async () => {

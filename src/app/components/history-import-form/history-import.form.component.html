@@ -153,29 +153,29 @@
 
 @if (isSleepBackfillVisible) {
 <section class="sleep-backfill-section"
-  [attr.aria-label]="isStagedHealthBackfillProvider && healthAvailabilityState() === 'loading'
+  [attr.aria-label]="checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
     ? sleepBackfillProviderLabel + ' import scope check'
-    : (isStagedHealthBackfillProvider && healthAvailabilityState() === 'error'
+    : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
       ? sleepBackfillProviderLabel + ' import scope unavailable'
       : sleepBackfillProviderLabel + (isSleepAndHealthBackfill ? ' sleep and health history import' : ' sleep history import'))">
   <div class="sleep-backfill-copy">
     <div class="sleep-backfill-title">
-      {{ isStagedHealthBackfillProvider && healthAvailabilityState() === 'loading'
+      {{ checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
         ? 'Checking ' + sleepBackfillProviderLabel + ' import scope'
-        : (isStagedHealthBackfillProvider && healthAvailabilityState() === 'error'
+        : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
           ? sleepBackfillProviderLabel + ' import scope unavailable'
           : (isSleepAndHealthBackfill ? 'Sleep & Health history' : 'Sleep history')) }}
     </div>
-    @if (isStagedHealthBackfillProvider && healthAvailabilityState() === 'loading') {
+    @if (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading') {
     <p>
       Checking whether this import includes Health metrics.
     </p>
-    } @else if (isStagedHealthBackfillProvider && healthAvailabilityState() === 'error') {
+    } @else if (checksHealthBackfillAvailability && healthAvailabilityState() === 'error') {
     <p>
       Could not determine whether this import includes Health metrics. Retry the availability check before importing.
     </p>
     <button mat-button type="button" class="qs-mat-primary"
-      (click)="retryHealthRolloutAvailability()">
+      (click)="retryHealthAvailability()">
       Retry availability check
     </button>
     } @else if (serviceName === serviceNames.GarminAPI) {
@@ -226,16 +226,16 @@
     <span class="sleep-backfill-button-content">
       @if (isSleepBackfillSubmitting()) {
       <mat-spinner diameter="18" class="sleep-backfill-progress" aria-hidden="true"></mat-spinner>
-      } @else if (isStagedHealthBackfillProvider && healthAvailabilityState() === 'loading') {
+      } @else if (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading') {
       <mat-spinner diameter="18" class="sleep-backfill-progress" aria-hidden="true"></mat-spinner>
       } @else {
       <mat-icon aria-hidden="true">bedtime</mat-icon>
       }
       <span>{{ isSleepBackfillSubmitting()
         ? 'Starting import...'
-        : (isStagedHealthBackfillProvider && healthAvailabilityState() === 'loading'
+        : (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
           ? 'Checking Health availability...'
-          : (isStagedHealthBackfillProvider && healthAvailabilityState() === 'error'
+          : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
             ? 'Health availability unavailable'
             : (isSleepAndHealthBackfill ? 'Import Sleep & Health History' : 'Import Sleep History'))) }}</span>
     </span>
