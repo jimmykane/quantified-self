@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HomeComponent } from './home.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -6,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -67,6 +68,13 @@ describe('HomeComponent', () => {
         userSubject.next(null);
 
         expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('should keep passive homepage tooltips from claiming touch gestures', () => {
+        const tooltipHosts = fixture.debugElement.queryAll(By.directive(MatTooltip));
+
+        expect(tooltipHosts.length).toBeGreaterThan(0);
+        expect(tooltipHosts.every(host => host.injector.get(MatTooltip).touchGestures === 'off')).toBe(true);
     });
 
     it('should render provider-focused hero messaging and a standalone Assistant section', () => {

@@ -5,10 +5,21 @@ import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import {
+  MAT_TOOLTIP_DEFAULT_OPTIONS,
+  MatTooltipModule,
+  type MatTooltipDefaultOptions,
+} from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
+
+const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
+  showDelay: 0,
+  hideDelay: 0,
+  touchendHideDelay: 1500,
+  touchGestures: 'off',
+};
 
 @Component({
   selector: 'app-home',
@@ -22,6 +33,9 @@ import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/type
     MatIconModule,
     MatTooltipModule,
     TypedPromptRotatorComponent,
+  ],
+  providers: [
+    { provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: HOME_TOOLTIP_DEFAULT_OPTIONS },
   ],
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
