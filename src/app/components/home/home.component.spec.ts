@@ -83,7 +83,7 @@ describe('HomeComponent', () => {
         expect(heroText).not.toMatch(/\bprivate\b/i);
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
-        expect(aiSectionText).toContain('Ask about your training. Get answers grounded in your data.');
+        expect(aiSectionText).toContain('Ask About Your Training');
         expect(aiSectionText).toContain('Explore sleep, readiness, training, measurements, and recent activities in one conversation.');
         expect(aiSectionText).toContain('The Assistant answers from your current data');
         expect(aiSectionText).toContain('not generic fitness advice');
@@ -164,7 +164,7 @@ describe('HomeComponent', () => {
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
     });
 
-    it('should surface KPI and derived metric charts in Engineered for Performance section', () => {
+    it('should surface KPI and derived metric charts in the performance section', () => {
         const text = fixture.nativeElement.textContent as string;
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
@@ -175,7 +175,8 @@ describe('HomeComponent', () => {
         expect(performanceCards.length).toBe(6);
         expect(metricChips.length).toBe(27);
         expect(metricChipInfoIcons.length).toBe(27);
-        expect(text).toContain('Engineered for Performance');
+        expect(text).toContain('Connect Your Services');
+        expect(text).toContain('Understand Your Performance');
         expect(text).toContain('Reliable and instant analytics');
         expect(text).toContain('KPI Lane for Fast Decisions');
         expect(text).toContain('Load Status');
@@ -222,7 +223,9 @@ describe('HomeComponent', () => {
         const analysisCards = fixture.nativeElement.querySelectorAll('.analysis-section .analysis-card');
 
         expect(analysisCards.length).toBe(3);
-        expect(text).toContain('Hardware-Grade Precision');
+        expect(text).toContain('Map Your Activities');
+        expect(text).toContain('Own Your Data');
+        expect(text).toContain('Compare Your Devices');
         expect(text).toContain('Merge same-session recordings, choose a reference device');
         expect(text).toContain('Benchmark Merge Workflow');
         expect(text).toContain('keep it out of normal training totals');
