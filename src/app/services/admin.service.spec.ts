@@ -86,6 +86,29 @@ describe('AdminService', () => {
         expect(stats).toEqual(mockStats);
     });
 
+    it('should call setSportsLibReparseSettings with an explicit scanner scope', async () => {
+        const mockResponse = {
+            success: true as const,
+            settings: {
+                enabled: true,
+                targetUid: 'target-user',
+                source: 'firestore' as const,
+                configurationValid: true,
+                updatedAt: null,
+                updatedBy: 'admin-user',
+            },
+        };
+        functionsServiceMock.call.mockResolvedValue({ data: mockResponse });
+
+        const result = await firstValueFrom(service.setSportsLibReparseSettings(true, 'target-user'));
+
+        expect(functionsServiceMock.call).toHaveBeenCalledWith('setSportsLibReparseSettings', {
+            enabled: true,
+            targetUid: 'target-user',
+        });
+        expect(result).toEqual(mockResponse);
+    });
+
     it('should return total user count with breakdown from Cloud Function', async () => {
         const mockData = {
             total: 180,

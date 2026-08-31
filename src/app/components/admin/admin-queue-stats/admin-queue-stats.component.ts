@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,6 +8,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { AdminService, QueueStats, ReparseFailurePreview, RouteReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
@@ -19,6 +24,7 @@ import {
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
@@ -46,13 +52,18 @@ type RouteReparseFailureRowView = RouteReparseFailurePreview & {
     standalone: true,
     imports: [
         CommonModule,
+        FormsModule,
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
         MatTooltipModule,
         MatTableModule,
         MatCardModule,
-        MatSnackBarModule
+        MatSnackBarModule,
+        MatDialogModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatSlideToggleModule
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
@@ -66,11 +77,13 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     set stats(value: QueueStats | null) {
         this._stats = value;
         this.updateReparseFailureRows();
+        this.syncReparseSettingsForm();
     }
 
     @Input() loading = false;
     @Input() queueView: AdminQueueStatsView = 'all';
     @Output() retryHeavyCompleted = new EventEmitter<void>();
+    @Output() reparseSettingsChanged = new EventEmitter<void>();
     hasRetryData = false;
     readonly reparseFailureColumns = ['outcome', 'uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
     readonly routeReparseFailureColumns = ['uid', 'routeId', 'attemptCount', 'updatedAt', 'lastError'];
@@ -78,6 +91,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     readonly retryingHeavyJobIds = new Set<string>();
     reparseFailureRows: ReparseFailureRowView[] = [];
     routeReparseFailureRows: RouteReparseFailureRowView[] = [];
+    reparseScanEnabled = false;
+    reparseTargetUid = '';
+    isSavingReparseSettings = false;
+    private savedReparseScanEnabled = false;
+    private savedReparseTargetUid = '';
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -105,7 +123,8 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         private appThemeService: AppThemeService,
         private eChartsLoader: EChartsLoaderService,
         private adminService: AdminService,
-        private snackBar: MatSnackBar
+        private snackBar: MatSnackBar,
+        private dialog: MatDialog
     ) {
         this.chartHost = new EChartsHostController({
             eChartsLoader: this.eChartsLoader,
@@ -414,6 +433,118 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                     this.snackBar.open(this.getRetryHeavyErrorMessage(error), 'Dismiss', { duration: 6000 });
                 },
             });
+    }
+
+    get reparseTargetUidValidationMessage(): string {
+        const targetUid = this.reparseTargetUid.trim();
+        if (!targetUid) {
+            return '';
+        }
+        if (targetUid.length > 128) {
+            return 'Firebase UID must be at most 128 characters.';
+        }
+        const hasUnsupportedCharacter = Array.from(targetUid).some(character => {
+            const characterCode = character.charCodeAt(0);
+            return character === '/' || characterCode <= 31 || characterCode === 127;
+        });
+        if (hasUnsupportedCharacter) {
+            return 'Firebase UID contains unsupported characters.';
+        }
+        return '';
+    }
+
+    get hasReparseSettingsChanges(): boolean {
+        return this.stats?.reparse?.runtimeSettings?.configurationValid === false
+            || this.reparseScanEnabled !== this.savedReparseScanEnabled
+            || this.reparseTargetUid.trim() !== this.savedReparseTargetUid;
+    }
+
+    get persistedReparseScanEnabled(): boolean {
+        return this.savedReparseScanEnabled;
+    }
+
+    get canSaveReparseSettings(): boolean {
+        return !this.loading
+            && !this.isSavingReparseSettings
+            && !this.reparseTargetUidValidationMessage
+            && this.hasReparseSettingsChanges;
+    }
+
+    saveReparseSettings(): void {
+        if (!this.canSaveReparseSettings) {
+            return;
+        }
+
+        const targetUid = this.reparseTargetUid.trim() || null;
+        if (this.reparseScanEnabled && !targetUid) {
+            const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+                width: '440px',
+                data: {
+                    title: 'Enable Global Event Reparse?',
+                    message: 'No Firebase UID is set. The scheduler will scan eligible events for every user and enqueue new reparse jobs.',
+                    confirmText: 'Enable Global Scan',
+                    cancelText: 'Cancel',
+                    confirmColor: 'warn',
+                },
+            });
+            dialogRef.afterClosed().pipe(takeUntil(this.destroy$)).subscribe(confirmed => {
+                if (confirmed) {
+                    this.persistReparseSettings(targetUid, true);
+                }
+            });
+            return;
+        }
+
+        this.persistReparseSettings(targetUid);
+    }
+
+    private persistReparseSettings(targetUid: string | null, confirmGlobal = false): void {
+        this.isSavingReparseSettings = true;
+        this.adminService.setSportsLibReparseSettings(this.reparseScanEnabled, targetUid, confirmGlobal)
+            .pipe(
+                takeUntil(this.destroy$),
+                finalize(() => {
+                    this.isSavingReparseSettings = false;
+                })
+            )
+            .subscribe({
+                next: (response) => {
+                    this.reparseScanEnabled = response.settings.enabled;
+                    this.reparseTargetUid = response.settings.targetUid || '';
+                    this.savedReparseScanEnabled = response.settings.enabled;
+                    this.savedReparseTargetUid = response.settings.targetUid || '';
+                    const scope = response.settings.targetUid
+                        ? `user ${response.settings.targetUid}`
+                        : 'all users';
+                    const state = response.settings.enabled ? 'enabled' : 'disabled';
+                    this.snackBar.open(`Event reparse scanner ${state} for ${scope}.`, 'Dismiss', { duration: 5000 });
+                    this.reparseSettingsChanged.emit();
+                },
+                error: (error) => {
+                    this.snackBar.open(this.getReparseSettingsErrorMessage(error), 'Dismiss', { duration: 6000 });
+                },
+            });
+    }
+
+    private syncReparseSettingsForm(): void {
+        if (this.isSavingReparseSettings || !this._stats?.reparse) {
+            return;
+        }
+        const runtimeSettings = this._stats.reparse.runtimeSettings;
+        const enabled = runtimeSettings?.enabled
+            ?? this._stats.reparse.automaticScanEnabled
+            ?? false;
+        const targetUid = runtimeSettings?.targetUid || '';
+        this.reparseScanEnabled = enabled;
+        this.reparseTargetUid = targetUid;
+        this.savedReparseScanEnabled = enabled;
+        this.savedReparseTargetUid = targetUid;
+    }
+
+    private getReparseSettingsErrorMessage(error: unknown): string {
+        const rawMessage = (error as { message?: unknown } | undefined)?.message;
+        const message = typeof rawMessage === 'string' ? rawMessage.trim() : '';
+        return message || 'Failed to save event reparse scanner settings.';
     }
 
     getDerivedMetricsFailureRows(): {

@@ -8,6 +8,44 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { SimpleChange } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+
+function createReparseQueueStats(
+    enabled = false,
+    targetUid: string | null = null,
+): QueueStats {
+    return {
+        pending: 0,
+        succeeded: 0,
+        stuck: 0,
+        providers: [],
+        cloudTasks: { pending: 0 },
+        reparse: {
+            automaticScanEnabled: enabled,
+            runtimeSettings: {
+                enabled,
+                targetUid,
+                source: 'firestore',
+                configurationValid: true,
+                updatedAt: null,
+                updatedBy: 'admin-user',
+            },
+            queuePending: 0,
+            targetSportsLibVersion: '20.3.1',
+            jobs: { total: 0, pending: 0, processing: 0, completed: 0, failed: 0 },
+            checkpoint: {
+                cursorEventPath: null,
+                lastScanAt: null,
+                lastPassStartedAt: null,
+                lastPassCompletedAt: null,
+                lastScanCount: 0,
+                lastEnqueuedCount: 0,
+                overrideUsersInProgress: 0,
+            },
+            recentFailures: [],
+        },
+    };
+}
 
 describe('AdminQueueStatsComponent', () => {
     let component: AdminQueueStatsComponent;
@@ -16,6 +54,7 @@ describe('AdminQueueStatsComponent', () => {
     let mockEchartsService: any;
     let mockAdminService: any;
     let mockSnackBar: any;
+    let mockDialog: any;
 
     if (!(global as any).requestAnimationFrame) {
         (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
@@ -47,11 +86,25 @@ describe('AdminQueueStatsComponent', () => {
                 success: true,
                 jobId: 'job1',
                 taskCreated: true
-            }))
+            })),
+            setSportsLibReparseSettings: vi.fn().mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: true,
+                    targetUid: 'target-user',
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            })),
         };
 
         mockSnackBar = {
             open: vi.fn()
+        };
+        mockDialog = {
+            open: vi.fn().mockReturnValue({ afterClosed: () => of(false) }),
         };
 
         await TestBed.configureTestingModule({
@@ -60,17 +113,127 @@ describe('AdminQueueStatsComponent', () => {
                 { provide: AppThemeService, useValue: mockThemeService },
                 { provide: EChartsLoaderService, useValue: mockEchartsService },
                 { provide: AdminService, useValue: mockAdminService },
-                { provide: MatSnackBar, useValue: mockSnackBar }
+                { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: MatDialog, useValue: mockDialog }
             ]
         }).compileComponents();
 
         fixture = TestBed.createComponent(AdminQueueStatsComponent);
         component = fixture.componentInstance;
+        (component as any).snackBar = mockSnackBar;
+        (component as any).dialog = mockDialog;
         fixture.detectChanges();
     });
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    describe('event reparse scanner settings', () => {
+        it('renders the persisted enablement and target UID', async () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(true, 'target-user');
+
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+
+            const host: HTMLElement = fixture.nativeElement;
+            const targetInput = host.querySelector<HTMLInputElement>('.reparse-settings-card input');
+            expect(host.textContent).toContain('Automatic Scanner');
+            expect(host.textContent).toContain('Enabled');
+            expect(host.textContent).toContain('Selected scope: target-user');
+            expect(targetInput?.value).toBe('target-user');
+        });
+
+        it('saves a targeted scan without a global-scan confirmation', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            component.reparseTargetUid = ' target-user ';
+            const changed = vi.fn();
+            component.reparseSettingsChanged.subscribe(changed);
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, 'target-user', false);
+            expect(changed).toHaveBeenCalledTimes(1);
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Event reparse scanner enabled for user target-user.',
+                'Dismiss',
+                { duration: 5000 },
+            );
+        });
+
+        it('requires confirmation before enabling a global scan', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: true,
+                    targetUid: null,
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({ title: 'Enable Global Event Reparse?' }),
+                }),
+            );
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
+        });
+
+        it('does not save a cancelled global scan or an invalid target UID', () => {
+            component.loading = false;
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+
+            component.saveReparseSettings();
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+
+            component.reparseTargetUid = 'invalid/user';
+            expect(component.reparseTargetUidValidationMessage).toContain('unsupported');
+            expect(component.canSaveReparseSettings).toBe(false);
+            component.saveReparseSettings();
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+        });
+
+        it('allows a fail-closed malformed setting to be repaired while remaining disabled', () => {
+            component.loading = false;
+            const stats = createReparseQueueStats(false, null);
+            stats.reparse!.runtimeSettings!.configurationValid = false;
+            component.stats = stats;
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: false,
+                    targetUid: null,
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            expect(component.canSaveReparseSettings).toBe(true);
+            component.saveReparseSettings();
+
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(false, null, false);
+        });
     });
 
     describe('formatDuration', () => {

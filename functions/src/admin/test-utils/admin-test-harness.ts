@@ -297,6 +297,7 @@ export const {
     listUsers,
     getQueueStats,
     retrySportsLibReparseHeavyJob,
+    setSportsLibReparseSettings,
     getUserCount,
     getAdminDashboardHistory,
     scheduleAdminDashboardSnapshot,

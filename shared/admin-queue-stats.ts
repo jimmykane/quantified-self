@@ -109,6 +109,26 @@ export interface RouteReparseFailurePreview {
     targetSportsLibVersion: string;
 }
 
+export interface SportsLibReparseRuntimeSettings {
+    enabled: boolean;
+    targetUid: string | null;
+    source: 'firestore' | 'defaults';
+    configurationValid: boolean;
+    updatedAt: unknown;
+    updatedBy: string | null;
+}
+
+export interface SetSportsLibReparseSettingsRequest {
+    enabled: boolean;
+    targetUid?: string | null;
+    confirmGlobal?: boolean;
+}
+
+export interface SetSportsLibReparseSettingsResponse {
+    success: true;
+    settings: SportsLibReparseRuntimeSettings;
+}
+
 export interface ReparseQueueStats<
     TCheckpoint extends ReparseCheckpointBaseStats,
     TFailure,
@@ -127,7 +147,9 @@ export type EventReparseStats = ReparseQueueStats<
     EventReparseCheckpointStats,
     EventReparseFailurePreview,
     EventReparseJobsStats
->;
+> & {
+    runtimeSettings?: SportsLibReparseRuntimeSettings;
+};
 
 export type RouteReparseStats = ReparseQueueStats<RouteReparseCheckpointStats, RouteReparseFailurePreview, RouteReparseJobsStats>;
 

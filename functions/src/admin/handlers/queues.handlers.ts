@@ -14,9 +14,10 @@ import { config } from '../../config';
 import {
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
-    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
     SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
+    resolveSportsLibReparseRuntimeSettings,
 } from '../../reparse/sports-lib-reparse.config';
 import {
     DERIVED_METRICS_COLLECTION_ID,
@@ -48,7 +49,6 @@ import { enqueueSportsLibReparseHeavyTask } from '../../shared/cloud-tasks';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 
 const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
-const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
 const SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibRouteReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
@@ -363,11 +363,12 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
 
         derivedFailures.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
 
-        const checkpointSnapshot = await admin.firestore().doc(SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH).get().catch(e => {
+        const checkpointSnapshot = await admin.firestore().doc(SPORTS_LIB_REPARSE_CHECKPOINT_PATH).get().catch(e => {
             logger.error('[admin/getQueueStats] Failed to read sports-lib reparse checkpoint:', e);
             return null;
         });
         const checkpointData = checkpointSnapshot?.data() as Record<string, unknown> | undefined;
+        const effectiveReparseSettings = resolveSportsLibReparseRuntimeSettings(checkpointData);
         const checkpointOverrideCursors = checkpointData?.overrideCursorByUid;
         const overrideCursorByUid = (checkpointOverrideCursors && typeof checkpointOverrideCursors === 'object')
             ? (checkpointOverrideCursors as Record<string, string | null>)
@@ -1086,7 +1087,15 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 },
             },
             reparse: {
-                automaticScanEnabled: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled,
+                automaticScanEnabled: effectiveReparseSettings.enabled,
+                runtimeSettings: {
+                    enabled: effectiveReparseSettings.enabled,
+                    targetUid: effectiveReparseSettings.targetUid,
+                    source: effectiveReparseSettings.source,
+                    configurationValid: effectiveReparseSettings.configurationValid,
+                    updatedAt: effectiveReparseSettings.updatedAt,
+                    updatedBy: effectiveReparseSettings.updatedBy,
+                },
                 queuePending: reparseCloudTaskDepth,
                 targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                 jobs: {

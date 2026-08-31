@@ -13,6 +13,9 @@ export type {
     RouteReparseJobsStats,
     RouteReparseStats,
     RouteSyncQueueStats,
+    SetSportsLibReparseSettingsRequest,
+    SetSportsLibReparseSettingsResponse,
+    SportsLibReparseRuntimeSettings,
 } from '../../../../shared/admin-queue-stats';
 
 export interface CountStats {

@@ -467,6 +467,36 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.routeReparse.queuePending).toBe(1);
     });
 
+    it('returns the effective persisted event reparse scanner settings', async () => {
+        mockDoc.mockImplementation((path: string) => ({
+            get: vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => path === 'systemJobs/sportsLibReparse'
+                    ? {
+                        runtimeSettings: {
+                            enabled: true,
+                            targetUid: 'target-user',
+                            updatedAt: 'stored-timestamp',
+                            updatedBy: 'admin-uid',
+                        },
+                    }
+                    : {},
+            }),
+        }));
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.reparse.automaticScanEnabled).toBe(true);
+        expect(result.reparse.runtimeSettings).toEqual({
+            enabled: true,
+            targetUid: 'target-user',
+            source: 'firestore',
+            configurationValid: true,
+            updatedAt: 'stored-timestamp',
+            updatedBy: 'admin-uid',
+        });
+    });
+
     it('classifies current, historical, and superseded reparse outcomes', async () => {
         const defaultCollectionImplementation = mockCollection.getMockImplementation();
         expect(defaultCollectionImplementation).toBeDefined();

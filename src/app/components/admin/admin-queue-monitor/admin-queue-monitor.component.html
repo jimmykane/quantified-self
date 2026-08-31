@@ -47,6 +47,7 @@
         [stats]="queueStats"
         [loading]="isLoadingStats"
         [queueView]="queueView"
-        (retryHeavyCompleted)="fetchQueueStats()">
+        (retryHeavyCompleted)="fetchQueueStats()"
+        (reparseSettingsChanged)="fetchQueueStats()">
     </app-admin-queue-stats>
 </div>

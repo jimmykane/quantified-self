@@ -46,7 +46,6 @@ import {
 import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 
-export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
@@ -65,13 +64,17 @@ export {
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
     SPORTS_LIB_REPARSE_FAILURE_REASONS,
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+    SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
     SPORTS_LIB_REPARSE_HEAVY_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
     SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
     SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_REPARSE_RUNTIME_SETTINGS_FIELD,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
+    resolveSportsLibReparseRuntimeSettings,
+    validateSportsLibReparseTargetUid,
 } from './sports-lib-reparse.config';
 
 export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'superseded';
@@ -221,6 +224,7 @@ async function runReparseFirestoreTransactionWithRetry<T>(
 }
 
 export interface SportsLibReparseCheckpoint {
+    runtimeSettings?: unknown;
     cursorEventPath?: string | null;
     cursorProcessingDocPath?: string | null;
     cursorProcessingVersionCode?: number | null;

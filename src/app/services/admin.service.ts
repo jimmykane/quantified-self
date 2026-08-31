@@ -8,6 +8,8 @@ import type {
     EventReparseFailurePreview,
     GetQueueStatsRequest,
     RouteReparseFailurePreview,
+    SetSportsLibReparseSettingsRequest,
+    SetSportsLibReparseSettingsResponse,
 } from '../../../shared/admin-queue-stats';
 
 export interface CountStats {
@@ -324,6 +326,24 @@ export class AdminService {
             'retrySportsLibReparseHeavyJob',
             { jobId }
         )).pipe(
+            map(result => result.data)
+        );
+    }
+
+    setSportsLibReparseSettings(
+        enabled: boolean,
+        targetUid: string | null,
+        confirmGlobal = false
+    ): Observable<SetSportsLibReparseSettingsResponse> {
+        const payload: SetSportsLibReparseSettingsRequest = {
+            enabled,
+            targetUid,
+            ...(confirmGlobal ? { confirmGlobal: true } : {}),
+        };
+        return from(this.functionsService.call<
+            SetSportsLibReparseSettingsRequest,
+            SetSportsLibReparseSettingsResponse
+        >('setSportsLibReparseSettings', payload)).pipe(
             map(result => result.data)
         );
     }
