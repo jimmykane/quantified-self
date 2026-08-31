@@ -50,6 +50,7 @@
   i {
     margin: 0 0.15rem;
     font-style: normal;
+    opacity: 0.65;
   }
 }
 
@@ -71,6 +72,12 @@
 }
 
 @container (max-width: 440px) {
+  .workout-preview__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
   .workout-preview__charts {
     grid-template-columns: 1fr;
   }

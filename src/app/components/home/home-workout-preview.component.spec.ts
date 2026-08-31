@@ -79,7 +79,7 @@ describe('HomeWorkoutPreviewComponent', () => {
           pieces: Array<{ color: string; label: string }>;
           outOfRange: { color: string };
         }>;
-        yAxis?: { inverse?: boolean };
+        yAxis?: { inverse?: boolean; axisLabel?: { show?: boolean } };
         series?: Array<{
           id: string;
           silent: boolean;
@@ -93,7 +93,7 @@ describe('HomeWorkoutPreviewComponent', () => {
           pieces: Array<{ color: string; label: string }>;
           outOfRange: { color: string };
         }>;
-        yAxis: { inverse?: boolean };
+        yAxis: { inverse?: boolean; axisLabel?: { show?: boolean } };
         series: Array<{
           id: string;
           silent: boolean;
@@ -114,6 +114,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(panels.every(panel => panel.previewMode)).toBe(true);
     expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
     expect(options.every(option => option.tooltip.show === false)).toBe(true);
+    expect(options.every(option => option.yAxis.axisLabel?.show === false)).toBe(true);
     expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
     expect(heartRateOption?.visualMap?.[0]?.pieces.map(piece => piece.color)).toEqual([
       AppColors.LightBlue,
@@ -146,12 +147,15 @@ describe('HomeWorkoutPreviewComponent', () => {
       origin: 'start',
     }));
     expect(chart.on).not.toHaveBeenCalled();
-    expect(text).toContain('Recorded streams');
-    expect(text).toContain('Synchronized by time');
+    expect(text).toContain('Workout charts');
+    expect(text).toContain('Distance');
+    expect(text).toContain('Duration');
+    expect(text).toContain('Time');
     expect(text).toContain('Heart Rate');
     expect(text).toContain('Altitude');
     expect(text).toContain('Power');
     expect(text).toContain('Depth');
+    expect(text).not.toContain('Recorded streams');
     expect(text).not.toContain('7 chart types');
   });
 });

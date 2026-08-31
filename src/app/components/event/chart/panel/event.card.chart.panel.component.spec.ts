@@ -337,6 +337,7 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
     expect(option?.tooltip?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(false);
     expect(option?.series?.[0]?.silent).toBe(true);
     expect(chart.on).not.toHaveBeenCalled();
     expect(zr.on).not.toHaveBeenCalled();
