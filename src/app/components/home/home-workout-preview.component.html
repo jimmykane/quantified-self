@@ -1,29 +1,17 @@
-<section class="workout-preview" role="img"
-  aria-label="Illustrative workout analysis with zone-colored Heart Rate and Power, grade-colored Altitude, and an inverse Depth profile">
-  <header class="workout-preview__header">
-    <div>
-      <span class="workout-preview__eyebrow">Illustrative analysis</span>
-      <strong>Workout charts</strong>
-    </div>
-    <span class="workout-preview__summary">
-      Distance <i aria-hidden="true">·</i> Duration <i aria-hidden="true">·</i> Time
-    </span>
-  </header>
-
-  <div class="workout-preview__charts" inert aria-hidden="true" data-nosnippet>
-    <app-event-card-chart-panel [panel]="heartRatePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
-      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
-      [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
-    <app-event-card-chart-panel [panel]="altitudePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
-      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
-      [showSwimLengths]="false" [colorAltitudeByGrade]="true"
-      [previewMode]="true"></app-event-card-chart-panel>
-    <app-event-card-chart-panel [panel]="powerPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
-      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
-      [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
-    <app-event-card-chart-panel [panel]="depthPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
-      [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
-      [showSwimLengths]="false" [fillOpacity]="1" [areaFillOrigin]="depthAreaFillOrigin"
-      [areaFillColor]="depthFillColor()" [previewMode]="true"></app-event-card-chart-panel>
-  </div>
-</section>
+<div class="workout-preview__charts" role="img"
+  aria-label="Workout charts with zone-colored Heart Rate and Power, grade-colored Altitude, and an inverse Depth profile"
+  data-nosnippet>
+  <app-event-card-chart-panel [panel]="heartRatePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="altitudePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+    [showSwimLengths]="false" [colorAltitudeByGrade]="true" [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="powerPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="depthPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="false" [showLaps]="false"
+    [showSwimLengths]="false" [fillOpacity]="1" [areaFillOrigin]="depthAreaFillOrigin"
+    [areaFillColor]="depthFillColor()" [previewMode]="true"></app-event-card-chart-panel>
+</div>

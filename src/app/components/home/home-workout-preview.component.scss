@@ -1,65 +1,15 @@
 :host {
+  container-type: inline-size;
   display: block;
   margin-top: 1rem;
   pointer-events: none;
   user-select: none;
 }
 
-.workout-preview {
-  container-type: inline-size;
-  overflow: hidden;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 18px;
-  background: var(--mat-sys-surface-container-lowest);
-}
-
-.workout-preview__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.85rem;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-
-  > div {
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  strong {
-    font-size: 0.95rem;
-    line-height: 1.1;
-  }
-}
-
-.workout-preview__eyebrow {
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.65rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.workout-preview__summary {
-  color: var(--mat-sys-on-surface-variant);
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-
-  i {
-    margin: 0 0.15rem;
-    font-style: normal;
-    opacity: 0.65;
-  }
-}
-
 .workout-preview__charts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
-  padding: 0.65rem 0.75rem;
-  background: var(--mat-sys-surface-container-low);
 
   app-event-card-chart-panel {
     --event-chart-panel-height: 70px;
@@ -72,12 +22,6 @@
 }
 
 @container (max-width: 440px) {
-  .workout-preview__header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
   .workout-preview__charts {
     grid-template-columns: 1fr;
   }

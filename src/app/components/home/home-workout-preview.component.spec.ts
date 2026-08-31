@@ -64,7 +64,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeWorkoutPreviewComponent);
   });
 
-  it('reuses real workout chart panels in non-interactive preview mode', async () => {
+  it('renders real workout chart panels directly in non-interactive preview mode', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(2));
 
@@ -147,10 +147,9 @@ describe('HomeWorkoutPreviewComponent', () => {
       origin: 'start',
     }));
     expect(chart.on).not.toHaveBeenCalled();
-    expect(text).toContain('Workout charts');
-    expect(text).toContain('Distance');
-    expect(text).toContain('Duration');
-    expect(text).toContain('Time');
+    expect(fixture.nativeElement.querySelector('.workout-preview')).toBeNull();
+    expect(text).not.toContain('Illustrative analysis');
+    expect(text).not.toContain('Workout charts');
     expect(text).toContain('Heart Rate');
     expect(text).toContain('Altitude');
     expect(text).toContain('Power');
