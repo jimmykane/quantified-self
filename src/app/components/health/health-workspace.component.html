@@ -309,6 +309,29 @@
             } @else {
               <span class="health-sync-update">{{ state.lastUpdateText }}</span>
             }
+            @if (state.historyImportStatusText) {
+              <span aria-hidden="true">·</span>
+              <span class="health-sync-import-status" role="status">{{ state.historyImportStatusText }}</span>
+            }
+            @if (state.historyImportError) {
+              <span class="health-sync-import-error" role="alert">{{ state.historyImportError }}</span>
+            }
+            @if (state.historyImportActionLabel) {
+              <button
+                mat-button
+                type="button"
+                class="health-sync-import"
+                [disabled]="state.historyImportBusy"
+                [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
+                (click)="startHistoryImport(state.provider)">
+                @if (state.historyImportBusy) {
+                  <mat-spinner diameter="14" aria-hidden="true"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">history</mat-icon>
+                }
+                <span>{{ state.historyImportActionLabel }}</span>
+              </button>
+            }
           </li>
         }
       </ul>

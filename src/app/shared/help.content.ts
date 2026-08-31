@@ -71,6 +71,7 @@ const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 - Series show device attribution when supplied, coverage, and freshness. Partial coverage, superseded sample revisions, conflicts, and bounded-load limits are stated explicitly. A conflict means comparable source observations disagree; both readings remain visible.
 - Expand **Source observations** for the accessible table. It lists source, device, reading, semantics, coverage, freshness, and conflict state without displaying opaque account keys.
 - **Sleep** continues to use the normalized Sleep model and existing Sleep trend. Health resolves typed references to those sessions rather than copying Sleep values into another model.
+- The compact source footer shows each provider's recency. For an eligible connected Pro source with no previous Sleep or Health history request, **Import history** starts the provider's existing bounded history workflow. Prior and cooldown-bound requests suppress the action; failed requests can be retried, and Garmin also reports its granular queued and running Health progress.
 - Loading, empty, permission, reconnect, failure, disconnected, and unsupported states link to **Connectivity** when an account action is available. Disconnecting stops future imports but keeps existing Health history; deleting your Quantified Self account removes user-scoped Health records, samples, sync state, and Sleep sessions as described in Policies.`;
 
 const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
