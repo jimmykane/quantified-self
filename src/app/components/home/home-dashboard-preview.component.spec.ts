@@ -7,6 +7,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsKpiComponent } from '../charts/kpi/charts.kpi.component';
+import { ChartsFormComponent } from '../charts/form/charts.form.component';
 import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
@@ -51,14 +52,18 @@ describe('HomeDashboardPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeDashboardPreviewComponent);
   });
 
-  it('reuses three real compact Dashboard KPI components with preview contexts', async () => {
+  it('reuses real Dashboard KPI and Form/TSS charts and the production map cluster palette', async () => {
     fixture.detectChanges();
-    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
 
     const kpiComponents = fixture.debugElement
       .queryAll(By.directive(ChartsKpiComponent))
       .map(debugElement => debugElement.componentInstance as ChartsKpiComponent);
     const text = fixture.nativeElement.textContent as string;
+    const formComponent = fixture.debugElement.query(By.directive(ChartsFormComponent))
+      .componentInstance as ChartsFormComponent;
+    const clusterMap = fixture.nativeElement.querySelector('.dashboard-preview__cluster-map') as HTMLElement;
+    const clusterMarkers = fixture.nativeElement.querySelectorAll('.dashboard-preview__cluster');
 
     expect(kpiComponents.map(component => component.chartType)).toEqual([
       DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
@@ -67,7 +72,13 @@ describe('HomeDashboardPreviewComponent', () => {
     ]);
     expect(kpiComponents.every(component => component.compactRow)).toBe(true);
     expect(kpiComponents.map(component => component.primaryValueText)).toEqual(['62', '+8', '72%']);
+    expect(formComponent.hasData()).toBe(true);
+    expect(formComponent.headlineStats().tss.value).not.toBe('--');
+    expect(clusterMap.style.getPropertyValue('--cluster-small')).toBe('#87d4ff');
+    expect(clusterMarkers).toHaveLength(4);
     expect(text).toContain('Training preset');
+    expect(text).toContain('Form (TSS)');
+    expect(text).toContain('Activity map');
     expect(text).toContain('Curated');
     expect(text).toContain('KPI');
     expect(text).toContain('Custom');

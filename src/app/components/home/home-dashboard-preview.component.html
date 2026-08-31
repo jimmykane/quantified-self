@@ -1,5 +1,5 @@
 <section class="dashboard-preview" role="img"
-  aria-label="Dashboard preview with Fitness, Form, and Easy intensity KPI tiles">
+  aria-label="Dashboard preview with Fitness, Form, Easy intensity, Form and TSS, and clustered activity map tiles">
   <header class="dashboard-preview__header">
     <div>
       <strong>Training preset</strong>
@@ -23,6 +23,41 @@
       <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="easyChartType"
         [easyPercent]="easyPercent"></app-kpi-chart>
     </article>
+
+    <div class="dashboard-preview__detail-tiles">
+      <article class="dashboard-preview__detail-tile dashboard-preview__detail-tile--form">
+        <div class="dashboard-preview__tile-bar">
+          <span><mat-icon>show_chart</mat-icon>Form (TSS)</span>
+          <mat-icon class="dashboard-preview__detail-handle">drag_indicator</mat-icon>
+        </div>
+        <div class="dashboard-preview__form-chart">
+          <app-form-chart [darkTheme]="darkTheme()" [data]="formTimeline" [absoluteLatestPoint]="latestFormPoint"
+            timelineWindow="w"></app-form-chart>
+        </div>
+      </article>
+
+      <article class="dashboard-preview__detail-tile dashboard-preview__detail-tile--map">
+        <div class="dashboard-preview__tile-bar">
+          <span><mat-icon>map</mat-icon>Activity map</span>
+          <mat-icon class="dashboard-preview__detail-handle">drag_indicator</mat-icon>
+        </div>
+        <div class="dashboard-preview__cluster-map" aria-label="Clustered activity map preview"
+          [style.--cluster-small]="clusterPaint().circleColors[0]"
+          [style.--cluster-medium]="clusterPaint().circleColors[1]"
+          [style.--cluster-large]="clusterPaint().circleColors[2]"
+          [style.--cluster-largest]="clusterPaint().circleColors[3]"
+          [style.--cluster-stroke]="clusterPaint().strokeColor"
+          [style.--cluster-text]="clusterPaint().textColor">
+          <span class="dashboard-preview__cluster dashboard-preview__cluster--one">12</span>
+          <span class="dashboard-preview__cluster dashboard-preview__cluster--two">34</span>
+          <span class="dashboard-preview__cluster dashboard-preview__cluster--three">68</span>
+          <span class="dashboard-preview__cluster dashboard-preview__cluster--four">126</span>
+          <span class="dashboard-preview__map-point dashboard-preview__map-point--one"></span>
+          <span class="dashboard-preview__map-point dashboard-preview__map-point--two"></span>
+          <span class="dashboard-preview__map-scale">2 km</span>
+        </div>
+      </article>
+    </div>
   </div>
 
   <footer class="dashboard-preview__types" aria-label="Available dashboard tile categories">

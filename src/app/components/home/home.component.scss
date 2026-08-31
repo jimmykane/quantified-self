@@ -800,7 +800,7 @@
             background: var(--mat-sys-surface-container-lowest);
 
             &--dashboard {
-                min-height: 276px;
+                min-height: 520px;
             }
 
             &--workout {
@@ -814,6 +814,12 @@
 @media (max-width: 520px), (min-width: 600px) and (max-width: 1080px) {
     .features-section .feature-card .home-preview-placeholder--workout {
         min-height: 510px;
+    }
+}
+
+@media (max-width: 420px) {
+    .features-section .feature-card .home-preview-placeholder--dashboard {
+        min-height: 680px;
     }
 }
 

@@ -28,6 +28,8 @@ describe('HomeComponent', () => {
     const chart = {
         dispatchAction: vi.fn(),
         isDisposed: vi.fn(() => false),
+        on: vi.fn(),
+        off: vi.fn(),
     };
     const eChartsLoader = {
         init: vi.fn().mockResolvedValue(chart),
@@ -269,7 +271,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('KPI');
         expect(text).toContain('Custom');
         expect(text).toContain('Map');
-        expect(text).toContain('clustered-heatmap controls');
+        expect(text).toContain('marker-clustering controls');
         expect(text).toContain('Analyze Every Workout');
         expect(text).toContain('Explore each workout with synchronized charts');
         expect(text).toContain('heart rate and power by zone');

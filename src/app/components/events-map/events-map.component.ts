@@ -62,6 +62,11 @@ import {
   resolveThemedActivityColor
 } from '../../services/map/map-activity-color.utils';
 import {
+  buildMapClusterCirclePaint,
+  buildMapClusterCountPaint,
+  buildMapClusterStepExpression,
+} from '../../services/map/map-cluster-style.helper';
+import {
   type MapSearchScope,
   removeMapSearchScopeOverlay,
   buildMapSearchScopeOverlayFeatureCollection,
@@ -1086,8 +1091,8 @@ function ensureEventPointLayers(
     return;
   }
 
-  const clusterCirclePaint = buildClusterCirclePaint(theme);
-  const clusterCountPaint = buildClusterCountPaint(theme);
+  const clusterCirclePaint = buildMapClusterCirclePaint(theme);
+  const clusterCountPaint = buildMapClusterCountPaint(theme);
 
   if (!map.getLayer?.(clusterLayerId)) {
     map.addLayer?.({
@@ -1108,7 +1113,7 @@ function ensureEventPointLayers(
       layout: {
         'text-field': ['get', 'point_count_abbreviated'],
         'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-        'text-size': buildClusterStepExpression([12, 13, 14, 15]),
+        'text-size': buildMapClusterStepExpression([12, 13, 14, 15]),
       },
       paint: clusterCountPaint,
     });
@@ -1116,77 +1121,4 @@ function ensureEventPointLayers(
 
   setPaintIfLayerExists(map, clusterLayerId, clusterCirclePaint);
   setPaintIfLayerExists(map, clusterCountLayerId, clusterCountPaint);
-}
-
-interface ClusterPaintTokens {
-  circleColors: [string, string, string, string];
-  strokeColor: string;
-  textColor: string;
-  textHaloColor: string;
-  textHaloWidth: number;
-  circleOpacity: number;
-  circleBlur: number;
-}
-
-function buildClusterStepExpression(values: [string, string, string, string] | [number, number, number, number]): any[] {
-  return [
-    'step',
-    ['get', 'point_count'],
-    values[0],
-    20,
-    values[1],
-    50,
-    values[2],
-    100,
-    values[3],
-  ];
-}
-
-function resolveClusterPaintTokens(theme: AppThemes): ClusterPaintTokens {
-  if (theme === AppThemes.Dark) {
-    return {
-      circleColors: ['#9be1ff', '#67bbff', '#458fff', '#5c74ff'],
-      strokeColor: 'rgba(244, 248, 255, 0.84)',
-      textColor: '#f8fbff',
-      textHaloColor: 'rgba(6, 12, 24, 0.58)',
-      textHaloWidth: 1.15,
-      circleOpacity: 0.94,
-      circleBlur: 0.08,
-    };
-  }
-
-  return {
-    circleColors: ['#87d4ff', '#4faaff', '#2d7ef7', '#314fce'],
-    strokeColor: 'rgba(244, 248, 255, 0.92)',
-    textColor: '#f8fbff',
-    textHaloColor: 'rgba(16, 37, 63, 0.28)',
-    textHaloWidth: 0.9,
-    circleOpacity: 0.92,
-    circleBlur: 0.06,
-  };
-}
-
-function buildClusterCirclePaint(theme: AppThemes): Record<string, any> {
-  const tokens = resolveClusterPaintTokens(theme);
-
-  return {
-    'circle-color': buildClusterStepExpression(tokens.circleColors),
-    'circle-radius': buildClusterStepExpression([17, 21, 26, 31]),
-    'circle-opacity': tokens.circleOpacity,
-    'circle-emissive-strength': 1,
-    'circle-stroke-color': tokens.strokeColor,
-    'circle-stroke-width': buildClusterStepExpression([1.6, 2, 2.4, 2.8]),
-    'circle-blur': tokens.circleBlur,
-  };
-}
-
-function buildClusterCountPaint(theme: AppThemes): Record<string, any> {
-  const tokens = resolveClusterPaintTokens(theme);
-
-  return {
-    'text-color': tokens.textColor,
-    'text-halo-color': tokens.textHaloColor,
-    'text-halo-width': tokens.textHaloWidth,
-    'text-halo-blur': 0.6,
-  };
 }
