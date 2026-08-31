@@ -113,6 +113,14 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(options).toHaveLength(4);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
     expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
+    expect(panels[0].zoneLegendItems.map(item => item.label)).toEqual([
+      'Zone 1',
+      'Zone 2',
+      'Zone 3',
+      'Zone 4',
+      'Zone 5',
+    ]);
+    expect(panels.slice(1).every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
     expect(options.every(option => option.tooltip.show === false)).toBe(true);
     expect(options.every(option => option.yAxis.axisLabel?.show === false)).toBe(true);
     expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
@@ -151,6 +159,8 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(text).not.toContain('Illustrative analysis');
     expect(text).not.toContain('Workout charts');
     expect(text).toContain('Heart Rate');
+    expect(text).toContain('Zone 1');
+    expect(text).toContain('Zone 5');
     expect(text).toContain('Altitude');
     expect(text).toContain('Power');
     expect(text).toContain('Depth');

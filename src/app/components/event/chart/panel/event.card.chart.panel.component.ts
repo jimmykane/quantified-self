@@ -229,6 +229,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() sharedZoomRange: EventChartRange | null = null;
   @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
   @Input() previewMode = false;
+  @Input() showZoneLegend = false;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
   @Output() previewRangeChange = new EventEmitter<EventChartRange | null>();
@@ -360,6 +361,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return EVENT_CHART_ALTITUDE_GRADE_COLOR_PIECES.map((piece) => ({
       key: piece.label,
       label: piece.label,
+      color: piece.color,
+    }));
+  }
+
+  public get zoneLegendItems(): PanelSeriesLegendItem[] {
+    if (!this.showZoneLegend || !this.panel?.series?.length) {
+      return [];
+    }
+
+    const series = this.panel.series.find(candidate => candidate.zoneColorPieces?.length);
+    return (series?.zoneColorPieces || []).map((piece) => ({
+      key: piece.zone,
+      label: piece.zone,
       color: piece.color,
     }));
   }
