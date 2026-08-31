@@ -113,14 +113,8 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(options).toHaveLength(4);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
     expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
-    expect(panels[0].zoneLegendItems.map(item => item.label)).toEqual([
-      'Zone 1',
-      'Zone 2',
-      'Zone 3',
-      'Zone 4',
-      'Zone 5',
-    ]);
-    expect(panels.slice(1).every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
+    expect(panels.every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
+    expect(panels.every(panel => panel.gradeLegendItems.length === 0)).toBe(true);
     expect(options.every(option => option.tooltip.show === false)).toBe(true);
     expect(options.every(option => option.yAxis.axisLabel?.show === false)).toBe(true);
     expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
@@ -159,12 +153,33 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(text).not.toContain('Illustrative analysis');
     expect(text).not.toContain('Workout charts');
     expect(text).toContain('Heart Rate');
-    expect(text).toContain('Zone 1');
-    expect(text).toContain('Zone 5');
+    expect(text).not.toContain('Zone 1');
+    expect(text).not.toContain('Zone 5');
+    expect(text).not.toContain('Downhill');
+    expect(text).not.toContain('0-3%');
     expect(text).toContain('Altitude');
     expect(text).toContain('Power');
     expect(text).toContain('Depth');
     expect(text).not.toContain('Recorded streams');
     expect(text).not.toContain('7 chart types');
+  });
+
+  it('uses one dense, coherent ride timeline for heart rate, altitude, and power', () => {
+    const component = fixture.componentInstance;
+    const heartRatePoints = component.heartRatePanel.series[0].points;
+    const altitudePoints = component.altitudePanel.series[0].points;
+    const powerPoints = component.powerPanel.series[0].points;
+    const gradeValues = component.altitudePanel.series[0].gradeColorValues;
+
+    expect(heartRatePoints.length).toBeGreaterThan(60);
+    expect(altitudePoints).toHaveLength(heartRatePoints.length);
+    expect(powerPoints).toHaveLength(heartRatePoints.length);
+    expect(gradeValues).toHaveLength(heartRatePoints.length);
+    expect(altitudePoints.map(point => point.x)).toEqual(heartRatePoints.map(point => point.x));
+    expect(powerPoints.map(point => point.x)).toEqual(heartRatePoints.map(point => point.x));
+    expect(Math.max(...heartRatePoints.map(point => point.y))).toBe(151);
+    expect(Math.max(...powerPoints.map(point => point.y))).toBe(298);
+    expect(Math.max(...altitudePoints.map(point => point.y))).toBe(597);
+    expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);
   });
 });

@@ -229,6 +229,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() sharedZoomRange: EventChartRange | null = null;
   @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
   @Input() previewMode = false;
+  @Input() showGradeLegend = true;
   @Input() showZoneLegend = false;
 
   @Output() cursorPositionChange = new EventEmitter<number>();
@@ -354,7 +355,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   public get gradeLegendItems(): GradeLegendItem[] {
-    if (!this.hasActiveAltitudeGradeColoring(this.panel)) {
+    if (!this.showGradeLegend || !this.hasActiveAltitudeGradeColoring(this.panel)) {
       return [];
     }
 

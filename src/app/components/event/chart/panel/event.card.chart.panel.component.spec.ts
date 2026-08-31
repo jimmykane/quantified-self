@@ -1600,6 +1600,9 @@ describe('EventCardChartPanelComponent', () => {
       '9-12%',
       '12%+',
     ]);
+
+    component.showGradeLegend = false;
+    expect(component.gradeLegendItems).toEqual([]);
   });
 
   it('renders normal altitude styling when grade coloring is toggled off', async () => {

@@ -29,12 +29,54 @@ const INTENSITY_ZONE_COLORS = [
   AppColors.LightestRed,
 ] as const;
 
+// One anonymized hilly ride profile shared by every training chart. Power reacts
+// immediately to terrain, while heart rate rises and recovers more gradually.
+const RIDE_HEART_RATE = [
+  120, 121, 119, 121, 116, 109, 102, 101, 101, 101,
+  102, 102, 97, 96, 98, 99, 102, 106, 107, 106,
+  107, 109, 112, 112, 110, 106, 101, 102, 106, 111,
+  116, 121, 121, 121, 122, 126, 131, 136, 141, 145,
+  149, 151, 151, 148, 144, 136, 131, 129, 129, 132,
+  137, 138, 138, 135, 131, 127, 122, 120, 122, 122,
+  123,
+] as const;
+
+const RIDE_ALTITUDE = [
+  491, 490, 490, 492, 493, 495, 496, 496, 496, 498,
+  501, 501, 500, 500, 499, 502, 503, 504, 505, 506,
+  506, 507, 509, 512, 514, 513, 513, 513, 513, 514,
+  516, 517, 518, 521, 523, 526, 530, 534, 538, 542,
+  547, 552, 557, 559, 562, 564, 565, 567, 571, 575,
+  578, 581, 583, 587, 589, 589, 591, 592, 593, 597,
+  596,
+] as const;
+
+const RIDE_GRADE = [
+  0, 0, 1, 2, 3, 1, 1, 1, 3, 3,
+  2, -2, -4, -4, 0, 2, 2, 2, 1, 1,
+  0, 1, 3, 4, 2, -1, -2, -1, 0, 1,
+  1, 2, 2, 5, 6, 8, 9, 10, 10, 12,
+  11, 11, 8, 6, 5, 2, 4, 6, 10, 10,
+  8, 7, 6, 5, 4, 2, 1, 1, 2, 12,
+  12,
+] as const;
+
+const RIDE_POWER = [
+  239, 191, 124, 75, 95, 79, 145, 222, 238, 191,
+  114, 89, 115, 162, 182, 147, 90, 122, 121, 87,
+  78, 106, 110, 101, 55, 100, 177, 295, 298, 189,
+  115, 110, 142, 133, 149, 176, 210, 211, 212, 245,
+  256, 232, 184, 136, 137, 83, 163, 188, 218, 203,
+  157, 196, 134, 112, 80, 77, 79, 115, 105, 130,
+  85,
+] as const;
+
 interface PreviewPanelOptions {
-  gradeValues?: number[];
-  zoneLowerLimits?: number[];
+  gradeValues?: readonly number[];
+  zoneLowerLimits?: readonly number[];
 }
 
-function buildZoneColorPieces(lowerLimits: number[]): EventChartZoneColorPiece[] {
+function buildZoneColorPieces(lowerLimits: readonly number[]): EventChartZoneColorPiece[] {
   return INTENSITY_ZONE_COLORS.slice(0, lowerLimits.length + 1).map((color, index) => ({
     zone: `Zone ${index + 1}`,
     color,
@@ -48,7 +90,7 @@ function buildPanel(
   displayName: string,
   unit: string,
   color: string,
-  values: number[],
+  values: readonly number[],
   options: PreviewPanelOptions = {},
 ): EventChartPanelModel {
   const finalIndex = values.length - 1;
@@ -109,8 +151,8 @@ export class HomeWorkoutPreviewComponent {
     'Heart Rate',
     'bpm',
     AppDataColors['Heart Rate'],
-    [112, 126, 139, 147, 143, 158, 151, 174, 163, 148, 136, 128],
-    { zoneLowerLimits: [120, 140, 155, 170] },
+    RIDE_HEART_RATE,
+    { zoneLowerLimits: [110, 125, 140, 150] },
   );
 
   readonly altitudePanel = buildPanel(
@@ -118,8 +160,8 @@ export class HomeWorkoutPreviewComponent {
     'Altitude',
     'm',
     AppDataColors.Altitude,
-    [92, 98, 109, 127, 151, 184, 207, 222, 210, 188, 156, 132],
-    { gradeValues: [1, 2, 4, 7, 10, 13, 8, 5, 1, -2, -4, -1] },
+    RIDE_ALTITUDE,
+    { gradeValues: RIDE_GRADE },
   );
 
   readonly powerPanel = buildPanel(
@@ -127,8 +169,8 @@ export class HomeWorkoutPreviewComponent {
     'Power',
     'W',
     AppDataColors.Power,
-    [138, 184, 212, 196, 258, 221, 318, 205, 279, 189, 172, 142],
-    { zoneLowerLimits: [150, 200, 250, 300] },
+    RIDE_POWER,
+    { zoneLowerLimits: [100, 150, 200, 250] },
   );
 
   readonly depthPanel = buildPanel(
