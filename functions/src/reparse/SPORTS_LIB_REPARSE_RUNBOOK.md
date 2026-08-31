@@ -278,11 +278,16 @@ Notes:
 - Multiple source files are merged into one final parsed event
 
 Preserved user-editable fields:
+- `name`
 - `description`
 - `privacy`
 - `notes`
 - `rpe`
 - `feeling`
+
+The reparse reapplies these fields after Sports Lib regenerates event stats. Its final event write transaction also
+re-reads the current event document and keeps the latest values plus event tags, so a user edit made while parsing is
+in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
 - regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
