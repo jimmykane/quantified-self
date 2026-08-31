@@ -119,52 +119,23 @@
           <a mat-stroked-button routerLink="/features/training-analysis">Explore Training</a>
         </header>
 
-        <div class="training-preview-overview" aria-label="Current Training overview">
-          <section class="training-preview-state">
-            <span>State</span>
-            <strong>Balanced</strong>
-            <small>TSS-only load model</small>
-          </section>
-          <section>
-            <span>Readiness today</span>
-            <div class="training-preview-value-row"><strong>78</strong><small>Ready</small></div>
-            <app-metric-indicator label="Readiness" [value]="78" tone="ready"
-              [showThresholds]="true"></app-metric-indicator>
-            <small>Load + recorded sleep signals</small>
-          </section>
-          <section>
-            <span>Training time</span>
-            <strong class="training-preview-number">18h 42m</strong>
-            <app-metric-indicator variant="deviation" label="Training time versus usual" [value]="12"
-              [compact]="true"></app-metric-indicator>
-            <small>+12% versus usual 28 days</small>
-          </section>
-          <section>
-            <span>Workouts</span>
-            <strong class="training-preview-number">14</strong>
-            <app-metric-indicator variant="deviation" label="Workouts versus usual" [value]="17"
-              [compact]="true"></app-metric-indicator>
-            <small>2 more than usual</small>
-          </section>
-        </div>
+        <app-training-summary-cards
+          mode="preview"
+          [cards]="trainingPreviewCards"
+          ariaLabel="Current Training overview"
+        ></app-training-summary-cards>
 
-        <dl class="training-preview-load-grid" aria-label="Training load metrics">
-          <div><dt>Fitness (CTL)</dt><dd>62</dd><small>42-day load</small></div>
-          <div><dt>Fatigue (ATL)</dt><dd>54</dd><small>7-day load</small></div>
-          <div><dt>Form now</dt><dd>+8</dd><small>Fitness − fatigue</small></div>
-          <div><dt>Ramp</dt><dd>+1.4</dd><small>7-day fitness change</small></div>
-          <div><dt>ACWR</dt><dd>1.03</dd><small>Acute ÷ chronic load</small></div>
-          <div><dt>Monotony</dt><dd>1.42</dd><small>Weekly load variability</small></div>
-          <div><dt>Strain</dt><dd>684</dd><small>Load × monotony</small></div>
-          <div><dt>Form +7 days</dt><dd>+15</dd><small>No-additional-load scenario</small></div>
-        </dl>
+        <app-training-metric-grid
+          mode="preview-load"
+          [metrics]="trainingPreviewLoadMetrics"
+          ariaLabel="Training load metrics"
+        ></app-training-metric-grid>
 
-        <dl class="training-preview-context-grid" aria-label="Training context">
-          <div><dt>Recovery debt</dt><dd>2 days</dd><small>Estimated to neutral Form</small></div>
-          <div><dt>Recovery left</dt><dd>8h 20m</dd><small>Imported estimate</small></div>
-          <div><dt>Intensity balance</dt><dd>72% easy · 14% hard</dd><small>Latest eligible week</small></div>
-          <div><dt>Efficiency</dt><dd>+3.2%</dd><small>Versus previous 4 weeks</small></div>
-        </dl>
+        <app-training-metric-grid
+          mode="preview-context"
+          [metrics]="trainingPreviewContextMetrics"
+          ariaLabel="Training context"
+        ></app-training-metric-grid>
       </div>
     </mat-card>
 

@@ -1,0 +1,25 @@
+<dl
+  class="training-metric-panel training-metric-grid"
+  [class.training-load-metrics]="mode() === 'workspace'"
+  [class.training-preview-load-grid]="mode() === 'preview-load'"
+  [class.training-preview-context-grid]="mode() === 'preview-context'"
+  [class.training-metric-grid--workspace]="mode() === 'workspace'"
+  [class.training-metric-grid--preview-load]="mode() === 'preview-load'"
+  [class.training-metric-grid--preview-context]="mode() === 'preview-context'"
+  [class.qs-glass-card-panel]="mode() === 'workspace'"
+  [attr.aria-label]="ariaLabel()"
+>
+  @for (metric of presentedMetrics(); track metric.id) {
+    <div>
+      <dt>{{ metric.label }}</dt>
+      <dd>
+        @for (segment of metric.valueSegments; track $index) {
+          <span [class.training-metric-token]="segment.isMetric">{{ segment.text }}</span>
+        }
+      </dd>
+      @if (metric.detailText) {
+        <small>{{ metric.detailText }}</small>
+      }
+    </div>
+  }
+</dl>

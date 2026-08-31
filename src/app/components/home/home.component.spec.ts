@@ -234,6 +234,8 @@ describe('HomeComponent', () => {
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreview.querySelector('app-training-summary-cards')).toBeTruthy();
+        expect(trainingPreview.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
         expect(trainingPreviewIndicators.length).toBe(3);
         expect(signalPreviews.length).toBe(0);
         expect(deferredPreviewPlaceholders.length).toBe(3);

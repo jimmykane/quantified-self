@@ -175,6 +175,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
 - Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
 - Body-weight trend chart: `src/app/components/training/training-body-weight-trend-chart.component.*`
+- Shared status/comparison cards: `src/app/components/shared/training-summary/training-summary-cards.component.*`
+- Shared exact-value metric grid: `src/app/components/shared/training-summary/training-metric-grid.component.*`
 - Snapshot service: `src/app/services/dashboard-derived-metrics.service.ts`
 - Shared payload contracts: `shared/derived-metrics.ts`
 - Shared discipline registry: `shared/training-disciplines.ts`
@@ -184,6 +186,13 @@ Training is available to signed-in users from the sidenav. Its route header uses
 primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
 **Calendar** and **Dashboard** route actions. Dashboard offers **Open Training** and **Calendar** route actions, but does
 not add curated Training snapshots as default Dashboard dependencies or configurable tiles.
+
+The lightweight status/comparison cards and exact-value load grid are shared presentation primitives. The authenticated
+Training workspace supplies their live, normalized view models; the public homepage supplies a static example view model
+and selects the compact preview density. These components own the repeated semantic markup, numeric token formatting,
+indicator placement, and responsive layout, but they never subscribe to data, calculate a metric, initialize a chart,
+or access browser-only APIs. Training remains the source of truth for calculations and athlete-specific wording, while
+the homepage remains safe to render during SSR and prerendering.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
@@ -1711,6 +1720,8 @@ training-durability-trajectory-chart.component.spec.ts
 durability-reading-guide.component.spec.ts
 training-readiness-trend-chart.component.spec.ts
 training-body-weight-trend-chart.component.spec.ts
+training-summary-cards.component.spec.ts
+training-metric-grid.component.spec.ts
 event-json-sanitizer.spec.ts
 ```
 
