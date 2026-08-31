@@ -198,7 +198,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);
   });
 
-  it('animates the production selection and synchronized zoom inputs once', async () => {
+  it('loops the production selection and synchronized zoom inputs', async () => {
     vi.useFakeTimers();
     fixture.detectChanges();
     const component = fixture.componentInstance;
@@ -227,5 +227,18 @@ describe('HomeWorkoutPreviewComponent', () => {
     fixture.detectChanges();
 
     expect(component.sharedZoomRange()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1_300);
+    fixture.detectChanges();
+
+    expect(component.previewRange()).toEqual({ start: 1_040, end: 2_260 });
+    expect(component.sharedZoomRange()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1_200);
+    fixture.detectChanges();
+
+    expect(component.previewRange()).toBeNull();
+    expect(component.sharedZoomRange()?.start).toBeGreaterThan(0);
+    expect(component.sharedZoomRange()?.end).toBeLessThan(component.xDomain.end);
   });
 });

@@ -36,6 +36,7 @@ const PREVIEW_SELECTION_DELAY_MS = 900;
 const PREVIEW_SELECTION_DURATION_MS = 850;
 const PREVIEW_ZOOM_DURATION_MS = 720;
 const PREVIEW_ZOOM_HOLD_MS = 1_000;
+const PREVIEW_LOOP_PAUSE_MS = 1_000;
 const PREVIEW_ZOOM_STEPS = 8;
 const DIVE_PROFILE_COLORS = AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup];
 const INTENSITY_ZONE_COLORS = [
@@ -154,7 +155,7 @@ function buildPanel(
 export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
-  private readonly animationTimers: Array<ReturnType<typeof setTimeout>> = [];
+  private readonly animationTimers = new Set<ReturnType<typeof setTimeout>>();
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
@@ -209,6 +210,18 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.startAnimationLoop();
+  }
+
+  ngOnDestroy(): void {
+    this.animationTimers.forEach(timer => clearTimeout(timer));
+    this.animationTimers.clear();
+  }
+
+  private startAnimationLoop(): void {
+    this.previewRange.set(null);
+    this.sharedZoomRange.set(null);
+
     this.scheduleAnimationStep(PREVIEW_SELECTION_DELAY_MS, () => {
       this.previewRange.set(PREVIEW_ZOOM_RANGE);
     });
@@ -228,13 +241,12 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
         + PREVIEW_ZOOM_HOLD_MS,
       () => {
         this.animateZoomRange(PREVIEW_ZOOM_RANGE, null, PREVIEW_ZOOM_DURATION_MS);
+        this.scheduleAnimationStep(
+          PREVIEW_ZOOM_DURATION_MS + PREVIEW_LOOP_PAUSE_MS,
+          () => this.startAnimationLoop(),
+        );
       },
     );
-  }
-
-  ngOnDestroy(): void {
-    this.animationTimers.forEach(timer => clearTimeout(timer));
-    this.animationTimers.length = 0;
   }
 
   private animateZoomRange(
@@ -267,6 +279,10 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
   }
 
   private scheduleAnimationStep(delayMs: number, callback: () => void): void {
-    this.animationTimers.push(setTimeout(callback, delayMs));
+    const timer = setTimeout(() => {
+      this.animationTimers.delete(timer);
+      callback();
+    }, delayMs);
+    this.animationTimers.add(timer);
   }
 }

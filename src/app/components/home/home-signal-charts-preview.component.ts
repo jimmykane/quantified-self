@@ -60,8 +60,14 @@ function buildFormTimeline(): DashboardFormPoint[] {
   imports: [AppChartsModule],
 })
 export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestroy {
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly themeService = inject(AppThemeService);
+
   readonly previews = buildHomeSignalChartPreviews(buildHomeSignalChartPalette(false));
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  readonly animationsEnabled = isPlatformBrowser(this.platformId)
+    && (typeof window.matchMedia !== 'function'
+      || !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   readonly formTimeline = buildFormTimeline();
   readonly latestFormPoint = [...this.formTimeline]
     .reverse()
@@ -69,8 +75,6 @@ export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestro
 
   @ViewChildren('chartDiv') private chartDivs!: QueryList<ElementRef<HTMLDivElement>>;
 
-  private readonly platformId = inject(PLATFORM_ID);
-  private readonly themeService = inject(AppThemeService);
   private readonly chartHosts: EChartsHostController[];
   private viewInitialized = false;
 

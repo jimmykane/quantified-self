@@ -80,6 +80,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   ];
 
   @Input() darkTheme = false;
+  @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
@@ -166,7 +167,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       return;
     }
 
-    if (changes.darkTheme || changes.isLoading || changes.formStatus) {
+    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus) {
       void this.refreshChart();
     }
   }
@@ -362,7 +363,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     return {
       option: {
-        animation: false,
+        animation: this.useAnimations === true,
         backgroundColor: 'transparent',
         textStyle: {
           color: chartStyle.textColor,

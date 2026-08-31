@@ -32,7 +32,7 @@
       <div class="signal-preview-form-chart" role="img"
         aria-label="Form and Training Stress Score chart showing fitness, fatigue, current form, and latest workout TSS">
         <app-form-chart [darkTheme]="darkTheme()" [data]="formTimeline" [absoluteLatestPoint]="latestFormPoint"
-          timelineWindow="w"></app-form-chart>
+          [useAnimations]="animationsEnabled" timelineWindow="w"></app-form-chart>
       </div>
     </article>
   </div>

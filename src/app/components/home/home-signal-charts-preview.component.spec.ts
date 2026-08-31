@@ -28,6 +28,19 @@ describe('HomeSignalChartsPreviewComponent', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     appTheme.set(AppThemes.Normal);
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: false,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
     await TestBed.configureTestingModule({
       imports: [HomeSignalChartsPreviewComponent],
       providers: [
@@ -53,6 +66,7 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(widgets.length).toBe(4);
     expect(chartSurfaces.length).toBe(4);
     expect(formComponent.hasData()).toBe(true);
+    expect(formComponent.useAnimations).toBe(true);
     expect(formComponent.headlineStats().tss.value).not.toBe('--');
     expect(text).not.toContain('Illustrative data');
     expect(text).toContain('Readiness');
@@ -62,6 +76,35 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(text).toContain('Form (TSS)');
     expect(text).toContain('Fitness, fatigue, and form from daily training stress');
     expect(loader.setOption).toHaveBeenCalledTimes(5);
+    const formOption = loader.setOption.mock.calls
+      .map(call => call[1] as { animation?: boolean; tooltip?: { show?: boolean } })
+      .find(option => option.tooltip?.show === true);
+    expect(formOption?.animation).toBe(true);
+  });
+
+  it('disables the homepage Form animation when reduced motion is requested', async () => {
+    fixture.destroy();
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    fixture = TestBed.createComponent(HomeSignalChartsPreviewComponent);
+
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
+
+    const formComponent = fixture.debugElement.query(By.directive(ChartsFormComponent))
+      .componentInstance as ChartsFormComponent;
+    expect(formComponent.useAnimations).toBe(false);
   });
 
   it('keeps the four compact ECharts previews silent', async () => {
