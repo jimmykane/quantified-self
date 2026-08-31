@@ -316,6 +316,31 @@ still removes the complete user subtree and prevents the migration from recreati
 use the existing per-user coalesced derived-metric ingress, so keep the documented user-scoped batches and allow that
 queue to settle during rollout rather than running overlapping pages for the same user.
 
+After clean single-user pilots, use the global cohort runner instead of copying Firebase UIDs into repeated commands.
+It scans only top-level user document names, checks for Health or Sleep subcollections, and keeps users plus their Health
+and Sleep passes sequential. It never prints a raw UID. `nextStartAfter` is a domain-separated SHA-256 checkpoint; on
+resume, the runner resolves it by scanning field-masked user document names server-side:
+
+```bash
+# Read-only five-user cohort.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --max-users 5
+
+# Execute the same bounded cohort with five guarded document transactions at a time.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 5 --document-concurrency 5
+
+# Resume after a clean cohort using only the opaque checkpoint from its summary.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 25 --document-concurrency 5 --start-after <opaque-checkpoint>
+```
+
+The runner defaults to scanning at most 100 user documents and processing at most five users that actually have Health
+or Sleep data. `--scan-limit` can be raised to 5,000 when sparse accounts require it; `--max-users` is capped at 100,
+`--document-limit` at 250, and `--document-concurrency` at 10. Each user receives complete Health and Sleep dry runs
+before execution, guarded execution one collection at a time, and zero-candidate postchecks before the checkpoint can
+advance. Inactive/deleting users are skipped. Any invalid record, missing/deleting document, read/write failure,
+repeated document cursor, or nonzero postcheck stops the cohort and retains the checkpoint before that user. Rerun from
+the returned checkpoint after resolving the cause. Start with 5 users, review logs and the derived-metrics queues, then
+increase to 25 before processing the remainder.
+
 ## Temporarily Disable A Provider
 
 To pause COROS sleep sync, add it to the disabled-provider list:

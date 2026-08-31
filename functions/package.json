@@ -61,6 +61,7 @@
     "migrate-storage-users-bucket": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-storage-users-bucket.ts",
     "backfill-sports-lib-processing-code": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-sports-lib-processing-code.ts",
     "migrate-health-sleep-sports-lib-data": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-health-sleep-sports-lib-data.ts",
+    "migrate-health-sleep-sports-lib-data-global": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-health-sleep-sports-lib-data-global.ts",
     "backfill-coros-sleep": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-coros-sleep.ts",
     "backfill-coros-daily-health": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-coros-sleep.ts",
     "migrate-coros-sleep-to-health": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-coros-sleep-to-health.ts",
