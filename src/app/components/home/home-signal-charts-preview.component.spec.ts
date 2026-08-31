@@ -3,7 +3,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChartsEfficiencyTrendComponent } from '../charts/efficiency-trend/charts.efficiency-trend.component';
 import { ChartsFormComponent } from '../charts/form/charts.form.component';
+import { ChartsFreshnessForecastComponent } from '../charts/freshness-forecast/charts.freshness-forecast.component';
+import { ChartsIntensityDistributionComponent } from '../charts/intensity-distribution/charts.intensity-distribution.component';
+import { ChartsPowerCurveComponent } from '../charts/power-curve/charts.power-curve.component';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
@@ -53,33 +57,44 @@ describe('HomeSignalChartsPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeSignalChartsPreviewComponent);
   });
 
-  it('renders four compact previews and the real Form/TSS Training chart', async () => {
+  it('renders the production chart components with homepage preview data', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
     const widgets = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
-    const chartSurfaces = fixture.nativeElement.querySelectorAll('.signal-preview-chart[role="img"]');
     const text = fixture.nativeElement.textContent as string;
     const formComponent = fixture.debugElement.query(By.directive(ChartsFormComponent))
       .componentInstance as ChartsFormComponent;
+    const freshnessComponent = fixture.debugElement.query(By.directive(ChartsFreshnessForecastComponent))
+      .componentInstance as ChartsFreshnessForecastComponent;
+    const intensityComponent = fixture.debugElement.query(By.directive(ChartsIntensityDistributionComponent))
+      .componentInstance as ChartsIntensityDistributionComponent;
+    const efficiencyComponent = fixture.debugElement.query(By.directive(ChartsEfficiencyTrendComponent))
+      .componentInstance as ChartsEfficiencyTrendComponent;
+    const powerCurveComponent = fixture.debugElement.query(By.directive(ChartsPowerCurveComponent))
+      .componentInstance as ChartsPowerCurveComponent;
 
     expect(widgets.length).toBe(4);
-    expect(chartSurfaces.length).toBe(4);
+    expect(fixture.nativeElement.querySelectorAll('.signal-preview-chart').length).toBe(0);
+    expect(freshnessComponent.forecast?.points).toHaveLength(14);
+    expect(intensityComponent.distribution?.weeks).toHaveLength(8);
+    expect(efficiencyComponent.trend?.points).toHaveLength(8);
+    expect(powerCurveComponent.title).toBe('Cycling Power Curve');
+    expect(powerCurveComponent.powerCurve?.series).toHaveLength(2);
+    expect(powerCurveComponent.primaryBenchmark?.durationLabel).toBe('20m');
     expect(formComponent.hasData()).toBe(true);
     expect(formComponent.useAnimations).toBe(true);
     expect(formComponent.headlineStats().tss.value).not.toBe('--');
     expect(text).not.toContain('Illustrative data');
-    expect(text).toContain('Readiness');
-    expect(text).toContain('Freshness');
-    expect(text).toContain('Intensity mix');
-    expect(text).toContain('Efficiency');
+    expect(text).toContain('Freshness Forecast');
+    expect(text).toContain('Intensity Distribution');
+    expect(text).toContain('Efficiency Trend');
+    expect(text).toContain('Cycling Power Curve');
     expect(text).toContain('Form (TSS)');
     expect(text).toContain('Fitness, fatigue, and form from daily training stress');
-    expect(loader.setOption).toHaveBeenCalledTimes(5);
-    const formOption = loader.setOption.mock.calls
-      .map(call => call[1] as { animation?: boolean; tooltip?: { show?: boolean } })
-      .find(option => option.tooltip?.show === true);
-    expect(formOption?.animation).toBe(true);
+    const options = loader.setOption.mock.calls
+      .map(call => call[1] as { animation?: boolean });
+    expect(options.some(option => option.animation === true)).toBe(true);
   });
 
   it('disables the homepage Form animation when reduced motion is requested', async () => {
@@ -107,51 +122,23 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(formComponent.useAnimations).toBe(false);
   });
 
-  it('keeps the four compact ECharts previews silent', async () => {
+  it('passes theme changes through every shared chart component', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
-    const options = loader.setOption.mock.calls.map(call => call[1] as {
-      animation: boolean;
-      tooltip: { show: boolean };
-      series: Array<{ silent: boolean }>;
-    }).filter(option => option.tooltip.show === false);
-
-    expect(options).toHaveLength(4);
-    expect(options.every(option => option.animation === false)).toBe(true);
-    expect(options.every(option => option.tooltip.show === false)).toBe(true);
-    expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
-  });
-
-  it('matches the canonical Training chart colors in light and dark themes', async () => {
-    fixture.detectChanges();
-    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
-
-    const readOptions = (start: number) => loader.setOption.mock.calls.slice(start, start + 5).map(call => call[1] as {
-      tooltip: { show: boolean };
-      series: Array<{
-        lineStyle?: { color: string };
-        itemStyle?: { color: string };
-      }>;
-    }).filter(option => option.tooltip.show === false);
-    const lightOptions = readOptions(0);
-
-    expect(lightOptions[0].series[0].lineStyle?.color).toBe('#6d6e73');
-    expect(lightOptions[1].series[0].lineStyle?.color).toBe('#4caf50');
-    expect(lightOptions[2].series.map(series => series.itemStyle?.color)).toEqual([
-      '#43a047',
-      '#fb8c00',
-      '#e53935',
-    ]);
-    expect(lightOptions[3].series[0].lineStyle?.color).toBe('#6d6e73');
+    const sharedCharts = [
+      ChartsFreshnessForecastComponent,
+      ChartsIntensityDistributionComponent,
+      ChartsEfficiencyTrendComponent,
+      ChartsPowerCurveComponent,
+      ChartsFormComponent,
+    ].map(component => fixture.debugElement.query(By.directive(component)).componentInstance as { darkTheme: boolean });
+    expect(sharedCharts.every(component => component.darkTheme === false)).toBe(true);
 
     appTheme.set(AppThemes.Dark);
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(10));
 
-    const darkOptions = readOptions(5);
-    expect(darkOptions[0].series[0].lineStyle?.color).toBe('rgba(179,180,183,1)');
-    expect(darkOptions[1].series[0].lineStyle?.color).toBe('#4caf50');
-    expect(darkOptions[3].series[0].lineStyle?.color).toBe('rgba(179,180,183,1)');
+    expect(sharedCharts.every(component => component.darkTheme === true)).toBe(true);
   });
 });

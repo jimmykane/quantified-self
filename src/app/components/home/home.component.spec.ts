@@ -256,10 +256,10 @@ describe('HomeComponent', () => {
         expect(text).toContain('Efficiency');
         expect(text).toContain('Explore Training');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
-        expect(text).toContain('14-day score');
-        expect(text).toContain('7-day forecast');
-        expect(text).toContain('8-week split');
-        expect(text).toContain('indexed trend');
+        expect(text).toContain('Freshness Forecast');
+        expect(text).toContain('Intensity Distribution');
+        expect(text).toContain('Efficiency Trend');
+        expect(text).toContain('Cycling Power Curve');
         expect(text).toContain('sleep views');
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');

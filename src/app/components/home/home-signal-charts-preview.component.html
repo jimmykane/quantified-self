@@ -4,23 +4,25 @@
   </div>
 
   <div class="signal-preview-grid">
-    @for (preview of previews; track preview.key) {
-      <article class="signal-preview-widget">
-        <header>
-          <div>
-            <h4>{{ preview.title }}</h4>
-            <small>{{ preview.context }}</small>
-          </div>
-          <strong>{{ preview.value }}</strong>
-        </header>
-        <div
-          #chartDiv
-          class="signal-preview-chart"
-          role="img"
-          [attr.aria-label]="preview.ariaLabel">
-        </div>
-      </article>
-    }
+    <article class="signal-preview-widget" aria-label="Freshness forecast chart preview">
+      <app-freshness-forecast-chart [darkTheme]="darkTheme()" [forecast]="freshnessForecast">
+      </app-freshness-forecast-chart>
+    </article>
+
+    <article class="signal-preview-widget" aria-label="Training intensity distribution chart preview">
+      <app-intensity-distribution-chart [darkTheme]="darkTheme()" [distribution]="intensityDistribution">
+      </app-intensity-distribution-chart>
+    </article>
+
+    <article class="signal-preview-widget" aria-label="Training efficiency trend chart preview">
+      <app-efficiency-trend-chart [darkTheme]="darkTheme()" [trend]="efficiencyTrend">
+      </app-efficiency-trend-chart>
+    </article>
+
+    <article class="signal-preview-widget" aria-label="Cycling power curve chart preview">
+      <app-power-curve-chart [darkTheme]="darkTheme()" title="Cycling Power Curve" [powerCurve]="powerCurve">
+      </app-power-curve-chart>
+    </article>
 
     <article class="signal-preview-form-widget">
       <div class="signal-preview-form-heading">
@@ -29,7 +31,7 @@
           <small>Fitness, fatigue, and form from daily training stress</small>
         </div>
       </div>
-      <div class="signal-preview-form-chart" role="img"
+      <div class="signal-preview-shared-chart signal-preview-form-chart" role="img"
         aria-label="Form and Training Stress Score chart showing fitness, fatigue, current form, and latest workout TSS">
         <app-form-chart [darkTheme]="darkTheme()" [data]="formTimeline" [absoluteLatestPoint]="latestFormPoint"
           [useAnimations]="animationsEnabled" timelineWindow="w"></app-form-chart>

@@ -38,8 +38,12 @@
 
 .signal-preview-widget {
   min-width: 0;
-  padding: 0.75rem;
+  height: 190px;
   background: var(--mat-sys-surface-container-lowest);
+  overflow: hidden;
+  pointer-events: none;
+  touch-action: pan-y;
+  user-select: none;
 
   &:nth-child(even) {
     border-left: 1px solid var(--mat-sys-outline-variant);
@@ -49,40 +53,13 @@
     border-top: 1px solid var(--mat-sys-outline-variant);
   }
 
-  header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  h4,
-  small,
-  strong {
+  app-freshness-forecast-chart,
+  app-intensity-distribution-chart,
+  app-efficiency-trend-chart,
+  app-power-curve-chart {
     display: block;
-  }
-
-  h4 {
-    margin: 0;
-    color: var(--mat-sys-on-surface);
-    font-size: 0.78rem;
-    font-weight: 650;
-    line-height: 1.2;
-  }
-
-  small {
-    margin-top: 0.15rem;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.65rem;
-    line-height: 1.2;
-  }
-
-  strong {
-    flex: 0 0 auto;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.15rem;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
+    width: 100%;
+    height: 100%;
   }
 }
 
@@ -122,9 +99,8 @@
   }
 }
 
-.signal-preview-form-chart {
+.signal-preview-shared-chart {
   width: 100%;
-  height: 280px;
   min-width: 0;
   overflow: hidden;
   pointer-events: none;
@@ -132,19 +108,14 @@
   user-select: none;
 }
 
+.signal-preview-form-chart {
+  height: 280px;
+}
+
 .signal-preview-form-chart app-form-chart {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.signal-preview-chart {
-  width: 100%;
-  height: 58px;
-  margin-top: 0.35rem;
-  pointer-events: none;
-  touch-action: pan-y;
-  user-select: none;
 }
 
 @media (max-width: 380px) {
@@ -159,15 +130,7 @@
   }
 
   .signal-preview-widget {
-    padding: 0.65rem;
-
-    header {
-      gap: 0.25rem;
-    }
-
-    h4 {
-      font-size: 0.72rem;
-    }
+    height: 184px;
   }
 
   .signal-preview-form-widget {

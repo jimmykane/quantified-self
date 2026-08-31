@@ -1,15 +1,9 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
-  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  OnDestroy,
   PLATFORM_ID,
-  QueryList,
-  ViewChildren,
   computed,
-  effect,
   inject,
 } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -18,24 +12,23 @@ import {
   type DashboardFormPoint,
 } from '../../helpers/dashboard-form.helper';
 import {
-  ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
-  EChartsHostController,
-} from '../../helpers/echarts-host-controller';
-import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
+  type DashboardEfficiencyTrendContext,
+  type DashboardFreshnessForecastContext,
+  type DashboardIntensityDistributionContext,
+} from '../../helpers/dashboard-derived-metrics.helper';
+import type { DashboardPowerCurveContext } from '../../helpers/dashboard-power-curve.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppThemeService } from '../../services/app.theme.service';
-import { EChartsLoaderService } from '../../services/echarts-loader.service';
-import { LoggerService } from '../../services/logger.service';
-import {
-  buildHomeSignalChartPalette,
-  buildHomeSignalChartPreviews,
-} from './home-signal-charts-preview.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
 
-function buildFormTimeline(): DashboardFormPoint[] {
+function getPreviewDayMs(): number {
   const today = new Date();
-  const previewDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+}
+
+function buildFormTimeline(previewDayMs: number): DashboardFormPoint[] {
   const weeklyLoadPattern = [0, 76, 52, 94, 0, 128, 58];
   const dayCount = 16 * 7;
 
@@ -51,6 +44,113 @@ function buildFormTimeline(): DashboardFormPoint[] {
   );
 }
 
+function buildFreshnessForecast(previewDayMs: number): DashboardFreshnessForecastContext {
+  const actualCtl = [54, 55, 56, 57, 58, 59, 59];
+  const actualAtl = [68, 66, 65, 67, 64, 62, 61];
+  const actualTss = [90, 55, 0, 104, 42, 0, 58];
+  const forecastCtl = [58, 57, 56, 55, 54, 53, 52];
+  const forecastAtl = [53, 46, 40, 35, 31, 27, 24];
+  const points = [
+    ...actualCtl.map((ctl, index) => ({
+      dayMs: previewDayMs - ((actualCtl.length - 1 - index) * DAY_MS),
+      trainingStressScore: actualTss[index],
+      ctl,
+      atl: actualAtl[index],
+      formSameDay: ctl - actualAtl[index],
+      formPriorDay: index === 0 ? null : actualCtl[index - 1] - actualAtl[index - 1],
+      isForecast: false,
+    })),
+    ...forecastCtl.map((ctl, index) => ({
+      dayMs: previewDayMs + ((index + 1) * DAY_MS),
+      trainingStressScore: 0,
+      ctl,
+      atl: forecastAtl[index],
+      formSameDay: ctl - forecastAtl[index],
+      formPriorDay: index === 0
+        ? actualCtl.at(-1)! - actualAtl.at(-1)!
+        : forecastCtl[index - 1] - forecastAtl[index - 1],
+      isForecast: true,
+    })),
+  ];
+
+  return { generatedAtMs: previewDayMs, points };
+}
+
+function buildIntensityDistribution(previewDayMs: number): DashboardIntensityDistributionContext {
+  const easyPercent = [82, 78, 85, 74, 88, 86, 84, 87];
+  const moderatePercent = [15, 18, 12, 23, 10, 12, 14, 11];
+  const hardPercent = [3, 4, 3, 3, 2, 2, 2, 2];
+  const weeks = easyPercent.map((easy, index) => ({
+    weekStartMs: previewDayMs - ((easyPercent.length - 1 - index) * WEEK_MS),
+    easySeconds: easy * 600,
+    moderateSeconds: moderatePercent[index] * 600,
+    hardSeconds: hardPercent[index] * 600,
+    source: 'power' as const,
+  }));
+
+  return {
+    weeks,
+    latestWeekStartMs: weeks.at(-1)?.weekStartMs ?? null,
+    latestEasyPercent: easyPercent.at(-1) ?? null,
+    latestModeratePercent: moderatePercent.at(-1) ?? null,
+    latestHardPercent: hardPercent.at(-1) ?? null,
+  };
+}
+
+function buildEfficiencyTrend(previewDayMs: number): DashboardEfficiencyTrendContext {
+  const values = [1.82, 1.85, 1.83, 1.88, 1.91, 1.94, 1.92, 1.96];
+  const points = values.map((value, index) => ({
+    weekStartMs: previewDayMs - ((values.length - 1 - index) * WEEK_MS),
+    value,
+    sampleCount: 3 + (index % 3),
+    totalDurationSeconds: 9_000 + (index * 420),
+  }));
+
+  return {
+    points,
+    latestWeekStartMs: points.at(-1)?.weekStartMs ?? null,
+    latestValue: values.at(-1) ?? null,
+  };
+}
+
+function buildPowerCurve(previewDayMs: number): DashboardPowerCurveContext {
+  const durations = [5, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600];
+  const bestPower = [910, 690, 560, 430, 370, 318, 282, 248, 232, 205];
+  const latestPower = [865, 650, 525, 405, 345, 295, 266, 232, 218, 192];
+  const latestEventStartMs = previewDayMs - (2 * DAY_MS);
+
+  return {
+    matchedEventCount: 18,
+    sourceEventCount: 20,
+    latestEventId: 'homepage-preview-latest',
+    latestEventStartMs,
+    latestSeriesLabel: 'Latest cycling activity',
+    compareMode: 'latest',
+    comparisonSeriesLabel: 'Latest cycling activity',
+    comparisonEventCount: 1,
+    series: [
+      {
+        seriesKey: 'best',
+        label: 'Best in range',
+        colorKey: 'best',
+        points: durations.map((duration, index) => ({ duration, power: bestPower[index] })),
+      },
+      {
+        seriesKey: 'latest',
+        label: 'Latest cycling activity',
+        colorKey: 'latest',
+        eventId: 'homepage-preview-latest',
+        eventStartMs: latestEventStartMs,
+        points: durations.map((duration, index) => ({ duration, power: latestPower[index] })),
+      },
+    ],
+    summaryPoints: [60, 300, 1200].map(duration => {
+      const index = durations.indexOf(duration);
+      return { duration, power: bestPower[index] };
+    }),
+  };
+}
+
 @Component({
   selector: 'app-home-signal-charts-preview',
   templateUrl: './home-signal-charts-preview.component.html',
@@ -59,75 +159,21 @@ function buildFormTimeline(): DashboardFormPoint[] {
   standalone: true,
   imports: [AppChartsModule],
 })
-export class HomeSignalChartsPreviewComponent implements AfterViewInit, OnDestroy {
+export class HomeSignalChartsPreviewComponent {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
+  private readonly previewDayMs = getPreviewDayMs();
 
-  readonly previews = buildHomeSignalChartPreviews(buildHomeSignalChartPalette(false));
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
     && (typeof window.matchMedia !== 'function'
       || !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  readonly formTimeline = buildFormTimeline();
+  readonly freshnessForecast = buildFreshnessForecast(this.previewDayMs);
+  readonly intensityDistribution = buildIntensityDistribution(this.previewDayMs);
+  readonly efficiencyTrend = buildEfficiencyTrend(this.previewDayMs);
+  readonly powerCurve = buildPowerCurve(this.previewDayMs);
+  readonly formTimeline = buildFormTimeline(this.previewDayMs);
   readonly latestFormPoint = [...this.formTimeline]
     .reverse()
     .find(point => point.trainingStressScore > 0) || this.formTimeline.at(-1) || null;
-
-  @ViewChildren('chartDiv') private chartDivs!: QueryList<ElementRef<HTMLDivElement>>;
-
-  private readonly chartHosts: EChartsHostController[];
-  private viewInitialized = false;
-
-  constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
-    this.chartHosts = this.previews.map(preview => new EChartsHostController({
-      eChartsLoader,
-      logger,
-      logPrefix: `[HomeSignalChartsPreview:${preview.key}]`,
-      enableMobileTapFeedback: false,
-    }));
-
-    effect(() => {
-      const darkTheme = this.themeService.appTheme() === AppThemes.Dark;
-      if (!this.viewInitialized) {
-        return;
-      }
-      this.chartHosts.forEach(host => host.dispose());
-      void this.renderCharts(darkTheme);
-    });
-  }
-
-  ngAfterViewInit(): void {
-    if (!isPlatformBrowser(this.platformId)) {
-      return;
-    }
-    this.viewInitialized = true;
-    void this.renderCharts(this.themeService.appTheme() === AppThemes.Dark);
-  }
-
-  ngOnDestroy(): void {
-    this.viewInitialized = false;
-    this.chartHosts.forEach(host => host.dispose());
-  }
-
-  private async renderCharts(darkTheme: boolean): Promise<void> {
-    const chartElements = this.chartDivs?.toArray() || [];
-    const previews = buildHomeSignalChartPreviews(buildHomeSignalChartPalette(darkTheme));
-
-    await Promise.all(chartElements.map(async (chartElement, index) => {
-      const host = this.chartHosts[index];
-      const preview = previews[index];
-      if (!host || !preview) {
-        return;
-      }
-      const chart = await host.init(
-        chartElement.nativeElement,
-        resolveEChartsThemeName(darkTheme),
-      );
-      if (!chart) {
-        return;
-      }
-      host.setOption(preview.option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
-      host.scheduleResize();
-    }));
-  }
 }
