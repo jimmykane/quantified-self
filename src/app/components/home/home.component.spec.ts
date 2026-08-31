@@ -108,7 +108,7 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('Understand readiness, training load, sleep, routes,');
         expect(heroText).toContain('keep supported activities synced across services');
         expect(heroText).toContain('Your Data Stays Yours');
-        expect(heroText).toContain('Export Anytime');
+        expect(heroText).not.toContain('Export Anytime');
         expect(heroText).not.toMatch(/\bprivate\b/i);
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
