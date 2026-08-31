@@ -909,7 +909,7 @@
                 <mat-icon>error</mat-icon>
                 {{ reparseTargetUidValidationMessage }}
             </p>
-            <p class="reparse-settings-error" *ngIf="stats?.reparse?.runtimeSettings?.configurationValid === false">
+            <p class="reparse-settings-error" *ngIf="reparseSettingsAvailable && !persistedReparseConfigurationValid">
                 <mat-icon>warning</mat-icon>
                 The persisted scanner setting is invalid, so automatic discovery is disabled until this form is saved.
             </p>

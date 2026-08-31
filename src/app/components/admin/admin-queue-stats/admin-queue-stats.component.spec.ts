@@ -148,7 +148,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(targetInput?.value).toBe('target-user');
         });
 
-        it('saves a targeted scan without a global-scan confirmation', () => {
+        it('requires confirmation before enabling a targeted scan', () => {
             component.loading = false;
             component.queueView = 'reparse';
             component.stats = createReparseQueueStats(false, null);
@@ -156,10 +156,21 @@ describe('AdminQueueStatsComponent', () => {
             component.reparseTargetUid = ' target-user ';
             const changed = vi.fn();
             component.reparseSettingsChanged.subscribe(changed);
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
 
             component.saveReparseSettings();
 
-            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Enable Event Reparse Scanner?',
+                        message: expect.stringContaining('target-user'),
+                        confirmText: 'Enable Scanner',
+                        confirmColor: 'warn',
+                    }),
+                }),
+            );
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, 'target-user', false);
             expect(changed).toHaveBeenCalledTimes(1);
             expect(mockSnackBar.open).toHaveBeenCalledWith(
@@ -198,7 +209,162 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
         });
 
-        it('opens only one global confirmation while a decision is pending', () => {
+        it('requires confirmation before disabling the scanner', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(true, 'target-user');
+            component.reparseScanEnabled = false;
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Disable Event Reparse Scanner?',
+                        message: expect.stringContaining('jobs already queued will continue'),
+                        confirmText: 'Disable Scanner',
+                        confirmColor: 'warn',
+                    }),
+                }),
+            );
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+        });
+
+        it('saves a confirmed scanner disablement', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(true, 'target-user');
+            component.reparseScanEnabled = false;
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: false,
+                    targetUid: 'target-user',
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            component.saveReparseSettings();
+
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(
+                false,
+                'target-user',
+                false,
+            );
+        });
+
+        it('confirms expanding an enabled scan to all users', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(true, 'target-user');
+            component.reparseTargetUid = '';
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: true,
+                    targetUid: null,
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Change Event Reparse Scope to All Users?',
+                        confirmColor: 'warn',
+                    }),
+                }),
+            );
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
+        });
+
+        it('confirms changing the target of an enabled scan', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(true, 'target-user');
+            component.reparseTargetUid = 'different-user';
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: true,
+                    targetUid: 'different-user',
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Change Event Reparse Target?',
+                        message: expect.stringContaining('different-user'),
+                        confirmText: 'Change Target',
+                        confirmColor: 'warn',
+                    }),
+                }),
+            );
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(
+                true,
+                'different-user',
+                false,
+            );
+        });
+
+        it('confirms changing the saved target while the scanner remains disabled', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseTargetUid = 'target-user';
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
+            mockAdminService.setSportsLibReparseSettings.mockReturnValue(of({
+                success: true,
+                settings: {
+                    enabled: false,
+                    targetUid: 'target-user',
+                    source: 'firestore',
+                    configurationValid: true,
+                    updatedAt: null,
+                    updatedBy: 'admin-user',
+                },
+            }));
+
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Change Saved Event Reparse Target?',
+                        confirmText: 'Save Target',
+                    }),
+                }),
+            );
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(
+                false,
+                'target-user',
+                false,
+            );
+        });
+
+        it('opens only one settings confirmation while a decision is pending', () => {
             component.loading = false;
             component.queueView = 'reparse';
             component.stats = createReparseQueueStats(false, null);
@@ -219,7 +385,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
         });
 
-        it('does not apply a stale global confirmation after settings become unavailable', () => {
+        it('does not apply a stale confirmation after settings become unavailable', () => {
             component.loading = false;
             component.queueView = 'reparse';
             component.stats = createReparseQueueStats(false, null);
@@ -242,7 +408,69 @@ describe('AdminQueueStatsComponent', () => {
             );
         });
 
-        it('does not save a cancelled global scan or an invalid target UID', () => {
+        it('does not apply a stale confirmation after persisted settings change', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            component.reparseTargetUid = 'target-user';
+            const confirmation = new Subject<boolean>();
+            mockDialog.open.mockReturnValue({ afterClosed: () => confirmation.asObservable() });
+
+            component.saveReparseSettings();
+            component.stats = createReparseQueueStats(true, 'different-user');
+            confirmation.next(true);
+
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Scanner settings changed or became unavailable. Review them and save again.',
+                'Dismiss',
+                { duration: 6000 },
+            );
+        });
+
+        it('does not apply a confirmation after the proposed target changes', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            component.reparseTargetUid = 'target-user';
+            const confirmation = new Subject<boolean>();
+            mockDialog.open.mockReturnValue({ afterClosed: () => confirmation.asObservable() });
+
+            component.saveReparseSettings();
+            component.reparseTargetUid = 'different-user';
+            confirmation.next(true);
+
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Scanner settings changed or became unavailable. Review them and save again.',
+                'Dismiss',
+                { duration: 6000 },
+            );
+        });
+
+        it('preserves the proposal across an unchanged stats refresh while confirmation is open', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            component.reparseTargetUid = 'target-user';
+            const confirmation = new Subject<boolean>();
+            mockDialog.open.mockReturnValue({ afterClosed: () => confirmation.asObservable() });
+
+            component.saveReparseSettings();
+            component.stats = createReparseQueueStats(false, null);
+            confirmation.next(true);
+
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(
+                true,
+                'target-user',
+                false,
+            );
+        });
+
+        it('does not save a cancelled settings change or an invalid target UID', () => {
             component.loading = false;
             component.stats = createReparseQueueStats(false, null);
             component.reparseScanEnabled = true;
@@ -275,9 +503,21 @@ describe('AdminQueueStatsComponent', () => {
             }));
 
             expect(component.canSaveReparseSettings).toBe(true);
+            mockDialog.open.mockReturnValue({ afterClosed: () => of(true) });
             component.saveReparseSettings();
 
+            expect(mockDialog.open).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        title: 'Repair Event Reparse Settings?',
+                        confirmText: 'Repair Settings',
+                    }),
+                }),
+            );
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(false, null, false);
+            expect(component.persistedReparseConfigurationValid).toBe(true);
+            expect(component.canSaveReparseSettings).toBe(false);
         });
 
         it('keeps settings read-only when the current runtime setting is unavailable', async () => {
