@@ -188,6 +188,8 @@ describe('Health workspace helpers', () => {
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
       endDate: '2026-08-30',
+      startTimeMs: new Date(2026, 7, 30).getTime(),
+      endTimeMs: new Date(2026, 7, 31).getTime() - 1,
       dayCount: 1,
       includeSamples: true,
       canNavigateNewer: false,

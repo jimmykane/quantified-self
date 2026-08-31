@@ -187,6 +187,20 @@ function parseCalendarDate(value: unknown): number | null {
     : null;
 }
 
+function localCalendarDateStartMs(value: string): number | null {
+  const utcTimestamp = parseCalendarDate(value);
+  if (utcTimestamp === null) {
+    return null;
+  }
+  const utcDate = new Date(utcTimestamp);
+  const localDate = new Date(
+    utcDate.getUTCFullYear(),
+    utcDate.getUTCMonth(),
+    utcDate.getUTCDate(),
+  );
+  return Number.isFinite(localDate.getTime()) ? localDate.getTime() : null;
+}
+
 export function localCalendarDate(nowMs = Date.now()): string {
   const date = new Date(nowMs);
   const year = date.getFullYear();
@@ -218,11 +232,14 @@ export function resolveHealthWorkspaceWindow(
   const dayCount = healthWorkspaceRangeDays(state.range);
   const endDayMs = parseCalendarDate(state.endDate) ?? parseCalendarDate(todayDate) ?? Date.now();
   const startDayMs = endDayMs - ((dayCount - 1) * DAY_MS);
-  const endTimeMs = endDayMs + DAY_MS - 1;
+  const startDate = new Date(startDayMs).toISOString().slice(0, 10);
+  const nextEndDate = new Date(endDayMs + DAY_MS).toISOString().slice(0, 10);
+  const startTimeMs = localCalendarDateStartMs(startDate) ?? startDayMs;
+  const endTimeMs = (localCalendarDateStartMs(nextEndDate) ?? (endDayMs + DAY_MS)) - 1;
   return {
     ...state,
-    startDate: new Date(startDayMs).toISOString().slice(0, 10),
-    startTimeMs: startDayMs,
+    startDate,
+    startTimeMs,
     endTimeMs,
     dayCount,
     includeSamples: dayCount <= 30,
