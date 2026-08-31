@@ -243,7 +243,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Contributing
 
-Contributions are welcome. Before opening a pull request:
+Contributions are welcome. Start with a [`good first issue`](https://github.com/jimmykane/quantified-self/labels/good%20first%20issue), or ask a question in [GitHub Discussions](https://github.com/jimmykane/quantified-self/discussions). Before opening a pull request:
 
 1. Keep changes focused and add or update the narrowest relevant tests.
 2. Run the applicable checks from the table above.

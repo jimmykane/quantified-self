@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a reproducible problem in Quantified Self.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Quantified Self. Do not include access tokens,
+        credentials, private activity files, precise locations, or other personal
+        health data in a public issue.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Account and sign-in
+        - Activity import or upload
+        - Garmin integration
+        - Suunto integration
+        - COROS integration
+        - Wahoo integration
+        - Dashboard or calendar
+        - Training analysis
+        - Event details or charts
+        - Routes or maps
+        - Workout comparison or benchmark reports
+        - Assistant or MCP
+        - Subscription or billing
+        - Self-hosting or development setup
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem and its impact.
+      placeholder: A concise description of the unexpected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest repeatable sequence. Redact private data.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Quantified Self version
+      description: The version shown in the app header or the commit/tag used for self-hosting.
+      placeholder: e.g. 10.10.2 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      placeholder: e.g. Firefox 141 on Linux, Safari on iPhone 16
+    validations:
+      required: true
+  - type: textarea
+    id: safe_diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Optional error text or screenshots with tokens, IDs, names, locations, and health data removed.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed credentials, personal health data, private files, and precise locations.
+          required: true
+        - label: I can reproduce this on the version listed above.
+          required: true

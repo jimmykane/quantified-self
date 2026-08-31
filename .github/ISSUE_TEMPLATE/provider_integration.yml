@@ -1,0 +1,61 @@
+name: Provider or device integration request
+description: Request a new fitness provider, wearable, or data-source integration.
+title: "integration: "
+labels:
+  - enhancement
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider or device
+      placeholder: e.g. Polar, Health Connect, Apple Health
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Needed workflow
+      multiple: true
+      options:
+        - Import new activities automatically
+        - Import historical activities
+        - Import sleep or recovery data
+        - Import body measurements
+        - Export activities
+        - Send routes or courses
+        - Send workouts or training plans
+        - Use data through Assistant or MCP
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case and expected value
+      description: Explain the real workflow this integration would unblock.
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: Known API or export options
+      description: Link public official documentation if available. Never paste credentials or private API keys.
+  - type: textarea
+    id: fields
+    attributes:
+      label: Important data fields
+      description: Which activities, metrics, sleep fields, files, or routes must be preserved?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround
+      description: Describe manual exports, bridge services, or other tools used today.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing provider and device requests.
+          required: true
+        - label: I have not included credentials, private files, or personal health/location data.
+          required: true

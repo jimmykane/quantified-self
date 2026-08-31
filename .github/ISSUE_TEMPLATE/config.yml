@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and community support
+    url: https://github.com/jimmykane/quantified-self/discussions
+    about: Ask setup, usage, and development questions in GitHub Discussions.
+  - name: Hosted app help
+    url: https://quantified-self.io/help
+    about: Check product help, provider setup guidance, and troubleshooting.
+  - name: Security vulnerability
+    url: https://github.com/jimmykane/quantified-self/security/policy
+    about: Report vulnerabilities privately through the security policy instead of a public issue.
