@@ -171,12 +171,15 @@ describe('HomeComponent', () => {
 
     it('should render three precise integration principles with one integrations hub link', () => {
         const text = fixture.nativeElement.textContent as string;
-        const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
+        const integrationRows = fixture.nativeElement.querySelectorAll(
+            '.integration-followup-list .integration-capability'
+        );
         const integrationLinks = fixture.nativeElement.querySelectorAll(
             'a[href="/integrations"], a[routerlink="/integrations"], a[ng-reflect-router-link="/integrations"]'
         );
 
-        expect(integrationCards.length).toBe(3);
+        expect(integrationRows.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.integration-followup-list mat-card')).toBeNull();
         expect(text).toContain('Bring It In. Keep It Moving.');
         expect(text).toContain('Sync Your History');
         expect(text).toContain('New activities arrive automatically');
@@ -187,9 +190,9 @@ describe('HomeComponent', () => {
         expect(text).toContain('Move Workouts and Routes');
         expect(text).toContain('automatic delivery between supported providers');
         expect(text).toContain('send past activities by date range');
-        expect(text).toContain('Garmin to Suunto, Wahoo, or COROS');
-        expect(text).toContain('Import routes from Suunto');
-        expect(text).toContain('Saved FIT and GPX routes can also be sent manually');
+        expect(text).toContain('Garmin → Suunto, Wahoo, or COROS');
+        expect(text).toContain('Import Suunto routes');
+        expect(text).toContain('Send saved FIT/GPX routes manually');
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');

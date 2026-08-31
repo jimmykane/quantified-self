@@ -58,50 +58,45 @@
       <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo"></mat-icon>
     </div>
 
-    <div class="integration-followup-grid">
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container import">
-            <mat-icon>history</mat-icon>
-          </div>
-          <mat-card-title>Sync Your History</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
+    <div class="integration-followup-list">
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container import" data-nosnippet>
+          <mat-icon>history</mat-icon>
+        </div>
+        <h3>Sync Your History</h3>
+        <div class="integration-capability-copy">
           <p>Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the
             activity history already stored with each provider.</p>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </section>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container service-sync">
-            <mat-icon>published_with_changes</mat-icon>
-          </div>
-          <mat-card-title>Move Workouts and Routes</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container service-sync" data-nosnippet>
+          <mat-icon>published_with_changes</mat-icon>
+        </div>
+        <h3>Move Workouts and Routes</h3>
+        <div class="integration-capability-copy integration-capability-copy--split">
           <p>Choose automatic delivery between supported providers. You can also send past activities by date range
             without enabling future sync.</p>
-          <p class="integration-examples"><strong>Examples:</strong> Garmin to Suunto, Wahoo, or COROS; COROS to Suunto
-            or Wahoo; Suunto to Wahoo or COROS; and Wahoo to Suunto or COROS.</p>
-          <p class="integration-route-note"><strong>Routes:</strong> Import routes from Suunto and send them to Garmin
-            Connect, Wahoo, or COROS automatically or as a one-off. Saved FIT and GPX routes can also be sent manually to
-            any of the four providers.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container activity-upload">
-            <mat-icon>upload_file</mat-icon>
+          <div class="integration-capability-details">
+            <p><strong>Examples:</strong> Garmin → Suunto, Wahoo, or COROS · COROS → Suunto or Wahoo · Suunto → Wahoo or
+              COROS · Wahoo → Suunto or COROS.</p>
+            <p><strong>Routes:</strong> Import Suunto routes and send them to Garmin Connect, Wahoo, or COROS automatically
+              or on demand. Send saved FIT/GPX routes manually to any of the four providers.</p>
           </div>
-          <mat-card-title>Upload Your Own Files</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
+        </div>
+      </section>
+
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container activity-upload" data-nosnippet>
+          <mat-icon>upload_file</mat-icon>
+        </div>
+        <h3>Upload Your Own Files</h3>
+        <div class="integration-capability-copy">
           <p>Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities
             directly to Suunto, COROS, or Wahoo for one-off transfers.</p>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </section>
     </div>
 
     <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
