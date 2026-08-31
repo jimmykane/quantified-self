@@ -30,7 +30,6 @@
     transform: translate3d(0, 40px, 0);
     transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
         transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-    will-change: opacity, transform;
 
     &.is-visible {
         opacity: 1;

@@ -17,6 +17,9 @@ import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
 
 describe('HomeWorkoutPreviewComponent', () => {
   let fixture: ComponentFixture<HomeWorkoutPreviewComponent>;
+  let viewportObserverCallback: IntersectionObserverCallback | undefined;
+  const observeViewport = vi.fn();
+  const disconnectViewport = vi.fn();
   const chart = {
     on: vi.fn(),
     off: vi.fn(),
@@ -36,6 +39,19 @@ describe('HomeWorkoutPreviewComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    viewportObserverCallback = undefined;
+    vi.stubGlobal('IntersectionObserver', vi.fn((callback: IntersectionObserverCallback) => {
+      viewportObserverCallback = callback;
+      return {
+        observe: observeViewport,
+        unobserve: vi.fn(),
+        disconnect: disconnectViewport,
+        takeRecords: vi.fn(() => []),
+        root: null,
+        rootMargin: '',
+        thresholds: [0.1],
+      } as IntersectionObserver;
+    }));
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn(() => ({
@@ -67,6 +83,7 @@ describe('HomeWorkoutPreviewComponent', () => {
   afterEach(() => {
     fixture.destroy();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('renders real workout chart panels directly in non-interactive preview mode', async () => {
@@ -198,10 +215,19 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);
   });
 
-  it('loops the production selection and synchronized zoom inputs', async () => {
+  it('plays the production selection and synchronized zoom once after entering the viewport', async () => {
     vi.useFakeTimers();
     fixture.detectChanges();
     const component = fixture.componentInstance;
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(component.previewRange()).toBeNull();
+    expect(component.sharedZoomRange()).toBeNull();
+
+    viewportObserverCallback?.([
+      { isIntersecting: true, target: fixture.nativeElement } as IntersectionObserverEntry,
+    ], {} as IntersectionObserver);
+    expect(disconnectViewport).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(900);
     fixture.detectChanges();
@@ -228,17 +254,10 @@ describe('HomeWorkoutPreviewComponent', () => {
 
     expect(component.sharedZoomRange()).toBeNull();
 
-    await vi.advanceTimersByTimeAsync(1_300);
-    fixture.detectChanges();
-
-    expect(component.previewRange()).toEqual({ start: 1_040, end: 2_260 });
-    expect(component.sharedZoomRange()).toBeNull();
-
-    await vi.advanceTimersByTimeAsync(1_200);
+    await vi.advanceTimersByTimeAsync(4_000);
     fixture.detectChanges();
 
     expect(component.previewRange()).toBeNull();
-    expect(component.sharedZoomRange()?.start).toBeGreaterThan(0);
-    expect(component.sharedZoomRange()?.end).toBeLessThan(component.xDomain.end);
+    expect(component.sharedZoomRange()).toBeNull();
   });
 });

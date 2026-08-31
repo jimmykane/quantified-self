@@ -375,6 +375,67 @@ describe('HomeComponent', () => {
         }
     });
 
+    it('should reveal scroll content once without hiding it after viewport changes', () => {
+        fixture.destroy();
+        const originalIntersectionObserver = globalThis.IntersectionObserver;
+        const observerRecords: Array<{
+            callback: IntersectionObserverCallback;
+            observe: ReturnType<typeof vi.fn>;
+            unobserve: ReturnType<typeof vi.fn>;
+            disconnect: ReturnType<typeof vi.fn>;
+        }> = [];
+
+        Object.defineProperty(globalThis, 'IntersectionObserver', {
+            configurable: true,
+            value: vi.fn((callback: IntersectionObserverCallback) => {
+                const record = {
+                    callback,
+                    observe: vi.fn(),
+                    unobserve: vi.fn(),
+                    disconnect: vi.fn(),
+                };
+                observerRecords.push(record);
+                return {
+                    ...record,
+                    takeRecords: vi.fn(() => []),
+                    root: null,
+                    rootMargin: '',
+                    thresholds: [0.1],
+                } as IntersectionObserver;
+            }),
+        });
+
+        try {
+            fixture = TestBed.createComponent(HomeComponent);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            const target = fixture.nativeElement.querySelector('.animate-on-scroll') as Element;
+            const homeObserver = observerRecords.find(record =>
+                record.observe.mock.calls.some(([observedTarget]) => observedTarget === target)
+            );
+            expect(homeObserver).toBeTruthy();
+            expect(target.classList.contains('is-visible')).toBe(false);
+
+            homeObserver?.callback([
+                { isIntersecting: true, target } as IntersectionObserverEntry,
+            ], {} as IntersectionObserver);
+            expect(target.classList.contains('is-visible')).toBe(true);
+            expect(homeObserver?.unobserve).toHaveBeenCalledWith(target);
+
+            homeObserver?.callback([
+                { isIntersecting: false, target } as IntersectionObserverEntry,
+            ], {} as IntersectionObserver);
+            expect(target.classList.contains('is-visible')).toBe(true);
+        } finally {
+            fixture.destroy();
+            Object.defineProperty(globalThis, 'IntersectionObserver', {
+                configurable: true,
+                value: originalIntersectionObserver,
+            });
+        }
+    });
+
     describe('navigateToDashboardOrLogin', () => {
         it('should navigate to dashboard if user is logged in', async () => {
             mockAuthService.getUser.mockResolvedValue({ uid: '123' });

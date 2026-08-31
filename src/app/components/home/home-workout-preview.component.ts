@@ -1,9 +1,10 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   OnDestroy,
-  OnInit,
   PLATFORM_ID,
   computed,
   inject,
@@ -36,7 +37,6 @@ const PREVIEW_SELECTION_DELAY_MS = 900;
 const PREVIEW_SELECTION_DURATION_MS = 850;
 const PREVIEW_ZOOM_DURATION_MS = 720;
 const PREVIEW_ZOOM_HOLD_MS = 1_000;
-const PREVIEW_LOOP_PAUSE_MS = 1_000;
 const PREVIEW_ZOOM_STEPS = 8;
 const DIVE_PROFILE_COLORS = AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup];
 const INTENSITY_ZONE_COLORS = [
@@ -152,10 +152,13 @@ function buildPanel(
   standalone: true,
   imports: [SharedModule],
 })
-export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
+export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly animationTimers = new Set<ReturnType<typeof setTimeout>>();
+  private viewportObserver: IntersectionObserver | undefined;
+  private hasPlayedAnimation = false;
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
@@ -205,20 +208,41 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
     [0.5, 1.5, 4, 8, 13, 18, 21, 20, 16, 10, 4, 0.5],
   );
 
-  ngOnInit(): void {
+  ngAfterViewInit(): void {
     if (!this.animationsEnabled) {
       return;
     }
 
-    this.startAnimationLoop();
+    if (typeof IntersectionObserver === 'undefined') {
+      this.startAnimationOnce();
+      return;
+    }
+
+    this.viewportObserver = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) {
+        return;
+      }
+
+      this.viewportObserver?.disconnect();
+      this.viewportObserver = undefined;
+      this.startAnimationOnce();
+    }, { threshold: 0.1 });
+    this.viewportObserver.observe(this.elementRef.nativeElement);
   }
 
   ngOnDestroy(): void {
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = undefined;
     this.animationTimers.forEach(timer => clearTimeout(timer));
     this.animationTimers.clear();
   }
 
-  private startAnimationLoop(): void {
+  private startAnimationOnce(): void {
+    if (this.hasPlayedAnimation) {
+      return;
+    }
+
+    this.hasPlayedAnimation = true;
     this.previewRange.set(null);
     this.sharedZoomRange.set(null);
 
@@ -241,10 +265,6 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
         + PREVIEW_ZOOM_HOLD_MS,
       () => {
         this.animateZoomRange(PREVIEW_ZOOM_RANGE, null, PREVIEW_ZOOM_DURATION_MS);
-        this.scheduleAnimationStep(
-          PREVIEW_ZOOM_DURATION_MS + PREVIEW_LOOP_PAUSE_MS,
-          () => this.startAnimationLoop(),
-        );
       },
     );
   }

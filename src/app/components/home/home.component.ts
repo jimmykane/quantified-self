@@ -158,18 +158,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        } else {
-          // Remove class when out of view to reset animation
-          entry.target.classList.remove('is-visible');
+        if (!entry.isIntersecting) {
+          return;
         }
+
+        entry.target.classList.add('is-visible');
+        this.observer?.unobserve(entry.target);
       });
     }, {
       threshold: 0.1,
-      // rootMargin: '0px 0px -50px 0px'
-      // Adjusting rootMargin might be needed if they "pop" out too quickly,
-      // but default intersection logic is safer for replay.
       rootMargin: '0px 0px -50px 0px'
     });
 
