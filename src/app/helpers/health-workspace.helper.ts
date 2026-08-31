@@ -203,6 +203,7 @@ export function normalizeHealthWorkspaceRange(value: unknown): HealthWorkspaceRa
 
 export function healthWorkspaceRangeDays(range: HealthWorkspaceRange): number {
   switch (range) {
+    case 'today': return 1;
     case '14d': return 14;
     case '30d': return 30;
     case '90d': return 90;
@@ -226,7 +227,9 @@ export function resolveHealthWorkspaceWindow(
     dayCount,
     includeSamples: dayCount <= 30,
     canNavigateNewer: state.endDate < todayDate,
-    label: formatWindowLabel(startDayMs, endDayMs),
+    label: state.range === 'today' && state.endDate === todayDate
+      ? 'Today'
+      : formatWindowLabel(startDayMs, endDayMs),
   };
 }
 
@@ -788,7 +791,9 @@ function humanize(value: string): string {
 
 function formatWindowLabel(startMs: number, endMs: number): string {
   const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return `${formatter.format(new Date(startMs))} – ${formatter.format(new Date(endMs))}`;
+  const startLabel = formatter.format(new Date(startMs));
+  const endLabel = formatter.format(new Date(endMs));
+  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
 }
 
 function formatDate(timestampMs: number): string {

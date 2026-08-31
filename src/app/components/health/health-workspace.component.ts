@@ -70,6 +70,7 @@ import {
   resolveHealthWorkspaceWindow,
 } from '../../helpers/health-workspace.helper';
 import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
+import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
 
@@ -103,6 +104,7 @@ interface QueuedHealthRangeWrite {
 }
 
 const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
+  today: 'Today',
   '14d': '14 days',
   '30d': '30 days',
   '90d': '90 days',
@@ -164,7 +166,11 @@ export class HealthWorkspaceComponent {
   private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
   private historyImportRequestGeneration = 0;
 
-  readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({ range, label: RANGE_LABELS[range] }));
+  readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({
+    range,
+    label: RANGE_LABELS[range],
+    buttonLabel: range === 'today' ? RANGE_LABELS[range] : range,
+  }));
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
   readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
   readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
@@ -236,7 +242,9 @@ export class HealthWorkspaceComponent {
   readonly detailTitle = computed(() => this.routeState().metric === 'sleep'
     ? 'Sleep'
     : this.selectedMetricDefinition()?.label || 'Resting heart rate');
-  readonly detailSubtitle = computed(() => `${this.selectedWindow().label} · ${RANGE_LABELS[this.routeState().range]}`);
+  readonly detailSubtitle = computed(() => this.routeState().range === 'today'
+    ? this.selectedWindow().label
+    : `${this.selectedWindow().label} · ${RANGE_LABELS[this.routeState().range]}`);
   readonly selectedIsSleep = computed(() => this.routeState().metric === 'sleep');
   readonly effectiveProviderFilters = computed(() => {
     const available = new Set(this.availableProviders());
@@ -259,11 +267,13 @@ export class HealthWorkspaceComponent {
   });
   readonly sleepTrend = computed(() => buildDashboardSleepTrendContext(this.filteredSleepSessions(), {
     sleepWindow: {
-      range: this.routeState().range,
+      range: healthRangeToSleepRange(this.routeState().range),
       startMs: this.selectedWindow().startTimeMs,
       endMs: this.selectedWindow().endTimeMs,
     },
   }));
+  readonly sleepChartRange = computed<AppDashboardSleepTrendRange>(() =>
+    healthRangeToSleepRange(this.routeState().range) || '14d');
   readonly sleepRows = computed<HealthSleepObservationRow[]>(() => buildSleepObservationRows(this.filteredSleepSessions()));
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
@@ -838,6 +848,10 @@ function emptyMetricView(): HealthMetricWorkspaceView {
     conflictCount: 0,
     providers: [],
   };
+}
+
+function healthRangeToSleepRange(range: HealthWorkspaceRange): AppDashboardSleepTrendRange | null {
+  return range === 'today' ? null : range;
 }
 
 function providerView(provider: HealthProvider): HealthProviderView {

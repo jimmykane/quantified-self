@@ -160,6 +160,7 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
 
 describe('Health workspace helpers', () => {
   it('normalizes saved Health ranges and falls back invalid settings to 30 days', () => {
+    expect(normalizeHealthWorkspaceRange('today')).toBe('today');
     expect(normalizeHealthWorkspaceRange('14d')).toBe('14d');
     expect(normalizeHealthWorkspaceRange('1y')).toBe('1y');
     expect(normalizeHealthWorkspaceRange('forever')).toBe('30d');
@@ -179,6 +180,23 @@ describe('Health workspace helpers', () => {
     expect(older.endDate).toBe('2026-08-16');
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
     expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(false);
+  });
+
+  it('loads Today as one sample-enabled day and pages it one day at a time', () => {
+    const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
+
+    expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
+      startDate: '2026-08-30',
+      endDate: '2026-08-30',
+      dayCount: 1,
+      includeSamples: true,
+      canNavigateNewer: false,
+      label: 'Today',
+    });
+    const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    expect(older.endDate).toBe('2026-08-29');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).not.toContain('–');
+    expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 
   it('publishes every catalog metric once in category groups', () => {

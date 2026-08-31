@@ -359,6 +359,31 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.isSavingRange()).toBe(false);
   });
 
+  it('loads and remembers Today as a sample-enabled one-day window', async () => {
+    await createComponent();
+
+    component.selectRange('today');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().range).toBe('today');
+    expect(component.selectedWindow()).toMatchObject({
+      startDate: todayDate,
+      endDate: todayDate,
+      dayCount: 1,
+      includeSamples: true,
+      label: 'Today',
+    });
+    expect(component.detailSubtitle()).toBe('Today');
+    expect(component.ranges[0]).toMatchObject({ range: 'today', buttonLabel: 'Today' });
+    expect(updateHealthWorkspaceRange).toHaveBeenCalledWith('user-1', 'today');
+    expect(loadMetricRange.mock.calls.some(([, request]) => request.startDate === todayDate
+      && request.endDate === todayDate
+      && request.includeSamples === true)).toBe(true);
+    expect(router.url).not.toContain('?');
+  });
+
   it('shows only metrics with stored history and falls back from an unavailable default', async () => {
     await createComponent(undefined, undefined, {
       metricIds: [HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.HeartRate],
@@ -833,7 +858,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
     expect(text).toContain('This metric is stored as detailed samples');
-    expect(text).toContain('Detailed samples load only for 14-day and 30-day windows');
+    expect(text).toContain('Detailed samples load only for Today, 14-day, and 30-day windows');
     expect(text).not.toContain('No Heart rate data in this window');
   });
 

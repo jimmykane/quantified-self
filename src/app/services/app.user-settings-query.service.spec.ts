@@ -205,12 +205,12 @@ describe('AppUserSettingsQueryService', () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
 
-            await service.updateHealthWorkspaceRange('test-uid', '90d');
+            await service.updateHealthWorkspaceRange('test-uid', 'today');
 
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
                 settings: {
                     appSettings: {
-                        healthWorkspace: { range: '90d' },
+                        healthWorkspace: { range: 'today' },
                     },
                 },
             });
