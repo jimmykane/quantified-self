@@ -12,6 +12,10 @@ import type { DashboardPowerCurveContext } from '../../helpers/dashboard-power-c
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
+// Keep public prerender output identical during hydration. These are illustrative
+// values, so tying them to the build or visit time only makes the markup unstable.
+export const HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS = Date.UTC(2026, 7, 31);
+
 export interface HomeSignalChartsPreviewData {
   freshnessForecast: DashboardFreshnessForecastContext;
   intensityDistribution: DashboardIntensityDistributionContext;

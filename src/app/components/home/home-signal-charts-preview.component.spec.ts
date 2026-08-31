@@ -84,6 +84,8 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(powerCurveComponent.primaryBenchmark?.durationLabel).toBe('20m');
     expect(freshnessComponent.showMobileAxisPointerHandle).toBe(false);
     expect(intensityComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(intensityComponent.weekContextTextOverride).toBe('Example training week');
+    expect(intensityComponent.weekContextText).toBe('Example training week');
     expect(efficiencyComponent.showMobileAxisPointerHandle).toBe(false);
     expect(powerCurveComponent.showMobileAxisPointerHandle).toBe(false);
     expect(formComponent.showMobileAxisPointerHandle).toBe(false);

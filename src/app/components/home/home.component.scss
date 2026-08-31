@@ -803,8 +803,24 @@
                 min-height: 470px;
             }
 
+            &--signals {
+                min-height: 690px;
+            }
+
             &--workout {
                 min-height: 330px;
+            }
+
+            &__summary {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
             }
         }
 
@@ -812,6 +828,10 @@
 }
 
 @media (max-width: 520px), (min-width: 600px) and (max-width: 1080px) {
+    .features-section .feature-card .home-preview-placeholder--signals {
+        min-height: 1030px;
+    }
+
     .features-section .feature-card .home-preview-placeholder--workout {
         min-height: 630px;
     }

@@ -9,7 +9,10 @@ import {
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppThemeService } from '../../services/app.theme.service';
-import { buildHomeSignalChartsPreviewData } from './home-signal-charts-preview-data.helper';
+import {
+  HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
+  buildHomeSignalChartsPreviewData,
+} from './home-signal-charts-preview-data.helper';
 
 @Component({
   selector: 'app-home-signal-charts-preview',
@@ -22,7 +25,7 @@ import { buildHomeSignalChartsPreviewData } from './home-signal-charts-preview-d
 export class HomeSignalChartsPreviewComponent {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
-  private readonly previewData = buildHomeSignalChartsPreviewData(Date.now());
+  private readonly previewData = buildHomeSignalChartsPreviewData(HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS);
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
@@ -30,6 +33,7 @@ export class HomeSignalChartsPreviewComponent {
       || !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   readonly freshnessForecast = this.previewData.freshnessForecast;
   readonly intensityDistribution = this.previewData.intensityDistribution;
+  readonly intensityWeekContext = 'Example training week';
   readonly efficiencyTrend = this.previewData.efficiencyTrend;
   readonly powerCurve = this.previewData.powerCurve;
   readonly formTimeline = this.previewData.formTimeline;

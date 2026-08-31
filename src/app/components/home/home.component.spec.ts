@@ -229,8 +229,9 @@ describe('HomeComponent', () => {
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
         expect(trainingPreviewIndicators.length).toBe(3);
-        expect(signalPreviews.length).toBe(4);
-        expect(deferredPreviewPlaceholders.length).toBe(2);
+        expect(signalPreviews.length).toBe(0);
+        expect(deferredPreviewPlaceholders.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals[data-nosnippet]')).toBeTruthy();
         expect(text).toContain('Bring It In. Keep It Moving.');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');

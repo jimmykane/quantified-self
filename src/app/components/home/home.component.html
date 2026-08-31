@@ -180,7 +180,16 @@
         <mat-card-content>
           <p>See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and
             sleep views available in Training.</p>
-          <app-home-signal-charts-preview></app-home-signal-charts-preview>
+          @defer (on viewport; prefetch on idle) {
+            <app-home-signal-charts-preview></app-home-signal-charts-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--signals" data-nosnippet>
+              <p class="home-preview-placeholder__summary">
+                Preview charts: Freshness Forecast, Intensity Distribution, Efficiency Trend, Cycling Power Curve,
+                and Form.
+              </p>
+            </div>
+          }
         </mat-card-content>
       </mat-card>
 

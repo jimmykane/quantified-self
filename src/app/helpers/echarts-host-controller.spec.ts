@@ -379,4 +379,22 @@ describe('EChartsHostController', () => {
     expect(logger.error).toHaveBeenCalled();
     expect(logger.error.mock.calls[0][0]).toBe('[TestChart] Failed to initialize ECharts');
   });
+
+  it('should quietly skip initialization when the loader does not support the runtime', async () => {
+    const logger = { error: vi.fn() };
+    const loader = buildLoaderMock();
+    loader.init.mockResolvedValue(null);
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      logger,
+      logPrefix: '[TestChart]'
+    });
+
+    const chart = await controller.init(document.createElement('div'));
+
+    expect(chart).toBeNull();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(loader.subscribeToViewportResize).not.toHaveBeenCalled();
+    expect(loader.attachMobileSeriesTapFeedback).not.toHaveBeenCalled();
+  });
 });

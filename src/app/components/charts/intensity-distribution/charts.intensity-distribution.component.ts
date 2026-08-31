@@ -63,6 +63,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   @Input() reserveTitleActionSpace = false;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input() showMobileAxisPointerHandle = true;
+  @Input() weekContextTextOverride?: string | null;
   @Input()
   set range(value: DashboardDerivedChartRange | null | undefined) {
     const nextRange = normalizeDashboardDerivedChartRange(value);
@@ -111,7 +112,8 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status || changes.showMobileAxisPointerHandle) {
+    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status
+      || changes.showMobileAxisPointerHandle || changes.weekContextTextOverride) {
       void this.refreshChart();
     }
   }
@@ -322,6 +324,11 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   }
 
   private resolveWeekContextText(weekStartMs: number): string {
+    const override = `${this.weekContextTextOverride || ''}`.trim();
+    if (override) {
+      return override;
+    }
+
     const currentWeekStartMs = this.resolveUtcWeekStartMs(Date.now());
     const contextPrefix = weekStartMs === currentWeekStartMs ? 'Current week' : 'Latest week';
     const weekEndMs = weekStartMs + (6 * 24 * 60 * 60 * 1000);

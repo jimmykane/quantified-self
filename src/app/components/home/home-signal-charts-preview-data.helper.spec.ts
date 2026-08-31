@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { buildHomeSignalChartsPreviewData } from './home-signal-charts-preview-data.helper';
+import {
+  HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
+  buildHomeSignalChartsPreviewData,
+} from './home-signal-charts-preview-data.helper';
 
 describe('buildHomeSignalChartsPreviewData', () => {
+  it('uses a stable Monday anchor for prerendered homepage data', () => {
+    expect(HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS).toBe(Date.UTC(2026, 7, 31));
+    expect(new Date(HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS).getUTCDay()).toBe(1);
+  });
+
   it('builds complete contexts for the production chart components', () => {
     const data = buildHomeSignalChartsPreviewData(Date.UTC(2026, 7, 31, 18, 42));
 
