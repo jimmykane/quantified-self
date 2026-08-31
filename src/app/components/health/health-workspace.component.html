@@ -33,6 +33,13 @@
       <p>Choose a metric found in your imported history.</p>
     </div>
 
+    @if (metricAvailabilityNotice()) {
+      <div class="health-notice" role="status">
+        <mat-icon aria-hidden="true">info</mat-icon>
+        <span>{{ metricAvailabilityNotice() }}</span>
+      </div>
+    }
+
     <div class="health-mobile-metric-selector">
       @if (hasAvailableMetricSelections()) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic">

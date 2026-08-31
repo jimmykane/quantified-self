@@ -183,22 +183,33 @@ export class HealthWorkspaceComponent {
   readonly sleepMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
-  readonly availabilityFilteringActive = computed(() =>
-    this.healthMetricAvailabilityStatus() === 'ready'
-    && this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
+  readonly sleepMetricFilteringActive = computed(() => this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly availabilityChecksSettled = computed(() =>
+    this.healthMetricAvailabilityStatus() !== 'loading'
+    && this.sleepMetricAvailabilityStatus() !== 'loading');
   readonly metricCatalogGroups = computed<readonly HealthMetricCatalogGroup[]>(() => {
-    if (!this.availabilityFilteringActive()) {
+    if (!this.healthMetricFilteringActive()) {
       return this.completeMetricCatalogGroups;
     }
     return buildHealthMetricCatalogGroups(this.availableHealthMetricIds() || []);
   });
   readonly showSleepMetric = computed(() =>
-    !this.availabilityFilteringActive() || this.hasAnySleepSession() === true);
+    !this.sleepMetricFilteringActive() || this.hasAnySleepSession() === true);
   readonly availableMetricSelections = computed<readonly HealthWorkspaceMetricSelection[]>(() => [
     ...(this.showSleepMetric() ? ['sleep' as const] : []),
     ...this.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)),
   ]);
   readonly hasAvailableMetricSelections = computed(() => this.availableMetricSelections().length > 0);
+  readonly metricAvailabilityNotice = computed(() => {
+    const healthStatus = this.healthMetricAvailabilityStatus();
+    const sleepStatus = this.sleepMetricAvailabilityStatus();
+    if (healthStatus !== 'error' && healthStatus !== 'denied'
+      && sleepStatus !== 'error' && sleepStatus !== 'denied') {
+      return null;
+    }
+    return 'Some metric availability could not be verified. Unverified entries remain visible so valid data is not hidden.';
+  });
 
   readonly selectedMetricDefinition = computed(() => {
     const metric = this.routeState().metric;
@@ -309,7 +320,8 @@ export class HealthWorkspaceComponent {
       : null;
   });
   readonly priorityCards = computed<HealthPriorityCardView[]>(() => {
-    const availabilityIsKnown = this.availabilityFilteringActive();
+    const healthAvailabilityIsKnown = this.healthMetricFilteringActive();
+    const sleepAvailabilityIsKnown = this.sleepMetricFilteringActive();
     const available = new Set(this.availableMetricSelections());
     return [
       priorityCard(
@@ -320,7 +332,7 @@ export class HealthWorkspaceComponent {
         buildSleepPriorityRows(this.prioritySleepSessions()),
         this.prioritySleepStatus(),
         'No Sleep sessions in the last 30 days.',
-        !availabilityIsKnown || available.has('sleep'),
+        !sleepAvailabilityIsKnown || available.has('sleep'),
       ),
       priorityCard(
         'heart_rate',
@@ -330,7 +342,7 @@ export class HealthWorkspaceComponent {
         buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
         this.priorityHeartRateStatus(),
         'No Heart rate summaries in the last 30 days.',
-        !availabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
+        !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
       ),
       priorityCard(
         'heart_rate_variability',
@@ -340,7 +352,7 @@ export class HealthWorkspaceComponent {
         buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
         this.priorityHrvStatus(),
         'No HRV summaries in the last 30 days.',
-        !availabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
+        !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
       ),
     ];
   });
@@ -417,7 +429,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      if (!this.availabilityFilteringActive()) {
+      if (!this.availabilityChecksSettled()) {
         return;
       }
       const selections = this.availableMetricSelections();

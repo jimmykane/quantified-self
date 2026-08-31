@@ -75,7 +75,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('only metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
-    expect(healthSection?.content).toContain('keeps the complete catalog visible rather than hiding valid data');
+    expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
+    expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('**14d**, **30d**, **90d**, or **1y**');
     expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('selected metric and older/newer position remain local');

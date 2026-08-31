@@ -344,6 +344,32 @@ describe('HealthWorkspaceComponent', () => {
       .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
     expect(component.showSleepMetric()).toBe(true);
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('Some metric availability could not be verified');
+  });
+
+  it('keeps Health filtering active when only Sleep availability fails', async () => {
+    await createComponent(undefined, undefined, {
+      metricIds: [HEALTH_METRIC_IDS.Steps],
+      sleepError: new Error('offline'),
+    });
+
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
+      .map(option => option.textContent?.replace('bedtime', '').trim());
+    expect(labels).toEqual(['Sleep overview', 'Steps']);
+    expect(component.routeState().metric).toBe('sleep');
+  });
+
+  it('keeps Sleep filtering active when only Health availability fails', async () => {
+    await createComponent(undefined, undefined, {
+      healthError: new Error('offline'),
+      hasSleep: false,
+    });
+
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics))
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+    expect(component.showSleepMetric()).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Sleep overview');
   });
 
   it('restores a saved range when settings hydrate after the signed-in account', async () => {
