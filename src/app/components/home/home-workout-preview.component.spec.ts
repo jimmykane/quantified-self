@@ -164,7 +164,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(text).not.toContain('7 chart types');
   });
 
-  it('uses one dense, coherent ride timeline for heart rate, altitude, and power', () => {
+  it('uses dense whole-workout timelines for heart rate, altitude, and power', () => {
     const component = fixture.componentInstance;
     const heartRatePoints = component.heartRatePanel.series[0].points;
     const altitudePoints = component.altitudePanel.series[0].points;
@@ -177,7 +177,16 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(gradeValues).toHaveLength(heartRatePoints.length);
     expect(altitudePoints.map(point => point.x)).toEqual(heartRatePoints.map(point => point.x));
     expect(powerPoints.map(point => point.x)).toEqual(heartRatePoints.map(point => point.x));
-    expect(Math.max(...heartRatePoints.map(point => point.y))).toBe(151);
+    expect(heartRatePoints[0].y).toBe(86);
+    expect(heartRatePoints.at(-1)?.y).toBe(124);
+    expect(Math.max(...heartRatePoints.map(point => point.y))).toBe(169);
+    expect(component.heartRatePanel.series[0].zoneColorPieces?.map(piece => piece.gte)).toEqual([
+      undefined,
+      107,
+      125,
+      142,
+      160,
+    ]);
     expect(Math.max(...powerPoints.map(point => point.y))).toBe(298);
     expect(Math.max(...altitudePoints.map(point => point.y))).toBe(597);
     expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);

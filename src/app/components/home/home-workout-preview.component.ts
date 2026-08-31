@@ -29,16 +29,16 @@ const INTENSITY_ZONE_COLORS = [
   AppColors.LightestRed,
 ] as const;
 
-// One anonymized hilly ride profile shared by every training chart. Power reacts
-// immediately to terrain, while heart rate rises and recovers more gradually.
+// Whole-workout mean bins from FITfileR's public Zwift/Garmin chest-strap example:
+// https://github.com/grimbough/FITfileR/blob/master/inst/extdata/Activities/zwift-turbo.fit
 const RIDE_HEART_RATE = [
-  120, 121, 119, 121, 116, 109, 102, 101, 101, 101,
-  102, 102, 97, 96, 98, 99, 102, 106, 107, 106,
-  107, 109, 112, 112, 110, 106, 101, 102, 106, 111,
-  116, 121, 121, 121, 122, 126, 131, 136, 141, 145,
-  149, 151, 151, 148, 144, 136, 131, 129, 129, 132,
-  137, 138, 138, 135, 131, 127, 122, 120, 122, 122,
-  123,
+  86, 105, 107, 108, 108, 87, 95, 100, 115, 116,
+  121, 123, 126, 130, 137, 154, 158, 143, 140, 153,
+  161, 163, 160, 148, 142, 151, 154, 155, 156, 152,
+  143, 144, 159, 164, 165, 159, 150, 152, 162, 163,
+  155, 151, 169, 164, 157, 151, 149, 147, 146, 150,
+  149, 147, 146, 145, 145, 143, 148, 143, 139, 139,
+  124,
 ] as const;
 
 const RIDE_ALTITUDE = [
@@ -152,7 +152,7 @@ export class HomeWorkoutPreviewComponent {
     'bpm',
     AppDataColors['Heart Rate'],
     RIDE_HEART_RATE,
-    { zoneLowerLimits: [110, 125, 140, 150] },
+    { zoneLowerLimits: [107, 125, 142, 160] },
   );
 
   readonly altitudePanel = buildPanel(
