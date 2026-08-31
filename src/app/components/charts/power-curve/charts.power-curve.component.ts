@@ -53,6 +53,8 @@ interface PowerCurveBenchmarkStat {
 }
 
 const PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS = 1200;
+const POWER_CURVE_COMPACT_CHART_MAX_WIDTH = 360;
+const POWER_CURVE_COMPACT_DURATION_ANCHORS = [5, 60, 300, 1200, 3600];
 const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [
   PRIMARY_POWER_CURVE_BENCHMARK_DURATION_SECONDS,
   300,
@@ -82,6 +84,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
+  @Input() showMobileAxisPointerHandle = true;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -128,7 +131,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.powerCurve) {
+    if (changes.darkTheme || changes.isLoading || changes.powerCurve || changes.showMobileAxisPointerHandle) {
       void this.refreshChart();
     }
   }
@@ -264,15 +267,17 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
+    const useCompactChartLayout = chartWidth > 0 && chartWidth <= POWER_CURVE_COMPACT_CHART_MAX_WIDTH;
     const visibleDurationLabels = buildPowerCurveVisibleDurationLabelSet(durations, {
-      isMobile: isMobileTooltipViewport,
+      isMobile: isMobileTooltipViewport || useCompactChartLayout,
       chartWidth,
+      ...(useCompactChartLayout ? { anchorDurations: POWER_CURVE_COMPACT_DURATION_ANCHORS } : {}),
     });
     const values = series.flatMap(seriesEntry => [...seriesEntry.pointsByDuration.values()].map(point => point.power));
     const valueAxis = buildDashboardValueAxisConfig(values);
-    const maxSymbolPoints = isMobileTooltipViewport ? 140 : 240;
+    const maxSymbolPoints = isMobileTooltipViewport || useCompactChartLayout ? 140 : 240;
     const showLegend = series.length > 1;
-    const mobileAxisPointerHandle = isMobileTooltipViewport
+    const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
         show: true,
         size: 20,
@@ -293,6 +298,12 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         show: showLegend,
         bottom: 0,
         left: 'center',
+        itemGap: useCompactChartLayout ? 10 : 16,
+        itemWidth: useCompactChartLayout ? 16 : 25,
+        itemHeight: useCompactChartLayout ? 8 : 14,
+        formatter: useCompactChartLayout
+          ? (name: string) => this.formatCompactLegendLabel(name)
+          : undefined,
         textStyle: {
           color: style.textColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
@@ -303,7 +314,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         left: 6,
         right: 6,
         top: 8,
-        bottom: showLegend ? (isMobileTooltipViewport ? 54 : 44) : 22,
+        bottom: showLegend ? (isMobileTooltipViewport || useCompactChartLayout ? 54 : 44) : 22,
         containLabel: false,
       },
       tooltip: {
@@ -333,12 +344,12 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         axisLabel: {
           interval: 0,
           hideOverlap: true,
-          rotate: isMobileTooltipViewport ? 56 : 42,
+          rotate: isMobileTooltipViewport || useCompactChartLayout ? 56 : 42,
           color: style.textColor,
           fontSize: style.axisFontSize,
           formatter: (value: string | number) => {
             const duration = Number(value);
-            if (isMobileTooltipViewport && !visibleDurationLabels.has(duration)) {
+            if ((isMobileTooltipViewport || useCompactChartLayout) && !visibleDurationLabels.has(duration)) {
               return '';
             }
             return formatPowerCurveDurationLabel(duration);
@@ -374,7 +385,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         }),
         showSymbol: durations.length <= maxSymbolPoints,
         symbol: 'circle',
-        symbolSize: isMobileTooltipViewport ? 4.5 : 5.5,
+        symbolSize: isMobileTooltipViewport || useCompactChartLayout ? 4.5 : 5.5,
         smooth: series.length > 1 ? 0.16 : 0.24,
         connectNulls: false,
         lineStyle: {
@@ -386,6 +397,21 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         },
       })),
     };
+  }
+
+  private formatCompactLegendLabel(name: string): string {
+    const normalizedName = `${name || ''}`.trim();
+    if (/^best in range$/i.test(normalizedName)) {
+      return 'Best';
+    }
+    if (/^latest(?:\s+.*)?activity$/i.test(normalizedName)) {
+      return 'Latest';
+    }
+    const recentBestMatch = normalizedName.match(/^best last (\d+)d$/i);
+    if (recentBestMatch) {
+      return `${recentBestMatch[1]}d`;
+    }
+    return normalizedName;
   }
 
   private formatTooltip(params: unknown, style: ReturnType<typeof buildDashboardEChartsStyleTokens>): string {

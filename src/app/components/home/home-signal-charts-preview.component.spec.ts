@@ -82,6 +82,11 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(powerCurveComponent.title).toBe('Cycling Power Curve');
     expect(powerCurveComponent.powerCurve?.series).toHaveLength(2);
     expect(powerCurveComponent.primaryBenchmark?.durationLabel).toBe('20m');
+    expect(freshnessComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(intensityComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(efficiencyComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(powerCurveComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(formComponent.showMobileAxisPointerHandle).toBe(false);
     expect(formComponent.hasData()).toBe(true);
     expect(formComponent.useAnimations).toBe(true);
     expect(formComponent.headlineStats().tss.value).not.toBe('--');

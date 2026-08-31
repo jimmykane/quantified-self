@@ -219,6 +219,41 @@ describe('ChartsPowerCurveComponent', () => {
     }));
   });
 
+  it('uses compact labels when a desktop dashboard tile is narrow', async () => {
+    fixture.detectChanges();
+    const chartElement = fixture.nativeElement.querySelector('.power-curve-chart') as HTMLDivElement;
+    Object.defineProperty(chartElement, 'clientWidth', { configurable: true, value: 258 });
+
+    fixture.componentRef.setInput('powerCurve', makePowerCurveContext());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as {
+      legend?: {
+        formatter?: (name: string) => string;
+        itemWidth?: number;
+      };
+      grid?: { bottom?: number };
+      xAxis?: {
+        axisLabel?: {
+          formatter?: (value: string | number) => string;
+          rotate?: number;
+        };
+      };
+    };
+
+    expect(option.legend?.formatter?.('Best in range')).toBe('Best');
+    expect(option.legend?.formatter?.('Latest cycling activity')).toBe('Latest');
+    expect(option.legend?.itemWidth).toBe(16);
+    expect(option.grid?.bottom).toBe(54);
+    expect(option.xAxis?.axisLabel?.rotate).toBe(56);
+    expect(option.xAxis?.axisLabel?.formatter?.(15)).toBe('');
+    expect(option.xAxis?.axisLabel?.formatter?.(300)).toBe('05m');
+  });
+
   it('formats tooltip rows with shared dashboard tooltip chrome', async () => {
     component.powerCurve = makePowerCurveContext();
 
@@ -301,6 +336,38 @@ describe('ChartsPowerCurveComponent', () => {
       expect(option?.xAxis?.axisPointer?.triggerTooltip).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.show).toBe(true);
       expect(option?.xAxis?.axisPointer?.handle?.size).toBe(20);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('hides the mobile axis handle for passive chart previews', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    try {
+      component.powerCurve = makePowerCurveContext();
+      component.showMobileAxisPointerHandle = false;
+
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+
+      const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+      const optionCandidate = setOptionCall[1] || setOptionCall[0];
+      const option = optionCandidate as {
+        xAxis?: { axisPointer?: { handle?: { show?: boolean } } };
+      };
+      expect(option.xAxis?.axisPointer?.handle?.show).toBe(false);
     } finally {
       window.matchMedia = originalMatchMedia;
     }

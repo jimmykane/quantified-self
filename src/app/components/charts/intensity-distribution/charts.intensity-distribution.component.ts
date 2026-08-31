@@ -62,6 +62,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
+  @Input() showMobileAxisPointerHandle = true;
   @Input()
   set range(value: DashboardDerivedChartRange | null | undefined) {
     const nextRange = normalizeDashboardDerivedChartRange(value);
@@ -110,7 +111,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status) {
+    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status || changes.showMobileAxisPointerHandle) {
       void this.refreshChart();
     }
   }
@@ -186,7 +187,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const mobileAxisPointerHandle = isMobileTooltipViewport
+    const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
         show: true,
         size: 20,
