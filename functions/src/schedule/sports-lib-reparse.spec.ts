@@ -472,6 +472,17 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
+    it('does not scan when the runtime checkpoint cannot be read', async () => {
+        hoisted.checkpointGet.mockRejectedValue(new Error('checkpoint unavailable'));
+
+        await expect((scheduleSportsLibReparseScan as any)({}))
+            .rejects.toThrow('checkpoint unavailable');
+
+        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.checkpointSet).not.toHaveBeenCalled();
+    });
+
     it('should let persisted settings enable a targeted scan when the compile-time default is disabled', async () => {
         hoisted.runtimeDefaults.enabled = false;
         hoisted.checkpointGet.mockResolvedValue({
@@ -674,6 +685,27 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(finalCheckpointPayload.cursorProcessingVersionCode).toBe(9_000_000);
     });
 
+    it('restarts a global scan when its persisted cursor tuple is malformed', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                cursorProcessingDocPath: 'not-an-event-processing-path',
+                cursorProcessingVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid global checkpoint cursor; restarting from the beginning.',
+        );
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
     it('should mark pass complete when processing scan returns no docs', async () => {
         await (scheduleSportsLibReparseScan as any)({});
 
@@ -713,6 +745,24 @@ describe('scheduleSportsLibReparseScan', () => {
 
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts a targeted user scan when its persisted cursor is malformed', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: { u1: { malformed: true } },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid targeted checkpoint cursor; restarting user scan.',
+            { uid: 'u1' },
+        );
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
     it('should skip override candidate when shouldEventBeReparsed returns false', async () => {

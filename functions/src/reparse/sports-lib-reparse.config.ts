@@ -1,4 +1,8 @@
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
+import { validateSportsLibReparseTargetUid } from '../../../shared/admin-queue-stats';
+
+export { validateSportsLibReparseTargetUid };
+export type { SportsLibReparseTargetUidValidation } from '../../../shared/admin-queue-stats';
 
 export const SPORTS_LIB_REPARSE_TARGET_VERSION = SPORTS_LIB_VERSION;
 export const SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -52,42 +56,6 @@ export interface ResolvedSportsLibReparseRuntimeSettings {
     configurationValid: boolean;
     updatedAt: unknown;
     updatedBy: string | null;
-}
-
-export type SportsLibReparseTargetUidValidation =
-    | { valid: true; targetUid: string | null }
-    | { valid: false; targetUid: null; reason: string };
-
-function hasUnsupportedSportsLibReparseTargetUidCharacter(value: string): boolean {
-    for (let index = 0; index < value.length; index += 1) {
-        const characterCode = value.charCodeAt(index);
-        if (value[index] === '/' || characterCode <= 31 || characterCode === 127) {
-            return true;
-        }
-    }
-    return false;
-}
-
-export function validateSportsLibReparseTargetUid(value: unknown): SportsLibReparseTargetUidValidation {
-    if (value === undefined || value === null) {
-        return { valid: true, targetUid: null };
-    }
-    if (typeof value !== 'string') {
-        return { valid: false, targetUid: null, reason: 'Target user ID must be a string or null.' };
-    }
-
-    const targetUid = value.trim();
-    if (!targetUid) {
-        return { valid: true, targetUid: null };
-    }
-    if (targetUid.length > 128) {
-        return { valid: false, targetUid: null, reason: 'Target user ID must be at most 128 characters.' };
-    }
-    if (hasUnsupportedSportsLibReparseTargetUidCharacter(targetUid)) {
-        return { valid: false, targetUid: null, reason: 'Target user ID contains unsupported characters.' };
-    }
-
-    return { valid: true, targetUid };
 }
 
 function resolveDefaultUidAllowlist(): {

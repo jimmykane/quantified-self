@@ -46,6 +46,7 @@
     <app-admin-queue-stats
         [stats]="queueStats"
         [loading]="isLoadingStats"
+        [statsLoadFailed]="queueStatsLoadFailed"
         [queueView]="queueView"
         (retryHeavyCompleted)="fetchQueueStats()"
         (reparseSettingsChanged)="fetchQueueStats()">

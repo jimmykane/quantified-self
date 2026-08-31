@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminQueueStatsComponent } from './admin-queue-stats.component';
 import { AdminService, QueueStats } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { SimpleChange } from '@angular/core';
@@ -142,6 +142,7 @@ describe('AdminQueueStatsComponent', () => {
             const host: HTMLElement = fixture.nativeElement;
             const targetInput = host.querySelector<HTMLInputElement>('.reparse-settings-card input');
             expect(host.textContent).toContain('Automatic Scanner');
+            expect(host.textContent).toContain('A pass already running and jobs already queued continue.');
             expect(host.textContent).toContain('Enabled');
             expect(host.textContent).toContain('Selected scope: target-user');
             expect(targetInput?.value).toBe('target-user');
@@ -197,6 +198,50 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
         });
 
+        it('opens only one global confirmation while a decision is pending', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            const confirmation = new Subject<boolean>();
+            mockDialog.open.mockReturnValue({ afterClosed: () => confirmation.asObservable() });
+
+            component.saveReparseSettings();
+            component.saveReparseSettings();
+
+            expect(mockDialog.open).toHaveBeenCalledTimes(1);
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+
+            confirmation.next(true);
+            confirmation.complete();
+
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledTimes(1);
+            expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(true, null, true);
+        });
+
+        it('does not apply a stale global confirmation after settings become unavailable', () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            const confirmation = new Subject<boolean>();
+            mockDialog.open.mockReturnValue({ afterClosed: () => confirmation.asObservable() });
+
+            component.saveReparseSettings();
+            const unavailableStats = createReparseQueueStats(false, null);
+            delete unavailableStats.reparse!.runtimeSettings;
+            component.stats = unavailableStats;
+            confirmation.next(true);
+            confirmation.complete();
+
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Scanner settings changed or became unavailable. Review them and save again.',
+                'Dismiss',
+                { duration: 6000 },
+            );
+        });
+
         it('does not save a cancelled global scan or an invalid target UID', () => {
             component.loading = false;
             component.stats = createReparseQueueStats(false, null);
@@ -233,6 +278,44 @@ describe('AdminQueueStatsComponent', () => {
             component.saveReparseSettings();
 
             expect(mockAdminService.setSportsLibReparseSettings).toHaveBeenCalledWith(false, null, false);
+        });
+
+        it('keeps settings read-only when the current runtime setting is unavailable', async () => {
+            component.loading = false;
+            component.queueView = 'reparse';
+            const stats = createReparseQueueStats(false, null);
+            delete stats.reparse!.runtimeSettings;
+            component.stats = stats;
+            component.reparseScanEnabled = true;
+
+            expect(component.reparseSettingsAvailable).toBe(false);
+            expect(component.canSaveReparseSettings).toBe(false);
+            component.saveReparseSettings();
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
+
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+
+            const host: HTMLElement = fixture.nativeElement;
+            const targetInput = host.querySelector<HTMLInputElement>('.reparse-settings-card input');
+            expect(targetInput?.disabled).toBe(true);
+            expect(host.textContent).toContain('Saving is disabled to avoid overwriting an unknown setting.');
+        });
+
+        it('keeps last-known settings read-only after the surrounding stats refresh fails', () => {
+            component.loading = false;
+            component.stats = createReparseQueueStats(false, null);
+            component.reparseScanEnabled = true;
+            component.statsLoadFailed = true;
+            component.ngOnChanges({
+                statsLoadFailed: new SimpleChange(false, true, false),
+            });
+
+            expect(component.reparseSettingsAvailable).toBe(true);
+            expect(component.canSaveReparseSettings).toBe(false);
+            component.saveReparseSettings();
+            expect(mockAdminService.setSportsLibReparseSettings).not.toHaveBeenCalled();
         });
     });
 

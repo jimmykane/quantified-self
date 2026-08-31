@@ -332,7 +332,9 @@ Operational behavior:
 - enabling with no target UID uses global processing-metadata discovery
 - the admin callable requires an explicit global-scan confirmation flag when enabling with no target UID
 - malformed persisted settings fail closed and keep discovery disabled
+- the Admin page disables settings writes when the current checkpoint setting cannot be read
 - the target UID is validated against Firebase Authentication before a targeted scan can be enabled
+- malformed targeted or global checkpoint cursors are ignored and that scan restarts from the beginning
 
 Compile-time defaults remain in `functions/src/reparse/sports-lib-reparse.config.ts` under
 `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. They supply `enabled`, `scanLimit`, `enqueueLimit`, and the legacy

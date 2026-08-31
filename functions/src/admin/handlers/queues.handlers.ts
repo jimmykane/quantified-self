@@ -368,12 +368,23 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             return null;
         });
         const checkpointData = checkpointSnapshot?.data() as Record<string, unknown> | undefined;
-        const effectiveReparseSettings = resolveSportsLibReparseRuntimeSettings(checkpointData);
+        // Do not turn a failed checkpoint read into apparently valid code defaults. The admin UI
+        // must be able to distinguish "no persisted setting" from "current setting unavailable"
+        // before it offers a write control.
+        const effectiveReparseSettings = checkpointSnapshot
+            ? resolveSportsLibReparseRuntimeSettings(checkpointData)
+            : null;
         const checkpointOverrideCursors = checkpointData?.overrideCursorByUid;
-        const overrideCursorByUid = (checkpointOverrideCursors && typeof checkpointOverrideCursors === 'object')
-            ? (checkpointOverrideCursors as Record<string, string | null>)
+        const overrideCursorByUid = (checkpointOverrideCursors
+            && typeof checkpointOverrideCursors === 'object'
+            && !Array.isArray(checkpointOverrideCursors))
+            ? (checkpointOverrideCursors as Record<string, unknown>)
             : {};
-        const overrideUsersInProgress = Object.values(overrideCursorByUid).filter(cursor => !!cursor).length;
+        const overrideUsersInProgress = effectiveReparseSettings?.uidAllowlist
+            ? Array.from(effectiveReparseSettings.uidAllowlist)
+                .filter(uid => typeof overrideCursorByUid[uid] === 'string' && !!overrideCursorByUid[uid])
+                .length
+            : 0;
         const routeCheckpointSnapshot = await admin.firestore().doc(SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_DOC_PATH).get().catch(e => {
             logger.error('[admin/getQueueStats] Failed to read sports-lib route reparse checkpoint:', e);
             return null;
@@ -1087,15 +1098,17 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 },
             },
             reparse: {
-                automaticScanEnabled: effectiveReparseSettings.enabled,
-                runtimeSettings: {
-                    enabled: effectiveReparseSettings.enabled,
-                    targetUid: effectiveReparseSettings.targetUid,
-                    source: effectiveReparseSettings.source,
-                    configurationValid: effectiveReparseSettings.configurationValid,
-                    updatedAt: effectiveReparseSettings.updatedAt,
-                    updatedBy: effectiveReparseSettings.updatedBy,
-                },
+                ...(effectiveReparseSettings ? {
+                    automaticScanEnabled: effectiveReparseSettings.enabled,
+                    runtimeSettings: {
+                        enabled: effectiveReparseSettings.enabled,
+                        targetUid: effectiveReparseSettings.targetUid,
+                        source: effectiveReparseSettings.source,
+                        configurationValid: effectiveReparseSettings.configurationValid,
+                        updatedAt: effectiveReparseSettings.updatedAt,
+                        updatedBy: effectiveReparseSettings.updatedBy,
+                    },
+                } : {}),
                 queuePending: reparseCloudTaskDepth,
                 targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                 jobs: {

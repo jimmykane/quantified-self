@@ -388,7 +388,7 @@ describe('getQueueStats Cloud Function', () => {
             checkpoint: expect.objectContaining({
                 lastScanCount: 200,
                 lastEnqueuedCount: 100,
-                overrideUsersInProgress: 1,
+                overrideUsersInProgress: 0,
             }),
         }));
         expect(result.derivedMetrics).toEqual({
@@ -479,6 +479,10 @@ describe('getQueueStats Cloud Function', () => {
                             updatedAt: 'stored-timestamp',
                             updatedBy: 'admin-uid',
                         },
+                        overrideCursorByUid: {
+                            'target-user': 'event-9',
+                            'old-target-user': 'event-4',
+                        },
                     }
                     : {},
             }),
@@ -495,6 +499,21 @@ describe('getQueueStats Cloud Function', () => {
             updatedAt: 'stored-timestamp',
             updatedBy: 'admin-uid',
         });
+        expect(result.reparse.checkpoint.overrideUsersInProgress).toBe(1);
+    });
+
+    it('does not report editable scanner settings when the checkpoint read fails', async () => {
+        mockDoc.mockImplementation((path: string) => ({
+            get: vi.fn().mockImplementation(() => path === 'systemJobs/sportsLibReparse'
+                ? Promise.reject(new Error('checkpoint unavailable'))
+                : Promise.resolve({ exists: true, data: () => ({}) })),
+        }));
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.reparse).not.toHaveProperty('automaticScanEnabled');
+        expect(result.reparse).not.toHaveProperty('runtimeSettings');
+        expect(result.reparse.checkpoint.overrideUsersInProgress).toBe(0);
     });
 
     it('classifies current, historical, and superseded reparse outcomes', async () => {

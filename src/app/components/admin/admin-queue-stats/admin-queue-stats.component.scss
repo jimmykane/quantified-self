@@ -61,9 +61,24 @@
     min-width: 154px;
     min-height: 48px;
 
+    .reparse-settings-save-content {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    mat-icon,
     mat-spinner {
-        display: inline-block;
-        margin-right: 0.5rem;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+    }
+
+    mat-icon {
+        font-size: 18px;
+        line-height: 18px;
     }
 
     @include bp.xsmall {
