@@ -28,7 +28,7 @@ import {
 } from '@shared/sleep';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import { combineLatest, of, Subscription } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import {
   AppHealthService,
@@ -150,6 +150,7 @@ export class HealthWorkspaceComponent {
   private readonly healthService = inject(AppHealthService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
+  private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
@@ -161,6 +162,7 @@ export class HealthWorkspaceComponent {
   private rangeWriteGeneration = 0;
   private rangeWriteInFlight = false;
   private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
+  private historyImportRequestGeneration = 0;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({ range, label: RANGE_LABELS[range] }));
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
@@ -188,7 +190,7 @@ export class HealthWorkspaceComponent {
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly sleepSyncStates = signal<Partial<Record<SleepProvider, SleepSyncState | null>>>({});
-  readonly sleepSyncStatesLoaded = signal(false);
+  readonly sleepSyncStateResolved = signal<Partial<Record<SleepProvider, boolean>>>({});
   readonly historyImportProvider = signal<HealthProvider | null>(null);
   readonly historyImportErrors = signal<Partial<Record<HealthProvider, string>>>({});
   readonly selectedProviders = signal<HealthProvider[]>([]);
@@ -377,7 +379,7 @@ export class HealthWorkspaceComponent {
       const sleepProvider = healthProviderSleepProvider(state.provider);
       return syncStateView(state, {
         sleepSyncState: sleepProvider ? this.sleepSyncStates()[sleepProvider] || null : null,
-        sleepSyncStatesLoaded: this.sleepSyncStatesLoaded(),
+        sleepSyncStateResolved: sleepProvider ? this.sleepSyncStateResolved()[sleepProvider] === true : false,
         hasProAccess: this.userService.hasProAccessSignal(),
         busy: this.historyImportProvider() === state.provider,
         error: this.historyImportErrors()[state.provider] || null,
@@ -430,10 +432,11 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.sleepSyncStates.set({});
-      this.sleepSyncStatesLoaded.set(false);
+      this.sleepSyncStateResolved.set({});
+      this.historyImportRequestGeneration += 1;
       this.historyImportProvider.set(null);
       this.historyImportErrors.set({});
       if (uid) {
@@ -444,15 +447,23 @@ export class HealthWorkspaceComponent {
         ] as const;
         subscription = combineLatest(providers.map(provider => this.sleepService
           .watchSyncState(uid, provider)
-          .pipe(catchError(() => of(null)))))
-          .subscribe(states => {
+          .pipe(
+            map(state => ({ state, resolved: true })),
+            catchError(() => of({ state: null, resolved: false })),
+          )))
+          .subscribe(results => {
             this.sleepSyncStates.set(Object.fromEntries(
-              providers.map((provider, index) => [provider, states[index]]),
+              providers.map((provider, index) => [provider, results[index].state]),
             ));
-            this.sleepSyncStatesLoaded.set(true);
+            this.sleepSyncStateResolved.set(Object.fromEntries(
+              providers.map((provider, index) => [provider, results[index].resolved]),
+            ));
           });
       }
-      onCleanup(() => subscription?.unsubscribe());
+      onCleanup(() => {
+        subscription?.unsubscribe();
+        this.historyImportRequestGeneration += 1;
+      });
     });
 
     effect(() => {
@@ -665,7 +676,7 @@ export class HealthWorkspaceComponent {
   async startHistoryImport(provider: HealthProvider): Promise<void> {
     const sleepProvider = healthProviderSleepProvider(provider);
     const sourceView = this.syncStateViews().find(state => state.provider === provider);
-    const requestedForUserID = `${this.userService.user()?.uid || ''}`.trim();
+    const requestedForUserID = `${this.signedInUserID() || ''}`.trim();
     if (
       !sleepProvider
       || !requestedForUserID
@@ -676,11 +687,15 @@ export class HealthWorkspaceComponent {
       return;
     }
 
+    const requestGeneration = ++this.historyImportRequestGeneration;
     this.historyImportProvider.set(provider);
     this.historyImportErrors.update(errors => ({ ...errors, [provider]: undefined }));
     try {
       const result = await this.requestHistoryImport(sleepProvider);
-      if (this.userService.user()?.uid !== requestedForUserID) {
+      if (
+        this.historyImportRequestGeneration !== requestGeneration
+        || this.signedInUserID() !== requestedForUserID
+      ) {
         return;
       }
       const queuedAtMs = Date.now();
@@ -707,7 +722,10 @@ export class HealthWorkspaceComponent {
         },
       }));
     } catch {
-      if (this.userService.user()?.uid !== requestedForUserID) {
+      if (
+        this.historyImportRequestGeneration !== requestGeneration
+        || this.signedInUserID() !== requestedForUserID
+      ) {
         return;
       }
       this.historyImportErrors.update(errors => ({
@@ -715,7 +733,9 @@ export class HealthWorkspaceComponent {
         [provider]: 'History import could not be started.',
       }));
     } finally {
-      this.historyImportProvider.set(null);
+      if (this.historyImportRequestGeneration === requestGeneration) {
+        this.historyImportProvider.set(null);
+      }
     }
   }
 
@@ -865,7 +885,7 @@ function priorityCard(
 
 interface HealthHistoryImportViewOptions {
   sleepSyncState: SleepSyncState | null;
-  sleepSyncStatesLoaded: boolean;
+  sleepSyncStateResolved: boolean;
   hasProAccess: boolean;
   busy: boolean;
   error: string | null;
@@ -934,7 +954,7 @@ function healthHistoryImportView(
   if (
     !healthProviderSleepProvider(state.provider)
     || state.status !== HEALTH_SYNC_STATUSES.Ready
-    || !options.sleepSyncStatesLoaded
+    || !options.sleepSyncStateResolved
     || !options.hasProAccess
   ) {
     return emptyView;
@@ -950,6 +970,13 @@ function healthHistoryImportView(
 
   const syncState = options.sleepSyncState;
   const healthStatus = syncState?.healthBackfillStatus || null;
+  if (syncState?.status === SLEEP_SYNC_STATUSES.PermissionMissing) {
+    return {
+      ...emptyView,
+      historyImportStatusText: 'History permission needed',
+      historyImportError: options.error,
+    };
+  }
   if (healthStatus === 'queued' || healthStatus === 'running') {
     return {
       ...emptyView,
@@ -957,13 +984,15 @@ function healthHistoryImportView(
     };
   }
 
-  const hasBackfillAttempt = positiveTimestamp(syncState?.lastBackfillQueuedAtMs)
-    || positiveTimestamp(syncState?.lastBackfillStartMs)
+  const hasBackfillAttempt = positiveTimestamp(syncState?.lastBackfillStartMs)
     || positiveTimestamp(syncState?.lastBackfillEndMs)
-    || syncState?.lastBackfillQueueItems !== null && syncState?.lastBackfillQueueItems !== undefined
+    || (syncState?.lastBackfillQueueItems !== null && syncState?.lastBackfillQueueItems !== undefined)
     || healthStatus !== null;
+  const providerBackfillFailed = syncState?.status === SLEEP_SYNC_STATUSES.Failed
+    && syncState.lastBackfillQueuedAtMs === null
+    && hasBackfillAttempt;
   const retryableFailure = healthStatus === 'failed'
-    || (syncState?.status === SLEEP_SYNC_STATUSES.Failed && hasBackfillAttempt)
+    || providerBackfillFailed
     || options.error !== null;
   if (syncState?.status === SLEEP_SYNC_STATUSES.Failed && !retryableFailure) {
     return emptyView;

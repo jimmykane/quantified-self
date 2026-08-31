@@ -85,8 +85,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Detailed sample streams load for 14-day and 30-day windows');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
-    expect(healthSection?.content).toContain('with no previous Sleep or Health history request');
+    expect(healthSection?.content).toContain('no previous Sleep or Health history request');
     expect(healthSection?.content).toContain('**Import history**');
+    expect(healthSection?.content).toContain('prior-import state cannot be verified');
     expect(healthSection?.content).toContain('Connectivity');
     expect(healthSection?.content).toContain('**Health (Beta)**');
     expect(healthSection?.content).toContain('Eligible beta accounts');
