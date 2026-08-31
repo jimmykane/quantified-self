@@ -46,18 +46,16 @@
 
   <!-- 2. Integration / Ecosystem Ticker -->
   <section class="integrations-section animate-on-scroll public-below-fold">
-    <p class="section-label">Connect Your Services</p>
+    <h2 class="section-label">Bring It In. Keep It Moving.</h2>
+    <p class="integration-intro">
+      Connect your accounts or upload files yourself. Quantified Self brings your history together and moves supported
+      workouts and routes between Garmin, Suunto, COROS, and Wahoo.
+    </p>
     <div class="logos-container">
       <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
       <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
       <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
       <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo"></mat-icon>
-      <div class="divider"></div>
-      <div class="file-formats">
-        <span class="format">FIT</span>
-        <span class="format">TCX</span>
-        <span class="format">GPX</span>
-      </div>
     </div>
 
     <div class="integration-followup-grid">
@@ -66,26 +64,11 @@
           <div mat-card-avatar class="feature-icon-container import">
             <mat-icon>history</mat-icon>
           </div>
-          <mat-card-title>Import History</mat-card-title>
+          <mat-card-title>Sync Your History</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Import your Garmin, Suunto, COROS, and Wahoo activity history into Quantified Self.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/integrations/wahoo">
-            Explore Wahoo
-          </a>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container auto-sync">
-            <mat-icon>sync_alt</mat-icon>
-          </div>
-          <mat-card-title>Automatic Sync for All Services</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Connect Garmin, Suunto, COROS, and Wahoo once. New activities from connected services sync to Quantified Self
-            automatically.</p>
+          <p>Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the
+            activity history already stored with each provider.</p>
         </mat-card-content>
       </mat-card>
 
@@ -94,27 +77,16 @@
           <div mat-card-avatar class="feature-icon-container service-sync">
             <mat-icon>published_with_changes</mat-icon>
           </div>
-          <mat-card-title>Automatic Sync Between Services</mat-card-title>
+          <mat-card-title>Move Workouts and Routes</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Automatically send new Garmin, COROS, or Wahoo activities to Suunto, or send supported activities to Wahoo.
-            You can also choose a date range to sync activities already stored in Quantified Self.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/integrations">
-            Explore Integrations
-          </a>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container route-upload">
-            <mat-icon>route</mat-icon>
-          </div>
-          <mat-card-title>Manual Route Uploads</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Upload GPX routes directly to Suunto from the Services page to keep your route planning and device workflows
-            aligned.</p>
+          <p>Choose automatic delivery between supported providers. You can also send past activities by date range
+            without enabling future sync.</p>
+          <p class="integration-examples"><strong>Examples:</strong> Garmin to Suunto, Wahoo, or COROS; COROS to Suunto
+            or Wahoo; Suunto to Wahoo or COROS; and Wahoo to Suunto or COROS.</p>
+          <p class="integration-route-note"><strong>Routes:</strong> Import routes from Suunto and send them to Garmin
+            Connect, Wahoo, or COROS automatically or as a one-off. Saved FIT and GPX routes can also be sent manually to
+            any of the four providers.</p>
         </mat-card-content>
       </mat-card>
 
@@ -123,14 +95,18 @@
           <div mat-card-avatar class="feature-icon-container activity-upload">
             <mat-icon>upload_file</mat-icon>
           </div>
-          <mat-card-title>Manual Activity Uploads to Suunto</mat-card-title>
+          <mat-card-title>Upload Your Own Files</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Upload FIT activities to Suunto manually anytime from Services for one-off corrections, missing sessions, or
-            migration workflows.</p>
+          <p>Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities
+            directly to Suunto, COROS, or Wahoo for one-off transfers.</p>
         </mat-card-content>
       </mat-card>
     </div>
+
+    <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
+      Explore Integrations
+    </a>
   </section>
 
   <!-- 3. Key Features Grid -->

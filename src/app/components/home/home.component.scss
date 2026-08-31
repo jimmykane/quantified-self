@@ -319,8 +319,17 @@
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--mat-sys-on-surface);
-        margin-bottom: 3rem;
+        margin: 0 0 0.75rem;
         opacity: 1;
+        text-align: center;
+    }
+
+    .integration-intro {
+        max-width: 760px;
+        margin: 0 0 2rem;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 1.1rem;
+        line-height: 1.6;
         text-align: center;
     }
 
@@ -346,37 +355,6 @@
             }
         }
 
-        .divider {
-            width: 1px;
-            height: 24px;
-            background-color: var(--mat-sys-outline-variant);
-            margin: 0 1rem;
-            display: none;
-
-            @include bp.small {
-                display: block;
-            }
-        }
-
-        .file-formats {
-            display: flex;
-            gap: 1rem;
-
-            .format {
-                font-size: 0.875rem;
-                font-weight: 600;
-                color: var(--mat-sys-on-surface-variant);
-                padding: 0.25rem 0.75rem;
-                background-color: var(--mat-sys-surface-container);
-                border-radius: 8px;
-                transition: background-color 0.2s;
-
-                &:hover {
-                    background-color: var(--mat-sys-surface-container-high);
-                    color: var(--mat-sys-on-surface);
-                }
-            }
-        }
     }
 
     .integration-followup-grid {
@@ -390,12 +368,18 @@
             display: flex;
             flex-direction: column;
             align-items: flex-start;
-            gap: 1rem;
+            gap: 0.75rem;
         }
 
-        .feature-link {
-            margin-top: auto;
+        .integration-examples,
+        .integration-route-note {
+            font-size: 0.9rem;
+            line-height: 1.5;
         }
+    }
+
+    .integrations-cta {
+        margin-top: 2rem;
     }
 
     .feature-card {
@@ -417,19 +401,9 @@
                 color: var(--mat-sys-on-tertiary-container);
             }
 
-            &.auto-sync {
-                background-color: var(--mat-sys-tertiary-container);
-                color: var(--mat-sys-on-tertiary-container);
-            }
-
             &.service-sync {
                 background-color: var(--mat-sys-secondary-container);
                 color: var(--mat-sys-on-secondary-container);
-            }
-
-            &.route-upload {
-                background-color: var(--mat-sys-error-container);
-                color: var(--mat-sys-on-error-container);
             }
 
             &.activity-upload {

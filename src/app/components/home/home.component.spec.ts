@@ -169,29 +169,34 @@ describe('HomeComponent', () => {
         ]);
     });
 
-    it('should render expanded integration capability cards with one integrations hub link', () => {
+    it('should render three precise integration principles with one integrations hub link', () => {
         const text = fixture.nativeElement.textContent as string;
         const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
         const integrationLinks = fixture.nativeElement.querySelectorAll(
             'a[href="/integrations"], a[routerlink="/integrations"], a[ng-reflect-router-link="/integrations"]'
         );
 
-        expect(integrationCards.length).toBe(5);
-        expect(text).toContain('Import your Garmin, Suunto, COROS, and Wahoo activity history');
+        expect(integrationCards.length).toBe(3);
+        expect(text).toContain('Bring It In. Keep It Moving.');
+        expect(text).toContain('Sync Your History');
+        expect(text).toContain('New activities arrive automatically');
+        expect(text).toContain('activity history already stored with each provider');
         expect(text).not.toContain('FIT-backed Wahoo history');
         expect(text).not.toContain('rolling 5 years');
         expect(text).not.toContain('last 3 months');
-        expect(text).toContain('Automatically send new Garmin, COROS, or Wahoo activities to Suunto');
-        expect(text).toContain('Automatic Sync for All Services');
-        expect(text).toContain('Automatic Sync Between Services');
+        expect(text).toContain('Move Workouts and Routes');
+        expect(text).toContain('automatic delivery between supported providers');
+        expect(text).toContain('send past activities by date range');
+        expect(text).toContain('Garmin to Suunto, Wahoo, or COROS');
+        expect(text).toContain('Import routes from Suunto');
+        expect(text).toContain('Saved FIT and GPX routes can also be sent manually');
+        expect(text).toContain('Upload Your Own Files');
+        expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
+        expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
         expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
-        expect(text).toContain('Manual Route Uploads');
-        expect(text).toContain('Manual Activity Uploads to Suunto');
-        expect(text).toContain('choose a date range to sync activities');
         expect(text).toContain('Explore Integrations');
-        expect(text).toContain('Explore Wahoo');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/integrations/wahoo"], a[ng-reflect-router-link="/integrations/wahoo"]')).toBeTruthy();
-        expect(integrationLinks.length).toBeGreaterThanOrEqual(1);
+        expect(text).not.toContain('Explore Wahoo');
+        expect(integrationLinks.length).toBe(1);
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
@@ -215,7 +220,7 @@ describe('HomeComponent', () => {
         expect(trainingPreviewIndicators.length).toBe(3);
         expect(signalPreviews.length).toBe(4);
         expect(deferredPreviewPlaceholders.length).toBe(2);
-        expect(text).toContain('Connect Your Services');
+        expect(text).toContain('Bring It In. Keep It Moving.');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
         expect(text).toContain('Illustrative data');
