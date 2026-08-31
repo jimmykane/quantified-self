@@ -916,6 +916,44 @@
         font-size: 0.95rem;
     }
 
+    .mcp-access-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 1.125rem 1.25rem;
+        border-radius: 20px;
+        background: var(--mat-sys-surface-container-low);
+
+        .mcp-access-row__icon {
+            @include icon-container-base;
+            background-color: var(--mat-sys-primary-container);
+            color: var(--mat-sys-on-primary-container);
+        }
+
+        .mcp-access-row__copy {
+            min-width: 0;
+
+            h3 {
+                margin: 0;
+                font-size: 1.2rem;
+                line-height: 1.2;
+            }
+
+            p {
+                margin: 0.35rem 0 0;
+                color: var(--mat-sys-on-surface-variant);
+                font-size: 0.95rem;
+                line-height: 1.5;
+            }
+        }
+
+        a {
+            white-space: nowrap;
+        }
+    }
+
 }
 
 // 3.1 Hardware Analysis Section
@@ -1389,6 +1427,17 @@
                 width: 100%;
                 max-width: 360px;
                 margin: 0 auto;
+            }
+        }
+
+        .mcp-access-row {
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: start;
+            padding: 1rem;
+
+            a {
+                grid-column: 1 / -1;
+                width: 100%;
             }
         }
     }

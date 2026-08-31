@@ -228,20 +228,6 @@
         </mat-card-content>
       </mat-card>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>devices</mat-icon>
-          </div>
-          <mat-card-title>Read-only MCP Server</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Authorize ChatGPT or another compatible MCP client to read only the metrics, body measurements, sleep, activity details and charts, route summaries, and separate location access you approve.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/features/mcp-server">
-            Explore MCP Access
-          </a>
-        </mat-card-content>
-      </mat-card>
     </div>
   </section>
 
@@ -307,6 +293,18 @@
     </div>
 
     <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
+
+    <mat-card class="mcp-access-row animate-on-scroll" appearance="outlined">
+      <div class="mcp-access-row__icon" data-nosnippet>
+        <mat-icon aria-hidden="true">devices</mat-icon>
+      </div>
+      <div class="mcp-access-row__copy">
+        <h3>Connect Other AI Tools</h3>
+        <p>Prefer ChatGPT or another compatible assistant? Grant access to the training, sleep, measurements, activity
+          charts, and routes you choose. Location access remains a separate permission.</p>
+      </div>
+      <a mat-stroked-button routerLink="/features/mcp-server">Explore MCP Access</a>
+    </mat-card>
   </section>
 
   <!-- 5. Map Your Activities (MyTracks Highlight) -->

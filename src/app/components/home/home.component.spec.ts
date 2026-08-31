@@ -122,11 +122,17 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('when your question needs the broader context.');
         expect(aiSectionText).toContain('Check the Evidence');
         expect(aiSectionText).toContain('see exactly what supports it.');
+        expect(aiSectionText).toContain('Connect Other AI Tools');
+        expect(aiSectionText).toContain('Grant access to the training, sleep, measurements, activity charts, and routes you choose.');
+        expect(aiSectionText).toContain('Location access remains a separate permission.');
+        expect(aiSectionText).toContain('Explore MCP Access');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
+        expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .feature-icon-container[data-nosnippet]').length).toBe(3);
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid .feature-icon-container[data-nosnippet]').length).toBe(3);
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });
 
@@ -217,7 +223,7 @@ describe('HomeComponent', () => {
         const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
         const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
 
-        expect(performanceCards.length).toBe(4);
+        expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
         expect(trainingPreviewIndicators.length).toBe(3);
@@ -277,9 +283,7 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('routes with heatmaps');
         expect(text).toContain('Explore Activity Calendar');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/activity-calendar"], a[ng-reflect-router-link="/features/activity-calendar"]')).toBeTruthy();
-        expect(text).toContain('Read-only MCP Server');
-        expect(text).toContain('activity details and charts, route summaries, and separate location access you approve');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/mcp-server"], a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
+        expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
     });
