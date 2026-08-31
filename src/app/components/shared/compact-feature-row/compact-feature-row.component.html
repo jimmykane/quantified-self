@@ -1,0 +1,27 @@
+<article
+  class="compact-feature-row"
+  [class.compact-feature-row--without-icon]="!icon()"
+  [class.compact-feature-row--primary]="iconTone() === 'primary'"
+  [class.compact-feature-row--secondary]="iconTone() === 'secondary'"
+  [class.compact-feature-row--tertiary]="iconTone() === 'tertiary'"
+  [class.compact-feature-row--neutral]="iconTone() === 'neutral'"
+>
+  @if (icon(); as iconName) {
+    <div class="compact-feature-row__icon" data-nosnippet>
+      <mat-icon aria-hidden="true">{{ iconName }}</mat-icon>
+    </div>
+  }
+
+  <h3 class="compact-feature-row__title">{{ title() }}</h3>
+
+  <div class="compact-feature-row__body">
+    @if (summary(); as summaryText) {
+      <p class="compact-feature-row__summary">{{ summaryText }}</p>
+    }
+    <ng-content></ng-content>
+  </div>
+
+  <div class="compact-feature-row__action">
+    <ng-content select="[compactFeatureRowAction]"></ng-content>
+  </div>
+</article>

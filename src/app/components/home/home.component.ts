@@ -3,7 +3,6 @@ import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import {
   MAT_TOOLTIP_DEFAULT_OPTIONS,
@@ -13,6 +12,7 @@ import {
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 import type {
@@ -38,7 +38,6 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
   imports: [
     RouterLink,
     MatButtonModule,
-    MatCardModule,
     MatIconModule,
     MatTooltipModule,
     HomeDashboardPreviewComponent,
@@ -47,6 +46,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     TrainingSummaryCardsComponent,
     TrainingMetricGridComponent,
     TypedPromptRotatorComponent,
+    CompactFeatureRowComponent,
   ],
   providers: [
     { provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: HOME_TOOLTIP_DEFAULT_OPTIONS },

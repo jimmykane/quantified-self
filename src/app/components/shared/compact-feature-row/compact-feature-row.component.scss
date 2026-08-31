@@ -1,0 +1,123 @@
+:host {
+  display: block;
+  min-width: 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.compact-feature-row {
+  display: grid;
+  grid-template-columns: 48px minmax(180px, 240px) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1.25rem;
+  padding: 1.25rem 0.5rem;
+}
+
+.compact-feature-row__icon {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+
+  mat-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+  }
+}
+
+.compact-feature-row--primary .compact-feature-row__icon {
+  color: var(--mat-sys-on-primary-container);
+  background: var(--mat-sys-primary-container);
+}
+
+.compact-feature-row--secondary .compact-feature-row__icon {
+  color: var(--mat-sys-on-secondary-container);
+  background: var(--mat-sys-secondary-container);
+}
+
+.compact-feature-row--tertiary .compact-feature-row__icon {
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
+}
+
+.compact-feature-row--neutral .compact-feature-row__icon {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-high);
+}
+
+.compact-feature-row__title {
+  align-self: center;
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.compact-feature-row__body {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  padding-top: 0.15rem;
+}
+
+.compact-feature-row__summary {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.compact-feature-row__action {
+  align-self: center;
+  white-space: nowrap;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.compact-feature-row--without-icon {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+}
+
+@media (max-width: 900px) {
+  .compact-feature-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1.25rem 0;
+  }
+
+  .compact-feature-row__body,
+  .compact-feature-row__action {
+    grid-column: 2;
+  }
+
+  .compact-feature-row__action {
+    justify-self: start;
+  }
+
+  .compact-feature-row--without-icon {
+    grid-template-columns: minmax(0, 1fr);
+
+    .compact-feature-row__body,
+    .compact-feature-row__action {
+      grid-column: 1;
+    }
+  }
+}
+
+@media (max-width: 520px) {
+  .compact-feature-row__body,
+  .compact-feature-row__action {
+    grid-column: 1 / -1;
+  }
+
+  .compact-feature-row__action,
+  .compact-feature-row__action ::ng-deep a,
+  .compact-feature-row__action ::ng-deep button {
+    width: 100%;
+  }
+}

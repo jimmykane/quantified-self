@@ -54,45 +54,42 @@
       <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo"></mat-icon>
     </div>
 
-    <div class="integration-followup-list">
-      <section class="integration-capability animate-on-scroll">
-        <div class="feature-icon-container import" data-nosnippet>
-          <mat-icon>history</mat-icon>
-        </div>
-        <h3>Sync Your History</h3>
-        <div class="integration-capability-copy">
-          <p>Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the
-            activity history already stored with each provider.</p>
-        </div>
-      </section>
+    <div class="compact-row-stack integration-followup-list">
+      <app-compact-feature-row
+        class="integration-capability animate-on-scroll"
+        icon="history"
+        iconTone="secondary"
+        title="Sync Your History"
+        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."
+      ></app-compact-feature-row>
 
-      <section class="integration-capability animate-on-scroll">
-        <div class="feature-icon-container service-sync" data-nosnippet>
-          <mat-icon>published_with_changes</mat-icon>
+      <app-compact-feature-row
+        class="integration-capability animate-on-scroll"
+        icon="published_with_changes"
+        iconTone="secondary"
+        title="Move Workouts and Routes"
+        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync."
+      >
+        <div class="integration-capability-details">
+          <p>
+            <strong>Examples:</strong> Garmin → Suunto, Wahoo, or COROS · COROS
+            → Suunto or Wahoo · Suunto → Wahoo or COROS · Wahoo → Suunto or
+            COROS.
+          </p>
+          <p>
+            <strong>Routes:</strong> Import Suunto routes and send them to
+            Garmin Connect, Wahoo, or COROS automatically or on demand. Send
+            saved FIT/GPX routes manually to any of the four providers.
+          </p>
         </div>
-        <h3>Move Workouts and Routes</h3>
-        <div class="integration-capability-copy integration-capability-copy--split">
-          <p>Choose automatic delivery between supported providers. You can also send past activities by date range
-            without enabling future sync.</p>
-          <div class="integration-capability-details">
-            <p><strong>Examples:</strong> Garmin → Suunto, Wahoo, or COROS · COROS → Suunto or Wahoo · Suunto → Wahoo or
-              COROS · Wahoo → Suunto or COROS.</p>
-            <p><strong>Routes:</strong> Import Suunto routes and send them to Garmin Connect, Wahoo, or COROS automatically
-              or on demand. Send saved FIT/GPX routes manually to any of the four providers.</p>
-          </div>
-        </div>
-      </section>
+      </app-compact-feature-row>
 
-      <section class="integration-capability animate-on-scroll">
-        <div class="feature-icon-container activity-upload" data-nosnippet>
-          <mat-icon>upload_file</mat-icon>
-        </div>
-        <h3>Upload Your Own Files</h3>
-        <div class="integration-capability-copy">
-          <p>Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities
-            directly to Suunto, COROS, or Wahoo for one-off transfers.</p>
-        </div>
-      </section>
+      <app-compact-feature-row
+        class="integration-capability animate-on-scroll"
+        icon="upload_file"
+        title="Upload Your Own Files"
+        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."
+      ></app-compact-feature-row>
     </div>
 
     <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
@@ -108,104 +105,101 @@
       behind every signal.
     </p>
 
-    <mat-card class="training-preview-card glass-panel animate-on-scroll" appearance="outlined">
-      <div class="training-preview-content" data-nosnippet>
-        <header class="training-preview-header">
-          <div>
-            <h3>Your Training Snapshot</h3>
-            <p>Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy
-              used by Training.</p>
-          </div>
-          <a mat-stroked-button routerLink="/features/training-analysis">Explore Training</a>
-        </header>
+    <div class="compact-row-stack training-preview-stack">
+      <app-compact-feature-row
+        class="training-preview-row animate-on-scroll"
+        icon="monitor_heart"
+        iconTone="secondary"
+        title="Your Training Snapshot"
+        summary="Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy used by Training."
+      >
+        <a
+          compactFeatureRowAction
+          mat-stroked-button
+          routerLink="/features/training-analysis"
+          >Explore Training</a
+        >
+        <div class="training-preview-data" data-nosnippet>
+          <app-training-summary-cards
+            mode="preview"
+            [cards]="trainingPreviewCards"
+            ariaLabel="Current Training overview"
+          ></app-training-summary-cards>
 
-        <app-training-summary-cards
-          mode="preview"
-          [cards]="trainingPreviewCards"
-          ariaLabel="Current Training overview"
-        ></app-training-summary-cards>
+          <app-training-metric-grid
+            mode="preview-load"
+            [metrics]="trainingPreviewLoadMetrics"
+            ariaLabel="Training load metrics"
+          ></app-training-metric-grid>
 
-        <app-training-metric-grid
-          mode="preview-load"
-          [metrics]="trainingPreviewLoadMetrics"
-          ariaLabel="Training load metrics"
-        ></app-training-metric-grid>
+          <app-training-metric-grid
+            mode="preview-context"
+            [metrics]="trainingPreviewContextMetrics"
+            ariaLabel="Training context"
+          ></app-training-metric-grid>
+        </div>
+      </app-compact-feature-row>
+    </div>
 
-        <app-training-metric-grid
-          mode="preview-context"
-          [metrics]="trainingPreviewContextMetrics"
-          ariaLabel="Training context"
-        ></app-training-metric-grid>
-      </div>
-    </mat-card>
-
-    <div class="features-grid">
+    <div class="compact-row-stack features-grid">
       <!-- Feature 1: Derived Curated Charts -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>query_stats</mat-icon>
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="query_stats"
+        title="Charts Behind Every Signal"
+        summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training."
+      >
+        @defer (on viewport) {
+          <app-home-signal-charts-preview></app-home-signal-charts-preview>
+        } @placeholder {
+          <div
+            class="home-preview-placeholder home-preview-placeholder--signals"
+            data-nosnippet
+          >
+            <p class="home-preview-placeholder__summary">
+              Preview charts: Freshness Forecast, Intensity Distribution,
+              Efficiency Trend, Cycling Power Curve, and Form.
+            </p>
           </div>
-          <mat-card-title>Charts Behind Every Signal</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and
-            sleep views available in Training.</p>
-          @defer (on viewport) {
-            <app-home-signal-charts-preview></app-home-signal-charts-preview>
-          } @placeholder {
-            <div class="home-preview-placeholder home-preview-placeholder--signals" data-nosnippet>
-              <p class="home-preview-placeholder__summary">
-                Preview charts: Freshness Forecast, Intensity Distribution, Efficiency Trend, Cycling Power Curve,
-                and Form.
-              </p>
-            </div>
-          }
-        </mat-card-content>
-      </mat-card>
+        }
+      </app-compact-feature-row>
 
       <!-- Feature 3: Dashboard Manager -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>dashboard_customize</mat-icon>
-          </div>
-          <mat-card-title>Build the Dashboard You Need</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters;
-            maps add style and marker-clustering controls.</p>
-          @defer (on viewport; prefetch on idle) {
-            <app-home-dashboard-preview></app-home-dashboard-preview>
-          } @placeholder {
-            <div class="home-preview-placeholder home-preview-placeholder--dashboard" aria-hidden="true"></div>
-          }
-          <a mat-stroked-button class="feature-link" routerLink="/dashboard">
-            Open Your Dashboard
-          </a>
-        </mat-card-content>
-      </mat-card>
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="dashboard_customize"
+        title="Build the Dashboard You Need"
+        summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls."
+      >
+        @defer (on viewport; prefetch on idle) {
+          <app-home-dashboard-preview></app-home-dashboard-preview>
+        } @placeholder {
+          <div
+            class="home-preview-placeholder home-preview-placeholder--dashboard"
+            aria-hidden="true"
+          ></div>
+        }
+        <a compactFeatureRowAction mat-stroked-button routerLink="/dashboard">
+          Open Your Dashboard
+        </a>
+      </app-compact-feature-row>
 
       <!-- Feature 4: Deep Analysis -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>layers</mat-icon>
-          </div>
-          <mat-card-title>Analyze Every Workout</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. View zones,
-            grade-colored elevation, and inverse depth; switch between distance, duration, or time where supported,
-            then select a range for stats or zoom in.</p>
-          @defer (on viewport; prefetch on idle) {
-            <app-home-workout-preview></app-home-workout-preview>
-          } @placeholder {
-            <div class="home-preview-placeholder home-preview-placeholder--workout" aria-hidden="true"></div>
-          }
-        </mat-card-content>
-      </mat-card>
-
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="layers"
+        title="Analyze Every Workout"
+        summary="Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. View zones, grade-colored elevation, and inverse depth; switch between distance, duration, or time where supported, then select a range for stats or zoom in."
+      >
+        @defer (on viewport; prefetch on idle) {
+          <app-home-workout-preview></app-home-workout-preview>
+        } @placeholder {
+          <div
+            class="home-preview-placeholder home-preview-placeholder--workout"
+            aria-hidden="true"
+          ></div>
+        }
+      </app-compact-feature-row>
     </div>
   </section>
 
@@ -219,42 +213,27 @@
       </p>
     </div>
 
-    <div class="features-grid">
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
-            <mat-icon aria-hidden="true">chat</mat-icon>
-          </div>
-          <mat-card-title>Ask in Your Own Words</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Start with today, a trend, or a recent workout. Ask follow-up questions without starting over.</p>
-        </mat-card-content>
-      </mat-card>
+    <div class="compact-row-stack features-grid">
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="chat"
+        title="Ask in Your Own Words"
+        summary="Start with today, a trend, or a recent workout. Ask follow-up questions without starting over."
+      ></app-compact-feature-row>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
-            <mat-icon aria-hidden="true">hub</mat-icon>
-          </div>
-          <mat-card-title>Bring Your Data Together</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>The Assistant draws from sleep, recovery, training, measurements, and activities when your question needs the broader context.</p>
-        </mat-card-content>
-      </mat-card>
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="hub"
+        title="Bring Your Data Together"
+        summary="The Assistant draws from sleep, recovery, training, measurements, and activities when your question needs the broader context."
+      ></app-compact-feature-row>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container" data-nosnippet>
-            <mat-icon aria-hidden="true">fact_check</mat-icon>
-          </div>
-          <mat-card-title>Check the Evidence</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Each answer shows the data behind it, so you can see exactly what supports it.</p>
-        </mat-card-content>
-      </mat-card>
+      <app-compact-feature-row
+        class="feature-card animate-on-scroll"
+        icon="fact_check"
+        title="Check the Evidence"
+        summary="Each answer shows the data behind it, so you can see exactly what supports it."
+      ></app-compact-feature-row>
     </div>
 
     <div class="ai-insights-examples animate-on-scroll">
@@ -272,17 +251,21 @@
 
     <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
 
-    <mat-card class="mcp-access-row animate-on-scroll" appearance="outlined">
-      <div class="mcp-access-row__icon" data-nosnippet>
-        <mat-icon aria-hidden="true">devices</mat-icon>
-      </div>
-      <div class="mcp-access-row__copy">
-        <h3>Connect Other AI Tools</h3>
-        <p>Prefer ChatGPT or another compatible assistant? Grant access to the training, sleep, measurements, activity
-          charts, and routes you choose. Location access remains a separate permission.</p>
-      </div>
-      <a mat-stroked-button routerLink="/features/mcp-server">Explore MCP Access</a>
-    </mat-card>
+    <div class="compact-row-stack mcp-access-stack">
+      <app-compact-feature-row
+        class="mcp-access-row animate-on-scroll"
+        icon="devices"
+        title="Connect Other AI Tools"
+        summary="Prefer ChatGPT or another compatible assistant? Grant access to the training, sleep, measurements, activity charts, and routes you choose. Location access remains a separate permission."
+      >
+        <a
+          compactFeatureRowAction
+          mat-stroked-button
+          routerLink="/features/mcp-server"
+          >Explore MCP Access</a
+        >
+      </app-compact-feature-row>
+    </div>
   </section>
 
   <!-- 5. Map Your Activities (MyTracks Highlight) -->
@@ -338,20 +321,16 @@
       </div>
     </div>
 
-    <div class="analysis-grid">
+    <div class="compact-row-stack analysis-grid">
       <!-- Benchmark Merge Workflow -->
-      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="analysis-icon-container">
-            <mat-icon>merge_type</mat-icon>
-          </div>
-          <mat-card-title>Benchmark Merge Workflow</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="analysis-card-copy">
-            Combine recordings from multiple devices into a benchmark event, keep it out of normal training totals, then
-            pick reference and test activities for a clean device-to-device report.
-          </p>
+      <app-compact-feature-row
+        class="analysis-card animate-on-scroll"
+        icon="merge_type"
+        iconTone="secondary"
+        title="Benchmark Merge Workflow"
+        summary="Combine recordings from multiple devices into a benchmark event, keep it out of normal training totals, then pick reference and test activities for a clean device-to-device report."
+      >
+        <div class="analysis-row-content">
           <div class="visual-box chart-preview">
             <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -391,22 +370,18 @@
               <span class="stat-value success">+/-15s</span>
             </div>
           </div>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </app-compact-feature-row>
 
       <!-- GNSS Trace Comparison -->
-      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="analysis-icon-container">
-            <mat-icon>route</mat-icon>
-          </div>
-          <mat-card-title>GNSS Trace Comparison</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="analysis-card-copy">
-            Compare GPS tracks point by point and quantify trace disagreement with CEP50, CEP95, RMSE, max deviation, and
-            total distance difference.
-          </p>
+      <app-compact-feature-row
+        class="analysis-card animate-on-scroll"
+        icon="route"
+        iconTone="secondary"
+        title="GNSS Trace Comparison"
+        summary="Compare GPS tracks point by point and quantify trace disagreement with CEP50, CEP95, RMSE, max deviation, and total distance difference."
+      >
+        <div class="analysis-row-content">
           <div class="visual-box map-preview">
             <div class="map-tile-bg"></div>
             <svg class="map-svg" viewBox="-100 -50 1000 700" preserveAspectRatio="xMidYMid meet">
@@ -435,22 +410,18 @@
               <span class="stat-value warning">1.1m</span>
             </div>
           </div>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </app-compact-feature-row>
 
       <!-- Sensor Agreement + Quality -->
-      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="analysis-icon-container">
-            <mat-icon>sensors</mat-icon>
-          </div>
-          <mat-card-title>Sensor Quality Reports</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="analysis-card-copy">
-            Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock
-            warnings before a device shapes your decisions.
-          </p>
+      <app-compact-feature-row
+        class="analysis-card animate-on-scroll"
+        icon="sensors"
+        iconTone="secondary"
+        title="Sensor Quality Reports"
+        summary="Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock warnings before a device shapes your decisions."
+      >
+        <div class="analysis-row-content">
           <div class="visual-box quality-preview">
             <div class="quality-verdict">
               <mat-icon>verified</mat-icon>
@@ -488,8 +459,8 @@
               <span class="stat-value success">Save / Share</span>
             </div>
           </div>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </app-compact-feature-row>
     </div>
   </section>
 

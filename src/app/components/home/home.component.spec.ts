@@ -10,7 +10,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconModule } from '@angular/material/icon';
-import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -60,7 +59,6 @@ describe('HomeComponent', () => {
                 RouterTestingModule.withRoutes([]),
                 MatIconModule,
                 MatIconTestingModule,
-                MatCardModule,
                 MatButtonModule,
                 MatTooltipModule,
                 BrowserAnimationsModule
@@ -138,7 +136,7 @@ describe('HomeComponent', () => {
         expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid .feature-icon-container[data-nosnippet]').length).toBe(3);
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-feature-row').length).toBe(3);
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
@@ -224,16 +222,16 @@ describe('HomeComponent', () => {
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
-        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-card');
+        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-row');
         const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
-            '.training-preview-card app-metric-indicator'
+            '.training-preview-row app-metric-indicator'
         );
         const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
         const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
 
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
-        expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
         expect(trainingPreview.querySelector('app-training-summary-cards')).toBeTruthy();
         expect(trainingPreview.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
         expect(trainingPreviewIndicators.length).toBe(3);
@@ -298,6 +296,15 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
+    });
+
+    it('uses the shared compact row primitive for every top-level homepage card', () => {
+        const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+
+        expect(compactRows.length).toBe(14);
+        expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
+        expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
     });
 
     it('should render the shared signal charts when the deferred section completes', async () => {
