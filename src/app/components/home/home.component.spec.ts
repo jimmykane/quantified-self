@@ -1,4 +1,9 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+    ComponentFixture,
+    DeferBlockBehavior,
+    DeferBlockState,
+    TestBed,
+} from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { HomeComponent } from './home.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -49,6 +54,7 @@ describe('HomeComponent', () => {
         };
 
         await TestBed.configureTestingModule({
+            deferBlockBehavior: DeferBlockBehavior.Manual,
             imports: [
                 HomeComponent,
                 RouterTestingModule.withRoutes([]),
@@ -290,6 +296,19 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
+    });
+
+    it('should render the shared signal charts when the deferred section completes', async () => {
+        const deferBlocks = await fixture.getDeferBlocks();
+
+        expect(deferBlocks.length).toBe(3);
+        await deferBlocks[0].render(DeferBlockState.Complete);
+        await fixture.whenStable();
+
+        expect(fixture.nativeElement.querySelectorAll('.signal-preview-widget').length).toBe(4);
+        expect(fixture.nativeElement.querySelector('.signal-preview-form-widget')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals')).toBeNull();
+        expect(eChartsLoader.setOption).toHaveBeenCalledTimes(5);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

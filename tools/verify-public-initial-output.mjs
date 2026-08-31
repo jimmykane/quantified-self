@@ -6,6 +6,7 @@ const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
 const prerenderManifestPath = path.join(path.dirname(outputDirectory), 'prerendered-routes.json');
 const sourceMapCache = new Map();
+const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 160 * 1024;
 
 const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/home\/home\.component\.ts$/,
@@ -29,6 +30,9 @@ const indexedJavaScriptAssets = collectAssets(indexHtml, '.js');
 const initialStylesheets = collectAssets(indexHtml, '.css');
 const applicationAssets = findAssetsContainingSource(/^src\/app\/app\.module\.ts$/);
 const homeRouteAssets = findAssetsContainingSource(/^src\/app\/components\/home\/home\.component\.ts$/);
+const homeSignalPreviewAssets = findAssetsContainingSource(
+  /^src\/app\/components\/home\/home-signal-charts-preview\.component\.ts$/,
+);
 const prerenderedRouteAssets = prerenderedPageSourcePatterns.flatMap(findAssetsContainingSource);
 const homeStartupJavaScriptAssets = collectStaticDependencyGraph([
   ...indexedJavaScriptAssets,
@@ -42,6 +46,14 @@ const publicStartupJavaScriptAssets = collectStaticDependencyGraph([
 ]);
 const homeStartupSourceRecords = uniqueSourceRecords(homeStartupJavaScriptAssets.flatMap(readSourceRecords));
 const publicStartupSourceRecords = uniqueSourceRecords(publicStartupJavaScriptAssets.flatMap(readSourceRecords));
+const homeSignalPreviewJavaScriptAssets = collectStaticDependencyGraph(homeSignalPreviewAssets);
+const homeSignalPreviewSourceRecords = uniqueSourceRecords(
+  homeSignalPreviewJavaScriptAssets.flatMap(readSourceRecords),
+);
+const homeStartupAssetSet = new Set(homeStartupJavaScriptAssets);
+const homeSignalPreviewIncrementalStaticAssets = homeSignalPreviewJavaScriptAssets.filter(
+  asset => !homeStartupAssetSet.has(asset),
+);
 
 assertNoHomeStartupSource(
   'route-only public page content',
@@ -85,6 +97,12 @@ assertNoStartupSource(
   'interaction-only comparison UI',
   /\/components\/(?:benchmark\/benchmark-(?:bottom-sheet|selection-dialog)|confirmation-dialog\/confirmation-dialog|event-tags\/event-tags-dialog|tools\/device-color-preferences-dialog)\.component\.ts$/,
 );
+assertNoSourceRecords(
+  'broad chart dependencies',
+  homeSignalPreviewSourceRecords,
+  /^src\/app\/(?:services\/app\.event\.service|modules\/(?:app-charts|material|shared)\.module)\.ts$/,
+  'deferred home signal preview graph',
+);
 assertNoInitialStylesheet('Mapbox', /mapboxgl-/);
 assertPrerenderedDocuments();
 
@@ -94,6 +112,15 @@ const homeStartupBytes = homeStartupJavaScriptAssets.reduce((total, asset) => (
 const publicStartupBytes = publicStartupJavaScriptAssets.reduce((total, asset) => (
   total + fs.statSync(path.join(outputDirectory, asset)).size
 ), 0);
+const homeSignalPreviewIncrementalStaticBytes = homeSignalPreviewIncrementalStaticAssets.reduce((total, asset) => (
+  total + fs.statSync(path.join(outputDirectory, asset)).size
+), 0);
+if (homeSignalPreviewIncrementalStaticBytes > HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES) {
+  throw new Error(
+    `Deferred home signal preview exceeded its ${formatBytes(HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES)} incremental static budget: `
+    + `${formatBytes(homeSignalPreviewIncrementalStaticBytes)} across ${homeSignalPreviewIncrementalStaticAssets.length} JS assets.`,
+  );
+}
 const sportsLibBaseline = sourceBaseline(homeStartupSourceRecords, /@sports-alliance\/sports-lib/);
 const authBaseline = sourceBaseline(
   homeStartupSourceRecords,
@@ -104,6 +131,10 @@ console.log(`Verified prerendered public startup union: ${publicStartupJavaScrip
 console.log(`Home startup baseline: ${homeStartupJavaScriptAssets.length} JS assets, ${formatBytes(homeStartupBytes)} raw.`);
 console.log(`Home Sports Lib baseline: ${sportsLibBaseline.count} source module(s), ${formatBytes(sportsLibBaseline.bytes)} source bytes.`);
 console.log(`Home auth/Firebase baseline: ${authBaseline.count} source module(s), ${formatBytes(authBaseline.bytes)} source bytes.`);
+console.log(
+  `Deferred home signal preview: ${homeSignalPreviewIncrementalStaticAssets.length} incremental static JS assets, `
+  + `${formatBytes(homeSignalPreviewIncrementalStaticBytes)} raw.`,
+);
 
 function collectAssets(html, extension) {
   const assetPattern = new RegExp(`(?:src|href)="([^\"]+\\${extension})"`, 'g');
@@ -192,6 +223,13 @@ function assertNoHomeStartupSource(label, pattern) {
   const matches = homeStartupSourceRecords.filter(({ source }) => pattern.test(source));
   if (matches.length > 0) {
     throw new Error(`${label} leaked into the home startup graph: ${matches.map(({ source }) => source).join(', ')}`);
+  }
+}
+
+function assertNoSourceRecords(label, records, pattern, graphLabel) {
+  const matches = records.filter(({ source }) => pattern.test(source));
+  if (matches.length > 0) {
+    throw new Error(`${label} leaked into the ${graphLabel}: ${matches.map(({ source }) => source).join(', ')}`);
   }
 }
 

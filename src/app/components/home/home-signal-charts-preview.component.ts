@@ -7,7 +7,7 @@ import {
   inject,
 } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { AppChartsModule } from '../../modules/app-charts.module';
+import { AppSignalChartsModule } from '../../modules/app-signal-charts.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
@@ -20,7 +20,7 @@ import {
   styleUrls: ['./home-signal-charts-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [AppChartsModule],
+  imports: [AppSignalChartsModule],
 })
 export class HomeSignalChartsPreviewComponent {
   private readonly platformId = inject(PLATFORM_ID);

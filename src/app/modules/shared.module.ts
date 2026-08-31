@@ -1,8 +1,5 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ShadeComponent } from '../components/loading/shade.component';
-import { AppSkeletonComponent } from '../components/loading/skeleton/app.skeleton.component';
-import { AppLoadingOverlayComponent } from '../components/loading/loading-overlay/loading-overlay.component';
 import { MaterialModule } from './material.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.component';
@@ -33,14 +30,13 @@ import { MyTracksMapLayersControlComponent } from '../components/map/my-tracks-m
 import { MapLayersMenuPanelComponent } from '../components/map/shared/map-layers-menu-panel.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
-import { HapticTapDirective } from '../directives/haptic-tap.directive';
-import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
 import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 import { WorkspaceSectionNavigationComponent } from '../components/shared/workspace-section-navigation/workspace-section-navigation.component';
 import { DurabilityReadingGuideComponent } from '../components/shared/durability-reading-guide/durability-reading-guide.component';
 import { PageHeaderComponent } from '../components/shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../components/shared/metric-indicator/metric-indicator.component';
+import { AppChartSharedModule } from './app-chart-shared.module';
 
 @NgModule({
     imports: [
@@ -54,17 +50,15 @@ import { MetricIndicatorComponent } from '../components/shared/metric-indicator/
         ActivityTypeIconComponent,
         PageHeaderComponent,
         MetricIndicatorComponent,
+        AppChartSharedModule,
     ],
     declarations: [
-        ShadeComponent,
         PrivacyIconComponent,
         EventActionsComponent,
         ConfirmationDialogComponent,
         EventSearchComponent,
         ActivityTypesFilterMenuComponent,
         ActivityTypesMultiSelectComponent,
-        AppSkeletonComponent,
-        AppLoadingOverlayComponent,
         ServiceSyncingStateComponent,
         StatusInfoComponent,
         BottomSheetHeaderComponent,
@@ -80,8 +74,6 @@ import { MetricIndicatorComponent } from '../components/shared/metric-indicator/
         MapLayersMenuPanelComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
-        HapticTapDirective,
-        TooltipTapDirective,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,
@@ -92,9 +84,7 @@ import { MetricIndicatorComponent } from '../components/shared/metric-indicator/
         CommonModule,
         MaterialModule,
         RouterModule,
-        ShadeComponent,
-        AppSkeletonComponent,
-        AppLoadingOverlayComponent,
+        AppChartSharedModule,
         PrivacyIconComponent,
         EventActionsComponent,
         ConfirmationDialogComponent,
@@ -119,8 +109,6 @@ import { MetricIndicatorComponent } from '../components/shared/metric-indicator/
         MapLayersActionsComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
-        HapticTapDirective,
-        TooltipTapDirective,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,

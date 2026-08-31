@@ -180,7 +180,7 @@
         <mat-card-content>
           <p>See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and
             sleep views available in Training.</p>
-          @defer (on viewport; prefetch on idle) {
+          @defer (on viewport) {
             <app-home-signal-charts-preview></app-home-signal-charts-preview>
           } @placeholder {
             <div class="home-preview-placeholder home-preview-placeholder--signals" data-nosnippet>
