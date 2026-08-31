@@ -403,11 +403,31 @@
                         @if (user.email) {
                         <div class="profile-meta-row">
                           <span class="user-email">Email: {{ user.email }}</span>
-                          <span class="user-id">ID: {{ user.uid }}</span>
+                          <div class="user-id-row">
+                            <span class="user-id">ID: {{ user.uid }}</span>
+                            <button
+                              mat-icon-button
+                              type="button"
+                              aria-label="Copy user ID"
+                              matTooltip="Copy user ID"
+                              (click)="copyUserId()">
+                              <mat-icon>content_copy</mat-icon>
+                            </button>
+                          </div>
                         </div>
                         } @else {
                         <div class="profile-meta-row">
-                          <span class="user-id">ID: {{ user.uid }}</span>
+                          <div class="user-id-row">
+                            <span class="user-id">ID: {{ user.uid }}</span>
+                            <button
+                              mat-icon-button
+                              type="button"
+                              aria-label="Copy user ID"
+                              matTooltip="Copy user ID"
+                              (click)="copyUserId()">
+                              <mat-icon>content_copy</mat-icon>
+                            </button>
+                          </div>
                         </div>
                         }
                       </div>

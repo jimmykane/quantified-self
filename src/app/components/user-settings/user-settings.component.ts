@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AppWindowService } from '../../services/app.window.service';
@@ -170,6 +171,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
 
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
   private analyticsService = inject(AppAnalyticsService);
+  private clipboard = inject(Clipboard);
   private hapticsService = inject(AppHapticsService);
 
 
@@ -397,6 +399,20 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       queryParams: { section },
       queryParamsHandling: 'merge',
     });
+  }
+
+  copyUserId(): void {
+    const userId = `${this.user?.uid || ''}`.trim();
+    if (!userId) {
+      return;
+    }
+
+    if (this.clipboard.copy(userId)) {
+      this.snackBar.open('User ID copied.', undefined, { duration: 2000 });
+      return;
+    }
+
+    this.snackBar.open('Could not copy the user ID. Please copy it manually.', undefined, { duration: 4000 });
   }
 
   onUnitPresetChange(preset: UnitSetupPreset): void {

@@ -82,6 +82,12 @@
         min-width: 0;
     }
 
+    .user-id-row {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+
     .user-email,
     .user-id {
         overflow: hidden;
@@ -99,6 +105,11 @@
 
     .user-id {
         max-width: 320px;
+        min-width: 0;
+    }
+
+    .user-id-row .user-id {
+        flex: 1 1 auto;
     }
 
     .pro-badge,
