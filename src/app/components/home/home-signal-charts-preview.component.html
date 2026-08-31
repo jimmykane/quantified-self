@@ -21,5 +21,19 @@
         </div>
       </article>
     }
+
+    <article class="signal-preview-form-widget">
+      <div class="signal-preview-form-heading">
+        <div>
+          <h4>Form (TSS)</h4>
+          <small>Fitness, fatigue, and form from daily training stress</small>
+        </div>
+      </div>
+      <div class="signal-preview-form-chart" role="img"
+        aria-label="Form and Training Stress Score chart showing fitness, fatigue, current form, and latest workout TSS">
+        <app-form-chart [darkTheme]="darkTheme()" [data]="formTimeline" [absoluteLatestPoint]="latestFormPoint"
+          timelineWindow="w"></app-form-chart>
+      </div>
+    </article>
   </div>
 </section>

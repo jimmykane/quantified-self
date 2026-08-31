@@ -1,5 +1,5 @@
 <section class="dashboard-preview" role="img"
-  aria-label="Dashboard preview with Fitness, Form, Easy intensity, Form and TSS, and clustered activity map tiles">
+  aria-label="Dashboard preview with Fitness, Form, Easy intensity, and clustered activity map tiles">
   <header class="dashboard-preview__header">
     <div>
       <strong>Training preset</strong>
@@ -25,17 +25,6 @@
     </article>
 
     <div class="dashboard-preview__detail-tiles">
-      <article class="dashboard-preview__detail-tile dashboard-preview__detail-tile--form">
-        <div class="dashboard-preview__tile-bar">
-          <span><mat-icon>show_chart</mat-icon>Form (TSS)</span>
-          <mat-icon class="dashboard-preview__detail-handle">drag_indicator</mat-icon>
-        </div>
-        <div class="dashboard-preview__form-chart">
-          <app-form-chart [darkTheme]="darkTheme()" [data]="formTimeline" [absoluteLatestPoint]="latestFormPoint"
-            timelineWindow="w"></app-form-chart>
-        </div>
-      </article>
-
       <article class="dashboard-preview__detail-tile dashboard-preview__detail-tile--map">
         <div class="dashboard-preview__tile-bar">
           <span><mat-icon>map</mat-icon>Activity map</span>

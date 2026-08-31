@@ -7,10 +7,6 @@ import type {
   DashboardFormNowContext,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
-  buildDashboardFormPointsFromDailyLoads,
-  type DashboardFormPoint,
-} from '../../helpers/dashboard-form.helper';
-import {
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
@@ -19,7 +15,6 @@ import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { resolveMapClusterPaintTokens } from '../../services/map/map-cluster-style.helper';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const PREVIEW_WEEK_MS = Date.UTC(2026, 7, 24);
 
@@ -28,24 +23,6 @@ function buildTrend(values: number[]): Array<{ time: number; value: number }> {
     time: PREVIEW_WEEK_MS - ((values.length - 1 - index) * WEEK_MS),
     value,
   }));
-}
-
-function buildFormTimeline(): DashboardFormPoint[] {
-  const today = new Date();
-  const previewDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const weeklyLoadPattern = [0, 76, 52, 94, 0, 128, 58];
-  const dayCount = 16 * 7;
-
-  return buildDashboardFormPointsFromDailyLoads(
-    Array.from({ length: dayCount }, (_, index) => {
-      const progression = 0.84 + ((index / (dayCount - 1)) * 0.18);
-      const trainingStressScore = weeklyLoadPattern[index % weeklyLoadPattern.length];
-      return {
-        dayMs: previewDayMs - ((dayCount - 1 - index) * DAY_MS),
-        load: Math.round(trainingStressScore * progression),
-      };
-    }),
-  );
 }
 
 @Component({
@@ -64,10 +41,6 @@ export class HomeDashboardPreviewComponent {
   readonly fitnessChartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
   readonly formChartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
   readonly easyChartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
-  readonly formTimeline = buildFormTimeline();
-  readonly latestFormPoint = [...this.formTimeline]
-    .reverse()
-    .find(point => point.trainingStressScore > 0) || this.formTimeline.at(-1) || null;
 
   readonly fitnessCtl: DashboardFitnessCtlContext = {
     latestDayMs: PREVIEW_WEEK_MS,
