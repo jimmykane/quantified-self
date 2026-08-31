@@ -16,18 +16,20 @@
       <div class="intensity-stats">
         <div class="intensity-stat">
           <div class="intensity-stat-value">{{ easyText }}</div>
-          <div class="intensity-stat-label">Easy</div>
+          <div class="intensity-stat-label">Easy @if (easyPercentText) { <span>· {{ easyPercentText }}</span> }</div>
         </div>
         <div class="intensity-stat">
           <div class="intensity-stat-value">{{ moderateText }}</div>
-          <div class="intensity-stat-label">Moderate</div>
+          <div class="intensity-stat-label">Moderate @if (moderatePercentText) { <span>· {{ moderatePercentText }}</span> }</div>
         </div>
         <div class="intensity-stat">
           <div class="intensity-stat-value">{{ hardText }}</div>
-          <div class="intensity-stat-label">Hard</div>
+          <div class="intensity-stat-label">Hard @if (hardPercentText) { <span>· {{ hardPercentText }}</span> }</div>
         </div>
       </div>
-      <div class="intensity-context-label">{{ weekContextText }}</div>
+      <div class="intensity-context-label">
+        {{ weekContextText }}@if (weekZoneTimeText) { · {{ weekZoneTimeText }} zone time }
+      </div>
     </header>
     <div #chartDiv class="intensity-chart"></div>
   </section>

@@ -84,7 +84,11 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
   public easyText = '--';
   public moderateText = '--';
   public hardText = '--';
+  public easyPercentText = '';
+  public moderatePercentText = '';
+  public hardPercentText = '';
   public weekContextText = 'Current week';
+  public weekZoneTimeText = '';
   public showNoDataError = false;
   public noDataErrorMessage = 'No data yet';
   public noDataErrorHint = 'This chart needs derived intensity distribution data.';
@@ -153,15 +157,23 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const latest = weeks[weeks.length - 1] || null;
     if (latest) {
       const total = latest.easySeconds + latest.moderateSeconds + latest.hardSeconds;
-      this.easyText = total > 0 ? `${Math.round((latest.easySeconds / total) * 100)}%` : '--';
-      this.moderateText = total > 0 ? `${Math.round((latest.moderateSeconds / total) * 100)}%` : '--';
-      this.hardText = total > 0 ? `${Math.round((latest.hardSeconds / total) * 100)}%` : '--';
+      this.easyText = this.formatZoneDuration(latest.easySeconds);
+      this.moderateText = this.formatZoneDuration(latest.moderateSeconds);
+      this.hardText = this.formatZoneDuration(latest.hardSeconds);
+      this.easyPercentText = total > 0 ? this.formatPercent((latest.easySeconds / total) * 100) : '';
+      this.moderatePercentText = total > 0 ? this.formatPercent((latest.moderateSeconds / total) * 100) : '';
+      this.hardPercentText = total > 0 ? this.formatPercent((latest.hardSeconds / total) * 100) : '';
       this.weekContextText = this.resolveWeekContextText(latest.weekStartMs);
+      this.weekZoneTimeText = total > 0 ? this.formatZoneDuration(total) : '';
     } else {
       this.easyText = '--';
       this.moderateText = '--';
       this.hardText = '--';
+      this.easyPercentText = '';
+      this.moderatePercentText = '';
+      this.hardPercentText = '';
       this.weekContextText = 'Current week';
+      this.weekZoneTimeText = '';
     }
 
     this.showNoDataError = weeks.length === 0;
@@ -201,18 +213,6 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
 
     const categories = weeks.map((week) => week.weekStartMs);
     const xAxisLabelMode = this.resolveXAxisLabelMode(weeks);
-    const percentages = weeks.map((week) => {
-      const total = week.easySeconds + week.moderateSeconds + week.hardSeconds;
-      if (total <= 0) {
-        return { easy: 0, moderate: 0, hard: 0 };
-      }
-      return {
-        easy: (week.easySeconds / total) * 100,
-        moderate: (week.moderateSeconds / total) * 100,
-        hard: (week.hardSeconds / total) * 100,
-      };
-    });
-
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -221,11 +221,11 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
-        left: 6,
+        left: 8,
         right: 6,
         top: 6,
         bottom: 20,
-        containLabel: false,
+        containLabel: true,
       },
       tooltip: {
         show: true,
@@ -240,10 +240,14 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
             return '';
           }
           const axisHeading = this.formatTooltipWeekLabel(params[0]?.axisValue ?? null);
+          const week = weeks.find(candidate => candidate.weekStartMs === Number(params[0]?.axisValue));
+          const total = week
+            ? week.easySeconds + week.moderateSeconds + week.hardSeconds
+            : 0;
           const rows = params
             .map((entry) => {
               const seriesName = `${entry?.seriesName || ''}`.trim();
-              const valueText = this.formatPercent(entry?.value ?? null);
+              const valueText = this.formatZoneDurationWithPercent(entry?.value ?? null, total);
               return seriesName
                 ? { label: seriesName, value: valueText }
                 : { label: 'Value', value: valueText };
@@ -278,13 +282,15 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       yAxis: {
         type: 'value',
         min: 0,
-        max: 100,
-        interval: 25,
+        splitNumber: 3,
         axisTick: { show: false },
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.textColor,
+          fontSize: style.axisFontSize,
+          formatter: (value: string | number) => this.formatZoneDuration(value),
         },
       },
       series: [
@@ -292,7 +298,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           name: 'Easy',
           type: 'bar',
           stack: 'intensity',
-          data: percentages.map(entry => entry.easy),
+          data: weeks.map(week => week.easySeconds),
           itemStyle: { color: '#43a047' },
           barMaxWidth: 28,
         },
@@ -300,7 +306,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           name: 'Moderate',
           type: 'bar',
           stack: 'intensity',
-          data: percentages.map(entry => entry.moderate),
+          data: weeks.map(week => week.moderateSeconds),
           itemStyle: { color: '#fb8c00' },
           barMaxWidth: 28,
         },
@@ -308,7 +314,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           name: 'Hard',
           type: 'bar',
           stack: 'intensity',
-          data: percentages.map(entry => entry.hard),
+          data: weeks.map(week => week.hardSeconds),
           itemStyle: { color: '#e53935' },
           barMaxWidth: 28,
         },
@@ -321,6 +327,30 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       return '--';
     }
     return `${Math.round(Number(value))}%`;
+  }
+
+  private formatZoneDuration(value: unknown): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      return '--';
+    }
+
+    const seconds = Math.max(0, Number(value));
+    if (seconds < 60) {
+      return seconds === 0 ? '0m' : `${Math.round(seconds)}s`;
+    }
+
+    const totalMinutes = Math.round(seconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0 ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes}m`;
+  }
+
+  private formatZoneDurationWithPercent(value: unknown, totalSeconds: number): string {
+    const duration = this.formatZoneDuration(value);
+    if (!Number.isFinite(Number(value)) || totalSeconds <= 0) {
+      return duration;
+    }
+    return `${duration} · ${this.formatPercent((Number(value) / totalSeconds) * 100)}`;
   }
 
   private resolveWeekContextText(weekStartMs: number): string {

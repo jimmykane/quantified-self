@@ -329,8 +329,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
 - **Freshness Forecast** projects 7 future days with zero load from the latest derived day. It is a TSS-only scenario, not a forecast of sleep or recovery.
-- **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
-- Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
+- **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week. Each stacked bar’s height is the recorded zone time for that week; its colored segments show the Easy/Moderate/Hard split, so a short workout does not look equivalent to a high-volume week.
+- Intensity Distribution shows both zone time and percentage for the **Current week**; when no current-week bucket exists they are labeled **Latest week**. Workouts without usable zones are excluded from that zone-time denominator.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
 - **Cycling Power Curve** and **Running Power Curve** use a prepared PowerCurve snapshot to draw the best power envelope and a selectable comparison: latest activity, best last 30d, or best last 90d. Cycling and running power data stay in separate tiles.
 - Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history and are saved per dashboard tile.

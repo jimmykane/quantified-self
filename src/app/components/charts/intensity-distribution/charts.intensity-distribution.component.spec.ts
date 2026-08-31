@@ -68,7 +68,7 @@ describe('ChartsIntensityDistributionComponent', () => {
     }
   });
 
-  it('renders easy/moderate/hard percentages from the latest week', async () => {
+  it('renders latest easy/moderate/hard zone time with percentages as supporting detail', async () => {
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2025, 11, 31, 12, 0, 0, 0));
     component.distribution = {
       latestWeekStartMs: Date.UTC(2026, 0, 5),
@@ -90,9 +90,13 @@ describe('ChartsIntensityDistributionComponent', () => {
     await fixture.whenStable();
     dateNowSpy.mockRestore();
 
-    expect(component.easyText).toBe('57%');
-    expect(component.moderateText).toBe('29%');
-    expect(component.hardText).toBe('14%');
+    expect(component.easyText).toBe('2h 00m');
+    expect(component.moderateText).toBe('1h 00m');
+    expect(component.hardText).toBe('30m');
+    expect(component.easyPercentText).toBe('57%');
+    expect(component.moderatePercentText).toBe('29%');
+    expect(component.hardPercentText).toBe('14%');
+    expect(component.weekZoneTimeText).toBe('3h 30m');
     expect(component.weekContextText.startsWith('Current week')).toBe(true);
   });
 
@@ -154,7 +158,7 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(component.noDataErrorMessage).toBe('Intensity distribution is updating');
   });
 
-  it('formats tooltip values as whole percentages with units', async () => {
+  it('formats tooltip values as zone time with whole percentages', async () => {
     const weeks = [
       {
         weekStartMs: Date.UTC(2025, 11, 29),
@@ -181,18 +185,51 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(typeof formatter).toBe('function');
 
     const tooltipHtml = formatter([
-      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Easy', value: 57.142857 },
-      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Moderate', value: 28.571428 },
-      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Hard', value: 14.285714 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Easy', value: 7200 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Moderate', value: 3600 },
+      { axisValue: Date.UTC(2025, 11, 29), seriesName: 'Hard', value: 1800 },
     ]);
 
     expect(tooltipHtml).toContain('Week 1,');
     expect(tooltipHtml).toContain('2025 -');
     expect(tooltipHtml).toContain('2026');
-    expect(tooltipHtml).toContain('Easy: 57%');
-    expect(tooltipHtml).toContain('Moderate: 29%');
-    expect(tooltipHtml).toContain('Hard: 14%');
+    expect(tooltipHtml).toContain('Easy: 2h 00m · 57%');
+    expect(tooltipHtml).toContain('Moderate: 1h 00m · 29%');
+    expect(tooltipHtml).toContain('Hard: 30m · 14%');
     expect(tooltipHtml).not.toContain('57.1');
+  });
+
+  it('keeps a short hard-only week visibly short instead of normalizing it to 100% height', async () => {
+    const weeks = [{
+      weekStartMs: Date.UTC(2026, 0, 5),
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 120,
+      source: 'power' as const,
+    }];
+    component.distribution = {
+      latestWeekStartMs: Date.UTC(2026, 0, 5),
+      latestEasyPercent: 0,
+      latestModeratePercent: 0,
+      latestHardPercent: 100,
+      weeks,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+    const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => string);
+
+    expect(component.hardText).toBe('2m');
+    expect(component.hardPercentText).toBe('100%');
+    expect(component.weekZoneTimeText).toBe('2m');
+    expect(option?.yAxis?.max).toBeUndefined();
+    expect(option?.series?.[0]?.data).toEqual([0]);
+    expect(option?.series?.[1]?.data).toEqual([0]);
+    expect(option?.series?.[2]?.data).toEqual([120]);
+    expect(formatter([{ axisValue: Date.UTC(2026, 0, 5), seriesName: 'Hard', value: 120 }]))
+      .toContain('Hard: 2m · 100%');
   });
 
   it('keeps tooltip week headings specific when x-axis labels collapse to month-year', () => {
@@ -208,7 +245,7 @@ describe('ChartsIntensityDistributionComponent', () => {
     const option = (component as any).buildOption(weeks) as Record<string, any>;
     const formatter = option?.tooltip?.formatter as ((params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => string);
     const tooltipHtml = formatter([
-      { axisValue: Date.UTC(2026, 3, 6), seriesName: 'Easy', value: 57 },
+      { axisValue: Date.UTC(2026, 3, 6), seriesName: 'Easy', value: 7200 },
     ]);
 
     expect(tooltipHtml).toContain('Week 15,');

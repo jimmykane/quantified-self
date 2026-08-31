@@ -1032,6 +1032,11 @@ the same cutoff; it is never treated as zero.
 Power zones take priority over heart-rate zones per activity. If neither exists, that activity contributes to count and
 duration but not to the zone denominator.
 
+The global Intensity Distribution keeps that denominator visible: each weekly stacked bar's height is the total recorded
+zone time, and its Easy/Moderate/Hard color segments show the composition. The header and tooltip show both zone time
+and percentage for the selected week. It must not normalize every week to an equally tall 100% bar, because a short
+hard-only workout would otherwise look equivalent to a high-volume hard week.
+
 On Overview, each recorded registered family is a compact workout-count, duration, and available TSS card. Workout
 and duration use normalized usual values; TSS carries the separate preceding-block median described above. The
 separate intensity-distribution chart remains global and can include any activity with eligible power or heart-rate
