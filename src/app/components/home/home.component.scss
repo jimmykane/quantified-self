@@ -538,18 +538,12 @@
         }
     }
 
-    .training-preview-eyebrow,
     .training-preview-overview section > span,
     .training-preview-load-grid dt,
     .training-preview-context-grid dt {
         color: var(--mat-sys-on-surface-variant);
         font-size: 0.75rem;
         font-weight: 650;
-    }
-
-    .training-preview-eyebrow {
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
     }
 
     .training-preview-overview {

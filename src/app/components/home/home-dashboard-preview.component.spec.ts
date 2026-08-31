@@ -51,7 +51,7 @@ describe('HomeDashboardPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeDashboardPreviewComponent);
   });
 
-  it('reuses three real compact Dashboard KPI components with illustrative contexts', async () => {
+  it('reuses three real compact Dashboard KPI components with preview contexts', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
 

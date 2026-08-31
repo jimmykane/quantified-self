@@ -112,7 +112,6 @@
       <div class="training-preview-content" data-nosnippet>
         <header class="training-preview-header">
           <div>
-            <span class="training-preview-eyebrow">Illustrative data</span>
             <h3>Your Training Snapshot</h3>
             <p>Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy
               used by Training.</p>
@@ -120,7 +119,7 @@
           <a mat-stroked-button routerLink="/features/training-analysis">Explore Training</a>
         </header>
 
-        <div class="training-preview-overview" aria-label="Illustrative current Training overview">
+        <div class="training-preview-overview" aria-label="Current Training overview">
           <section class="training-preview-state">
             <span>State</span>
             <strong>Balanced</strong>
@@ -129,27 +128,27 @@
           <section>
             <span>Readiness today</span>
             <div class="training-preview-value-row"><strong>78</strong><small>Ready</small></div>
-            <app-metric-indicator label="Illustrative readiness" [value]="78" tone="ready"
+            <app-metric-indicator label="Readiness" [value]="78" tone="ready"
               [showThresholds]="true"></app-metric-indicator>
             <small>Load + recorded sleep signals</small>
           </section>
           <section>
             <span>Training time</span>
             <strong class="training-preview-number">18h 42m</strong>
-            <app-metric-indicator variant="deviation" label="Illustrative training time versus usual" [value]="12"
+            <app-metric-indicator variant="deviation" label="Training time versus usual" [value]="12"
               [compact]="true"></app-metric-indicator>
             <small>+12% versus usual 28 days</small>
           </section>
           <section>
             <span>Workouts</span>
             <strong class="training-preview-number">14</strong>
-            <app-metric-indicator variant="deviation" label="Illustrative workouts versus usual" [value]="17"
+            <app-metric-indicator variant="deviation" label="Workouts versus usual" [value]="17"
               [compact]="true"></app-metric-indicator>
             <small>2 more than usual</small>
           </section>
         </div>
 
-        <dl class="training-preview-load-grid" aria-label="Illustrative Training load metrics">
+        <dl class="training-preview-load-grid" aria-label="Training load metrics">
           <div><dt>Fitness (CTL)</dt><dd>62</dd><small>42-day load</small></div>
           <div><dt>Fatigue (ATL)</dt><dd>54</dd><small>7-day load</small></div>
           <div><dt>Form now</dt><dd>+8</dd><small>Fitness − fatigue</small></div>
@@ -160,7 +159,7 @@
           <div><dt>Form +7 days</dt><dd>+15</dd><small>No-additional-load scenario</small></div>
         </dl>
 
-        <dl class="training-preview-context-grid" aria-label="Illustrative Training context">
+        <dl class="training-preview-context-grid" aria-label="Training context">
           <div><dt>Recovery debt</dt><dd>2 days</dd><small>Estimated to neutral Form</small></div>
           <div><dt>Recovery left</dt><dd>8h 20m</dd><small>Imported estimate</small></div>
           <div><dt>Intensity balance</dt><dd>72% easy · 14% hard</dd><small>Latest eligible week</small></div>

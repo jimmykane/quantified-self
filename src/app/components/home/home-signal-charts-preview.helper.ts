@@ -20,8 +20,8 @@ export interface HomeSignalChartPreview {
   option: ChartOption;
 }
 
-// These values are deliberately altered and normalized illustrative data. They preserve
-// broad aggregate trend shapes without embedding account measurements in the public page.
+// These normalized preview values preserve broad aggregate trend shapes without
+// embedding account measurements in the public page.
 const READINESS_POINTS = [57, 55, 59, 62, 65, 68, 72, 69] as const;
 const FRESHNESS_POINTS = [8, 15, 23, 30, 36, 41, 45, 48] as const;
 const EFFICIENCY_POINTS = [97, 104, 100, 96, 102, 105, 108, 105] as const;
@@ -51,7 +51,7 @@ export function buildHomeSignalChartPreviews(
       title: 'Readiness',
       value: '69',
       context: '14-day score',
-      ariaLabel: 'Illustrative readiness trend rising before a small pullback.',
+      ariaLabel: 'Readiness trend rising before a small pullback.',
       option: buildLineOption(READINESS_POINTS, palette.trend, 45, 85),
     },
     {
@@ -59,7 +59,7 @@ export function buildHomeSignalChartPreviews(
       title: 'Freshness',
       value: '+48',
       context: '7-day forecast',
-      ariaLabel: 'Illustrative zero-load freshness forecast rising over seven days.',
+      ariaLabel: 'Zero-load freshness forecast rising over seven days.',
       option: buildLineOption(FRESHNESS_POINTS, palette.freshness, 0, 58),
     },
     {
@@ -67,7 +67,7 @@ export function buildHomeSignalChartPreviews(
       title: 'Intensity mix',
       value: '87% easy',
       context: '8-week split',
-      ariaLabel: 'Illustrative eight-week intensity mix dominated by easy training.',
+      ariaLabel: 'Eight-week intensity mix dominated by easy training.',
       option: buildIntensityOption(palette),
     },
     {
@@ -75,7 +75,7 @@ export function buildHomeSignalChartPreviews(
       title: 'Efficiency',
       value: '105',
       context: 'indexed trend',
-      ariaLabel: 'Illustrative efficiency index improving with week-to-week variation.',
+      ariaLabel: 'Efficiency index improving with week-to-week variation.',
       option: buildLineOption(EFFICIENCY_POINTS, palette.trend, 88, 114),
     },
   ];

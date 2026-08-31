@@ -107,8 +107,8 @@ function buildPanel(
     minX: 0,
     maxX: PREVIEW_DURATION_SECONDS,
     series: [{
-      id: `illustrative-ride::${dataType}`,
-      activityID: 'illustrative-ride',
+      id: `preview-ride::${dataType}`,
+      activityID: 'preview-ride',
       activityName: 'Morning Ride',
       color,
       streamType: dataType,

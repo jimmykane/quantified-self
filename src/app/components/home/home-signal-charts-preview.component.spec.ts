@@ -48,7 +48,7 @@ describe('HomeSignalChartsPreviewComponent', () => {
 
     expect(widgets.length).toBe(4);
     expect(chartSurfaces.length).toBe(4);
-    expect(text).toContain('Illustrative data');
+    expect(text).not.toContain('Illustrative data');
     expect(text).toContain('Readiness');
     expect(text).toContain('Freshness');
     expect(text).toContain('Intensity mix');

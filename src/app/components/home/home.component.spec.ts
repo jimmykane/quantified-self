@@ -232,7 +232,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Bring It In. Keep It Moving.');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
-        expect(text).toContain('Illustrative data');
+        expect(text).not.toContain('Illustrative data');
         expect(text).toContain('Your Training Snapshot');
         expect(text).toContain('Balanced');
         expect(text).toContain('TSS-only load model');
