@@ -34,10 +34,12 @@
         <mat-icon aria-hidden="true">monitoring</mat-icon>
         <span class="dashboard-training-link-label">Open Training</span>
       </a>
-      <a mat-button class="dashboard-health-link" routerLink="/health" aria-label="Open Health workspace">
-        <mat-icon aria-hidden="true">cardiology</mat-icon>
-        <span class="dashboard-health-link-label">Open Health</span>
-      </a>
+      @if (hasHealthWorkspaceNavigationAccess) {
+        <a mat-button class="dashboard-health-link" routerLink="/health" aria-label="Open Health workspace">
+          <mat-icon aria-hidden="true">cardiology</mat-icon>
+          <span class="dashboard-health-link-label">Open Health</span>
+        </a>
+      }
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
         <mat-icon>add_chart</mat-icon>

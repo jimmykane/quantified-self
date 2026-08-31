@@ -28,8 +28,8 @@
 .animate-on-scroll {
     opacity: 0;
     transform: translate3d(0, 40px, 0);
-    transition: opacity 1s cubic-bezier(0.2, 0.8, 0.2, 1),
-        transform 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+        transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
     will-change: opacity, transform;
 
     &.is-visible {
@@ -79,6 +79,7 @@
     border-radius: 16px;
     width: 48px;
     height: 48px;
+    margin-bottom: 0;
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
     mat-icon {
@@ -101,7 +102,7 @@
         display: flex; // Force flex logic
         align-items: center;
         padding-top: 16px;
-        margin-bottom: 8px;
+        margin-bottom: 0;
 
         // Fix: Strip default margins from internal wrapper to guarantee centering
         ::ng-deep .mat-mdc-card-header-text {
@@ -124,7 +125,6 @@
         font-size: 1.25rem;
         font-weight: 600;
         margin: 0; // Remove all margins
-        margin-left: 16px; // Add spacing between avatar and title
     }
 
     &:hover {
@@ -171,16 +171,16 @@
         // Immediate Entrance Animation
         &>*:not(.hero-title):not(.hero-subtitle) {
             opacity: 0; // Start hidden
-            animation: fadeInUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            animation: fadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
         // Stagger Delays
         .brand-badge {
-            animation-delay: 0.1s;
+            animation-delay: 0.05s;
         }
 
         .hero-actions {
-            animation-delay: 0.2s;
+            animation-delay: 0.1s;
         }
 
         .trust-indicators {
@@ -312,15 +312,24 @@
 
     // Scroll Animation
     @extend .animate-on-scroll;
-    transition-delay: 0.2s; // Delay relative to appearance
+    transition-delay: 0.05s; // Delay relative to appearance
 
     .section-label {
         font-size: 2.5rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--mat-sys-on-surface);
-        margin-bottom: 3rem;
+        margin: 0 0 0.75rem;
         opacity: 1;
+        text-align: center;
+    }
+
+    .integration-intro {
+        max-width: 760px;
+        margin: 0 0 2rem;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 1.1rem;
+        line-height: 1.6;
         text-align: center;
     }
 
@@ -330,7 +339,7 @@
         gap: 3rem;
         flex-wrap: wrap;
         justify-content: center;
-        opacity: 0.6;
+        opacity: 1;
         transition: opacity 0.3s ease;
 
         &:hover {
@@ -346,81 +355,72 @@
             }
         }
 
-        .divider {
-            width: 1px;
-            height: 24px;
-            background-color: var(--mat-sys-outline-variant);
-            margin: 0 1rem;
-            display: none;
-
-            @include bp.small {
-                display: block;
-            }
-        }
-
-        .file-formats {
-            display: flex;
-            gap: 1rem;
-
-            .format {
-                font-size: 0.875rem;
-                font-weight: 600;
-                color: var(--mat-sys-on-surface-variant);
-                padding: 0.25rem 0.75rem;
-                background-color: var(--mat-sys-surface-container);
-                border-radius: 8px;
-                transition: background-color 0.2s;
-
-                &:hover {
-                    background-color: var(--mat-sys-surface-container-high);
-                    color: var(--mat-sys-on-surface);
-                }
-            }
-        }
     }
 
-    .integration-followup-grid {
-        width: min(1200px, 100%);
+    .integration-followup-list {
+        width: min(1020px, 100%);
         margin-top: 3rem;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 2rem;
+        border-top: 1px solid var(--mat-sys-outline-variant);
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
+    }
 
-        mat-card-content {
+    .integration-capability {
+        display: grid;
+        grid-template-columns: 48px 225px minmax(0, 1fr);
+        gap: 1.25rem;
+        align-items: start;
+        padding: 1.25rem 0.5rem;
+
+        & + .integration-capability {
+            border-top: 1px solid var(--mat-sys-outline-variant);
+        }
+
+        h3 {
+            margin: 0.65rem 0 0;
+            color: var(--mat-sys-on-surface);
+            font-size: 1.25rem;
+            line-height: 1.15;
+        }
+
+        .integration-capability-copy {
+            min-width: 0;
+            padding-top: 0.25rem;
+
+            &--split {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+                gap: 1.5rem;
+            }
+
+            p {
+                margin: 0;
+                color: var(--mat-sys-on-surface-variant);
+                font-size: 1rem;
+                line-height: 1.55;
+            }
+        }
+
+        .integration-capability-details {
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
-            gap: 1rem;
-        }
+            gap: 0.35rem;
+            padding-left: 1.25rem;
+            border-left: 1px solid var(--mat-sys-outline-variant);
 
-        .feature-link {
-            margin-top: auto;
+            p {
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
         }
-    }
-
-    .feature-card {
-        @include glass-interactive-card;
-        text-align: left;
 
         .feature-icon-container {
             @include icon-container-base;
             background-color: var(--mat-sys-primary-container);
             color: var(--mat-sys-on-primary-container);
-            margin-bottom: 0;
 
             &.import {
                 background-color: var(--mat-sys-secondary-container);
                 color: var(--mat-sys-on-secondary-container);
-            }
-
-            &.sync {
-                background-color: var(--mat-sys-tertiary-container);
-                color: var(--mat-sys-on-tertiary-container);
-            }
-
-            &.auto-sync {
-                background-color: var(--mat-sys-tertiary-container);
-                color: var(--mat-sys-on-tertiary-container);
             }
 
             &.service-sync {
@@ -428,14 +428,46 @@
                 color: var(--mat-sys-on-secondary-container);
             }
 
-            &.route-upload {
-                background-color: var(--mat-sys-error-container);
-                color: var(--mat-sys-on-error-container);
-            }
-
             &.activity-upload {
                 background-color: var(--mat-sys-primary-container);
                 color: var(--mat-sys-on-primary-container);
+            }
+        }
+    }
+
+    .integrations-cta {
+        margin-top: 2rem;
+    }
+
+    @include bp.max-900 {
+        .integration-followup-list {
+            margin-top: 2rem;
+        }
+
+        .integration-capability {
+            grid-template-columns: 48px minmax(0, 1fr);
+            gap: 1rem;
+            padding: 1.25rem 0;
+
+            h3 {
+                align-self: center;
+                margin: 0;
+            }
+
+            .integration-capability-copy {
+                grid-column: 2;
+
+                &--split {
+                    grid-template-columns: 1fr;
+                    gap: 0.8rem;
+                }
+            }
+
+            .integration-capability-details {
+                gap: 0.25rem;
+                padding: 0.75rem 0 0;
+                border-top: 1px solid var(--mat-sys-outline-variant);
+                border-left: 0;
             }
         }
     }
@@ -470,10 +502,46 @@
         @extend .animate-on-scroll;
     }
 
+    .training-preview-card {
+        margin-bottom: 2rem;
+        overflow: hidden;
+        border-radius: 24px;
+        background: var(--mat-sys-surface-container-low);
+    }
+
+    .training-preview-content {
+        padding: 1.5rem;
+    }
+
+    .training-preview-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.5rem;
+
+        h3 {
+            margin: 0.25rem 0 0;
+            font-size: 1.5rem;
+            line-height: 1.2;
+        }
+
+        p {
+            max-width: 720px;
+            margin: 0.5rem 0 0;
+            color: var(--mat-sys-on-surface-variant);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        a {
+            flex: 0 0 auto;
+        }
+    }
+
     .features-grid {
         --features-grid-gap: 2rem;
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--features-grid-gap);
 
         // Apply scroll animation to cards
@@ -482,40 +550,36 @@
         }
 
         &>*:nth-child(1) {
-            transition-delay: 0.1s;
+            transition-delay: 0.04s;
         }
 
         &>*:nth-child(2) {
-            transition-delay: 0.2s;
+            transition-delay: 0.08s;
         }
 
         &>*:nth-child(3) {
-            transition-delay: 0.3s;
+            transition-delay: 0.12s;
         }
 
         &>*:nth-child(4) {
-            transition-delay: 0.4s;
-        }
-
-        @media only screen and (max-width: 1087.98px) {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-
-            // Keep odd final cards centered when grid collapses to two columns.
-            > :last-child:nth-child(odd) {
-                grid-column: 1 / -1;
-                width: min(100%, calc((100% - var(--features-grid-gap)) / 2));
-                justify-self: center;
-            }
+            transition-delay: 0.16s;
         }
 
         @include bp.xsmall {
             grid-template-columns: 1fr;
-
-            > :last-child:nth-child(odd) {
-                grid-column: auto;
-                width: 100%;
-            }
         }
+    }
+
+    @include bp.xsmall {
+        .training-preview-content {
+            padding: 1.125rem;
+        }
+
+        .training-preview-header {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
     }
 
     .feature-card {
@@ -542,46 +606,51 @@
             }
         }
 
-        .metric-chip-list {
-            margin-top: 1rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
         .feature-link {
             margin-top: 1rem;
         }
 
-        .metric-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            min-height: 2rem;
-            padding: 0.25rem 0.65rem;
-            border-radius: 999px;
+        .home-preview-placeholder {
+            margin-top: 1rem;
             border: 1px solid var(--mat-sys-outline-variant);
-            background: var(--mat-sys-surface-container-low);
-            color: var(--mat-sys-on-surface-variant);
-            font-size: 0.8rem;
-            line-height: 1.2;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            cursor: help;
+            border-radius: 18px;
+            background: var(--mat-sys-surface-container-lowest);
 
-            .metric-chip-info {
-                width: 0.9rem;
-                height: 0.9rem;
-                font-size: 0.9rem;
-                opacity: 0.75;
+            &--dashboard {
+                min-height: 470px;
             }
 
-            &:hover .metric-chip-info,
-            &:focus-visible .metric-chip-info {
-                opacity: 1;
-                color: var(--mat-sys-primary);
+            &--signals {
+                min-height: 690px;
+            }
+
+            &--workout {
+                min-height: 330px;
+            }
+
+            &__summary {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
             }
         }
+
+    }
+}
+
+@media (max-width: 520px), (min-width: 600px) and (max-width: 1080px) {
+    .features-section .feature-card .home-preview-placeholder--signals {
+        min-height: 1030px;
+    }
+
+    .features-section .feature-card .home-preview-placeholder--workout {
+        min-height: 630px;
     }
 }
 
@@ -591,7 +660,7 @@
 
     .ai-insights-header {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
 
         .section-title {
             margin-bottom: 1rem;
@@ -607,6 +676,8 @@
             max-width: 760px;
             margin: 0 auto;
             line-height: 1.6;
+            opacity: 1;
+            transform: none;
         }
     }
 
@@ -676,6 +747,44 @@
         font-size: 0.95rem;
     }
 
+    .mcp-access-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 1.125rem 1.25rem;
+        border-radius: 20px;
+        background: var(--mat-sys-surface-container-low);
+
+        .mcp-access-row__icon {
+            @include icon-container-base;
+            background-color: var(--mat-sys-primary-container);
+            color: var(--mat-sys-on-primary-container);
+        }
+
+        .mcp-access-row__copy {
+            min-width: 0;
+
+            h3 {
+                margin: 0;
+                font-size: 1.2rem;
+                line-height: 1.2;
+            }
+
+            p {
+                margin: 0.35rem 0 0;
+                color: var(--mat-sys-on-surface-variant);
+                font-size: 0.95rem;
+                line-height: 1.5;
+            }
+        }
+
+        a {
+            white-space: nowrap;
+        }
+    }
+
 }
 
 // 3.1 Hardware Analysis Section
@@ -726,7 +835,7 @@
         overflow: hidden;
 
         mat-card-header {
-            padding: 24px 24px 16px;
+            padding: 24px 24px 8px;
         }
 
         mat-card-content {
@@ -1119,13 +1228,6 @@
         }
     }
 
-    .integrations-section {
-        .integration-followup-grid {
-            margin-top: 2rem;
-            grid-template-columns: 1fr;
-        }
-    }
-
     .trust-indicators {
         flex-direction: column;
         gap: 0.5rem;
@@ -1156,6 +1258,17 @@
                 width: 100%;
                 max-width: 360px;
                 margin: 0 auto;
+            }
+        }
+
+        .mcp-access-row {
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: start;
+            padding: 1rem;
+
+            a {
+                grid-column: 1 / -1;
+                width: 100%;
             }
         }
     }

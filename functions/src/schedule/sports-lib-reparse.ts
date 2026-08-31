@@ -5,7 +5,6 @@ import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
-    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_REPARSE_STATUS_DOC_ID,
     ReparseStatusWrite,
@@ -16,6 +15,7 @@ import {
     isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage,
     parseUidAndEventIdFromEventPath,
+    resolveSportsLibReparseRuntimeSettings,
     resolveSportsLibReparseRoutingDecision,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
@@ -46,24 +46,6 @@ type ProcessingTaskResult = {
 type EnqueueSlotLease = {
     release: () => void;
 };
-
-function getCurrentSettings(): {
-    enabled: boolean;
-    scanLimit: number;
-    enqueueLimit: number;
-    uidAllowlist: Set<string> | null;
-} {
-    const constantUIDAllowlist = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist
-        && SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist.length > 0
-        ? new Set(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist)
-        : null;
-    return {
-        enabled: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled,
-        scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
-        enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
-        uidAllowlist: constantUIDAllowlist,
-    };
-}
 
 function toSafeString(value: unknown): string {
     if (value === undefined || value === null) {
@@ -187,6 +169,27 @@ function getProcessingVersionCode(value: unknown): number | null {
     return value;
 }
 
+function resolveOverrideCursor(
+    rawCursorByUid: unknown,
+    uid: string,
+): { cursor: string | null; valid: boolean } {
+    if (rawCursorByUid === undefined || rawCursorByUid === null) {
+        return { cursor: null, valid: true };
+    }
+    if (typeof rawCursorByUid !== 'object' || Array.isArray(rawCursorByUid)) {
+        return { cursor: null, valid: false };
+    }
+
+    const rawCursor = (rawCursorByUid as Record<string, unknown>)[uid];
+    if (rawCursor === undefined || rawCursor === null) {
+        return { cursor: null, valid: true };
+    }
+    if (typeof rawCursor !== 'string' || !rawCursor || rawCursor.includes('/')) {
+        return { cursor: null, valid: false };
+    }
+    return { cursor: rawCursor, valid: true };
+}
+
 function isEventProcessingMetadataDocPath(path: string): boolean {
     const processingMetadataSuffix = '/metaData/processing';
     if (!path.endsWith(processingMetadataSuffix)) {
@@ -235,20 +238,26 @@ export const scheduleSportsLibReparseScan = onSchedule({
     memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
-    const settings = getCurrentSettings();
-    if (!settings.enabled) {
-        logger.info('[sports-lib-reparse] Scheduler disabled (SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled=false).');
-        return;
-    }
-
     const db = admin.firestore();
-    const targetSportsLibVersion = resolveTargetSportsLibVersion();
-    const targetSportsLibVersionCode = resolveTargetSportsLibVersionCode();
     const checkpointRef = db.doc(SPORTS_LIB_REPARSE_CHECKPOINT_PATH);
     const checkpointSnapshot = await checkpointRef.get();
     const checkpointData = checkpointSnapshot.data() as SportsLibReparseCheckpoint | undefined;
-    const cursorProcessingDocPath = checkpointData?.cursorProcessingDocPath || null;
-    const cursorProcessingVersionCode = getProcessingVersionCode(checkpointData?.cursorProcessingVersionCode);
+    const settings = resolveSportsLibReparseRuntimeSettings(checkpointData);
+    if (!settings.configurationValid) {
+        logger.warn('[sports-lib-reparse] Invalid runtime settings; scheduler disabled.', {
+            settingsSource: settings.source,
+        });
+    }
+    if (!settings.enabled) {
+        logger.info('[sports-lib-reparse] Scheduler disabled.', {
+            settingsSource: settings.source,
+            targetUid: settings.targetUid,
+        });
+        return;
+    }
+
+    const targetSportsLibVersion = resolveTargetSportsLibVersion();
+    const targetSportsLibVersionCode = resolveTargetSportsLibVersionCode();
 
     await checkpointRef.set({
         lastPassStartedAt: FieldValue.serverTimestamp(),
@@ -472,12 +481,18 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
     if (settings.uidAllowlist && settings.uidAllowlist.size > 0) {
         const overrideUIDs = Array.from(settings.uidAllowlist);
-        const previousCursorByUID = checkpointData?.overrideCursorByUid || {};
+        const previousCursorByUID = checkpointData?.overrideCursorByUid;
         const nextCursorByUID: Record<string, string | null> = {};
 
         for (const uid of overrideUIDs) {
             const remainingScan = settings.scanLimit - scannedCount;
-            const previousCursor = previousCursorByUID[uid] || null;
+            const resolvedPreviousCursor = resolveOverrideCursor(previousCursorByUID, uid);
+            const previousCursor = resolvedPreviousCursor.cursor;
+            if (!resolvedPreviousCursor.valid) {
+                logger.warn('[sports-lib-reparse] Invalid targeted checkpoint cursor; restarting user scan.', {
+                    uid,
+                });
+            }
 
             if (hasReachedEnqueueLimit()) {
                 nextCursorByUID[uid] = previousCursor;
@@ -541,6 +556,25 @@ export const scheduleSportsLibReparseScan = onSchedule({
             nextCursorByUID,
         });
         return;
+    }
+
+    const rawCursorProcessingDocPath = checkpointData?.cursorProcessingDocPath;
+    const rawCursorProcessingVersionCode = checkpointData?.cursorProcessingVersionCode;
+    const storedCursorProcessingVersionCode = getProcessingVersionCode(rawCursorProcessingVersionCode);
+    const hasStoredProcessingCursor = (
+        rawCursorProcessingDocPath !== undefined
+        && rawCursorProcessingDocPath !== null
+    ) || (
+        rawCursorProcessingVersionCode !== undefined
+        && rawCursorProcessingVersionCode !== null
+    );
+    const hasValidProcessingCursor = typeof rawCursorProcessingDocPath === 'string'
+        && isEventProcessingMetadataDocPath(rawCursorProcessingDocPath)
+        && storedCursorProcessingVersionCode !== null;
+    const cursorProcessingDocPath = hasValidProcessingCursor ? rawCursorProcessingDocPath : null;
+    const cursorProcessingVersionCode = hasValidProcessingCursor ? storedCursorProcessingVersionCode : null;
+    if (hasStoredProcessingCursor && !hasValidProcessingCursor) {
+        logger.warn('[sports-lib-reparse] Invalid global checkpoint cursor; restarting from the beginning.');
     }
 
     let query = db.collectionGroup('metaData')

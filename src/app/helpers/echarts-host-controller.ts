@@ -89,6 +89,9 @@ export class EChartsHostController {
     const initialization = (async () => {
       try {
         const chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
+        if (!chart) {
+          return null;
+        }
         if (lifecycleVersion !== this.lifecycleVersion) {
           this.config.eChartsLoader.dispose(chart);
           return null;

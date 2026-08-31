@@ -35,6 +35,49 @@ const hoisted = vi.hoisted(() => {
         enqueueLimit: 100,
         uidAllowlist: null as string[] | null,
     };
+    const resolveSportsLibReparseRuntimeSettings = vi.fn((checkpointData: Record<string, unknown> | undefined) => {
+        if (checkpointData && Object.prototype.hasOwnProperty.call(checkpointData, 'runtimeSettings')) {
+            const rawSettings = checkpointData.runtimeSettings;
+            const storedSettings = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
+                ? rawSettings as Record<string, unknown>
+                : null;
+            const rawTargetUid = storedSettings?.targetUid;
+            const targetUid = typeof rawTargetUid === 'string' && rawTargetUid.trim()
+                ? rawTargetUid.trim()
+                : null;
+            const configurationValid = storedSettings !== null
+                && typeof storedSettings.enabled === 'boolean'
+                && Object.prototype.hasOwnProperty.call(storedSettings, 'targetUid')
+                && (rawTargetUid === undefined || rawTargetUid === null || typeof rawTargetUid === 'string')
+                && !targetUid?.includes('/');
+            return {
+                enabled: configurationValid && storedSettings?.enabled === true,
+                scanLimit: runtimeDefaults.scanLimit,
+                enqueueLimit: runtimeDefaults.enqueueLimit,
+                targetUid,
+                uidAllowlist: configurationValid && targetUid ? new Set([targetUid]) : null,
+                source: 'firestore' as const,
+                configurationValid,
+                updatedAt: null,
+                updatedBy: null,
+            };
+        }
+
+        const uidAllowlist = runtimeDefaults.uidAllowlist?.length
+            ? new Set(runtimeDefaults.uidAllowlist)
+            : null;
+        return {
+            enabled: runtimeDefaults.enabled,
+            scanLimit: runtimeDefaults.scanLimit,
+            enqueueLimit: runtimeDefaults.enqueueLimit,
+            targetUid: runtimeDefaults.uidAllowlist?.length === 1 ? runtimeDefaults.uidAllowlist[0] : null,
+            uidAllowlist,
+            source: 'defaults' as const,
+            configurationValid: true,
+            updatedAt: null,
+            updatedBy: null,
+        };
+    });
 
     const enqueueSportsLibReparseTask = vi.fn();
     const enqueueSportsLibReparseHeavyTask = vi.fn();
@@ -221,6 +264,7 @@ const hoisted = vi.hoisted(() => {
         sportsLibVersionToCode,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
+        resolveSportsLibReparseRuntimeSettings,
         enqueueSportsLibReparseTask,
         enqueueSportsLibReparseHeavyTask,
         getExpireAtTimestamp,
@@ -249,6 +293,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_CHECKPOINT_PATH: 'systemJobs/sportsLibReparse',
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
+    resolveSportsLibReparseRuntimeSettings: hoisted.resolveSportsLibReparseRuntimeSettings,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     SPORTS_LIB_REPARSE_STATUS_DOC_ID: 'reparseStatus',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
@@ -423,7 +468,89 @@ describe('scheduleSportsLibReparseScan', () => {
     it('should short-circuit when runtime flag is disabled', async () => {
         hoisted.runtimeDefaults.enabled = false;
         await (scheduleSportsLibReparseScan as any)({});
+        expect(hoisted.checkpointGet).toHaveBeenCalledTimes(1);
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+    });
+
+    it('does not scan when the runtime checkpoint cannot be read', async () => {
+        hoisted.checkpointGet.mockRejectedValue(new Error('checkpoint unavailable'));
+
+        await expect((scheduleSportsLibReparseScan as any)({}))
+            .rejects.toThrow('checkpoint unavailable');
+
+        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.checkpointSet).not.toHaveBeenCalled();
+    });
+
+    it('should let persisted settings enable a targeted scan when the compile-time default is disabled', async () => {
+        hoisted.runtimeDefaults.enabled = false;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                runtimeSettings: { enabled: true, targetUid: 'u1' },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.collection).toHaveBeenCalledWith('users/u1/events');
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should let persisted settings disable scans when the compile-time default is enabled', async () => {
+        hoisted.runtimeDefaults.enabled = true;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                runtimeSettings: { enabled: false, targetUid: null },
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.checkpointSet).not.toHaveBeenCalled();
+    });
+
+    it('should let persisted settings enable a global scan when the compile-time default is disabled', async () => {
+        hoisted.runtimeDefaults.enabled = false;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                runtimeSettings: { enabled: true, targetUid: null },
+            }),
+        });
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('metaData');
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should fail closed when persisted settings are malformed', async () => {
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                runtimeSettings: { enabled: true },
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid runtime settings; scheduler disabled.',
+            { settingsSource: 'firestore' },
+        );
+        expect(hoisted.collection).not.toHaveBeenCalled();
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.checkpointSet).not.toHaveBeenCalled();
     });
 
     it('should enqueue candidate jobs from processing metadata collectionGroup in global mode', async () => {
@@ -558,6 +685,27 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(finalCheckpointPayload.cursorProcessingVersionCode).toBe(9_000_000);
     });
 
+    it('restarts a global scan when its persisted cursor tuple is malformed', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                cursorProcessingDocPath: 'not-an-event-processing-path',
+                cursorProcessingVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid global checkpoint cursor; restarting from the beginning.',
+        );
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
     it('should mark pass complete when processing scan returns no docs', async () => {
         await (scheduleSportsLibReparseScan as any)({});
 
@@ -597,6 +745,24 @@ describe('scheduleSportsLibReparseScan', () => {
 
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts a targeted user scan when its persisted cursor is malformed', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: { u1: { malformed: true } },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid targeted checkpoint cursor; restarting user scan.',
+            { uid: 'u1' },
+        );
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
     it('should skip override candidate when shouldEventBeReparsed returns false', async () => {

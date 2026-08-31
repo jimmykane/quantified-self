@@ -80,11 +80,13 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   ];
 
   @Input() darkTheme = false;
+  @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() reserveTitleActionSpace = false;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
+  @Input() showMobileAxisPointerHandle = true;
   @Input()
   set timelineWindow(value: DashboardFormTimelineWindow | null | undefined) {
     if (value !== 'w' && value !== 'm' && value !== 'y') {
@@ -166,7 +168,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       return;
     }
 
-    if (changes.darkTheme || changes.isLoading || changes.formStatus) {
+    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus || changes.showMobileAxisPointerHandle) {
       void this.refreshChart();
     }
   }
@@ -247,7 +249,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const atlAxisValues = points.map(point => point.atl);
     const formAxisValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const mobileAxisPointerHandle = isMobileTooltipViewport
+    const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
         show: true,
         size: 20,
@@ -362,7 +364,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     return {
       option: {
-        animation: false,
+        animation: this.useAnimations === true,
         backgroundColor: 'transparent',
         textStyle: {
           color: chartStyle.textColor,

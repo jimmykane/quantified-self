@@ -7,18 +7,33 @@
     <p>Latest reading per source series. No cross-provider average.</p>
   </div>
 
-  <div class="health-priority-grid">
+  <mat-card appearance="outlined" class="health-priority-grid" aria-label="Priority Health summaries">
     @for (card of cards(); track card.id) {
-      <mat-card
-        appearance="outlined"
+      <section
         class="health-priority-card"
+        [attr.aria-labelledby]="'health-priority-card-' + card.id"
         [class.health-priority-card-selected]="selectedMetric() === card.metric">
-        <mat-card-header>
-          <mat-icon mat-card-avatar aria-hidden="true">{{ card.icon }}</mat-icon>
-          <mat-card-title>{{ card.label }}</mat-card-title>
-        </mat-card-header>
+        <header class="health-priority-card-header">
+          <div class="health-priority-title-row">
+            <span class="health-priority-avatar">
+              <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
+            </span>
+            <h3 [id]="'health-priority-card-' + card.id">{{ card.label }}</h3>
+          </div>
+          <button
+            mat-button
+            type="button"
+            class="health-priority-open-button"
+            [attr.aria-label]="'Open ' + card.label"
+            [attr.aria-pressed]="selectedMetric() === card.metric"
+            [disabled]="!card.available"
+            (click)="metricSelected.emit(card.metric)">
+            <span>Open</span>
+            <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+          </button>
+        </header>
 
-        <mat-card-content class="health-priority-content">
+        <div class="health-priority-content">
           @if (card.loading) {
             <span class="health-priority-state">
               <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
@@ -41,7 +56,7 @@
                         [presentation]="row.presentation"
                         [showText]="false"
                         [showTooltip]="false"
-                        [iconWidth]="18"
+                        [iconWidth]="32"
                         [iconHeight]="18">
                       </app-service-source-icon>
                     } @else {
@@ -57,19 +72,8 @@
               }
             </span>
           }
-        </mat-card-content>
-
-        <mat-card-actions align="end">
-          <button
-            mat-button
-            type="button"
-            [attr.aria-pressed]="selectedMetric() === card.metric"
-            (click)="metricSelected.emit(card.metric)">
-            <span>Open {{ card.label }}</span>
-            <mat-icon aria-hidden="true">arrow_forward</mat-icon>
-          </button>
-        </mat-card-actions>
-      </mat-card>
+        </div>
+      </section>
     }
-  </div>
+  </mat-card>
 </section>

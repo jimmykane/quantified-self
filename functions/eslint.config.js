@@ -6,7 +6,8 @@ module.exports = tseslint.config(
     eslint.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        files: ["src/**/*.{ts,js}"],
+        // Match both normal Functions-package linting and the root-level pre-commit hook.
+        files: ["src/**/*.{ts,js}", "functions/src/**/*.{ts,js}"],
         rules: {
             "no-unused-vars": "off", // Handled by TS
             "no-undef": "off",      // Handled by TS

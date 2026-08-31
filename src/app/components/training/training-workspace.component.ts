@@ -107,6 +107,10 @@ import {
   type TrainingExplanationViewModel,
 } from '../../helpers/training-explanation-view.helper';
 import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
+import type {
+  TrainingSummaryCard,
+  TrainingSummaryMetric,
+} from '../shared/training-summary/training-summary.models';
 import {
   buildTrainingDurabilityScopeViewModels,
   type TrainingDurabilityScopeViewModel,
@@ -372,6 +376,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public selectedTrainingPowerSystems: TrainingPowerSystemsActivityTypeViewModel | null = null;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
+  public trainingSummaryCards: readonly TrainingSummaryCard[] = [];
   public trainingDataAsOfText: string | null = null;
   public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
     type: 'pending',
@@ -380,6 +385,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     showRetry: false,
   };
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
+  public trainingLoadMetricItems: readonly TrainingSummaryMetric[] = [];
   public trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
   public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
   public readonly freshnessForecastInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE);
@@ -823,6 +829,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.selectedTrainingPowerSystems = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
+    this.trainingSummaryCards = this.buildTrainingSummaryCards();
     this.trainingDataAsOfText = null;
     this.derivedMetricsRouteStatus = {
       type: 'pending',
@@ -831,6 +838,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       showRetry: false,
     };
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
+    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems();
     this.trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
@@ -1813,6 +1821,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessNowText: this.formatNumber(currentFormNow?.value ?? latestCurrentPoint?.formSameDay, 0, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
+    this.trainingSummaryCards = this.buildTrainingSummaryCards();
+    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems();
     this.trainingLoadGuidance = buildTrainingLoadGuidance(
       currentFormNow?.value ?? latestCurrentPoint?.formSameDay ?? null,
       finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value ?? null,
@@ -2733,6 +2743,85 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       sessionsText: `${this.formatNumber(analysis.activities.current, 0)} workouts`,
       sessionsCaption: this.formatSessionsComparison(analysis.activities),
     };
+  }
+
+  private buildTrainingSummaryCards(): TrainingSummaryCard[] {
+    const stateCard: TrainingSummaryCard = {
+      id: 'state',
+      label: 'State',
+      valueText: this.trainingStatus.stateLabel,
+      captionText: this.trainingStatus.stateCaption,
+      updateText: this.trainingStatus.stateUpdateText,
+      kind: 'state',
+    };
+
+    if (this.trainingComparisonState === 'preparing') {
+      return [
+        stateCard,
+        {
+          id: 'training-comparison-preparing',
+          label: 'Training comparison',
+          valueText: 'Preparing',
+          captionText: 'Reading your recent workouts across the Training sport groups.',
+          span: 'double',
+          announcesStatus: true,
+        },
+      ];
+    }
+
+    if (this.trainingComparisonState === 'unavailable') {
+      return [
+        stateCard,
+        {
+          id: 'training-comparison-unavailable',
+          label: 'Training comparison',
+          valueText: 'Unavailable',
+          captionText: 'Refresh to request another comparison snapshot.',
+          span: 'double',
+        },
+      ];
+    }
+
+    return [
+      stateCard,
+      {
+        id: 'training-time',
+        label: 'Training time',
+        valueText: this.trainingStatus.volumeText,
+        captionText: this.trainingStatus.volumeCaption,
+        indicator: {
+          variant: 'deviation',
+          label: 'Training time versus usual',
+          value: this.trainingStatus.volumeDeltaPercent,
+          compact: true,
+        },
+      },
+      {
+        id: 'workouts',
+        label: 'Workouts',
+        valueText: this.trainingStatus.sessionsText,
+        captionText: this.trainingStatus.sessionsCaption,
+        indicator: {
+          variant: 'deviation',
+          label: 'Workouts versus usual',
+          value: this.trainingStatus.sessionsDeltaPercent,
+          compact: true,
+        },
+      },
+    ];
+  }
+
+  private buildTrainingLoadMetricItems(): TrainingSummaryMetric[] {
+    return [
+      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText },
+      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText },
+      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText },
+      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText },
+      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText },
+      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText },
+      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText },
+      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText },
+    ];
   }
 
   private formatVolumeComparison(comparison: TrainingWindowComparison): string {

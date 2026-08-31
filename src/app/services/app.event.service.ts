@@ -38,6 +38,7 @@ import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 import { OriginalFileDownloadSource } from './app.original-file-download.service';
+import { getActivityCreatorNameCarryover } from '@shared/activity-creator-name';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
@@ -1184,7 +1185,10 @@ export class AppEventService implements OnDestroy {
   private applyUserActivityOverrides(existingActivity: ActivityInterface, parsedActivity: ActivityInterface): void {
     if (!existingActivity || !parsedActivity) return;
 
-    const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
+    const existingCreatorName = getActivityCreatorNameCarryover(
+      existingActivity.creator?.name,
+      parsedActivity.creator?.name,
+    );
     if (existingCreatorName && parsedActivity.creator) {
       parsedActivity.creator.name = existingCreatorName;
     }

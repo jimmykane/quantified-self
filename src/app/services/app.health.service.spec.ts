@@ -3,6 +3,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     HEALTH_COVERAGE_STATUSES,
+    HEALTH_METRIC_CATALOG,
     HEALTH_METRIC_IDS,
     HEALTH_NORMALIZATION_STATUSES,
     HEALTH_PROVIDERS,
@@ -21,6 +22,7 @@ import {
     collection,
     collectionData,
     documentId,
+    getCountFromServer,
     getDocs,
     limit,
     orderBy,
@@ -38,6 +40,7 @@ vi.mock('app/firebase/firestore', () => {
         collection: vi.fn((_firestore, ...path: string[]) => ({ path })),
         collectionData: vi.fn(() => of([])),
         documentId: vi.fn(() => '__name__'),
+        getCountFromServer: vi.fn(),
         getDocs: vi.fn(),
         limit: vi.fn((value: number) => ({ type: 'limit', value })),
         orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
@@ -158,6 +161,7 @@ describe('AppHealthService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(collectionData).mockReturnValue(of([]));
+        vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 0 }) } as never);
         vi.mocked(getDocs).mockResolvedValue({ docs: [] } as never);
         functions = { call: vi.fn() };
         TestBed.configureTestingModule({
@@ -269,6 +273,39 @@ describe('AppHealthService', () => {
         await expect(firstValueFrom(service.watchSyncStates(null))).resolves.toEqual([]);
         expect(collection).not.toHaveBeenCalled();
         expect(orderBy).not.toHaveBeenCalled();
+    });
+
+    it('discovers metrics across all stored history with one bounded indexed count per metric', async () => {
+        vi.mocked(getCountFromServer).mockImplementation(async target => {
+            const constraints = (target as {
+                constraints?: Array<{ type?: string; value?: unknown }>;
+            }).constraints || [];
+            const metricId = constraints.find(constraint => constraint.type === 'where')?.value;
+            const count = metricId === HEALTH_METRIC_IDS.HeartRate
+                || metricId === HEALTH_METRIC_IDS.Steps
+                ? 1
+                : 0;
+            return { data: () => ({ count }) } as never;
+        });
+
+        await expect(service.loadAvailableMetricIds('user-1')).resolves.toEqual([
+            HEALTH_METRIC_IDS.Steps,
+            HEALTH_METRIC_IDS.HeartRate,
+        ]);
+
+        expect(getCountFromServer).toHaveBeenCalledTimes(Object.keys(HEALTH_METRIC_CATALOG).length);
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'user-1', 'healthSourceRecords');
+        expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', HEALTH_METRIC_IDS.HeartRate);
+        expect(orderBy).toHaveBeenCalledWith('calendarDate', 'asc');
+        expect(orderBy).toHaveBeenCalledWith('__name__', 'asc');
+        expect(limit).toHaveBeenCalledWith(1);
+    });
+
+    it('does not query metric availability without an owner', async () => {
+        await expect(service.loadAvailableMetricIds(null)).resolves.toEqual([]);
+
+        expect(getCountFromServer).not.toHaveBeenCalled();
+        expect(collection).not.toHaveBeenCalled();
     });
 
     it('loads the selected metric across pages before projecting conflicts and coverage', async () => {

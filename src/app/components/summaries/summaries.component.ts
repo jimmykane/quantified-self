@@ -30,6 +30,7 @@ import {
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import equal from 'fast-deep-equal';
 import type { EventStatAggregationPreferences } from '@shared/event-stat-aggregation.types';
+import { isHealthWorkspaceNavigationUIDAllowed } from '@shared/health-workspace-rollout';
 import {
   buildDashboardTileViewModels,
   type DashboardChartTileViewModel,
@@ -304,6 +305,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public todayDateSubtitle = '';
   public todayGreeting = '';
   public isOwnerDashboard = false;
+  public hasHealthWorkspaceNavigationAccess = false;
 
   private appThemeSubscription: Subscription | null = null;
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -504,6 +506,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private refreshTodayHeader(date: Date): void {
     this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
+    this.hasHealthWorkspaceNavigationAccess = isHealthWorkspaceNavigationUIDAllowed(this.user?.uid);
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
     this.todayGreeting = formatDashboardGreeting(
       date,

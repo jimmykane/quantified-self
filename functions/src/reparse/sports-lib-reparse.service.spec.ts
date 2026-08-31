@@ -929,7 +929,7 @@ describe('sports-lib-reparse.service', () => {
         expect(event.rpe).toBe(7);
         expect(event.feeling).toBe(3);
         expect(event.tags).toEqual(['Race', '2026']);
-        expect(event.name).toBeUndefined();
+        expect(event.name).toBe('new-name');
     });
 
     it('applyPreservedFields should not override isMerge when existing value is not boolean', () => {
@@ -987,6 +987,63 @@ describe('sports-lib-reparse.service', () => {
         expect(activityOne.creator.name).toBe('old1');
         expect(activityTwo.creator.name).toBe('old2');
     });
+
+    it.each(['Unknown', 'Unknown Device', ' UNKNOWN   DEVICE '])(
+        'resolveActivityEditCarryover should replace parser placeholder creator %j',
+        (existingCreatorName) => {
+            const parsedActivity = {
+                creator: { name: 'Garmin Edge 1030 Plus' },
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Ride',
+                getStat: vi.fn(() => null),
+            };
+            const parsedEvent = {
+                getActivities: () => [parsedActivity],
+            } as any;
+
+            const result = resolveActivityEditCarryover(parsedEvent, [{
+                id: 'a1',
+                data: () => ({
+                    creator: { name: existingCreatorName },
+                    startDate: new Date('2026-01-01T10:00:00.000Z'),
+                    endDate: new Date('2026-01-01T10:30:00.000Z'),
+                    type: 'Ride',
+                }),
+            } as any]);
+
+            expect(result.assignments.size).toBe(1);
+            expect(parsedActivity.creator.name).toBe('Garmin Edge 1030 Plus');
+        },
+    );
+
+    it.each(['Unknown', 'Unknown Device', ''])(
+        'resolveActivityEditCarryover should retain a placeholder when the new creator is %j',
+        (parsedCreatorName) => {
+            const parsedActivity = {
+                creator: { name: parsedCreatorName },
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Ride',
+                getStat: vi.fn(() => null),
+            };
+            const parsedEvent = {
+                getActivities: () => [parsedActivity],
+            } as any;
+
+            resolveActivityEditCarryover(parsedEvent, [{
+                id: 'a1',
+                data: () => ({
+                    creator: { name: 'Unknown Device' },
+                    startDate: new Date('2026-01-01T10:00:00.000Z'),
+                    endDate: new Date('2026-01-01T10:30:00.000Z'),
+                    type: 'Ride',
+                }),
+            } as any]);
+
+            expect(parsedActivity.creator.name).toBe('Unknown Device');
+        },
+    );
 
     it('resolveActivityEditCarryover should leave creator unchanged on ambiguous matches', () => {
         const sharedStart = new Date('2026-01-01T10:00:00.000Z');
@@ -1511,11 +1568,22 @@ describe('sports-lib-reparse.service', () => {
         );
     });
 
-    it('persistReparsedEvent should preserve the latest event tags inside the write transaction', async () => {
+    it('persistReparsedEvent should preserve the latest user-edited event fields inside the write transaction', async () => {
         hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
-            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ tags: ['Latest'] }) }),
+            get: vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    name: 'Latest name',
+                    description: 'Latest description',
+                    privacy: 'private',
+                    notes: 'Latest notes',
+                    rpe: 8,
+                    feeling: 3,
+                    tags: ['Latest'],
+                }),
+            }),
         }));
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1524,7 +1592,18 @@ describe('sports-lib-reparse.service', () => {
         }));
         hoisted.mockWriteAllEventData.mockImplementationOnce(async () => {
             const ctorArgs = hoisted.eventWriterCtorArgs.at(-1);
-            await ctorArgs!.adapter.setDoc(['users', 'u1', 'events', 'e1'], { tags: ['Stale'] });
+            await ctorArgs!.adapter.setDoc(['users', 'u1', 'events', 'e1'], {
+                name: 'Parsed name',
+                description: 'Parsed description',
+                privacy: 'public',
+                notes: 'Parsed notes',
+                rpe: 1,
+                feeling: 1,
+                tags: ['Stale'],
+                stats: { 'Recovery Time': 46_140 },
+                activities: [{ streams: [{ type: 'Power' }] }],
+                diagnostics: { keep: true, streams: [{ type: 'Pace' }] },
+            });
         });
 
         await persistReparsedEvent(
@@ -1538,7 +1617,17 @@ describe('sports-lib-reparse.service', () => {
 
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
-            { tags: ['Latest'] },
+            {
+                name: 'Latest name',
+                description: 'Latest description',
+                privacy: 'private',
+                notes: 'Latest notes',
+                rpe: 8,
+                feeling: 3,
+                tags: ['Latest'],
+                stats: { 'Recovery Time': 46_140 },
+                diagnostics: { keep: true },
+            },
             undefined,
         );
     });
@@ -1977,12 +2066,20 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('reparseEventFromOriginalFiles should parse, preserve fields, and persist', async () => {
-        const parsedEvent = makeEvent();
+        const parsedEvent = makeEvent({
+            name: 'Parsed name',
+            description: 'Parsed description',
+        });
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.reGenerateStatsForEvent.mockImplementationOnce((event: Record<string, unknown>) => {
+            event.name = 'Regenerated name';
+            event.description = 'Regenerated description';
+        });
 
         const result = await reparseEventFromOriginalFiles('u1', 'e1', {
             eventData: {
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
+                name: 'keep-name',
                 description: 'keep-desc',
                 privacy: 'private',
                 notes: 'keep-notes',
@@ -2011,6 +2108,7 @@ describe('sports-lib-reparse.service', () => {
         expect(secondSourceKey).toMatch(/^[a-f0-9]{64}:/);
         expect(firstSourceKey).not.toBe(secondSourceKey);
         const persistedEvent = hoisted.mockWriteAllEventData.mock.calls[0]?.[1] as Record<string, unknown>;
+        expect(persistedEvent.name).toBe('keep-name');
         expect(persistedEvent.description).toBe('keep-desc');
         expect(persistedEvent.privacy).toBe('private');
         expect(persistedEvent.notes).toBe('keep-notes');

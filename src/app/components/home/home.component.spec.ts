@@ -1,4 +1,10 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+    ComponentFixture,
+    DeferBlockBehavior,
+    DeferBlockState,
+    TestBed,
+} from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HomeComponent } from './home.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -6,12 +12,17 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { signal } from '@angular/core';
+import { AppThemeService } from '../../services/app.theme.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
+import { LoggerService } from '../../services/logger.service';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -19,15 +30,31 @@ describe('HomeComponent', () => {
     let mockAuthService: any;
     let mockRouter: any;
     let userSubject: BehaviorSubject<any>;
+    const chart = {
+        dispatchAction: vi.fn(),
+        isDisposed: vi.fn(() => false),
+        on: vi.fn(),
+        off: vi.fn(),
+    };
+    const eChartsLoader = {
+        init: vi.fn().mockResolvedValue(chart),
+        setOption: vi.fn(),
+        dispose: vi.fn(),
+        resize: vi.fn(),
+        subscribeToViewportResize: vi.fn(() => vi.fn()),
+        attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
+    };
 
     beforeEach(async () => {
         userSubject = new BehaviorSubject<any>(null);
+        vi.clearAllMocks();
         mockAuthService = {
             getUser: vi.fn().mockResolvedValue(null),
             user$: userSubject.asObservable()
         };
 
         await TestBed.configureTestingModule({
+            deferBlockBehavior: DeferBlockBehavior.Manual,
             imports: [
                 HomeComponent,
                 RouterTestingModule.withRoutes([]),
@@ -40,6 +67,9 @@ describe('HomeComponent', () => {
             ],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+                { provide: EChartsLoaderService, useValue: eChartsLoader },
+                { provide: LoggerService, useValue: { error: vi.fn() } },
             ]
         }).compileComponents();
 
@@ -69,6 +99,13 @@ describe('HomeComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
+    it('should keep passive homepage tooltips from claiming touch gestures', () => {
+        const tooltipHosts = fixture.debugElement.queryAll(By.directive(MatTooltip));
+
+        expect(tooltipHosts.length).toBeGreaterThan(0);
+        expect(tooltipHosts.every(host => host.injector.get(MatTooltip).touchGestures === 'off')).toBe(true);
+    });
+
     it('should render provider-focused hero messaging and a standalone Assistant section', () => {
         const text = fixture.nativeElement.textContent as string;
         const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
@@ -79,11 +116,11 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('Understand readiness, training load, sleep, routes,');
         expect(heroText).toContain('keep supported activities synced across services');
         expect(heroText).toContain('Your Data Stays Yours');
-        expect(heroText).toContain('Export Anytime');
+        expect(heroText).not.toContain('Export Anytime');
         expect(heroText).not.toMatch(/\bprivate\b/i);
         expect(heroText).not.toContain('Quantified Self Assistant');
         expect(heroText).not.toContain('chart-backed answers');
-        expect(aiSectionText).toContain('Ask about your training. Get answers grounded in your data.');
+        expect(aiSectionText).toContain('Ask About Your Training');
         expect(aiSectionText).toContain('Explore sleep, readiness, training, measurements, and recent activities in one conversation.');
         expect(aiSectionText).toContain('The Assistant answers from your current data');
         expect(aiSectionText).toContain('not generic fitness advice');
@@ -93,11 +130,17 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('when your question needs the broader context.');
         expect(aiSectionText).toContain('Check the Evidence');
         expect(aiSectionText).toContain('see exactly what supports it.');
+        expect(aiSectionText).toContain('Connect Other AI Tools');
+        expect(aiSectionText).toContain('Grant access to the training, sleep, measurements, activity charts, and routes you choose.');
+        expect(aiSectionText).toContain('Location access remains a separate permission.');
+        expect(aiSectionText).toContain('Explore MCP Access');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
+        expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .feature-icon-container[data-nosnippet]').length).toBe(3);
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid .feature-icon-container[data-nosnippet]').length).toBe(3);
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });
 
@@ -140,81 +183,134 @@ describe('HomeComponent', () => {
         ]);
     });
 
-    it('should render expanded integration capability cards with one integrations hub link', () => {
+    it('should render three precise integration principles with one integrations hub link', () => {
         const text = fixture.nativeElement.textContent as string;
-        const integrationCards = fixture.nativeElement.querySelectorAll('.integration-followup-grid .feature-card');
+        const integrationRows = fixture.nativeElement.querySelectorAll(
+            '.integration-followup-list .integration-capability'
+        );
         const integrationLinks = fixture.nativeElement.querySelectorAll(
             'a[href="/integrations"], a[routerlink="/integrations"], a[ng-reflect-router-link="/integrations"]'
         );
 
-        expect(integrationCards.length).toBe(5);
-        expect(text).toContain('Automatically send new Garmin, COROS, or Wahoo activities to Suunto');
-        expect(text).toContain('Automatic Sync for All Services');
-        expect(text).toContain('Automatic Sync Between Services');
+        expect(integrationRows.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.integration-followup-list mat-card')).toBeNull();
+        expect(text).toContain('Bring It In. Keep It Moving.');
+        expect(text).toContain('Sync Your History');
+        expect(text).toContain('New activities arrive automatically');
+        expect(text).toContain('activity history already stored with each provider');
+        expect(text).not.toContain('FIT-backed Wahoo history');
+        expect(text).not.toContain('rolling 5 years');
+        expect(text).not.toContain('last 3 months');
+        expect(text).toContain('Move Workouts and Routes');
+        expect(text).toContain('automatic delivery between supported providers');
+        expect(text).toContain('send past activities by date range');
+        expect(text).toContain('Garmin → Suunto, Wahoo, or COROS');
+        expect(text).toContain('Import Suunto routes');
+        expect(text).toContain('Send saved FIT/GPX routes manually');
+        expect(text).toContain('Upload Your Own Files');
+        expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
+        expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
         expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
-        expect(text).toContain('Manual Route Uploads');
-        expect(text).toContain('Manual Activity Uploads to Suunto');
-        expect(text).toContain('choose a date range to sync activities');
         expect(text).toContain('Explore Integrations');
-        expect(text).toContain('Explore Wahoo');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/integrations/wahoo"], a[ng-reflect-router-link="/integrations/wahoo"]')).toBeTruthy();
-        expect(integrationLinks.length).toBeGreaterThanOrEqual(1);
+        expect(text).not.toContain('Explore Wahoo');
+        expect(integrationLinks.length).toBe(1);
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');
         expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
     });
 
-    it('should surface KPI and derived metric charts in Engineered for Performance section', () => {
+    it('should surface a concrete Training snapshot and supporting analysis capabilities', () => {
         const text = fixture.nativeElement.textContent as string;
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
-        const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
-        const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
+        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-card');
+        const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
+            '.training-preview-card app-metric-indicator'
+        );
+        const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
+        const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
 
-        expect(performanceCards.length).toBe(6);
-        expect(metricChips.length).toBe(27);
-        expect(metricChipInfoIcons.length).toBe(27);
-        expect(text).toContain('Engineered for Performance');
-        expect(text).toContain('Reliable and instant analytics');
-        expect(text).toContain('KPI Lane for Fast Decisions');
-        expect(text).toContain('Load Status');
+        expect(performanceCards.length).toBe(3);
+        expect(trainingPreview).toBeTruthy();
+        expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreview.querySelector('app-training-summary-cards')).toBeTruthy();
+        expect(trainingPreview.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
+        expect(trainingPreviewIndicators.length).toBe(3);
+        expect(signalPreviews.length).toBe(0);
+        expect(deferredPreviewPlaceholders.length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals[data-nosnippet]')).toBeTruthy();
+        expect(text).toContain('Bring It In. Keep It Moving.');
+        expect(text).toContain('Training Load, Readiness, and Recovery');
+        expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
+        expect(text).not.toContain('Illustrative data');
+        expect(text).toContain('Your Training Snapshot');
+        expect(text).toContain('Balanced');
+        expect(text).toContain('TSS-only load model');
+        expect(text).toContain('Readiness today');
+        expect(text).toContain('Load + recorded sleep signals');
+        expect(text).toContain('Training time');
+        expect(text).toContain('18h 42m');
+        expect(text).toContain('Workouts');
         expect(text).toContain('ACWR');
-        expect(text).toContain('Ramp Rate');
-        expect(text).toContain('Monotony / Strain');
-        expect(text).toContain('Form Now');
-        expect(text).toContain('Fitness Trend');
-        expect(text).toContain('Fatigue Trend');
-        expect(text).toContain('Recovery Debt');
-        expect(text).toContain('Form +7d');
+        expect(text).toContain('Monotony');
+        expect(text).toContain('Strain');
+        expect(text).toContain('Form now');
+        expect(text).toContain('Form +7 days');
         expect(text).toContain('Fitness (CTL)');
         expect(text).toContain('Fatigue (ATL)');
-        expect(text).toContain('Training Balance');
-        expect(text).toContain('Easy %');
-        expect(text).toContain('Hard %');
-        expect(text).toContain('Efficiency Δ (4w)');
-        expect(text).toContain('Recovery');
-        expect(text).toContain('Form (TSS)');
+        expect(text).toContain('Recovery debt');
+        expect(text).toContain('Recovery left');
+        expect(text).toContain('Intensity balance');
+        expect(text).toContain('Efficiency');
+        expect(text).toContain('Explore Training');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
         expect(text).toContain('Freshness Forecast');
         expect(text).toContain('Intensity Distribution');
         expect(text).toContain('Efficiency Trend');
-        expect(text).toContain('Sleep');
+        expect(text).toContain('Cycling Power Curve');
+        expect(text).toContain('sleep views');
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
         expect(text).not.toContain('Form Model (CTL / ATL / TSB)');
-        expect(text).toContain('Dashboard Manager by Category');
-        expect(text).toContain('Manual');
-        expect(text).toContain('Presets');
+        expect(text).toContain('Charts Behind Every Signal');
+        expect(text).toContain('Build the Dashboard You Need');
+        expect(text).toContain('Start from a preset or arrange');
         expect(text).toContain('Curated');
         expect(text).toContain('KPI');
         expect(text).toContain('Custom');
         expect(text).toContain('Map');
-        expect(text).toContain('clustered heatmaps');
-        expect(text).toContain('Explore Activity Calendar');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/activity-calendar"], a[ng-reflect-router-link="/features/activity-calendar"]')).toBeTruthy();
-        expect(text).toContain('Read-only MCP Server');
-        expect(text).toContain('activity details and charts, route summaries, and separate location access you approve');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/mcp-server"], a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
+        expect(text).toContain('marker-clustering controls');
+        expect(text).toContain('Analyze Every Workout');
+        expect(text).toContain('Compare heart rate, power, altitude, depth, pace, and more in synchronized charts');
+        expect(text).toContain('View zones');
+        expect(text).toContain('grade-colored elevation');
+        expect(text).toContain('inverse depth');
+        expect(text).toContain('distance, duration, or time where supported');
+        expect(text).toContain('select a range for stats or zoom in');
+        expect(text).not.toContain('7 chart types');
+        expect(text).not.toContain('12 map styles');
+        expect(text).not.toContain('recorded streams');
+        expect(text).not.toContain('routes with heatmaps');
+        expect(text).toContain('Open Your Dashboard');
+        expect(text).not.toContain('Explore Activity Calendar');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeTruthy();
+        expect(text).not.toContain('Read-only MCP Server');
+        expect(text).not.toContain('KPI Lane for Fast Decisions');
+        expect(text).not.toContain('Connected Training Data');
+    });
+
+    it('should render the shared signal charts when the deferred section completes', async () => {
+        const deferBlocks = await fixture.getDeferBlocks();
+
+        expect(deferBlocks.length).toBe(3);
+        await deferBlocks[0].render(DeferBlockState.Complete);
+        await fixture.whenStable();
+
+        expect(fixture.nativeElement.querySelectorAll('.signal-preview-widget').length).toBe(4);
+        expect(fixture.nativeElement.querySelector('.signal-preview-form-widget')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals')).toBeNull();
+        expect(eChartsLoader.setOption).toHaveBeenCalledTimes(5);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {
@@ -222,7 +318,9 @@ describe('HomeComponent', () => {
         const analysisCards = fixture.nativeElement.querySelectorAll('.analysis-section .analysis-card');
 
         expect(analysisCards.length).toBe(3);
-        expect(text).toContain('Hardware-Grade Precision');
+        expect(text).toContain('Map Your Activities');
+        expect(text).toContain('Own Your Data');
+        expect(text).toContain('Compare Your Devices');
         expect(text).toContain('Merge same-session recordings, choose a reference device');
         expect(text).toContain('Benchmark Merge Workflow');
         expect(text).toContain('keep it out of normal training totals');

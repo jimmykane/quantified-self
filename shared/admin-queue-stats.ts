@@ -109,6 +109,55 @@ export interface RouteReparseFailurePreview {
     targetSportsLibVersion: string;
 }
 
+export interface SportsLibReparseRuntimeSettings {
+    enabled: boolean;
+    targetUid: string | null;
+    source: 'firestore' | 'defaults';
+    configurationValid: boolean;
+    updatedAt: unknown;
+    updatedBy: string | null;
+}
+
+export type SportsLibReparseTargetUidValidation =
+    | { valid: true; targetUid: string | null }
+    | { valid: false; targetUid: null; reason: string };
+
+export function validateSportsLibReparseTargetUid(value: unknown): SportsLibReparseTargetUidValidation {
+    if (value === undefined || value === null) {
+        return { valid: true, targetUid: null };
+    }
+    if (typeof value !== 'string') {
+        return { valid: false, targetUid: null, reason: 'Target user ID must be a string or null.' };
+    }
+
+    const targetUid = value.trim();
+    if (!targetUid) {
+        return { valid: true, targetUid: null };
+    }
+    if (targetUid.length > 128) {
+        return { valid: false, targetUid: null, reason: 'Target user ID must be at most 128 characters.' };
+    }
+    for (let index = 0; index < targetUid.length; index += 1) {
+        const characterCode = targetUid.charCodeAt(index);
+        if (targetUid[index] === '/' || characterCode <= 31 || characterCode === 127) {
+            return { valid: false, targetUid: null, reason: 'Target user ID contains unsupported characters.' };
+        }
+    }
+
+    return { valid: true, targetUid };
+}
+
+export interface SetSportsLibReparseSettingsRequest {
+    enabled: boolean;
+    targetUid?: string | null;
+    confirmGlobal?: boolean;
+}
+
+export interface SetSportsLibReparseSettingsResponse {
+    success: true;
+    settings: SportsLibReparseRuntimeSettings;
+}
+
 export interface ReparseQueueStats<
     TCheckpoint extends ReparseCheckpointBaseStats,
     TFailure,
@@ -127,7 +176,9 @@ export type EventReparseStats = ReparseQueueStats<
     EventReparseCheckpointStats,
     EventReparseFailurePreview,
     EventReparseJobsStats
->;
+> & {
+    runtimeSettings?: SportsLibReparseRuntimeSettings;
+};
 
 export type RouteReparseStats = ReparseQueueStats<RouteReparseCheckpointStats, RouteReparseFailurePreview, RouteReparseJobsStats>;
 

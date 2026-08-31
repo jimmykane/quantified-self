@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,18 +8,27 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { AdminService, QueueStats, ReparseFailurePreview, RouteReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
-import { finalize, takeUntil } from 'rxjs/operators';
+import { finalize, take, takeUntil } from 'rxjs/operators';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import {
     ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS,
     EChartsHostController
 } from '../../../helpers/echarts-host-controller';
 import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import {
+    ConfirmationDialogComponent,
+    ConfirmationDialogData,
+} from '../../confirmation-dialog/confirmation-dialog.component';
+import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
 
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
@@ -39,6 +49,15 @@ type RouteReparseFailureRowView = RouteReparseFailurePreview & {
     updatedAtLabel: string;
 };
 
+type ReparseSettingsProposal = {
+    enabled: boolean;
+    targetUid: string | null;
+};
+
+type ReparseSettingsBaseline = ReparseSettingsProposal & {
+    configurationValid: boolean;
+};
+
 @Component({
     selector: 'app-admin-queue-stats',
     templateUrl: './admin-queue-stats.component.html',
@@ -46,13 +65,18 @@ type RouteReparseFailureRowView = RouteReparseFailurePreview & {
     standalone: true,
     imports: [
         CommonModule,
+        FormsModule,
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
         MatTooltipModule,
         MatTableModule,
         MatCardModule,
-        MatSnackBarModule
+        MatSnackBarModule,
+        MatDialogModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatSlideToggleModule
     ]
 })
 export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
@@ -66,11 +90,14 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     set stats(value: QueueStats | null) {
         this._stats = value;
         this.updateReparseFailureRows();
+        this.syncReparseSettingsForm();
     }
 
     @Input() loading = false;
+    @Input() statsLoadFailed = false;
     @Input() queueView: AdminQueueStatsView = 'all';
     @Output() retryHeavyCompleted = new EventEmitter<void>();
+    @Output() reparseSettingsChanged = new EventEmitter<void>();
     hasRetryData = false;
     readonly reparseFailureColumns = ['outcome', 'uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
     readonly routeReparseFailureColumns = ['uid', 'routeId', 'attemptCount', 'updatedAt', 'lastError'];
@@ -78,6 +105,37 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     readonly retryingHeavyJobIds = new Set<string>();
     reparseFailureRows: ReparseFailureRowView[] = [];
     routeReparseFailureRows: RouteReparseFailureRowView[] = [];
+    private reparseScanEnabledValue = false;
+    private reparseTargetUidValue = '';
+    isSavingReparseSettings = false;
+    isConfirmingReparseSettings = false;
+    reparseSettingsAvailable = false;
+    reparseTargetUidValidationMessage = '';
+    hasReparseSettingsChanges = false;
+    persistedReparseScanEnabled = false;
+    persistedReparseConfigurationValid = true;
+    canSaveReparseSettings = false;
+    reparseSelectedScopeLabel = 'All users';
+    reparseSettingsUpdatedAtLabel = '';
+    private persistedReparseTargetUid = '';
+
+    get reparseScanEnabled(): boolean {
+        return this.reparseScanEnabledValue;
+    }
+
+    set reparseScanEnabled(value: boolean) {
+        this.reparseScanEnabledValue = value === true;
+        this.updateReparseSettingsFormState();
+    }
+
+    get reparseTargetUid(): string {
+        return this.reparseTargetUidValue;
+    }
+
+    set reparseTargetUid(value: string) {
+        this.reparseTargetUidValue = typeof value === 'string' ? value : '';
+        this.updateReparseSettingsFormState();
+    }
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -105,7 +163,8 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         private appThemeService: AppThemeService,
         private eChartsLoader: EChartsLoaderService,
         private adminService: AdminService,
-        private snackBar: MatSnackBar
+        private snackBar: MatSnackBar,
+        private dialog: MatDialog
     ) {
         this.chartHost = new EChartsHostController({
             eChartsLoader: this.eChartsLoader,
@@ -128,6 +187,9 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['stats']) {
             this.updateReparseFailureRows();
+        }
+        if (changes['loading'] || changes['statsLoadFailed']) {
+            this.updateReparseSettingsFormState();
         }
         if (changes['stats'] || changes['loading']) {
             void this.tryInitializeChartAndRender();
@@ -414,6 +476,249 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
                     this.snackBar.open(this.getRetryHeavyErrorMessage(error), 'Dismiss', { duration: 6000 });
                 },
             });
+    }
+
+    saveReparseSettings(): void {
+        this.updateReparseSettingsFormState();
+        if (!this.canSaveReparseSettings) {
+            return;
+        }
+
+        const targetValidation = validateSportsLibReparseTargetUid(this.reparseTargetUidValue);
+        const baseline = this.getReparseSettingsBaseline();
+        if (!targetValidation.valid || !baseline) {
+            return;
+        }
+
+        const proposal: ReparseSettingsProposal = {
+            enabled: this.reparseScanEnabledValue,
+            targetUid: targetValidation.targetUid,
+        };
+        this.isConfirmingReparseSettings = true;
+        this.updateReparseSettingsFormState();
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            width: '440px',
+            data: this.getReparseSettingsConfirmation(proposal, baseline),
+        });
+        dialogRef.afterClosed().pipe(
+            take(1),
+            takeUntil(this.destroy$),
+            finalize(() => {
+                this.isConfirmingReparseSettings = false;
+                this.updateReparseSettingsFormState();
+            }),
+        ).subscribe(confirmed => {
+            if (!confirmed) {
+                return;
+            }
+            if (!this.canApplyConfirmedReparseSettings(proposal, baseline)) {
+                this.snackBar.open(
+                    'Scanner settings changed or became unavailable. Review them and save again.',
+                    'Dismiss',
+                    { duration: 6000 },
+                );
+                return;
+            }
+            this.persistReparseSettings(
+                proposal.enabled,
+                proposal.targetUid,
+                proposal.enabled && proposal.targetUid === null,
+            );
+        });
+    }
+
+    private persistReparseSettings(
+        enabled: boolean,
+        targetUid: string | null,
+        confirmGlobal = false,
+    ): void {
+        this.isSavingReparseSettings = true;
+        this.updateReparseSettingsFormState();
+        this.adminService.setSportsLibReparseSettings(enabled, targetUid, confirmGlobal)
+            .pipe(
+                takeUntil(this.destroy$),
+                finalize(() => {
+                    this.isSavingReparseSettings = false;
+                    this.updateReparseSettingsFormState();
+                })
+            )
+            .subscribe({
+                next: (response) => {
+                    this.reparseScanEnabledValue = response.settings.enabled;
+                    this.reparseTargetUidValue = response.settings.targetUid || '';
+                    this.persistedReparseScanEnabled = response.settings.enabled;
+                    this.persistedReparseTargetUid = response.settings.targetUid || '';
+                    this.persistedReparseConfigurationValid = response.settings.configurationValid;
+                    this.updateReparseSettingsFormState();
+                    const scope = response.settings.targetUid
+                        ? `user ${response.settings.targetUid}`
+                        : 'all users';
+                    const state = response.settings.enabled ? 'enabled' : 'disabled';
+                    this.snackBar.open(`Event reparse scanner ${state} for ${scope}.`, 'Dismiss', { duration: 5000 });
+                    this.reparseSettingsChanged.emit();
+                },
+                error: (error) => {
+                    this.snackBar.open(this.getReparseSettingsErrorMessage(error), 'Dismiss', { duration: 6000 });
+                },
+            });
+    }
+
+    private syncReparseSettingsForm(): void {
+        const runtimeSettings = this._stats?.reparse?.runtimeSettings;
+        this.reparseSettingsAvailable = !!runtimeSettings;
+        this.reparseSettingsUpdatedAtLabel = runtimeSettings?.updatedAt
+            ? this.formatTimestamp(runtimeSettings.updatedAt)
+            : '';
+        if (this.isSavingReparseSettings || !runtimeSettings) {
+            this.updateReparseSettingsFormState();
+            return;
+        }
+        this.persistedReparseScanEnabled = runtimeSettings.enabled;
+        this.persistedReparseTargetUid = runtimeSettings.targetUid || '';
+        this.persistedReparseConfigurationValid = runtimeSettings.configurationValid;
+        if (!this.isConfirmingReparseSettings) {
+            this.reparseScanEnabledValue = runtimeSettings.enabled;
+            this.reparseTargetUidValue = runtimeSettings.targetUid || '';
+        }
+        this.updateReparseSettingsFormState();
+    }
+
+    private updateReparseSettingsFormState(): void {
+        const targetValidation = validateSportsLibReparseTargetUid(this.reparseTargetUidValue);
+        const normalizedTargetUid = targetValidation.valid
+            ? targetValidation.targetUid || ''
+            : this.reparseTargetUidValue.trim();
+        this.reparseTargetUidValidationMessage = 'reason' in targetValidation
+            ? targetValidation.reason
+            : '';
+        this.reparseSelectedScopeLabel = normalizedTargetUid || 'All users';
+        this.hasReparseSettingsChanges = !this.persistedReparseConfigurationValid
+            || this.reparseScanEnabledValue !== this.persistedReparseScanEnabled
+            || normalizedTargetUid !== this.persistedReparseTargetUid;
+        this.canSaveReparseSettings = this.reparseSettingsAvailable
+            && !this.loading
+            && !this.statsLoadFailed
+            && !this.isSavingReparseSettings
+            && !this.isConfirmingReparseSettings
+            && !this.reparseTargetUidValidationMessage
+            && this.hasReparseSettingsChanges;
+    }
+
+    private getReparseSettingsBaseline(): ReparseSettingsBaseline | null {
+        if (!this._stats?.reparse?.runtimeSettings) {
+            return null;
+        }
+        return {
+            enabled: this.persistedReparseScanEnabled,
+            targetUid: this.persistedReparseTargetUid || null,
+            configurationValid: this.persistedReparseConfigurationValid,
+        };
+    }
+
+    private getReparseSettingsConfirmation(
+        proposal: ReparseSettingsProposal,
+        baseline: ReparseSettingsBaseline,
+    ): ConfirmationDialogData {
+        if (proposal.enabled !== baseline.enabled) {
+            if (proposal.enabled && proposal.targetUid === null) {
+                return {
+                    title: 'Enable Global Event Reparse?',
+                    message: 'No Firebase UID is set. Automatic scheduled discovery will scan eligible events for every user and can enqueue new reparse jobs.',
+                    confirmText: 'Enable Global Scan',
+                    cancelText: 'Cancel',
+                    confirmColor: 'warn',
+                };
+            }
+            if (proposal.enabled) {
+                return {
+                    title: 'Enable Event Reparse Scanner?',
+                    message: `Automatic scheduled discovery will start for Firebase UID "${proposal.targetUid}" and can enqueue new event reparse jobs.`,
+                    confirmText: 'Enable Scanner',
+                    cancelText: 'Cancel',
+                    confirmColor: 'warn',
+                };
+            }
+
+            const targetChange = proposal.targetUid !== baseline.targetUid
+                ? proposal.targetUid
+                    ? ` The saved target will also change to Firebase UID "${proposal.targetUid}" for the next time the scanner is enabled.`
+                    : ' The saved target will also change to all users for the next time the scanner is enabled.'
+                : '';
+            return {
+                title: 'Disable Event Reparse Scanner?',
+                message: `Later scheduled discovery passes will stop. A pass already running and reparse jobs already queued will continue.${targetChange}`,
+                confirmText: 'Disable Scanner',
+                cancelText: 'Cancel',
+                confirmColor: 'warn',
+            };
+        }
+
+        if (proposal.enabled && proposal.targetUid === null) {
+            return {
+                title: 'Change Event Reparse Scope to All Users?',
+                message: 'The enabled scanner will scan eligible events for every user on later scheduled passes and can enqueue new reparse jobs.',
+                confirmText: 'Use All Users',
+                cancelText: 'Cancel',
+                confirmColor: 'warn',
+            };
+        }
+
+        if (proposal.enabled) {
+            return {
+                title: 'Change Event Reparse Target?',
+                message: `Later scheduled passes will scan only Firebase UID "${proposal.targetUid}". Jobs already queued for other users will continue.`,
+                confirmText: 'Change Target',
+                cancelText: 'Cancel',
+                confirmColor: 'warn',
+            };
+        }
+
+        if (!baseline.configurationValid) {
+            const scope = proposal.targetUid
+                ? `with Firebase UID "${proposal.targetUid}" as its saved target`
+                : 'with all users as its saved scope';
+            return {
+                title: 'Repair Event Reparse Settings?',
+                message: `This will replace the malformed runtime setting with an explicit disabled configuration ${scope}. Automatic discovery will remain disabled.`,
+                confirmText: 'Repair Settings',
+                cancelText: 'Cancel',
+                confirmColor: 'primary',
+            };
+        }
+
+        return {
+            title: 'Change Saved Event Reparse Target?',
+            message: proposal.targetUid
+                ? `The scanner will remain disabled. If it is enabled later, automatic discovery will be limited to Firebase UID "${proposal.targetUid}".`
+                : 'The scanner will remain disabled. If it is enabled later, automatic discovery will scan eligible events for all users.',
+            confirmText: 'Save Target',
+            cancelText: 'Cancel',
+            confirmColor: 'primary',
+        };
+    }
+
+    private canApplyConfirmedReparseSettings(
+        proposal: ReparseSettingsProposal,
+        baseline: ReparseSettingsBaseline,
+    ): boolean {
+        const targetValidation = validateSportsLibReparseTargetUid(this.reparseTargetUidValue);
+        return this.reparseSettingsAvailable
+            && !this.loading
+            && !this.statsLoadFailed
+            && !this.isSavingReparseSettings
+            && this.hasReparseSettingsChanges
+            && targetValidation.valid
+            && this.reparseScanEnabledValue === proposal.enabled
+            && targetValidation.targetUid === proposal.targetUid
+            && this.persistedReparseScanEnabled === baseline.enabled
+            && (this.persistedReparseTargetUid || null) === baseline.targetUid
+            && this.persistedReparseConfigurationValid === baseline.configurationValid;
+    }
+
+    private getReparseSettingsErrorMessage(error: unknown): string {
+        const rawMessage = (error as { message?: unknown } | undefined)?.message;
+        const message = typeof rawMessage === 'string' ? rawMessage.trim() : '';
+        return message || 'Failed to save event reparse scanner settings.';
     }
 
     getDerivedMetricsFailureRows(): {

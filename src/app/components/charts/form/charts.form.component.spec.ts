@@ -210,11 +210,21 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].axisPointer?.snap).toBe(true);
     expect(option.axisPointer?.snap).toBe(true);
     expect(option.tooltip?.axisPointer?.snap).toBe(true);
+    expect(option.animation).toBe(false);
     expect(option.tooltip?.axisPointer?.axis).toBe('x');
     expect(option.yAxis?.[0]?.axisPointer?.show).toBe(false);
     expect(option.yAxis?.[1]?.axisPointer?.show).toBe(false);
     expect(mockChart.on).not.toHaveBeenCalledWith('datazoom', expect.any(Function));
     expect(mockChart.on).not.toHaveBeenCalledWith('restore', expect.any(Function));
+  });
+
+  it('should enable chart animation only when explicitly requested', async () => {
+    component.useAnimations = true;
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    expect(getLastFullChartOption().animation).toBe(true);
   });
 
   it('should expose current-day readiness stats while keeping latest workout TSS from latest real point', async () => {

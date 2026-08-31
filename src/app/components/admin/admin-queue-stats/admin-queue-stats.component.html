@@ -859,6 +859,74 @@
             Event Reparse
         </h3>
 
+        <mat-card class="reparse-settings-card" appearance="outlined" *ngIf="queueView === 'reparse'">
+            <div class="reparse-settings-heading">
+                <div>
+                    <h4>Automatic Scanner</h4>
+                    <p>Disabling stops later scheduled discovery passes. A pass already running and jobs already queued continue.</p>
+                </div>
+                <mat-slide-toggle
+                    [(ngModel)]="reparseScanEnabled"
+                    [disabled]="loading || statsLoadFailed || isSavingReparseSettings || isConfirmingReparseSettings || !reparseSettingsAvailable"
+                    aria-label="Enable automatic event reparse scanner">
+                    Enable automatic scans
+                </mat-slide-toggle>
+            </div>
+
+            <div class="reparse-settings-controls">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Target Firebase UID (optional)</mat-label>
+                    <input
+                        matInput
+                        [(ngModel)]="reparseTargetUid"
+                        [disabled]="loading || statsLoadFailed || isSavingReparseSettings || isConfirmingReparseSettings || !reparseSettingsAvailable"
+                        maxlength="128"
+                        autocomplete="off"
+                        autocapitalize="none"
+                        spellcheck="false">
+                    <mat-hint>Set one UID for a scoped scan. Leave blank to scan all users.</mat-hint>
+                </mat-form-field>
+
+                <button
+                    mat-flat-button
+                    class="qs-mat-primary reparse-settings-save"
+                    type="button"
+                    [disabled]="!canSaveReparseSettings"
+                    (click)="saveReparseSettings()">
+                    <span class="reparse-settings-save-content">
+                        <mat-spinner *ngIf="isSavingReparseSettings" diameter="18"></mat-spinner>
+                        <mat-icon *ngIf="!isSavingReparseSettings">save</mat-icon>
+                        <span>{{ isSavingReparseSettings ? 'Saving' : 'Save Settings' }}</span>
+                    </span>
+                </button>
+            </div>
+
+            <p class="reparse-settings-error" *ngIf="!loading && (statsLoadFailed || !reparseSettingsAvailable)">
+                <mat-icon>warning</mat-icon>
+                Current scanner settings could not be loaded. Saving is disabled to avoid overwriting an unknown setting.
+            </p>
+            <p class="reparse-settings-error" *ngIf="reparseTargetUidValidationMessage">
+                <mat-icon>error</mat-icon>
+                {{ reparseTargetUidValidationMessage }}
+            </p>
+            <p class="reparse-settings-error" *ngIf="reparseSettingsAvailable && !persistedReparseConfigurationValid">
+                <mat-icon>warning</mat-icon>
+                The persisted scanner setting is invalid, so automatic discovery is disabled until this form is saved.
+            </p>
+
+            <div class="reparse-settings-meta" *ngIf="!loading && !statsLoadFailed && reparseSettingsAvailable">
+                <span>Source: {{ stats?.reparse?.runtimeSettings?.source === 'firestore' ? 'App setting' : 'Code default' }}</span>
+                <span>Current: {{ persistedReparseScanEnabled ? 'Enabled' : 'Disabled' }}</span>
+                <span>Selected scope: {{ reparseSelectedScopeLabel }}</span>
+                <span *ngIf="stats?.reparse?.runtimeSettings?.updatedBy">
+                    Updated by: {{ stats?.reparse?.runtimeSettings?.updatedBy }}
+                </span>
+                <span *ngIf="reparseSettingsUpdatedAtLabel">
+                    Updated: {{ reparseSettingsUpdatedAtLabel }}
+                </span>
+            </div>
+        </mat-card>
+
         <div class="stats-grid">
             <mat-card class="app-stat-card status-info"
                 matTooltip="Tasks currently in flight or scheduled in the normal sports-lib reparse Cloud Tasks queue.">

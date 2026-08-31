@@ -1,0 +1,47 @@
+<div
+  class="training-status-grid training-summary-grid"
+  [class.training-preview-overview]="mode() === 'preview'"
+  [class.training-summary-grid--preview]="mode() === 'preview'"
+  role="group"
+  [attr.aria-label]="ariaLabel()"
+>
+  @for (card of presentedCards(); track card.id) {
+    <article
+      class="training-summary-card"
+      [class.training-state-panel]="card.kind === 'state'"
+      [class.training-comparison-panel]="card.kind !== 'state'"
+      [class.training-comparison-status-panel]="card.span === 'double'"
+      [class.qs-glass-card-panel]="mode() === 'workspace'"
+      [attr.role]="card.announcesStatus ? 'status' : null"
+    >
+      <span class="training-metric-label">{{ card.label }}</span>
+      <div class="training-summary-value-row" [class.training-state-value-row]="card.kind === 'state'">
+        <strong>
+          @for (segment of card.valueSegments; track $index) {
+            <span [class.training-metric-token]="segment.isMetric">{{ segment.text }}</span>
+          }
+        </strong>
+        @if (card.kind === 'state') {
+          <ng-content select="[trainingSummaryStateAction]"></ng-content>
+        }
+        @if (card.qualifierText) {
+          <small class="training-summary-qualifier">{{ card.qualifierText }}</small>
+        }
+      </div>
+      @if (card.indicator; as indicator) {
+        <app-metric-indicator
+          [variant]="indicator.variant || 'score'"
+          [label]="indicator.label"
+          [value]="indicator.value"
+          [tone]="indicator.tone || 'neutral'"
+          [compact]="indicator.compact || false"
+          [showThresholds]="indicator.showThresholds || false"
+        ></app-metric-indicator>
+      }
+      <span class="training-summary-caption">{{ card.captionText }}</span>
+      @if (card.updateText) {
+        <small class="training-state-update" role="status">{{ card.updateText }}</small>
+      }
+    </article>
+  }
+</div>

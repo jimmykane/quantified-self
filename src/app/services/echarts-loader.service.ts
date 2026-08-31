@@ -125,7 +125,11 @@ export class EChartsLoaderService {
     return this.loader;
   }
 
-  public async init(container: HTMLElement, theme?: string, options?: EChartsInitOptions): Promise<EChartsType> {
+  public async init(container: HTMLElement, theme?: string, options?: EChartsInitOptions): Promise<EChartsType | null> {
+    if (!isPlatformBrowser(this.platformId)) {
+      return null;
+    }
+
     const echarts = await this.load();
     const resolvedTheme = this.resolveThemeName(theme);
     const initOptions = this.buildSafeInitOptions(container, options);

@@ -4,6 +4,7 @@ import {
     collection,
     collectionData,
     documentId,
+    getCountFromServer,
     getDocs,
     limit,
     orderBy,
@@ -16,6 +17,8 @@ import { Observable, combineLatest, of } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import {
     HEALTH_SYNC_STATE_COLLECTION_ID,
+    HEALTH_METRIC_CATALOG,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HealthRangeQuery,
     HealthRangeResult,
     HealthMetricId,
@@ -118,6 +121,41 @@ export class AppHealthService {
         const stateCollection = collection(this.firestore, 'users', uid, HEALTH_SYNC_STATE_COLLECTION_ID);
         const stateQuery = query(stateCollection, limit(AppHealthService.MAX_SYNC_STATE_DOCUMENTS));
         return collectionData(stateQuery, { idField: 'provider' }) as Observable<HealthSyncState[]>;
+    }
+
+    /**
+     * Resolves catalog availability across all stored history without loading
+     * source records. Each existence query is capped at one indexed match so
+     * absent metrics can be distinguished from metrics outside the open range.
+     */
+    async loadAvailableMetricIds(
+        userID: string | null | undefined,
+    ): Promise<HealthMetricId[]> {
+        const uid = `${userID || ''}`.trim();
+        if (!uid) {
+            return [];
+        }
+
+        const sourceRecords = collection(
+            this.firestore,
+            'users',
+            uid,
+            HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+        );
+        const metricIds = Object.keys(HEALTH_METRIC_CATALOG) as HealthMetricId[];
+        const availability = await Promise.all(metricIds.map(async metricId => {
+            const metricQuery = query(
+                sourceRecords,
+                where('metricIds', 'array-contains', metricId),
+                orderBy('calendarDate', 'asc'),
+                orderBy(documentId(), 'asc'),
+                limit(1),
+            );
+            const snapshot = await getCountFromServer(metricQuery);
+            return snapshot.data().count > 0 ? metricId : null;
+        }));
+
+        return availability.filter((metricId): metricId is HealthMetricId => metricId !== null);
     }
 
     /**

@@ -133,17 +133,19 @@ describe('Health and sleep Sports Lib data migration', () => {
             '--uid', 'user-1',
             '--kind=sleep',
             '--limit', '25',
+            '--concurrency', '8',
             '--start-after', 'opaque-document-id',
         ])).toEqual({
             execute: false,
             userID: 'user-1',
             kind: SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
             limit: 25,
+            concurrency: 8,
             startAfter: 'opaque-document-id',
         });
         expect(parseSportsLibDataMigrationOptions([
             '--execute', '--uid=user-1', '--kind=health',
-        ]).execute).toBe(true);
+        ])).toMatchObject({ execute: true, concurrency: 5 });
     });
 
     it.each([
@@ -152,6 +154,9 @@ describe('Health and sleep Sports Lib data migration', () => {
         ['--uid', 'user/1', '--kind', 'health'],
         ['--uid', 'user-1', '--kind', 'unknown'],
         ['--uid', 'user-1', '--kind', 'health', '--limit', '251'],
+        ['--uid', 'user-1', '--kind', 'health', '--concurrency', '0'],
+        ['--uid', 'user-1', '--kind', 'health', '--concurrency', '11'],
+        ['--uid', 'user-1', '--kind', 'health', '--concurrency', '1.5'],
         ['--uid', 'user-1', '--kind', 'health', '--start-after', 'nested/path'],
         ['--uid', '--execute', '--kind', 'health'],
         ['--uid=user-1', '--kind', 'health', '--limit'],
@@ -184,6 +189,10 @@ describe('Health and sleep Sports Lib data migration', () => {
         expect(buildHealthSportsLibDataMigrationDecision(first.update)).toEqual({ status: 'unchanged' });
     });
 
+    it('treats a valid series-only Health record with no scalar metrics as unchanged', () => {
+        expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'unchanged' });
+    });
+
     it('builds an idempotent sleep update while retaining all existing session fields', () => {
         const legacy = sleepDocument();
         const first = buildSleepSportsLibDataMigrationDecision(legacy);
@@ -214,12 +223,14 @@ describe('Health and sleep Sports Lib data migration', () => {
             '--uid', 'private-user-id',
             '--kind', 'health',
             '--limit', '2',
+            '--concurrency', '1',
             '--start-after', 'opaque-prior',
         ], { db: fake.db });
 
         expect(summary).toEqual({
             dryRun: true,
             kind: SPORTS_LIB_DATA_MIGRATION_KINDS.Health,
+            concurrency: 1,
             scanned: 2,
             candidates: 2,
             migrated: 0,
@@ -274,6 +285,7 @@ describe('Health and sleep Sports Lib data migration', () => {
             '--execute',
             '--uid', 'private-user-id',
             '--kind', 'health',
+            '--concurrency', '1',
             '--start-after', 'opaque-prior',
         ], { db: fake.db });
 
@@ -285,6 +297,99 @@ describe('Health and sleep Sports Lib data migration', () => {
             nextStartAfter: 'opaque-prior',
         });
         expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs guarded document transactions with bounded concurrency', async () => {
+        const fake = fakeQueryDatabase(Array.from({ length: 7 }, () => healthDocument()));
+        let active = 0;
+        let maximumActive = 0;
+        fake.dbMock.runTransaction.mockImplementation(async () => {
+            active += 1;
+            maximumActive = Math.max(maximumActive, active);
+            await new Promise(resolve => setTimeout(resolve, 5));
+            active -= 1;
+            return 'migrated';
+        });
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--limit', '7',
+            '--concurrency', '3',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 7,
+            candidates: 7,
+            migrated: 7,
+            failed: 0,
+        });
+        expect(maximumActive).toBe(3);
+        expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(7);
+    });
+
+    it('stops scheduling new batches and resumes before the earliest concurrent failure', async () => {
+        const fake = fakeQueryDatabase(Array.from({ length: 6 }, () => healthDocument()));
+        let transactionIndex = 0;
+        fake.dbMock.runTransaction.mockImplementation(async () => {
+            const currentIndex = transactionIndex;
+            transactionIndex += 1;
+            await new Promise(resolve => setTimeout(resolve, 5));
+            if (currentIndex === 1) throw new Error('transient');
+            return 'migrated';
+        });
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--limit', '6',
+            '--concurrency', '2',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            candidates: 2,
+            migrated: 1,
+            failed: 1,
+            nextStartAfter: 'opaque-1',
+        });
+        expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not advance past an unexecuted candidate when later inspection fails', async () => {
+        const fake = fakeQueryDatabase([]);
+        fake.query.get.mockResolvedValue({
+            docs: [{
+                id: 'opaque-1',
+                data: () => healthDocument(),
+                ref: { id: 'opaque-1' },
+            }, {
+                id: 'opaque-2',
+                data: () => {
+                    throw new Error('inspection failed');
+                },
+                ref: { id: 'opaque-2' },
+            }],
+        });
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--concurrency', '5',
+            '--start-after', 'opaque-prior',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            candidates: 1,
+            migrated: 0,
+            failed: 1,
+            nextStartAfter: 'opaque-prior',
+        });
+        expect(fake.dbMock.runTransaction).not.toHaveBeenCalled();
     });
 
     it('does not overwrite malformed canonical envelopes', () => {
@@ -301,7 +406,6 @@ describe('Health and sleep Sports Lib data migration', () => {
                 metrics: { duration: { 'Sleep Duration': Number.NaN } },
             },
         })).toEqual({ status: 'invalid' });
-        expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'invalid' });
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [{}] })).toEqual({ status: 'invalid' });
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [null] })).toEqual({ status: 'invalid' });
     });

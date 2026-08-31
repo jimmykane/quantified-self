@@ -294,25 +294,56 @@ when another page exists:
 npm --prefix functions run migrate-health-sleep-sports-lib-data -- --uid <uid> --kind health --limit 100
 npm --prefix functions run migrate-health-sleep-sports-lib-data -- --uid <uid> --kind sleep --limit 100
 
-npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100
-npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind sleep --limit 100
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --concurrency 5
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind sleep --limit 100 --concurrency 5
 
-npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --start-after <opaque-document-id>
+npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --concurrency 5 --start-after <opaque-document-id>
 ```
 
 For each candidate, execution rechecks account deletion and re-reads the exact document in the update transaction. It
 updates only the derived canonical field and never changes provider revisions, receipt timestamps, source metadata,
 stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a deletion race becomes
 `skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. A retryable failure
-stops the page, exits nonzero, and returns the cursor immediately before the failed document; rerun from that cursor
-before advancing. Re-running the same page is safe. Finish by repeating both dry runs and require `candidates: 0`,
-`skippedInvalid: 0`, and `failed: 0`.
+stops new transaction batches, exits nonzero, and returns the cursor immediately before the earliest failed document;
+already-started transactions in that bounded batch may finish, and rerunning from the returned cursor safely rechecks
+them. `--concurrency` defaults to 5 and is capped at 10; start at 5 and increase only after a clean pilot while keeping
+users and Health/Sleep collections sequential. Re-running the same page is safe. Finish by repeating both dry runs and
+require `candidates: 0`, `skippedInvalid: 0`, and `failed: 0`.
 
 The migration does not require provider reconnects or history refetches. Ordinary disconnect intentionally retains
 imported history, so disconnecting during the migration does not remove a valid historical candidate. Account deletion
 still removes the complete user subtree and prevents the migration from recreating descendants. Sleep-document updates
 use the existing per-user coalesced derived-metric ingress, so keep the documented user-scoped batches and allow that
 queue to settle during rollout rather than running overlapping pages for the same user.
+
+After clean single-user pilots, use the global cohort runner instead of copying Firebase UIDs into repeated commands.
+It scans only top-level user document names, checks for Health or Sleep subcollections, and keeps users plus their Health
+and Sleep passes sequential. It never prints a raw UID. `nextStartAfter` is a domain-separated SHA-256 checkpoint bound
+to either dry-run or execution mode; on resume, the runner resolves it by scanning field-masked user document names
+server-side. A dry-run checkpoint is deliberately rejected by `--execute`, so it cannot skip users that were inspected
+but not migrated:
+
+```bash
+# Read-only five-user cohort.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --max-users 5
+
+# Execute the same bounded cohort with five guarded document transactions at a time.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 5 --document-concurrency 5
+
+# Resume after a clean execution cohort using only its execution checkpoint.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 25 --document-concurrency 5 --start-after <opaque-checkpoint>
+```
+
+The runner defaults to scanning at most 100 user documents and processing at most five users that actually have Health
+or Sleep data. `--scan-limit` can be raised to 5,000 when sparse accounts require it; `--max-users` is capped at 100,
+`--document-limit` at 250, and `--document-concurrency` at 10. Each user receives complete Health and Sleep dry runs
+before execution, guarded execution one collection at a time, and zero-candidate postchecks before the checkpoint can
+advance. Inactive/deleting users are skipped. Any invalid record, missing/deleting document, read/write failure,
+repeated document cursor, or nonzero postcheck stops the cohort and retains the checkpoint before that user. Rerun from
+the returned checkpoint after resolving the cause. Checkpoint resolution completes before any migration writes; if the
+checkpoint user root was deleted between cohorts, restart without `--start-after` and let the idempotent postchecks
+advance through already-current users again. Start with 5 users, review logs and the derived-metrics queues, then increase
+to 25 before processing the remainder.
 
 ## Temporarily Disable A Provider
 

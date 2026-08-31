@@ -26,11 +26,13 @@ import { AdminQueueStatsComponent, AdminQueueStatsView } from '../admin-queue-st
 export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     queueStats: QueueStats | null = null;
     isLoadingStats = true;
+    queueStatsLoadFailed = false;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
     pageSubtitle = 'Operational health for ingestion, route delivery sync, route import sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
 
     private readonly destroy$ = new Subject<void>();
+    private queueStatsRequestSequence = 0;
 
     constructor(
         private readonly adminService: AdminService,
@@ -118,14 +120,24 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     }
 
     fetchQueueStats(): void {
+        const requestSequence = ++this.queueStatsRequestSequence;
         this.isLoadingStats = true;
+        this.queueStatsLoadFailed = false;
         this.adminService.getQueueStats(true).pipe(takeUntil(this.destroy$)).subscribe({
             next: (stats) => {
+                if (requestSequence !== this.queueStatsRequestSequence) {
+                    return;
+                }
                 this.queueStats = stats;
+                this.queueStatsLoadFailed = false;
                 this.isLoadingStats = false;
             },
             error: (err) => {
+                if (requestSequence !== this.queueStatsRequestSequence) {
+                    return;
+                }
                 this.logger.error('Failed to load queue stats:', err);
+                this.queueStatsLoadFailed = true;
                 this.isLoadingStats = false;
             }
         });

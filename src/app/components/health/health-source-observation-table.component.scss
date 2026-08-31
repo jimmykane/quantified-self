@@ -3,7 +3,12 @@
 }
 
 .health-source-table-panel {
-  margin-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.health-source-table-panel mat-expansion-panel-header {
+  height: 42px;
+  padding-inline: 0.75rem;
 }
 
 .health-source-table-title {
@@ -12,7 +17,7 @@
 }
 
 .health-source-table-scroll {
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
   overflow-x: auto;
 }
 
@@ -25,14 +30,14 @@ table {
 
 caption {
   color: var(--mat-sys-on-surface-variant);
-  padding: 0 0 0.6rem;
+  padding: 0 0 0.4rem;
   text-align: left;
 }
 
 th,
 td {
   border-bottom: 1px solid var(--mat-sys-outline-variant);
-  padding: 0.55rem;
+  padding: 0.45rem;
   text-align: left;
   vertical-align: top;
 }
@@ -56,5 +61,11 @@ td:nth-child(4) {
 .health-table-note {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
-  margin: 0.5rem 0 0;
+  margin: 0.35rem 0 0;
+}
+
+@media (max-width: 720px) {
+  .health-source-table-panel mat-expansion-panel-header {
+    height: 48px;
+  }
 }

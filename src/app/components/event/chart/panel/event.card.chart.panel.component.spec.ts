@@ -327,6 +327,23 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
   });
 
+  it('renders a non-interactive chart when preview mode is enabled', async () => {
+    component.previewMode = true;
+    component.overlayOptions = [{ dataType: 'heartRate', label: 'Heart Rate', color: '#ff0000', unit: 'bpm' }];
+    component.showResetChartState = true;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
+    expect(option?.tooltip?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.series?.[0]?.silent).toBe(true);
+    expect(chart.on).not.toHaveBeenCalled();
+    expect(zr.on).not.toHaveBeenCalled();
+    expect(intersectionObserverObserveSpies).toHaveLength(0);
+  });
+
   it('clears the active tooltip before replacing series for an overlay', async () => {
     await renderComponent();
 
@@ -1583,6 +1600,9 @@ describe('EventCardChartPanelComponent', () => {
       '9-12%',
       '12%+',
     ]);
+
+    component.showGradeLegend = false;
+    expect(component.gradeLegendItems).toEqual([]);
   });
 
   it('renders normal altitude styling when grade coloring is toggled off', async () => {

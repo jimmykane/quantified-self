@@ -7,6 +7,7 @@ export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
     listUsers: { name: 'listUsers', region: 'europe-west2' },
     getQueueStats: { name: 'getQueueStats', region: 'europe-west2' },
+    setSportsLibReparseSettings: { name: 'setSportsLibReparseSettings', region: 'europe-west2' },
     getUserCount: { name: 'getUserCount', region: 'europe-west2' },
     getAdminDashboardHistory: { name: 'getAdminDashboardHistory', region: 'europe-west2' },
     scheduleAdminDashboardSnapshot: { name: 'scheduleAdminDashboardSnapshot', region: 'europe-west2' },

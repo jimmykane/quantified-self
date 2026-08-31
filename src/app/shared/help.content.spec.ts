@@ -73,6 +73,10 @@ describe('help.content', () => {
 
     expect(healthSection?.title).toBe('Health');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
+    expect(healthSection?.content).toContain('only metrics found anywhere in your imported history');
+    expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
+    expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
+    expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('**14d**, **30d**, **90d**, or **1y**');
     expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
@@ -81,14 +85,14 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Detailed sample streams load for 14-day and 30-day windows');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
+    expect(healthSection?.content).toContain('no previous Sleep or Health history request');
+    expect(healthSection?.content).toContain('**Import history**');
+    expect(healthSection?.content).toContain('prior-import state cannot be verified');
     expect(healthSection?.content).toContain('Connectivity');
+    expect(healthSection?.content).toContain('**Health (Beta)**');
+    expect(healthSection?.content).toContain('Eligible beta accounts');
     expect(healthSection?.content).not.toContain('URL retains the metric');
-    expect(healthSection?.links).toContainEqual({
-      label: 'Open Health',
-      icon: 'cardiology',
-      kind: 'route',
-      target: '/health',
-    });
+    expect(HELP_SECTIONS.flatMap(section => section.links).some(link => link.target === '/health')).toBe(false);
   });
 
   it('should explain automatic retry for incomplete Suunto activity files', () => {

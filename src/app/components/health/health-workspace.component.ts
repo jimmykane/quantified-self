@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,8 +19,16 @@ import {
   getHealthMetricDefinition,
 } from '@shared/health';
 import { ProviderPresentation, buildProviderPresentation } from '@shared/provider-presentation';
-import { SleepSession } from '@shared/sleep';
-import { Subscription } from 'rxjs';
+import {
+  SLEEP_PROVIDERS,
+  SLEEP_SYNC_STATUSES,
+  SleepProvider,
+  SleepSession,
+  SleepSyncState,
+} from '@shared/sleep';
+import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import { combineLatest, of, Subscription } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import {
   AppHealthService,
@@ -78,10 +85,16 @@ interface HealthProviderFilterView extends HealthProviderView {
 
 interface HealthSyncStateView extends HealthProviderView {
   statusLabel: string;
-  message: string;
-  actionRequired: boolean;
-  error: boolean;
+  lastUpdateText: string;
+  lastUpdateDateTime: string | null;
+  tone: HealthSyncTone;
+  historyImportActionLabel: string | null;
+  historyImportStatusText: string | null;
+  historyImportBusy: boolean;
+  historyImportError: string | null;
 }
+
+type HealthSyncTone = 'current' | 'delayed' | 'stale' | 'error' | 'neutral';
 
 interface QueuedHealthRangeWrite {
   uid: string;
@@ -104,6 +117,9 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
   'lastWebhookAtMs',
 ] as const;
 
+const HEALTH_SYNC_CURRENT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 @Component({
   selector: 'app-health-workspace',
   standalone: true,
@@ -111,7 +127,6 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
-    MatCardModule,
     MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
@@ -135,9 +150,11 @@ export class HealthWorkspaceComponent {
   private readonly healthService = inject(AppHealthService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
+  private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
+  private metricAvailabilityGeneration = 0;
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
   private rangePreferenceUserID: string | null = null;
@@ -145,9 +162,10 @@ export class HealthWorkspaceComponent {
   private rangeWriteGeneration = 0;
   private rangeWriteInFlight = false;
   private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
+  private historyImportRequestGeneration = 0;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({ range, label: RANGE_LABELS[range] }));
-  readonly metricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
+  private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
   readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
   readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
   readonly selectedEndDate = signal(this.todayDate);
@@ -171,9 +189,45 @@ export class HealthWorkspaceComponent {
   readonly priorityHrvStatus = signal<HealthLoadStatus>('loading');
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
+  readonly sleepSyncStates = signal<Partial<Record<SleepProvider, SleepSyncState | null>>>({});
+  readonly sleepSyncStateResolved = signal<Partial<Record<SleepProvider, boolean>>>({});
+  readonly historyImportProvider = signal<HealthProvider | null>(null);
+  readonly historyImportErrors = signal<Partial<Record<HealthProvider, string>>>({});
   readonly selectedProviders = signal<HealthProvider[]>([]);
   readonly refreshRevision = signal(0);
+  readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
+  readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
+  readonly hasAnySleepSession = signal<boolean | null>(null);
+  readonly sleepMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+
+  readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
+  readonly sleepMetricFilteringActive = computed(() => this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly availabilityChecksSettled = computed(() =>
+    this.healthMetricAvailabilityStatus() !== 'loading'
+    && this.sleepMetricAvailabilityStatus() !== 'loading');
+  readonly metricCatalogGroups = computed<readonly HealthMetricCatalogGroup[]>(() => {
+    if (!this.healthMetricFilteringActive()) {
+      return this.completeMetricCatalogGroups;
+    }
+    return buildHealthMetricCatalogGroups(this.availableHealthMetricIds() || []);
+  });
+  readonly showSleepMetric = computed(() =>
+    !this.sleepMetricFilteringActive() || this.hasAnySleepSession() === true);
+  readonly availableMetricSelections = computed<readonly HealthWorkspaceMetricSelection[]>(() => [
+    ...(this.showSleepMetric() ? ['sleep' as const] : []),
+    ...this.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)),
+  ]);
+  readonly hasAvailableMetricSelections = computed(() => this.availableMetricSelections().length > 0);
+  readonly metricAvailabilityNotice = computed(() => {
+    const healthStatus = this.healthMetricAvailabilityStatus();
+    const sleepStatus = this.sleepMetricAvailabilityStatus();
+    if (healthStatus !== 'error' && healthStatus !== 'denied'
+      && sleepStatus !== 'error' && sleepStatus !== 'denied') {
+      return null;
+    }
+    return 'Some metric availability could not be verified. Unverified entries remain visible so valid data is not hidden.';
+  });
 
   readonly selectedMetricDefinition = computed(() => {
     const metric = this.routeState().metric;
@@ -283,37 +337,54 @@ export class HealthWorkspaceComponent {
       ? `Showing the newest ${view.rows.length.toLocaleString()} of ${view.totalRowCount.toLocaleString()} source observations.`
       : null;
   });
-  readonly priorityCards = computed<HealthPriorityCardView[]>(() => [
-    priorityCard(
-      'sleep',
-      'Sleep',
-      'bedtime',
-      'sleep',
-      buildSleepPriorityRows(this.prioritySleepSessions()),
-      this.prioritySleepStatus(),
-      'No Sleep sessions in the last 30 days.',
-    ),
-    priorityCard(
-      'heart_rate',
-      'Heart rate',
-      'favorite',
-      HEALTH_METRIC_IDS.HeartRate,
-      buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
-      this.priorityHeartRateStatus(),
-      'No Heart rate summaries in the last 30 days.',
-    ),
-    priorityCard(
-      'heart_rate_variability',
-      'HRV',
-      'ecg_heart',
-      HEALTH_METRIC_IDS.HeartRateVariability,
-      buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
-      this.priorityHrvStatus(),
-      'No HRV summaries in the last 30 days.',
-    ),
-  ]);
+  readonly priorityCards = computed<HealthPriorityCardView[]>(() => {
+    const healthAvailabilityIsKnown = this.healthMetricFilteringActive();
+    const sleepAvailabilityIsKnown = this.sleepMetricFilteringActive();
+    const available = new Set(this.availableMetricSelections());
+    return [
+      priorityCard(
+        'sleep',
+        'Sleep',
+        'bedtime',
+        'sleep',
+        buildSleepPriorityRows(this.prioritySleepSessions()),
+        this.prioritySleepStatus(),
+        'No Sleep sessions in the last 30 days.',
+        !sleepAvailabilityIsKnown || available.has('sleep'),
+      ),
+      priorityCard(
+        'heart_rate',
+        'Heart rate',
+        'favorite',
+        HEALTH_METRIC_IDS.HeartRate,
+        buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
+        this.priorityHeartRateStatus(),
+        'No Heart rate summaries in the last 30 days.',
+        !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
+      ),
+      priorityCard(
+        'heart_rate_variability',
+        'HRV',
+        'ecg_heart',
+        HEALTH_METRIC_IDS.HeartRateVariability,
+        buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
+        this.priorityHrvStatus(),
+        'No HRV summaries in the last 30 days.',
+        !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
+      ),
+    ];
+  });
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
-    .map(state => syncStateView(state))
+    .map(state => {
+      const sleepProvider = healthProviderSleepProvider(state.provider);
+      return syncStateView(state, {
+        sleepSyncState: sleepProvider ? this.sleepSyncStates()[sleepProvider] || null : null,
+        sleepSyncStateResolved: sleepProvider ? this.sleepSyncStateResolved()[sleepProvider] === true : false,
+        hasProAccess: this.userService.hasProAccessSignal(),
+        busy: this.historyImportProvider() === state.provider,
+        error: this.historyImportErrors()[state.provider] || null,
+      });
+    })
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
@@ -338,6 +409,105 @@ export class HealthWorkspaceComponent {
       this.selectedMetric.set(HEALTH_METRIC_IDS.RestingHeartRate);
       this.selectedEndDate.set(this.todayDate);
       this.selectedRange.set(savedRange);
+    });
+
+    effect(onCleanup => {
+      const uid = this.userService.user()?.uid || null;
+      let subscription: Subscription | null = null;
+      this.hasAnySleepSession.set(null);
+      this.sleepMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
+      if (uid) {
+        subscription = this.sleepService.watchHasAnySleepSession(uid).subscribe({
+          next: hasSession => {
+            this.hasAnySleepSession.set(hasSession);
+            this.sleepMetricAvailabilityStatus.set('ready');
+          },
+          error: error => {
+            this.hasAnySleepSession.set(null);
+            this.sleepMetricAvailabilityStatus.set(loadErrorStatus(error));
+          },
+        });
+      }
+      onCleanup(() => subscription?.unsubscribe());
+    });
+
+    effect(onCleanup => {
+      const uid = this.signedInUserID();
+      let subscription: Subscription | null = null;
+      this.sleepSyncStates.set({});
+      this.sleepSyncStateResolved.set({});
+      this.historyImportRequestGeneration += 1;
+      this.historyImportProvider.set(null);
+      this.historyImportErrors.set({});
+      if (uid) {
+        const providers = [
+          SLEEP_PROVIDERS.GarminAPI,
+          SLEEP_PROVIDERS.SuuntoApp,
+          SLEEP_PROVIDERS.COROSAPI,
+        ] as const;
+        subscription = combineLatest(providers.map(provider => this.sleepService
+          .watchSyncState(uid, provider)
+          .pipe(
+            map(state => ({ state, resolved: true })),
+            catchError(() => of({ state: null, resolved: false })),
+          )))
+          .subscribe(results => {
+            this.sleepSyncStates.set(Object.fromEntries(
+              providers.map((provider, index) => [provider, results[index].state]),
+            ));
+            this.sleepSyncStateResolved.set(Object.fromEntries(
+              providers.map((provider, index) => [provider, results[index].resolved]),
+            ));
+          });
+      }
+      onCleanup(() => {
+        subscription?.unsubscribe();
+        this.historyImportRequestGeneration += 1;
+      });
+    });
+
+    effect(() => {
+      const uid = this.userService.user()?.uid || null;
+      this.refreshRevision();
+      const generation = ++this.metricAvailabilityGeneration;
+      this.availableHealthMetricIds.set(uid ? null : []);
+      this.healthMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
+      if (!uid) {
+        return;
+      }
+      void this.healthService.loadAvailableMetricIds(uid).then(metricIds => {
+        if (generation !== this.metricAvailabilityGeneration) {
+          return;
+        }
+        this.availableHealthMetricIds.set(metricIds);
+        this.healthMetricAvailabilityStatus.set('ready');
+      }).catch(error => {
+        if (generation !== this.metricAvailabilityGeneration) {
+          return;
+        }
+        this.availableHealthMetricIds.set(null);
+        this.healthMetricAvailabilityStatus.set(loadErrorStatus(error));
+      });
+    });
+
+    effect(() => {
+      if (!this.availabilityChecksSettled()) {
+        return;
+      }
+      const selections = this.availableMetricSelections();
+      if (selections.includes(this.selectedMetric())) {
+        return;
+      }
+      const priorityFallbacks: readonly HealthWorkspaceMetricSelection[] = [
+        'sleep',
+        HEALTH_METRIC_IDS.HeartRate,
+        HEALTH_METRIC_IDS.HeartRateVariability,
+        HEALTH_METRIC_IDS.RestingHeartRate,
+      ];
+      const fallback = priorityFallbacks.find(metric => selections.includes(metric)) || selections[0];
+      if (fallback) {
+        this.selectedMetric.set(fallback);
+      }
     });
 
     effect(onCleanup => {
@@ -503,6 +673,72 @@ export class HealthWorkspaceComponent {
     this.selectedProviders.set(next.length === 0 || next.length === available.length ? [] : next);
   }
 
+  async startHistoryImport(provider: HealthProvider): Promise<void> {
+    const sleepProvider = healthProviderSleepProvider(provider);
+    const sourceView = this.syncStateViews().find(state => state.provider === provider);
+    const requestedForUserID = `${this.signedInUserID() || ''}`.trim();
+    if (
+      !sleepProvider
+      || !requestedForUserID
+      || !sourceView?.historyImportActionLabel
+      || this.historyImportProvider()
+      || !this.userService.hasProAccessSignal()
+    ) {
+      return;
+    }
+
+    const requestGeneration = ++this.historyImportRequestGeneration;
+    this.historyImportProvider.set(provider);
+    this.historyImportErrors.update(errors => ({ ...errors, [provider]: undefined }));
+    try {
+      const result = await this.requestHistoryImport(sleepProvider);
+      if (
+        this.historyImportRequestGeneration !== requestGeneration
+        || this.signedInUserID() !== requestedForUserID
+      ) {
+        return;
+      }
+      const queuedAtMs = Date.now();
+      this.sleepSyncStates.update(states => ({
+        ...states,
+        [sleepProvider]: {
+          ...(states[sleepProvider] || {
+            provider: sleepProvider,
+            status: SLEEP_SYNC_STATUSES.Ready,
+            updatedAtMs: queuedAtMs,
+          }),
+          status: SLEEP_SYNC_STATUSES.Ready,
+          lastBackfillQueuedAtMs: queuedAtMs,
+          lastBackfillStartMs: new Date(result.startDate).getTime(),
+          lastBackfillEndMs: new Date(result.endDate).getTime(),
+          lastBackfillQueueItems: result.queued,
+          nextBackfillAllowedAtMs: result.nextAllowedAtMs,
+          healthBackfillStatus: sleepProvider === SLEEP_PROVIDERS.GarminAPI
+            && Number(result.healthQueued) > 0
+            ? 'queued'
+            : null,
+          lastError: null,
+          updatedAtMs: queuedAtMs,
+        },
+      }));
+    } catch {
+      if (
+        this.historyImportRequestGeneration !== requestGeneration
+        || this.signedInUserID() !== requestedForUserID
+      ) {
+        return;
+      }
+      this.historyImportErrors.update(errors => ({
+        ...errors,
+        [provider]: 'History import could not be started.',
+      }));
+    } finally {
+      if (this.historyImportRequestGeneration === requestGeneration) {
+        this.historyImportProvider.set(null);
+      }
+    }
+  }
+
   private async loadPriorityMetric(
     uid: string,
     metricId: HealthMetricId,
@@ -535,6 +771,17 @@ export class HealthWorkspaceComponent {
       } else {
         this.priorityHrvStatus.set(loadErrorStatus(error));
       }
+    }
+  }
+
+  private requestHistoryImport(provider: SleepProvider): Promise<SleepBackfillQueueResponse> {
+    switch (provider) {
+      case SLEEP_PROVIDERS.GarminAPI:
+        return this.userService.backfillGarminHealthForCurrentUser();
+      case SLEEP_PROVIDERS.SuuntoApp:
+        return this.userService.backfillSuuntoSleepForCurrentUser();
+      case SLEEP_PROVIDERS.COROSAPI:
+        return this.userService.backfillCorosSleepForCurrentUser();
     }
   }
 
@@ -621,6 +868,7 @@ function priorityCard(
   rows: readonly HealthPriorityRow[],
   status: HealthLoadStatus,
   emptyText: string,
+  available: boolean,
 ): HealthPriorityCardView {
   return {
     id,
@@ -628,38 +876,185 @@ function priorityCard(
     icon,
     metric,
     rows: rows.map(row => ({ ...row, presentation: providerView(row.provider).presentation })),
+    available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',
     emptyText,
   };
 }
 
-function syncStateView(state: HealthSyncState): HealthSyncStateView {
+interface HealthHistoryImportViewOptions {
+  sleepSyncState: SleepSyncState | null;
+  sleepSyncStateResolved: boolean;
+  hasProAccess: boolean;
+  busy: boolean;
+  error: string | null;
+}
+
+function syncStateView(
+  state: HealthSyncState,
+  historyOptions: HealthHistoryImportViewOptions,
+  nowMs = Date.now(),
+): HealthSyncStateView {
   const provider = providerView(state.provider);
-  const lastSyncMs = Math.max(
+  const candidateLastUpdateAtMs = Math.max(
     0,
     Number(state.lastSyncedAtMs) || 0,
     Number(state.lastObservedAtMs) || 0,
     Number(state.lastPollAtMs) || 0,
     Number(state.lastWebhookAtMs) || 0,
   );
-  const lastSyncText = Number.isFinite(lastSyncMs) && lastSyncMs > 0
-    ? `Last update ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(lastSyncMs))}.`
-    : 'No completed Health update reported yet.';
+  const lastUpdateAtMs = Number.isFinite(candidateLastUpdateAtMs) && candidateLastUpdateAtMs > 0
+    ? candidateLastUpdateAtMs
+    : null;
+  const lastUpdateText = lastUpdateAtMs === null
+    ? 'No update yet'
+    : new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(lastUpdateAtMs));
+  const baseView = {
+    ...provider,
+    lastUpdateText,
+    lastUpdateDateTime: lastUpdateAtMs === null ? null : new Date(lastUpdateAtMs).toISOString(),
+    ...healthHistoryImportView(state, historyOptions, nowMs),
+  };
   switch (state.status) {
-    case HEALTH_SYNC_STATUSES.Ready:
-      return { ...provider, statusLabel: 'Ready', message: lastSyncText, actionRequired: false, error: false };
+    case HEALTH_SYNC_STATUSES.Ready: {
+      const recency = healthSyncRecency(lastUpdateAtMs, nowMs);
+      return { ...baseView, statusLabel: recency.statusLabel, tone: recency.tone };
+    }
     case HEALTH_SYNC_STATUSES.PermissionMissing:
-      return { ...provider, statusLabel: 'Permission needed', message: 'Grant Health permissions in Connectivity, then reconnect if requested.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Permission needed', tone: 'error' };
     case HEALTH_SYNC_STATUSES.ReconnectRequired:
-      return { ...provider, statusLabel: 'Reconnect required', message: 'Reconnect this service in Connectivity to resume Health sync.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Reconnect required', tone: 'error' };
     case HEALTH_SYNC_STATUSES.Failed:
-      return { ...provider, statusLabel: 'Sync failed', message: 'The latest Health sync failed. Review the connection in Connectivity.', actionRequired: true, error: true };
+      return { ...baseView, statusLabel: 'Sync failed', tone: 'error' };
     case HEALTH_SYNC_STATUSES.Unsupported:
-      return { ...provider, statusLabel: 'Not supported', message: 'This connected service does not currently provide Health metrics here.', actionRequired: false, error: false };
+      return { ...baseView, statusLabel: 'Not supported', tone: 'neutral' };
     case HEALTH_SYNC_STATUSES.Disconnected:
-      return { ...provider, statusLabel: 'Disconnected', message: 'Connect this service in Connectivity to import supported Health data.', actionRequired: true, error: false };
+      return { ...baseView, statusLabel: 'Disconnected', tone: 'neutral' };
   }
+}
+
+function healthHistoryImportView(
+  state: HealthSyncState,
+  options: HealthHistoryImportViewOptions,
+  nowMs: number,
+): Pick<HealthSyncStateView,
+  'historyImportActionLabel' | 'historyImportStatusText' | 'historyImportBusy' | 'historyImportError'> {
+  const emptyView = {
+    historyImportActionLabel: null,
+    historyImportStatusText: null,
+    historyImportBusy: false,
+    historyImportError: null,
+  };
+  if (
+    !healthProviderSleepProvider(state.provider)
+    || state.status !== HEALTH_SYNC_STATUSES.Ready
+    || !options.sleepSyncStateResolved
+    || !options.hasProAccess
+  ) {
+    return emptyView;
+  }
+  if (options.busy) {
+    return {
+      ...emptyView,
+      historyImportActionLabel: 'Starting…',
+      historyImportStatusText: 'Starting history import',
+      historyImportBusy: true,
+    };
+  }
+
+  const syncState = options.sleepSyncState;
+  const healthStatus = syncState?.healthBackfillStatus || null;
+  if (syncState?.status === SLEEP_SYNC_STATUSES.PermissionMissing) {
+    return {
+      ...emptyView,
+      historyImportStatusText: 'History permission needed',
+      historyImportError: options.error,
+    };
+  }
+  if (healthStatus === 'queued' || healthStatus === 'running') {
+    return {
+      ...emptyView,
+      historyImportStatusText: healthStatus === 'queued' ? 'History queued' : 'History importing',
+    };
+  }
+
+  const hasBackfillAttempt = positiveTimestamp(syncState?.lastBackfillStartMs)
+    || positiveTimestamp(syncState?.lastBackfillEndMs)
+    || (syncState?.lastBackfillQueueItems !== null && syncState?.lastBackfillQueueItems !== undefined)
+    || healthStatus !== null;
+  const providerBackfillFailed = syncState?.status === SLEEP_SYNC_STATUSES.Failed
+    && syncState.lastBackfillQueuedAtMs === null
+    && hasBackfillAttempt;
+  const retryableFailure = healthStatus === 'failed'
+    || providerBackfillFailed
+    || options.error !== null;
+  if (syncState?.status === SLEEP_SYNC_STATUSES.Failed && !retryableFailure) {
+    return emptyView;
+  }
+  const hasBackfillHistory = positiveTimestamp(syncState?.lastBackfillQueuedAtMs)
+    || positiveTimestamp(syncState?.lastBackfillStartMs)
+    || positiveTimestamp(syncState?.lastBackfillEndMs)
+    || healthStatus === 'complete'
+    || healthStatus === 'skipped';
+  if (hasBackfillHistory && !retryableFailure) {
+    return emptyView;
+  }
+
+  const nextAllowedAtMs = Number(syncState?.nextBackfillAllowedAtMs);
+  if (Number.isFinite(nextAllowedAtMs) && nextAllowedAtMs > nowMs) {
+    return {
+      ...emptyView,
+      historyImportStatusText: `History available ${new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+      }).format(new Date(nextAllowedAtMs))}`,
+      historyImportError: options.error,
+    };
+  }
+  return {
+    ...emptyView,
+    historyImportActionLabel: retryableFailure ? 'Retry import' : 'Import history',
+    historyImportError: options.error,
+  };
+}
+
+function positiveTimestamp(value: unknown): boolean {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0;
+}
+
+function healthProviderSleepProvider(provider: HealthProvider): SleepProvider | null {
+  switch (provider) {
+    case HEALTH_PROVIDERS.GarminAPI: return SLEEP_PROVIDERS.GarminAPI;
+    case HEALTH_PROVIDERS.SuuntoApp: return SLEEP_PROVIDERS.SuuntoApp;
+    case HEALTH_PROVIDERS.COROSAPI: return SLEEP_PROVIDERS.COROSAPI;
+    case HEALTH_PROVIDERS.WahooAPI:
+    case HEALTH_PROVIDERS.QuantifiedSelf:
+      return null;
+  }
+}
+
+function healthSyncRecency(
+  lastUpdateAtMs: number | null,
+  nowMs: number,
+): Pick<HealthSyncStateView, 'statusLabel' | 'tone'> {
+  if (lastUpdateAtMs === null) {
+    return { statusLabel: 'Waiting', tone: 'neutral' };
+  }
+  const ageMs = Math.max(0, nowMs - lastUpdateAtMs);
+  if (ageMs <= HEALTH_SYNC_CURRENT_MAX_AGE_MS) {
+    return { statusLabel: 'Current', tone: 'current' };
+  }
+  if (ageMs <= HEALTH_SYNC_DELAYED_MAX_AGE_MS) {
+    return { statusLabel: 'Delayed', tone: 'delayed' };
+  }
+  return { statusLabel: 'Stale', tone: 'stale' };
 }
 
 function loadErrorStatus(error: unknown): HealthLoadStatus {

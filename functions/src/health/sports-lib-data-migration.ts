@@ -26,6 +26,8 @@ import {
 const LOG_PREFIX = '[sports-lib-health-sleep-migration]';
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 250;
+const DEFAULT_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 10;
 const SAFE_USER_ID_PATTERN = /^[^/]{1,128}$/;
 const HEALTH_FIELD_MASK = ['metrics'] as const;
 const SLEEP_FIELD_MASK = [
@@ -51,12 +53,14 @@ export interface SportsLibDataMigrationOptions {
     userID: string;
     kind: SportsLibDataMigrationKind;
     limit: number;
+    concurrency: number;
     startAfter?: string;
 }
 
 export interface SportsLibDataMigrationSummary {
     dryRun: boolean;
     kind: SportsLibDataMigrationKind;
+    concurrency: number;
     scanned: number;
     candidates: number;
     migrated: number;
@@ -109,7 +113,7 @@ function isSafeDocumentId(value: string): boolean {
 }
 
 export function parseSportsLibDataMigrationOptions(argv: readonly string[]): SportsLibDataMigrationOptions {
-    const knownValueArguments = new Set(['--uid', '--kind', '--limit', '--start-after']);
+    const knownValueArguments = new Set(['--uid', '--kind', '--limit', '--concurrency', '--start-after']);
     const knownBooleanArguments = new Set(['--execute']);
     const values = new Map<string, string>();
     const booleans = new Set<string>();
@@ -153,6 +157,11 @@ export function parseSportsLibDataMigrationOptions(argv: readonly string[]): Spo
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
         throw new Error(`--limit must be an integer from 1 to ${MAX_LIMIT}.`);
     }
+    const concurrencyValue = values.get('--concurrency');
+    const concurrency = concurrencyValue === undefined ? DEFAULT_CONCURRENCY : Number(concurrencyValue);
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > MAX_CONCURRENCY) {
+        throw new Error(`--concurrency must be an integer from 1 to ${MAX_CONCURRENCY}.`);
+    }
     const startAfter = values.get('--start-after');
     if (startAfter !== undefined && !isSafeDocumentId(startAfter)) {
         throw new Error('--start-after must be a safe document ID cursor.');
@@ -162,6 +171,7 @@ export function parseSportsLibDataMigrationOptions(argv: readonly string[]): Spo
         userID,
         kind: kindValue,
         limit,
+        concurrency,
         startAfter,
     };
 }
@@ -169,11 +179,14 @@ export function parseSportsLibDataMigrationOptions(argv: readonly string[]): Spo
 export function buildHealthSportsLibDataMigrationDecision(value: unknown): SportsLibDataMigrationDecision {
     const metrics = asRecord(value).metrics;
     if (!Array.isArray(metrics)
-        || metrics.length === 0
         || metrics.length > HEALTH_MAX_METRICS_PER_SOURCE_RECORD
         || metrics.some(metric => !metric || typeof metric !== 'object' || Array.isArray(metric))) {
         return { status: 'invalid' };
     }
+    // Series-only Health source records intentionally persist no scalar
+    // metrics. Their sample chunks contain no Sports Lib scalar envelope to
+    // migrate, so they are already unchanged rather than malformed.
+    if (metrics.length === 0) return { status: 'unchanged' };
     try {
         const decoded = metrics.map(metric => decodeHealthMetricSportsLibData(metric as HealthMetricEntry));
         const encoded = decoded.map(encodeHealthMetricSportsLibData);
@@ -281,6 +294,7 @@ export async function runSportsLibDataMigration(
     const summary: SportsLibDataMigrationSummary = {
         dryRun: !options.execute,
         kind: options.kind,
+        concurrency: options.concurrency,
         scanned: 0,
         candidates: 0,
         migrated: 0,
@@ -292,37 +306,87 @@ export async function runSportsLibDataMigration(
         nextStartAfter: hasMore && documents.length > 0 ? documents[documents.length - 1].id : null,
     };
 
-    for (let index = 0; index < documents.length; index += 1) {
-        const document = documents[index];
-        summary.scanned += 1;
-        try {
-            const initialDecision = migrationDecision(options.kind, document.data());
-            if (initialDecision.status === 'invalid') {
-                summary.skippedInvalid += 1;
-                continue;
-            }
-            if (initialDecision.status === 'unchanged') {
-                summary.unchanged += 1;
-                continue;
-            }
-            summary.candidates += 1;
-            if (!options.execute) continue;
+    let nextDocumentIndex = 0;
+    while (nextDocumentIndex < documents.length) {
+        const candidates: Array<{
+            document: admin.firestore.QueryDocumentSnapshot;
+            index: number;
+        }> = [];
+        let decisionFailureIndex: number | null = null;
 
-            const status = await migrateSportsLibDataDocument(db, options.userID, document.ref, options.kind);
-            if (status === 'migrated') summary.migrated += 1;
-            if (status === 'unchanged') summary.unchanged += 1;
-            if (status === 'invalid') summary.skippedInvalid += 1;
-            if (status === 'skipped_deleted_user') summary.skippedDeletedUser += 1;
-            if (status === 'skipped_missing') summary.skippedMissing += 1;
-        } catch {
-            summary.failed += 1;
-            // Stop at the first retryable failure and return the cursor before
-            // it. Advancing to the end of the page would permanently skip the
-            // failed document when the operator resumes with nextStartAfter.
-            summary.nextStartAfter = index > 0
-                ? documents[index - 1].id
+        while (nextDocumentIndex < documents.length && candidates.length < options.concurrency) {
+            const index = nextDocumentIndex;
+            const document = documents[index];
+            nextDocumentIndex += 1;
+            summary.scanned += 1;
+            try {
+                const initialDecision = migrationDecision(options.kind, document.data());
+                if (initialDecision.status === 'invalid') {
+                    summary.skippedInvalid += 1;
+                    continue;
+                }
+                if (initialDecision.status === 'unchanged') {
+                    summary.unchanged += 1;
+                    continue;
+                }
+                summary.candidates += 1;
+                candidates.push({ document, index });
+            } catch {
+                summary.failed += 1;
+                decisionFailureIndex = index;
+                break;
+            }
+        }
+
+        if (decisionFailureIndex !== null) {
+            const earliestUnexecutedIndex = candidates[0]?.index ?? decisionFailureIndex;
+            summary.nextStartAfter = earliestUnexecutedIndex > 0
+                ? documents[earliestUnexecutedIndex - 1].id
                 : options.startAfter ?? null;
-            logger.error(`${LOG_PREFIX} Failed to migrate one document.`, {
+            logger.error(`${LOG_PREFIX} Failed to inspect one document.`, {
+                kind: options.kind,
+                failure: 'sports_lib_data_migration_failed',
+            });
+            break;
+        }
+        if (!options.execute || candidates.length === 0) continue;
+
+        const outcomes = await Promise.all(candidates.map(async candidate => {
+            try {
+                const status = await migrateSportsLibDataDocument(
+                    db,
+                    options.userID,
+                    candidate.document.ref,
+                    options.kind,
+                );
+                return { ...candidate, status };
+            } catch {
+                return { ...candidate, status: null };
+            }
+        }));
+        let earliestFailureIndex: number | null = null;
+        for (const outcome of outcomes) {
+            if (outcome.status === null) {
+                summary.failed += 1;
+                earliestFailureIndex = earliestFailureIndex === null
+                    ? outcome.index
+                    : Math.min(earliestFailureIndex, outcome.index);
+                continue;
+            }
+            if (outcome.status === 'migrated') summary.migrated += 1;
+            if (outcome.status === 'unchanged') summary.unchanged += 1;
+            if (outcome.status === 'invalid') summary.skippedInvalid += 1;
+            if (outcome.status === 'skipped_deleted_user') summary.skippedDeletedUser += 1;
+            if (outcome.status === 'skipped_missing') summary.skippedMissing += 1;
+        }
+        if (earliestFailureIndex !== null) {
+            // A later transaction in this bounded batch may already have
+            // succeeded. Resume before the earliest failure so rerunning the
+            // page safely rechecks every possibly affected document.
+            summary.nextStartAfter = earliestFailureIndex > 0
+                ? documents[earliestFailureIndex - 1].id
+                : options.startAfter ?? null;
+            logger.error(`${LOG_PREFIX} Failed to migrate one or more documents.`, {
                 kind: options.kind,
                 failure: 'sports_lib_data_migration_failed',
             });

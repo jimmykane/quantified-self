@@ -1,0 +1,22 @@
+<div class="workout-preview__charts" role="img"
+  aria-label="Workout charts with zone-colored Heart Rate and Power, grade-colored Altitude, and an inverse Depth profile"
+  data-nosnippet>
+  <app-event-card-chart-panel [panel]="heartRatePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
+    [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
+    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="altitudePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
+    [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
+    [showSwimLengths]="false" [colorAltitudeByGrade]="true" [showGradeLegend]="false"
+    [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="powerPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
+    [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
+    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+  <app-event-card-chart-panel [panel]="depthPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
+    [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
+    [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
+    [showSwimLengths]="false" [fillOpacity]="1" [areaFillOrigin]="depthAreaFillOrigin"
+    [areaFillColor]="depthFillColor()" [previewMode]="true"></app-event-card-chart-panel>
+</div>

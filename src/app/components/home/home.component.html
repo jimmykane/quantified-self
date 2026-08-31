@@ -36,308 +36,131 @@
           <span data-nosnippet><mat-icon aria-hidden="true">check_circle</mat-icon></span>
           <span>Your Data Stays Yours</span>
         </div>
-        <div class="indicator">
-          <span data-nosnippet><mat-icon aria-hidden="true">verified_user</mat-icon></span>
-          <span>Export Anytime</span>
-        </div>
       </div>
     </div>
   </section>
 
   <!-- 2. Integration / Ecosystem Ticker -->
   <section class="integrations-section animate-on-scroll public-below-fold">
-    <p class="section-label">Seamless Integration With</p>
+    <h2 class="section-label">Bring It In. Keep It Moving.</h2>
+    <p class="integration-intro">
+      Connect your accounts or upload files yourself. Quantified Self brings your history together and moves supported
+      workouts and routes between Garmin, Suunto, COROS, and Wahoo.
+    </p>
     <div class="logos-container">
       <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
       <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
       <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
       <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo"></mat-icon>
-      <div class="divider"></div>
-      <div class="file-formats">
-        <span class="format">FIT</span>
-        <span class="format">TCX</span>
-        <span class="format">GPX</span>
-      </div>
     </div>
 
-    <div class="integration-followup-grid">
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container import">
-            <mat-icon>history</mat-icon>
-          </div>
-          <mat-card-title>Import History</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Import Garmin, Suunto, COROS, and FIT-backed Wahoo history into Quantified Self. Garmin supports its latest
-            rolling 5 years, while COROS history imports are limited to the last 3 months.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/integrations/wahoo">
-            Explore Wahoo
-          </a>
-        </mat-card-content>
-      </mat-card>
+    <div class="integration-followup-list">
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container import" data-nosnippet>
+          <mat-icon>history</mat-icon>
+        </div>
+        <h3>Sync Your History</h3>
+        <div class="integration-capability-copy">
+          <p>Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the
+            activity history already stored with each provider.</p>
+        </div>
+      </section>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container auto-sync">
-            <mat-icon>sync_alt</mat-icon>
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container service-sync" data-nosnippet>
+          <mat-icon>published_with_changes</mat-icon>
+        </div>
+        <h3>Move Workouts and Routes</h3>
+        <div class="integration-capability-copy integration-capability-copy--split">
+          <p>Choose automatic delivery between supported providers. You can also send past activities by date range
+            without enabling future sync.</p>
+          <div class="integration-capability-details">
+            <p><strong>Examples:</strong> Garmin → Suunto, Wahoo, or COROS · COROS → Suunto or Wahoo · Suunto → Wahoo or
+              COROS · Wahoo → Suunto or COROS.</p>
+            <p><strong>Routes:</strong> Import Suunto routes and send them to Garmin Connect, Wahoo, or COROS automatically
+              or on demand. Send saved FIT/GPX routes manually to any of the four providers.</p>
           </div>
-          <mat-card-title>Automatic Sync for All Services</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Connect Garmin, Suunto, COROS, and Wahoo once. New activities from connected services sync to Quantified Self
-            automatically.</p>
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </section>
 
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container service-sync">
-            <mat-icon>published_with_changes</mat-icon>
-          </div>
-          <mat-card-title>Automatic Sync Between Services</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Automatically send new Garmin, COROS, or Wahoo activities to Suunto, or send supported activities to Wahoo.
-            You can also choose a date range to sync activities already stored in Quantified Self.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/integrations">
-            Explore Integrations
-          </a>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container route-upload">
-            <mat-icon>route</mat-icon>
-          </div>
-          <mat-card-title>Manual Route Uploads</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Upload GPX routes directly to Suunto from the Services page to keep your route planning and device workflows
-            aligned.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container activity-upload">
-            <mat-icon>upload_file</mat-icon>
-          </div>
-          <mat-card-title>Manual Activity Uploads to Suunto</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Upload FIT activities to Suunto manually anytime from Services for one-off corrections, missing sessions, or
-            migration workflows.</p>
-        </mat-card-content>
-      </mat-card>
+      <section class="integration-capability animate-on-scroll">
+        <div class="feature-icon-container activity-upload" data-nosnippet>
+          <mat-icon>upload_file</mat-icon>
+        </div>
+        <h3>Upload Your Own Files</h3>
+        <div class="integration-capability-copy">
+          <p>Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities
+            directly to Suunto, COROS, or Wahoo for one-off transfers.</p>
+        </div>
+      </section>
     </div>
+
+    <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
+      Explore Integrations
+    </a>
   </section>
 
   <!-- 3. Key Features Grid -->
   <section class="features-section public-below-fold">
-    <h2 class="section-title animate-on-scroll">Engineered for Performance</h2>
+    <h2 class="section-title animate-on-scroll">Training Load, Readiness, and Recovery</h2>
     <p class="section-subtitle animate-on-scroll">
-      Reliable and instant analytics for training load, readiness, and execution. KPI and derived charts are built in for
-      decision-ready coaching context.
+      See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency—then explore the charts
+      behind every signal.
     </p>
 
-    <div class="features-grid">
-      <!-- Feature 1: KPI Lane -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>speed</mat-icon>
+    <mat-card class="training-preview-card glass-panel animate-on-scroll" appearance="outlined">
+      <div class="training-preview-content" data-nosnippet>
+        <header class="training-preview-header">
+          <div>
+            <h3>Your Training Snapshot</h3>
+            <p>Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy
+              used by Training.</p>
           </div>
-          <mat-card-title>KPI Lane for Fast Decisions</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Compact KPI rows keep key load and readiness indicators visible above your main dashboard grid.</p>
-          <div class="metric-chip-list" aria-label="KPI metrics">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current training state from Form, ramp, fitness, and fatigue."
-              matTooltipPosition="above">
-              Load Status
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Acute 7-day load versus chronic 28-day load to spot risk from sudden load spikes."
-              matTooltipPosition="above">
-              ACWR
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Change in fitness load over 7 days, calculated from CTL(today) minus CTL(7 days ago)."
-              matTooltipPosition="above">
-              Ramp Rate
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Monotony is weekly load mean divided by weekly load variability; strain combines load and monotony."
-              matTooltipPosition="above">
-              Monotony / Strain
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current readiness based on same-day TSB from your derived load model."
-              matTooltipPosition="above">
-              Form Now
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recent CTL direction from your derived Form model."
-              matTooltipPosition="above">
-              Fitness Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recent ATL direction from your derived Form model."
-              matTooltipPosition="above">
-              Fatigue Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Estimated zero-load days until your current Form returns to neutral."
-              matTooltipPosition="above">
-              Recovery Debt
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Projected readiness in 7 days assuming zero additional training load."
-              matTooltipPosition="above">
-              Form +7d
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current 42-day chronic training load from your derived Form model."
-              matTooltipPosition="above">
-              Fitness (CTL)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current 7-day acute training load from your derived Form model."
-              matTooltipPosition="above">
-              Fatigue (ATL)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Latest weekly Easy/Moderate/Hard intensity balance."
-              matTooltipPosition="above">
-              Training Balance
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Percentage of weekly training load that falls in easy intensity ranges."
-              matTooltipPosition="above">
-              Easy %
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Percentage of weekly training load that falls in hard intensity ranges."
-              matTooltipPosition="above">
-              Hard %
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Current efficiency against your previous 4-week baseline, shown as absolute and percent delta."
-              matTooltipPosition="above">
-              Efficiency Δ (4w)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
-        </mat-card-content>
-      </mat-card>
+          <a mat-stroked-button routerLink="/features/training-analysis">Explore Training</a>
+        </header>
 
-      <!-- Feature 2: Derived Curated Charts -->
+        <app-training-summary-cards
+          mode="preview"
+          [cards]="trainingPreviewCards"
+          ariaLabel="Current Training overview"
+        ></app-training-summary-cards>
+
+        <app-training-metric-grid
+          mode="preview-load"
+          [metrics]="trainingPreviewLoadMetrics"
+          ariaLabel="Training load metrics"
+        ></app-training-metric-grid>
+
+        <app-training-metric-grid
+          mode="preview-context"
+          [metrics]="trainingPreviewContextMetrics"
+          ariaLabel="Training context"
+        ></app-training-metric-grid>
+      </div>
+    </mat-card>
+
+    <div class="features-grid">
+      <!-- Feature 1: Derived Curated Charts -->
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>query_stats</mat-icon>
           </div>
-          <mat-card-title>Derived Curated Charts</mat-card-title>
+          <mat-card-title>Charts Behind Every Signal</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Use recovery, readiness, execution, and sleep views computed from your stored training history.</p>
-          <div class="metric-chip-list" aria-label="Derived curated charts">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Recovery left versus elapsed recovery."
-              matTooltipPosition="above">
-              Recovery
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Fitness, fatigue, and form trend from derived training stress."
-              matTooltipPosition="above">
-              Form (TSS)
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Forecasts the next 7 days of freshness and form from your latest derived state."
-              matTooltipPosition="above">
-              Freshness Forecast
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Weekly easy/moderate/hard intensity mix using power zones when available, otherwise heart-rate zones."
-              matTooltipPosition="above">
-              Intensity Distribution
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Weekly trend of duration-weighted average power-to-heart-rate efficiency."
-              matTooltipPosition="above">
-              Efficiency Trend
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Sleep duration, stages, and HRV by connected source."
-              matTooltipPosition="above">
-              Sleep
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
+          <p>See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and
+            sleep views available in Training.</p>
+          @defer (on viewport) {
+            <app-home-signal-charts-preview></app-home-signal-charts-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--signals" data-nosnippet>
+              <p class="home-preview-placeholder__summary">
+                Preview charts: Freshness Forecast, Intensity Distribution, Efficiency Trend, Cycling Power Curve,
+                and Form.
+              </p>
+            </div>
+          }
         </mat-card-content>
       </mat-card>
 
@@ -347,62 +170,18 @@
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>dashboard_customize</mat-icon>
           </div>
-          <mat-card-title>Dashboard Manager by Category</mat-card-title>
+          <mat-card-title>Build the Dashboard You Need</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Build manually or start from presets across Curated, KPI, Custom, and Map tiles. Tune tile filters, map style, and clustered heatmaps per tile.</p>
-          <div class="metric-chip-list" aria-label="Dashboard manager workflows and categories">
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Configure tile settings field by field."
-              matTooltipPosition="above">
-              Manual
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Apply quick-start dashboard tile templates."
-              matTooltipPosition="above">
-              Presets
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Fixed derived tiles such as Recovery, Form, Freshness, Intensity, Efficiency, and Sleep."
-              matTooltipPosition="above">
-              Curated
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Compact Today rows grouped as Load, Readiness, and Execution."
-              matTooltipPosition="above">
-              KPI
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Configurable charts with their own date range and activity filters."
-              matTooltipPosition="above">
-              Custom
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-            <span
-              class="metric-chip"
-              tabindex="0"
-              matTooltip="Map tile with its own date range, activity filters, map style, markers, and heatmap."
-              matTooltipPosition="above">
-              Map
-              <mat-icon class="metric-chip-info">info</mat-icon>
-            </span>
-          </div>
-          <a mat-stroked-button class="feature-link" routerLink="/features/activity-calendar">
-            Explore Activity Calendar
+          <p>Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters;
+            maps add style and marker-clustering controls.</p>
+          @defer (on viewport; prefetch on idle) {
+            <app-home-dashboard-preview></app-home-dashboard-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--dashboard" aria-hidden="true"></div>
+          }
+          <a mat-stroked-button class="feature-link" routerLink="/dashboard">
+            Open Your Dashboard
           </a>
         </mat-card-content>
       </mat-card>
@@ -413,47 +192,27 @@
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>layers</mat-icon>
           </div>
-          <mat-card-title>Deep Analysis Toolkit</mat-card-title>
+          <mat-card-title>Analyze Every Workout</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Explore 7 chart types, heatmaps, clustering, and route-level analysis with gradient and speed overlays across 12 map styles.</p>
+          <p>Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. View zones,
+            grade-colored elevation, and inverse depth; switch between distance, duration, or time where supported,
+            then select a range for stats or zoom in.</p>
+          @defer (on viewport; prefetch on idle) {
+            <app-home-workout-preview></app-home-workout-preview>
+          } @placeholder {
+            <div class="home-preview-placeholder home-preview-placeholder--workout" aria-hidden="true"></div>
+          }
         </mat-card-content>
       </mat-card>
 
-      <!-- Feature 5: Connected Training Data -->
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>insights</mat-icon>
-          </div>
-          <mat-card-title>Connected Training Data</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Import and sync across Garmin, Suunto, COROS, and Wahoo, then analyze your complete activity dataset from one dashboard.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
-        <mat-card-header>
-          <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>devices</mat-icon>
-          </div>
-          <mat-card-title>Read-only MCP Server</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>Authorize ChatGPT or another compatible MCP client to read only the metrics, body measurements, sleep, activity details and charts, route summaries, and separate location access you approve.</p>
-          <a mat-stroked-button class="feature-link" routerLink="/features/mcp-server">
-            Explore MCP Access
-          </a>
-        </mat-card-content>
-      </mat-card>
     </div>
   </section>
 
   <!-- 4. Assistant Launch Section -->
   <section class="features-section ai-insights-section public-below-fold">
     <div class="ai-insights-header animate-on-scroll">
-      <h2 class="section-title">Ask about your training. Get answers grounded in your data.</h2>
+      <h2 class="section-title">Ask About Your Training</h2>
       <p class="section-subtitle">
         Explore sleep, readiness, training, measurements, and recent activities in one conversation. The Assistant
         answers from your current data—not generic fitness advice.
@@ -512,14 +271,26 @@
     </div>
 
     <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
+
+    <mat-card class="mcp-access-row animate-on-scroll" appearance="outlined">
+      <div class="mcp-access-row__icon" data-nosnippet>
+        <mat-icon aria-hidden="true">devices</mat-icon>
+      </div>
+      <div class="mcp-access-row__copy">
+        <h3>Connect Other AI Tools</h3>
+        <p>Prefer ChatGPT or another compatible assistant? Grant access to the training, sleep, measurements, activity
+          charts, and routes you choose. Location access remains a separate permission.</p>
+      </div>
+      <a mat-stroked-button routerLink="/features/mcp-server">Explore MCP Access</a>
+    </mat-card>
   </section>
 
-  <!-- 5. See Your Footprint (MyTracks Highlight) -->
+  <!-- 5. Map Your Activities (MyTracks Highlight) -->
   <section class="footprint-section animate-on-scroll public-below-fold">
     <div class="footprint-content">
       <div class="footprint-text">
         <mat-icon class="footprint-icon">map</mat-icon>
-        <h2>See Your Footprint</h2>
+        <h2>Map Your Activities</h2>
         <p>
           Every run, ride, and hike — visualized on a single map.
           Explore your entire athletic history.
@@ -537,7 +308,7 @@
     <div class="content-wrapper">
       <div class="text-content">
         <mat-icon class="large-icon">security</mat-icon>
-        <h2>Your Data, Your Rules</h2>
+        <h2>Own Your Data</h2>
         <p>
           We believe athletes should own their performance data. Export your original files anytime.
           No hidden mining, no lock-in, just pure analytics.
@@ -552,7 +323,7 @@
   <!-- 7. Hardware Benchmark Section (Precise Analysis) -->
   <section class="analysis-section container public-below-fold">
     <div class="analysis-header animate-on-scroll">
-      <h2 class="section-title">Hardware-Grade Precision</h2>
+      <h2 class="section-title">Compare Your Devices</h2>
       <p class="section-subtitle">
         Merge same-session recordings, choose a reference device, and compare hardware across GNSS accuracy, sensor
         agreement, stat deltas, and data-quality artifacts.

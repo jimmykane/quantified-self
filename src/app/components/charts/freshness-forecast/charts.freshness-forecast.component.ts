@@ -58,6 +58,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   @Input() status?: DashboardDerivedMetricStatus | null;
   @Input() infoTooltip?: string | null;
   @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
+  @Input() showMobileAxisPointerHandle = true;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -91,7 +92,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status) {
+    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status || changes.showMobileAxisPointerHandle) {
       void this.refreshChart();
     }
   }
@@ -155,7 +156,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
-    const mobileAxisPointerHandle = isMobileTooltipViewport
+    const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
         show: true,
         size: 20,

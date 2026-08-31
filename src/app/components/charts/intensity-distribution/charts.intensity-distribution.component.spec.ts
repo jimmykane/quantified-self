@@ -121,6 +121,28 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(component.weekContextText.startsWith('Latest week')).toBe(true);
   });
 
+  it('uses a stable caller-provided context label when supplied', async () => {
+    component.weekContextTextOverride = 'Example training week';
+    component.distribution = {
+      latestWeekStartMs: Date.UTC(2026, 7, 31),
+      latestEasyPercent: 84,
+      latestModeratePercent: 14,
+      latestHardPercent: 2,
+      weeks: [{
+        weekStartMs: Date.UTC(2026, 7, 31),
+        easySeconds: 50400,
+        moderateSeconds: 8400,
+        hardSeconds: 1200,
+        source: 'power',
+      }],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.weekContextText).toBe('Example training week');
+  });
+
   it('shows pending no-data message when empty and stale', async () => {
     component.distribution = { latestWeekStartMs: null, latestEasyPercent: null, latestModeratePercent: null, latestHardPercent: null, weeks: [] };
     component.status = 'stale';

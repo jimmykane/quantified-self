@@ -43,25 +43,38 @@ import {
     ActivityIdentityLike,
     resolveActivityIdentityAssignments,
 } from '../shared/activity-identity-matcher';
+import { getActivityCreatorNameCarryover } from '../../../shared/activity-creator-name';
+import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 
-export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
 export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
 const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
+const REPARSE_PRESERVED_EVENT_FIELDS = [
+    'name',
+    'description',
+    'privacy',
+    'notes',
+    'rpe',
+    'feeling',
+] as const;
 export {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
     SPORTS_LIB_REPARSE_FAILURE_REASONS,
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+    SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
     SPORTS_LIB_REPARSE_HEAVY_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
     SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
     SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_REPARSE_RUNTIME_SETTINGS_FIELD,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
+    resolveSportsLibReparseRuntimeSettings,
+    validateSportsLibReparseTargetUid,
 } from './sports-lib-reparse.config';
 
 export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'superseded';
@@ -211,6 +224,7 @@ async function runReparseFirestoreTransactionWithRetry<T>(
 }
 
 export interface SportsLibReparseCheckpoint {
+    runtimeSettings?: unknown;
     cursorEventPath?: string | null;
     cursorProcessingDocPath?: string | null;
     cursorProcessingVersionCode?: number | null;
@@ -955,24 +969,35 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     ) {
         parsedAny.mergeType = existingAny.mergeType;
     }
-    if (Object.prototype.hasOwnProperty.call(existingAny, 'description')) {
-        parsedAny.description = existingAny.description;
-    }
-    if (Object.prototype.hasOwnProperty.call(existingAny, 'privacy')) {
-        parsedAny.privacy = existingAny.privacy;
-    }
-    if (Object.prototype.hasOwnProperty.call(existingAny, 'notes')) {
-        parsedAny.notes = existingAny.notes;
-    }
-    if (Object.prototype.hasOwnProperty.call(existingAny, 'rpe')) {
-        parsedAny.rpe = existingAny.rpe;
-    }
-    if (Object.prototype.hasOwnProperty.call(existingAny, 'feeling')) {
-        parsedAny.feeling = existingAny.feeling;
-    }
+    copyPreservedReparseEventFields(parsedAny, existingAny);
     if (Array.isArray(existingAny.tags) || Array.isArray(existingAny.benchmarkReviewTags)) {
         parsedAny.tags = getEventTags(existingAny);
     }
+}
+
+function copyPreservedReparseEventFields(
+    target: Record<string, unknown>,
+    source: Record<string, unknown>,
+): void {
+    REPARSE_PRESERVED_EVENT_FIELDS.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(source, field)) {
+            target[field] = source[field];
+        }
+    });
+}
+
+function preserveReparseEventEditsOnRewrite(
+    incomingData: admin.firestore.DocumentData,
+    existingData: admin.firestore.DocumentData | null,
+): admin.firestore.DocumentData {
+    const preservedData = preserveEventTagsOnRewrite(incomingData, existingData);
+    if (!existingData) {
+        return sanitizeEventFirestoreWritePayload(preservedData);
+    }
+
+    const finalData = { ...preservedData };
+    copyPreservedReparseEventFields(finalData, existingData);
+    return sanitizeEventFirestoreWritePayload(finalData);
 }
 
 export interface ActivityEditCarryoverResult {
@@ -1381,7 +1406,10 @@ export function resolveActivityEditCarryover(
             setActivitySourceActivityKey(activity, existingSourceActivityKey);
         }
 
-        const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
+        const existingCreatorName = getActivityCreatorNameCarryover(
+            existingActivity.creator?.name,
+            activity.creator?.name,
+        );
         if (!existingCreatorName) {
             return;
         }
@@ -1502,7 +1530,7 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
                 admin.firestore().doc(documentPath),
                 data,
                 undefined,
-                isEventDocument ? preserveEventTagsOnRewrite : undefined,
+                isEventDocument ? preserveReparseEventEditsOnRewrite : undefined,
             );
         },
         createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -1972,6 +2000,8 @@ export async function reparseEventFromOriginalFiles(
             });
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
+        // Event regeneration may hydrate source-level name/description values. User edits remain authoritative.
+        applyPreservedFields(reparsedEvent, autoHealResult.eventData);
         const transformDurationMs = Date.now() - transformStartedAtMs;
         logReparseStageCompleted(uid, eventId, stage, transformStartedAtMs, {
             mode,

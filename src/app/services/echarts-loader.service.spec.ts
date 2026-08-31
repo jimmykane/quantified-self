@@ -722,6 +722,22 @@ describe('EChartsLoaderService', () => {
     await expect(serverService.load()).rejects.toThrow('ECharts can only be initialized in the browser.');
   });
 
+  it('should skip chart initialization in non-browser platform', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        EChartsLoaderService,
+        { provide: PLATFORM_ID, useValue: 'server' },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      ],
+    });
+
+    const serverService = TestBed.inject(EChartsLoaderService);
+    const initialized = await serverService.init(document.createElement('div'));
+
+    expect(initialized).toBeNull();
+  });
+
   it('should no-op mobile tap feedback binding on server platform', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

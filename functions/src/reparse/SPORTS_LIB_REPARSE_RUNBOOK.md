@@ -7,6 +7,17 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### FIT creator device metadata correction
+
+When Quantified Self adopts the Sports Lib release that recovers a FIT activity creator from an explicitly local or
+creator `device_info` message, new imports persist that source-provided device identity. A targeted source-backed
+reparse also replaces legacy `Unknown` and `Unknown Device` creator placeholders when it recovers a meaningful new identity.
+Meaningful existing creator names continue to win so user device renames survive reparsing.
+
+Use the ordinary targeted reparse only for retained original FIT files whose persisted creator is a placeholder. Do not
+patch activity documents directly, and do not enable the automatic scanner or launch a global campaign solely for this
+correction. Files without suitable creator metadata remain unknown.
+
 ### Sports Lib 20.3.0 Health and sleep scalar JSON transition
 
 Sports Lib 20.3.0 adds the exported Health and Sleep scalar classes plus strict canonical `fromJSON()` support used by
@@ -164,8 +175,10 @@ Malformed processing metadata policy:
 - scheduler/script run continues
 
 ### UID override mode (safe testing)
-When `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist` is set, scheduler switches to per-user event scans:
+When the persisted runtime setting has a target Firebase UID, the scheduler switches to a per-user event scan:
 - query: `users/{uid}/events`
+- blank target UID means global discovery
+- the compile-time `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist` remains the fallback only when no persisted setting exists
 
 ### Missing processing docs
 Missing `metaData/processing` docs are not visible to the global processing query. Use the backfill script to create them before full rollout.
@@ -267,11 +280,16 @@ Notes:
 - Multiple source files are merged into one final parsed event
 
 Preserved user-editable fields:
+- `name`
 - `description`
 - `privacy`
 - `notes`
 - `rpe`
 - `feeling`
+
+The reparse reapplies these fields after Sports Lib regenerates event stats. Its final event write transaction also
+re-reads the current event document and keeps the latest values plus event tags, so a user edit made while parsing is
+in progress is not replaced by source metadata or an older reparse snapshot.
 
 Activity identity strategy:
 - regenerate activity IDs deterministically on every reparse (eventId + sourceActivityKey)
@@ -299,18 +317,28 @@ If fallback bucket is used successfully:
 Reparse candidate eligibility no longer depends on entitlement checks.
 All users with candidate events are eligible in scheduler, worker, and local script paths.
 
-## Runtime Controls (Code Constants)
-File:
-- `functions/src/reparse/sports-lib-reparse.config.ts`
+## Runtime Controls
+The Admin Event Reparse Queue page controls automatic event discovery. Settings are stored in the existing
+`systemJobs/sportsLibReparse` checkpoint document under `runtimeSettings`, independently of Firebase Remote Config.
 
-Constant:
-- `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`
+Persisted fields:
+- `enabled`: permits the scheduler to discover and enqueue new work
+- `targetUid`: one Firebase UID for a scoped scan, or `null` for a global scan
+- `updatedAt` and `updatedBy`: operator audit metadata
 
-Fields:
-- `enabled`
-- `scanLimit`
-- `enqueueLimit`
-- `uidAllowlist`
+Operational behavior:
+- disabling the scanner stops later scheduled discovery passes; it does not cancel jobs already in Cloud Tasks
+- enabling with a target UID uses the per-user event query and its per-user checkpoint cursor
+- enabling with no target UID uses global processing-metadata discovery
+- the admin callable requires an explicit global-scan confirmation flag when enabling with no target UID
+- malformed persisted settings fail closed and keep discovery disabled
+- the Admin page disables settings writes when the current checkpoint setting cannot be read
+- the target UID is validated against Firebase Authentication before a targeted scan can be enabled
+- malformed targeted or global checkpoint cursors are ignored and that scan restarts from the beginning
+
+Compile-time defaults remain in `functions/src/reparse/sports-lib-reparse.config.ts` under
+`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`. They supply `enabled`, `scanLimit`, `enqueueLimit`, and the legacy
+`uidAllowlist` only when the checkpoint has no persisted `runtimeSettings` value.
 
 ## Required Firestore Index
 Global processing-query discovery requires:

@@ -27,6 +27,8 @@ import { TrainingWorkspaceComponent } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
+import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
+import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -122,7 +124,13 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
-      imports: [MatMenuModule, MatTooltipModule, PageHeaderComponent],
+      imports: [
+        MatMenuModule,
+        MatTooltipModule,
+        PageHeaderComponent,
+        TrainingSummaryCardsComponent,
+        TrainingMetricGridComponent,
+      ],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -207,6 +215,8 @@ describe('TrainingWorkspaceComponent', () => {
       expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
     }
     expect(element.textContent).toContain('Compared with your usual 28 days');
+    expect(element.querySelector('app-training-summary-cards')).toBeTruthy();
+    expect(element.querySelector('app-training-metric-grid .training-load-metrics')).toBeTruthy();
     expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');

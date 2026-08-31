@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AdminQueueMonitorComponent } from './admin-queue-monitor.component';
@@ -129,6 +129,35 @@ describe('AdminQueueMonitorComponent', () => {
     it('should load queue stats on init', () => {
         expect(adminServiceSpy.getQueueStats).toHaveBeenCalledWith(true);
         expect(component.queueStats).toEqual(mockQueueStats);
+        expect(component.isLoadingStats).toBe(false);
+        expect(component.queueStatsLoadFailed).toBe(false);
+    });
+
+    it('marks a refresh failure without replacing last-known queue stats with zeroes', () => {
+        adminServiceSpy.getQueueStats.mockReturnValue(throwError(() => new Error('stats unavailable')));
+
+        component.fetchQueueStats();
+
+        expect(component.queueStats).toEqual(mockQueueStats);
+        expect(component.queueStatsLoadFailed).toBe(true);
+        expect(component.isLoadingStats).toBe(false);
+    });
+
+    it('ignores an older refresh failure after a newer refresh succeeds', () => {
+        const olderRequest = new Subject<typeof mockQueueStats>();
+        const newerRequest = new Subject<typeof mockQueueStats>();
+        adminServiceSpy.getQueueStats
+            .mockReturnValueOnce(olderRequest.asObservable())
+            .mockReturnValueOnce(newerRequest.asObservable());
+
+        component.fetchQueueStats();
+        component.fetchQueueStats();
+        newerRequest.next(mockQueueStats);
+        newerRequest.complete();
+        olderRequest.error(new Error('older request failed'));
+
+        expect(component.queueStats).toEqual(mockQueueStats);
+        expect(component.queueStatsLoadFailed).toBe(false);
         expect(component.isLoadingStats).toBe(false);
     });
 

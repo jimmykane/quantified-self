@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Clipboard } from '@angular/cdk/clipboard';
 import { UserSettingsComponent } from './user-settings.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -42,6 +43,8 @@ describe('UserSettingsComponent', () => {
     let fixture: ComponentFixture<UserSettingsComponent>;
     let mockActivatedRoute: any;
     let mockRouter: any;
+    let clipboardMock: { copy: ReturnType<typeof vi.fn> };
+    let snackBarMock: { open: ReturnType<typeof vi.fn> };
     let queryParamMapSubject: BehaviorSubject<any>;
     let hapticsServiceMock: any;
 
@@ -127,16 +130,19 @@ describe('UserSettingsComponent', () => {
             warning: vi.fn(),
             error: vi.fn(),
         };
+        clipboardMock = { copy: vi.fn(() => true) };
+        snackBarMock = { open: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
             imports: [ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
+                { provide: Clipboard, useValue: clipboardMock },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
                 { provide: Router, useValue: mockRouter },
-                { provide: MatSnackBar, useValue: { open: vi.fn() } },
+                { provide: MatSnackBar, useValue: snackBarMock },
                 { provide: AppWindowService, useValue: {} },
                 {
                     provide: MatDialog,
@@ -191,6 +197,17 @@ describe('UserSettingsComponent', () => {
 
         const emailLine = fixture.nativeElement.querySelector('.user-email');
         expect(emailLine).toBeNull();
+    });
+
+    it('copies the profile user ID to the clipboard', () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+
+        const copyButton = fixture.nativeElement.querySelector('button[aria-label="Copy user ID"]') as HTMLButtonElement;
+        copyButton.click();
+
+        expect(clipboardMock.copy).toHaveBeenCalledWith('test-uid');
+        expect(snackBarMock.open).toHaveBeenCalledWith('User ID copied.', undefined, { duration: 2000 });
     });
 
     it('shows the profile identity strip only while the profile section is active', () => {
