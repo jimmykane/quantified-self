@@ -136,11 +136,12 @@ describe('global Health and Sleep Sports Lib data migration', () => {
     });
 
     it('creates a stable opaque checkpoint that does not contain the user ID', () => {
-        const checkpoint = sportsLibDataGlobalCheckpoint('private-user-id');
+        const checkpoint = sportsLibDataGlobalCheckpoint('private-user-id', false);
         expect(checkpoint).toMatch(/^[a-f0-9]{64}$/);
-        expect(checkpoint).toBe(sportsLibDataGlobalCheckpoint('private-user-id'));
+        expect(checkpoint).toBe(sportsLibDataGlobalCheckpoint('private-user-id', false));
         expect(checkpoint).not.toContain('private-user-id');
-        expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('other-user-id'));
+        expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('other-user-id', false));
+        expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('private-user-id', true));
     });
 
     it('resolves an opaque checkpoint using field-masked user document names', async () => {
@@ -153,14 +154,30 @@ describe('global Health and Sleep Sports Lib data migration', () => {
 
         const result = await listUsersForGlobalMigration(
             db,
-            sportsLibDataGlobalCheckpoint('private-user-1'),
+            sportsLibDataGlobalCheckpoint('private-user-1', false),
             1,
+            false,
         );
 
         expect(result).toEqual({ userIDs: ['private-user-2'], hasMore: true });
         expect(lookup.select).toHaveBeenCalledWith();
         expect(page.startAfter).toHaveBeenCalledWith('private-user-1');
         expect(page.select).toHaveBeenCalledWith();
+    });
+
+    it('rejects a dry-run checkpoint when starting an execution cohort', async () => {
+        const lookup = fakeQuery(querySnapshot(['private-user-1']));
+        const db = {
+            collection: vi.fn(() => lookup),
+        } as unknown as admin.firestore.Firestore;
+
+        await expect(listUsersForGlobalMigration(
+            db,
+            sportsLibDataGlobalCheckpoint('private-user-1', false),
+            1,
+            true,
+        )).rejects.toThrow('checkpoint could not be resolved');
+        expect(lookup.select).toHaveBeenCalledWith();
     });
 
     it('runs a bounded dry-run cohort and exposes only an opaque user checkpoint', async () => {
@@ -184,11 +201,12 @@ describe('global Health and Sleep Sports Lib data migration', () => {
             usersProcessed: 2,
             usersMigrated: 0,
             hasMoreUsers: true,
-            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-2'),
+            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-2', false),
             health: { preflightCandidates: 2 },
             sleep: { preflightCandidates: 2 },
         });
         expect(runMigration).toHaveBeenCalledTimes(4);
+        expect(runMigration.mock.calls.every(([, options]) => options?.db === fakeDb)).toBe(true);
         expect(runMigration.mock.calls.flatMap(([argv]) => argv)).not.toContain('--execute');
         const publicOutput = JSON.stringify({ summary, logs: hoisted.loggerInfo.mock.calls });
         expect(publicOutput).not.toContain('private-user-1');
@@ -250,7 +268,7 @@ describe('global Health and Sleep Sports Lib data migration', () => {
             usersProcessed: 1,
             failedUsers: 1,
             hasMoreUsers: true,
-            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-1'),
+            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-1', false),
             health: { failed: 1 },
         });
         expect(JSON.stringify(runMigration.mock.calls)).not.toContain('private-user-3');
@@ -294,7 +312,7 @@ describe('global Health and Sleep Sports Lib data migration', () => {
             usersProcessed: 1,
             usersMigrated: 0,
             failedUsers: 1,
-            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-1'),
+            nextStartAfter: sportsLibDataGlobalCheckpoint('private-user-1', true),
             health: { migrated: 1, postcheckCandidates: 1 },
             sleep: { migrated: 0, postcheckCandidates: 0 },
         });

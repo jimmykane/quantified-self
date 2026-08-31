@@ -318,8 +318,10 @@ queue to settle during rollout rather than running overlapping pages for the sam
 
 After clean single-user pilots, use the global cohort runner instead of copying Firebase UIDs into repeated commands.
 It scans only top-level user document names, checks for Health or Sleep subcollections, and keeps users plus their Health
-and Sleep passes sequential. It never prints a raw UID. `nextStartAfter` is a domain-separated SHA-256 checkpoint; on
-resume, the runner resolves it by scanning field-masked user document names server-side:
+and Sleep passes sequential. It never prints a raw UID. `nextStartAfter` is a domain-separated SHA-256 checkpoint bound
+to either dry-run or execution mode; on resume, the runner resolves it by scanning field-masked user document names
+server-side. A dry-run checkpoint is deliberately rejected by `--execute`, so it cannot skip users that were inspected
+but not migrated:
 
 ```bash
 # Read-only five-user cohort.
@@ -328,7 +330,7 @@ npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --max-
 # Execute the same bounded cohort with five guarded document transactions at a time.
 npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 5 --document-concurrency 5
 
-# Resume after a clean cohort using only the opaque checkpoint from its summary.
+# Resume after a clean execution cohort using only its execution checkpoint.
 npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --max-users 25 --document-concurrency 5 --start-after <opaque-checkpoint>
 ```
 
@@ -338,8 +340,10 @@ or Sleep data. `--scan-limit` can be raised to 5,000 when sparse accounts requir
 before execution, guarded execution one collection at a time, and zero-candidate postchecks before the checkpoint can
 advance. Inactive/deleting users are skipped. Any invalid record, missing/deleting document, read/write failure,
 repeated document cursor, or nonzero postcheck stops the cohort and retains the checkpoint before that user. Rerun from
-the returned checkpoint after resolving the cause. Start with 5 users, review logs and the derived-metrics queues, then
-increase to 25 before processing the remainder.
+the returned checkpoint after resolving the cause. Checkpoint resolution completes before any migration writes; if the
+checkpoint user root was deleted between cohorts, restart without `--start-after` and let the idempotent postchecks
+advance through already-current users again. Start with 5 users, review logs and the derived-metrics queues, then increase
+to 25 before processing the remainder.
 
 ## Temporarily Disable A Provider
 

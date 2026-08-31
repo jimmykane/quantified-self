@@ -16,7 +16,7 @@ import {
 } from './sports-lib-data-migration';
 
 const LOG_PREFIX = '[sports-lib-health-sleep-global-migration]';
-const CHECKPOINT_DOMAIN = 'sports-lib-health-sleep-global-v1';
+const CHECKPOINT_DOMAIN = 'sports-lib-health-sleep-global-v2';
 const DEFAULT_MAX_USERS = 5;
 const MAX_MAX_USERS = 100;
 const DEFAULT_SCAN_LIMIT = 100;
@@ -124,6 +124,7 @@ export interface SportsLibDataGlobalMigrationDependencies {
         db: admin.firestore.Firestore,
         startAfter: string | undefined,
         scanLimit: number,
+        execute: boolean,
     ) => Promise<UserInventoryPage>;
     runMigration?: typeof runSportsLibDataMigration;
 }
@@ -205,15 +206,16 @@ export function parseSportsLibDataGlobalMigrationOptions(
     };
 }
 
-export function sportsLibDataGlobalCheckpoint(userID: string): string {
+export function sportsLibDataGlobalCheckpoint(userID: string, execute: boolean): string {
     return createHash('sha256')
-        .update(`${CHECKPOINT_DOMAIN}\0${userID}`, 'utf8')
+        .update(`${CHECKPOINT_DOMAIN}\0${execute ? 'execute' : 'dry-run'}\0${userID}`, 'utf8')
         .digest('hex');
 }
 
 async function resolveCheckpointUserID(
     db: admin.firestore.Firestore,
     checkpoint: string,
+    execute: boolean,
 ): Promise<string> {
     let lastUserID: string | undefined;
     while (true) {
@@ -223,7 +225,7 @@ async function resolveCheckpointUserID(
         if (lastUserID) query = query.startAfter(lastUserID);
         const snapshot = await query.select().get();
         const match = snapshot.docs.find(document => (
-            sportsLibDataGlobalCheckpoint(document.id) === checkpoint
+            sportsLibDataGlobalCheckpoint(document.id, execute) === checkpoint
         ));
         if (match) return match.id;
         if (snapshot.size < CHECKPOINT_LOOKUP_PAGE_SIZE) break;
@@ -236,9 +238,10 @@ export async function listUsersForGlobalMigration(
     db: admin.firestore.Firestore,
     startAfter: string | undefined,
     scanLimit: number,
+    execute: boolean,
 ): Promise<UserInventoryPage> {
     const startAfterUserID = startAfter
-        ? await resolveCheckpointUserID(db, startAfter)
+        ? await resolveCheckpointUserID(db, startAfter, execute)
         : undefined;
     let query = db.collection('users')
         .orderBy(FieldPath.documentId())
@@ -298,6 +301,7 @@ function passIsClean(totals: KindPassTotals): boolean {
 }
 
 async function runKindPass(
+    db: admin.firestore.Firestore,
     userID: string,
     kind: SportsLibDataMigrationKind,
     execute: boolean,
@@ -318,7 +322,7 @@ async function runKindPass(
         if (startAfter) argv.push('--start-after', startAfter);
         let summary: SportsLibDataMigrationSummary;
         try {
-            summary = await runMigration(argv);
+            summary = await runMigration(argv, { db });
         } catch {
             totals.failed += 1;
             return { clean: false, totals };
@@ -379,11 +383,13 @@ function collectUserKindResult(
 }
 
 async function migrateOneUser(
+    db: admin.firestore.Firestore,
     userID: string,
     options: SportsLibDataGlobalMigrationOptions,
     runMigration: typeof runSportsLibDataMigration,
 ): Promise<UserMigrationResult> {
     const healthPreflight = await runKindPass(
+        db,
         userID,
         SPORTS_LIB_DATA_MIGRATION_KINDS.Health,
         false,
@@ -392,6 +398,7 @@ async function migrateOneUser(
     );
     const sleepPreflight = healthPreflight.clean
         ? await runKindPass(
+            db,
             userID,
             SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
             false,
@@ -411,6 +418,7 @@ async function migrateOneUser(
 
     const healthExecution = healthPreflight.totals.candidates > 0
         ? await runKindPass(
+            db,
             userID,
             SPORTS_LIB_DATA_MIGRATION_KINDS.Health,
             true,
@@ -424,6 +432,7 @@ async function migrateOneUser(
         return result;
     }
     const healthPostcheck = await runKindPass(
+        db,
         userID,
         SPORTS_LIB_DATA_MIGRATION_KINDS.Health,
         false,
@@ -438,6 +447,7 @@ async function migrateOneUser(
 
     const sleepExecution = sleepPreflight.totals.candidates > 0
         ? await runKindPass(
+            db,
             userID,
             SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
             true,
@@ -451,6 +461,7 @@ async function migrateOneUser(
         return result;
     }
     const sleepPostcheck = await runKindPass(
+        db,
         userID,
         SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
         false,
@@ -493,7 +504,7 @@ export async function runSportsLibDataGlobalMigration(
     const hasUserData = dependencies.hasUserData || userDataPresence;
     const getDeletionGuard = dependencies.getDeletionGuard || getUserDeletionGuardState;
     const runMigration = dependencies.runMigration || runSportsLibDataMigration;
-    const inventory = await listUsers(db, options.startAfter, options.scanLimit);
+    const inventory = await listUsers(db, options.startAfter, options.scanLimit, options.execute);
     const summary: SportsLibDataGlobalMigrationSummary = {
         dryRun: !options.execute,
         maxUsers: options.maxUsers,
@@ -543,7 +554,7 @@ export async function runSportsLibDataGlobalMigration(
             continue;
         }
         summary.usersWithData += 1;
-        const userResult = await migrateOneUser(userID, options, runMigration);
+        const userResult = await migrateOneUser(db, userID, options, runMigration);
         collectUserKindResult(summary.health, userResult.health);
         collectUserKindResult(summary.sleep, userResult.sleep);
         if (!userResult.clean) {
@@ -564,7 +575,7 @@ export async function runSportsLibDataGlobalMigration(
         || inventory.hasMore;
     if (summary.hasMoreUsers) {
         summary.nextStartAfter = lastSafeUserID
-            ? sportsLibDataGlobalCheckpoint(lastSafeUserID)
+            ? sportsLibDataGlobalCheckpoint(lastSafeUserID, options.execute)
             : options.startAfter ?? null;
     }
     logger.info(`${LOG_PREFIX} ${options.execute ? 'Execution' : 'Dry run'} complete.`, {
