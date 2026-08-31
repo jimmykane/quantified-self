@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityTypeGroups, AppThemes } from '@sports-alliance/sports-lib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventCardChartPanelComponent } from '../event/chart/panel/event.card.chart.panel.component';
 import { AppShareService } from '../../services/app.share.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -64,6 +64,11 @@ describe('HomeWorkoutPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeWorkoutPreviewComponent);
   });
 
+  afterEach(() => {
+    fixture.destroy();
+    vi.useRealTimers();
+  });
+
   it('renders real workout chart panels directly in non-interactive preview mode', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(2));
@@ -112,6 +117,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(panels).toHaveLength(4);
     expect(options).toHaveLength(4);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
+    expect(panels.every(panel => panel.useAnimations)).toBe(true);
     expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
     expect(panels.every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
     expect(panels.every(panel => panel.gradeLegendItems.length === 0)).toBe(true);
@@ -190,5 +196,36 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(Math.max(...powerPoints.map(point => point.y))).toBe(298);
     expect(Math.max(...altitudePoints.map(point => point.y))).toBe(597);
     expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);
+  });
+
+  it('animates the production selection and synchronized zoom inputs once', async () => {
+    vi.useFakeTimers();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await vi.advanceTimersByTimeAsync(900);
+    fixture.detectChanges();
+
+    expect(component.previewRange()).toEqual({ start: 1_040, end: 2_260 });
+    expect(component.sharedZoomRange()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1_200);
+    fixture.detectChanges();
+
+    const activeZoomRange = component.sharedZoomRange();
+    expect(component.previewRange()).toBeNull();
+    expect(activeZoomRange?.start).toBeGreaterThan(0);
+    expect(activeZoomRange?.end).toBeLessThan(component.xDomain.end);
+
+    const panels = fixture.debugElement
+      .queryAll(By.directive(EventCardChartPanelComponent))
+      .map(debugElement => debugElement.componentInstance as EventCardChartPanelComponent);
+    expect(panels.every(panel => panel.sharedZoomRange?.start === activeZoomRange?.start)).toBe(true);
+    expect(panels.every(panel => panel.sharedZoomRange?.end === activeZoomRange?.end)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2_700);
+    fixture.detectChanges();
+
+    expect(component.sharedZoomRange()).toBeNull();
   });
 });

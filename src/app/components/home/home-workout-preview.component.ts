@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  PLATFORM_ID,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import {
   ActivityTypeGroups,
   AppThemes,
@@ -13,6 +23,7 @@ import type {
   EventChartPanelModel,
   EventChartZoneColorPiece,
 } from '../../helpers/event-echarts-data.helper';
+import type { EventChartRange } from '../../helpers/event-chart-range.helper';
 import { SharedModule } from '../../modules/shared.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
@@ -20,6 +31,12 @@ import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
 
 const PREVIEW_DURATION_SECONDS = 3_258;
+const PREVIEW_ZOOM_RANGE: EventChartRange = { start: 1_040, end: 2_260 };
+const PREVIEW_SELECTION_DELAY_MS = 900;
+const PREVIEW_SELECTION_DURATION_MS = 850;
+const PREVIEW_ZOOM_DURATION_MS = 720;
+const PREVIEW_ZOOM_HOLD_MS = 1_000;
+const PREVIEW_ZOOM_STEPS = 8;
 const DIVE_PROFILE_COLORS = AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup];
 const INTENSITY_ZONE_COLORS = [
   AppColors.LightBlue,
@@ -134,13 +151,19 @@ function buildPanel(
   standalone: true,
   imports: [SharedModule],
 })
-export class HomeWorkoutPreviewComponent {
+export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
+  private readonly animationTimers: Array<ReturnType<typeof setTimeout>> = [];
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  readonly animationsEnabled = isPlatformBrowser(this.platformId)
+    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   readonly xAxisType = XAxisTypes.Duration;
   readonly cursorBehaviour = ChartCursorBehaviours.ZoomX;
   readonly xDomain = { start: 0, end: PREVIEW_DURATION_SECONDS };
+  readonly previewRange = signal<EventChartRange | null>(null);
+  readonly sharedZoomRange = signal<EventChartRange | null>(null);
   readonly depthAreaFillOrigin = 'start' as const;
   readonly depthFillColor = computed(() => (
     this.darkTheme() ? DIVE_PROFILE_COLORS.start : DIVE_PROFILE_COLORS.end
@@ -180,4 +203,70 @@ export class HomeWorkoutPreviewComponent {
     AppDataColors.Depth,
     [0.5, 1.5, 4, 8, 13, 18, 21, 20, 16, 10, 4, 0.5],
   );
+
+  ngOnInit(): void {
+    if (!this.animationsEnabled) {
+      return;
+    }
+
+    this.scheduleAnimationStep(PREVIEW_SELECTION_DELAY_MS, () => {
+      this.previewRange.set(PREVIEW_ZOOM_RANGE);
+    });
+
+    this.scheduleAnimationStep(
+      PREVIEW_SELECTION_DELAY_MS + PREVIEW_SELECTION_DURATION_MS,
+      () => {
+        this.previewRange.set(null);
+        this.animateZoomRange(null, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_DURATION_MS);
+      },
+    );
+
+    this.scheduleAnimationStep(
+      PREVIEW_SELECTION_DELAY_MS
+        + PREVIEW_SELECTION_DURATION_MS
+        + PREVIEW_ZOOM_DURATION_MS
+        + PREVIEW_ZOOM_HOLD_MS,
+      () => {
+        this.animateZoomRange(PREVIEW_ZOOM_RANGE, null, PREVIEW_ZOOM_DURATION_MS);
+      },
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.animationTimers.forEach(timer => clearTimeout(timer));
+    this.animationTimers.length = 0;
+  }
+
+  private animateZoomRange(
+    from: EventChartRange | null,
+    to: EventChartRange | null,
+    durationMs: number,
+  ): void {
+    const fromRange = from || this.xDomain;
+    const toRange = to || this.xDomain;
+
+    for (let step = 1; step <= PREVIEW_ZOOM_STEPS; step += 1) {
+      this.scheduleAnimationStep((durationMs / PREVIEW_ZOOM_STEPS) * step, () => {
+        if (step === PREVIEW_ZOOM_STEPS) {
+          this.sharedZoomRange.set(to);
+          return;
+        }
+
+        const progress = step / PREVIEW_ZOOM_STEPS;
+        const easedProgress = 1 - ((1 - progress) ** 3);
+        this.sharedZoomRange.set({
+          start: this.interpolateRangeValue(fromRange.start, toRange.start, easedProgress),
+          end: this.interpolateRangeValue(fromRange.end, toRange.end, easedProgress),
+        });
+      });
+    }
+  }
+
+  private interpolateRangeValue(start: number, end: number, progress: number): number {
+    return Math.round(start + ((end - start) * progress));
+  }
+
+  private scheduleAnimationStep(delayMs: number, callback: () => void): void {
+    this.animationTimers.push(setTimeout(callback, delayMs));
+  }
 }
