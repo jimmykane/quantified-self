@@ -47,6 +47,9 @@ import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-ti
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
+import { HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS } from '@shared/health-workspace-rollout';
+
+const HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID = HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS[0];
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
@@ -458,6 +461,10 @@ describe('SummariesComponent', () => {
   });
 
   it('exposes compact Training and Health actions without a duplicate Calendar action', () => {
+    component.user = {
+      uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
     component.showActions = true;
 
     fixture.detectChanges();
@@ -476,6 +483,19 @@ describe('SummariesComponent', () => {
     expect(template).toContain('<a mat-button class="dashboard-health-link"');
     expect(template).not.toContain('<a mat-stroked-button class="dashboard-training-link"');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
+  });
+
+  it('hides the Health action from dashboard users outside the staged rollout', () => {
+    component.user = {
+      uid: 'another-user',
+      settings: { dashboardSettings: { tiles: [] } },
+    } as any;
+    component.showActions = true;
+
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).not.toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-health-link')).toBeNull();
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {

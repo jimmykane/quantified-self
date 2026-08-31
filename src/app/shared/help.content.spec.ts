@@ -82,13 +82,10 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
     expect(healthSection?.content).toContain('Connectivity');
+    expect(healthSection?.content).toContain('**Health (Beta)**');
+    expect(healthSection?.content).toContain('Eligible beta accounts');
     expect(healthSection?.content).not.toContain('URL retains the metric');
-    expect(healthSection?.links).toContainEqual({
-      label: 'Open Health',
-      icon: 'cardiology',
-      kind: 'route',
-      target: '/health',
-    });
+    expect(HELP_SECTIONS.flatMap(section => section.links).some(link => link.target === '/health')).toBe(false);
   });
 
   it('should explain automatic retry for incomplete Suunto activity files', () => {

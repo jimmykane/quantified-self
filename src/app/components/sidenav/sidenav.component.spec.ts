@@ -288,6 +288,8 @@ describe('SideNavComponent', () => {
 
         expect(healthItem).toBeTruthy();
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
+        expect(healthItem?.nativeElement.textContent).toContain('BETA');
+        expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeTruthy();
         expect(navigationItems.indexOf(healthItem!)).toBe(navigationItems.indexOf(dashboardItem!) + 1);
     });
 
@@ -371,10 +373,8 @@ describe('SideNavComponent', () => {
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('BETA');
         expect(assistantItem?.nativeElement.getAttribute('aria-label')).toBeNull();
-
-        const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
-        expect(template).not.toMatch(/beta/i);
     });
 
     it('should link My Tracks directly for logged-in free users', () => {
