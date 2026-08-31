@@ -43,6 +43,7 @@ import {
     ActivityIdentityLike,
     resolveActivityIdentityAssignments,
 } from '../shared/activity-identity-matcher';
+import { getPreservableActivityCreatorName } from '../../../shared/activity-creator-name';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
@@ -1381,7 +1382,7 @@ export function resolveActivityEditCarryover(
             setActivitySourceActivityKey(activity, existingSourceActivityKey);
         }
 
-        const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
+        const existingCreatorName = getPreservableActivityCreatorName(existingActivity.creator?.name);
         if (!existingCreatorName) {
             return;
         }

@@ -988,6 +988,35 @@ describe('sports-lib-reparse.service', () => {
         expect(activityTwo.creator.name).toBe('old2');
     });
 
+    it.each(['Unknown', 'Unknown Device', ' UNKNOWN   DEVICE '])(
+        'resolveActivityEditCarryover should replace parser placeholder creator %j',
+        (existingCreatorName) => {
+            const parsedActivity = {
+                creator: { name: 'Garmin Edge 1030 Plus' },
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Ride',
+                getStat: vi.fn(() => null),
+            };
+            const parsedEvent = {
+                getActivities: () => [parsedActivity],
+            } as any;
+
+            const result = resolveActivityEditCarryover(parsedEvent, [{
+                id: 'a1',
+                data: () => ({
+                    creator: { name: existingCreatorName },
+                    startDate: new Date('2026-01-01T10:00:00.000Z'),
+                    endDate: new Date('2026-01-01T10:30:00.000Z'),
+                    type: 'Ride',
+                }),
+            } as any]);
+
+            expect(result.assignments.size).toBe(1);
+            expect(parsedActivity.creator.name).toBe('Garmin Edge 1030 Plus');
+        },
+    );
+
     it('resolveActivityEditCarryover should leave creator unchanged on ambiguous matches', () => {
         const sharedStart = new Date('2026-01-01T10:00:00.000Z');
         const activityOne = { creator: { name: 'keep-me' }, startDate: sharedStart, type: 'Run', getStat: vi.fn(() => null) };

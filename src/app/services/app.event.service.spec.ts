@@ -1908,6 +1908,35 @@ describe('AppEventService', () => {
             expect(parsedActivity.creator.name).toBe('Renamed Device');
         });
 
+        it('should replace an existing Unknown creator during client-side parsing', async () => {
+            const activityId = 'act1';
+            const existingActivity = {
+                getID: vi.fn().mockReturnValue(activityId),
+                creator: { name: 'Unknown' },
+            } as any;
+            const mockEvent = {
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
+                originalFile: { path: 'path/to/file.fit' },
+                getID: vi.fn().mockReturnValue('event1')
+            } as any;
+            const parsedActivity = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+                creator: { name: 'Garmin Edge 1030 Plus' },
+            } as any;
+            const parsedEvent = {
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity.setID).toHaveBeenCalledWith(activityId);
+            expect(parsedActivity.creator.name).toBe('Garmin Edge 1030 Plus');
+        });
+
         it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {
             // Firestore activities
             const mockActivity1 = { getID: () => 'act1' } as any;

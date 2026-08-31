@@ -7,6 +7,17 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### FIT creator device metadata correction
+
+When Quantified Self adopts the Sports Lib release that recovers a FIT activity creator from an explicitly local or
+creator `device_info` message, new imports persist that source-provided device identity. A targeted source-backed
+reparse also replaces legacy `Unknown` and `Unknown Device` creator placeholders with the newly parsed identity.
+Meaningful existing creator names continue to win so user device renames survive reparsing.
+
+Use the ordinary targeted reparse only for retained original FIT files whose persisted creator is a placeholder. Do not
+patch activity documents directly, and do not enable the automatic scanner or launch a global campaign solely for this
+correction. Files without suitable creator metadata remain unknown.
+
 ### Sports Lib 20.3.0 Health and sleep scalar JSON transition
 
 Sports Lib 20.3.0 adds the exported Health and Sleep scalar classes plus strict canonical `fromJSON()` support used by

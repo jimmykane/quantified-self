@@ -122,6 +122,30 @@ describe('AppOriginalFileHydrationService', () => {
     expect(parsedActivity.creator.name).toBe('User renamed device');
   });
 
+  it('should let newly parsed device metadata replace an existing Unknown placeholder', async () => {
+    const parsedActivity = {
+      setID: vi.fn(),
+      creator: { name: 'Garmin Edge 1030 Plus' },
+    };
+    const existingActivity = {
+      getID: () => 'existing-activity-id',
+      creator: { name: 'Unknown' },
+    };
+    const event = {
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingActivity],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedActivity],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedActivity.setID).toHaveBeenCalledWith('existing-activity-id');
+    expect(parsedActivity.creator.name).toBe('Garmin Edge 1030 Plus');
+  });
+
   it('should preserve identity by deterministic signatures when parsed activity order changes', async () => {
     const firstStart = new Date('2026-01-01T10:00:00.000Z');
     const secondStart = new Date('2026-01-01T12:30:00.000Z');
