@@ -2,6 +2,7 @@
   class="training-status-grid training-summary-grid"
   [class.training-preview-overview]="mode() === 'preview'"
   [class.training-summary-grid--preview]="mode() === 'preview'"
+  role="group"
   [attr.aria-label]="ariaLabel()"
 >
   @for (card of presentedCards(); track card.id) {

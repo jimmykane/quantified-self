@@ -34,6 +34,9 @@ describe('TrainingSummaryCardsComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
+    const summaryGroup = element.querySelector('.training-summary-grid');
+    expect(summaryGroup?.getAttribute('role')).toBe('group');
+    expect(summaryGroup?.getAttribute('aria-label')).toBe('Current Training overview');
     expect(element.querySelector('.training-state-panel')).toBeTruthy();
     expect(element.querySelectorAll('.qs-glass-card-panel')).toHaveLength(2);
     expect(element.querySelectorAll('app-metric-indicator')).toHaveLength(1);
