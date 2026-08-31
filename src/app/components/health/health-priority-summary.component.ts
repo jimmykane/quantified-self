@@ -20,6 +20,7 @@ export interface HealthPriorityCardView {
   icon: string;
   metric: HealthWorkspaceMetricSelection;
   rows: HealthPriorityRowView[];
+  available: boolean;
   loading: boolean;
   error: boolean;
   emptyText: string;

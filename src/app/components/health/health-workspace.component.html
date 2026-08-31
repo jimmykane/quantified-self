@@ -28,40 +28,48 @@
     <div class="health-section-heading health-explorer-heading">
       <div>
         <p class="health-eyebrow">Metric explorer</p>
-        <h2 id="health-explorer-title">Complete Health catalog</h2>
+        <h2 id="health-explorer-title">Your Health metrics</h2>
       </div>
-      <p>Choose a metric, range, and optional source filter.</p>
+      <p>Choose a metric found in your imported history.</p>
     </div>
 
     <div class="health-mobile-metric-selector">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Health metric</mat-label>
-        <mat-select [value]="routeState().metric" (selectionChange)="selectMetric($event.value)">
-          <mat-option value="sleep">Sleep overview</mat-option>
-          @for (group of metricCatalogGroups; track group.id) {
-            <mat-optgroup [label]="group.label">
-              @for (metric of group.metrics; track metric.id) {
-                <mat-option [value]="metric.id">{{ metric.label }}</mat-option>
-              }
-            </mat-optgroup>
-          }
-        </mat-select>
-      </mat-form-field>
+      @if (hasAvailableMetricSelections()) {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Health metric</mat-label>
+          <mat-select [value]="routeState().metric" (selectionChange)="selectMetric($event.value)">
+            @if (showSleepMetric()) {
+              <mat-option value="sleep">Sleep overview</mat-option>
+            }
+            @for (group of metricCatalogGroups(); track group.id) {
+              <mat-optgroup [label]="group.label">
+                @for (metric of group.metrics; track metric.id) {
+                  <mat-option [value]="metric.id">{{ metric.label }}</mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+        </mat-form-field>
+      } @else {
+        <p class="health-metric-empty" role="status">No imported Health metrics yet.</p>
+      }
     </div>
 
     <div class="health-explorer-layout">
       <nav class="health-metric-list" aria-label="Health metrics">
-        <button
-          mat-button
-          type="button"
-          class="health-metric-option health-metric-option-sleep"
-          [class.health-metric-option-selected]="routeState().metric === 'sleep'"
-          [attr.aria-pressed]="routeState().metric === 'sleep'"
-          (click)="selectMetric('sleep')">
-          <mat-icon aria-hidden="true">bedtime</mat-icon>
-          <span>Sleep overview</span>
-        </button>
-        @for (group of metricCatalogGroups; track group.id) {
+        @if (showSleepMetric()) {
+          <button
+            mat-button
+            type="button"
+            class="health-metric-option health-metric-option-sleep"
+            [class.health-metric-option-selected]="routeState().metric === 'sleep'"
+            [attr.aria-pressed]="routeState().metric === 'sleep'"
+            (click)="selectMetric('sleep')">
+            <mat-icon aria-hidden="true">bedtime</mat-icon>
+            <span>Sleep overview</span>
+          </button>
+        }
+        @for (group of metricCatalogGroups(); track group.id) {
           <section class="health-metric-group" [attr.aria-labelledby]="'health-metric-group-' + group.id">
             <h3 [id]="'health-metric-group-' + group.id">{{ group.label }}</h3>
             @for (metric of group.metrics; track metric.id) {
@@ -76,6 +84,9 @@
               </button>
             }
           </section>
+        }
+        @if (!hasAvailableMetricSelections()) {
+          <p class="health-metric-empty" role="status">No imported Health metrics yet.</p>
         }
       </nav>
 

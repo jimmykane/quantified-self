@@ -26,6 +26,7 @@
             class="health-priority-open-button"
             [attr.aria-label]="'Open ' + card.label"
             [attr.aria-pressed]="selectedMetric() === card.metric"
+            [disabled]="!card.available"
             (click)="metricSelected.emit(card.metric)">
             <span>Open</span>
             <mat-icon aria-hidden="true">arrow_forward</mat-icon>

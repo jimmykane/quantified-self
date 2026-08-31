@@ -141,6 +141,7 @@ export class HealthWorkspaceComponent {
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
+  private metricAvailabilityGeneration = 0;
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
   private rangePreferenceUserID: string | null = null;
@@ -150,7 +151,7 @@ export class HealthWorkspaceComponent {
   private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({ range, label: RANGE_LABELS[range] }));
-  readonly metricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
+  private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
   readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
   readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
   readonly selectedEndDate = signal(this.todayDate);
@@ -176,7 +177,28 @@ export class HealthWorkspaceComponent {
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly selectedProviders = signal<HealthProvider[]>([]);
   readonly refreshRevision = signal(0);
+  readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
+  readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
+  readonly hasAnySleepSession = signal<boolean | null>(null);
+  readonly sleepMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+
+  readonly availabilityFilteringActive = computed(() =>
+    this.healthMetricAvailabilityStatus() === 'ready'
+    && this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly metricCatalogGroups = computed<readonly HealthMetricCatalogGroup[]>(() => {
+    if (!this.availabilityFilteringActive()) {
+      return this.completeMetricCatalogGroups;
+    }
+    return buildHealthMetricCatalogGroups(this.availableHealthMetricIds() || []);
+  });
+  readonly showSleepMetric = computed(() =>
+    !this.availabilityFilteringActive() || this.hasAnySleepSession() === true);
+  readonly availableMetricSelections = computed<readonly HealthWorkspaceMetricSelection[]>(() => [
+    ...(this.showSleepMetric() ? ['sleep' as const] : []),
+    ...this.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)),
+  ]);
+  readonly hasAvailableMetricSelections = computed(() => this.availableMetricSelections().length > 0);
 
   readonly selectedMetricDefinition = computed(() => {
     const metric = this.routeState().metric;
@@ -286,35 +308,42 @@ export class HealthWorkspaceComponent {
       ? `Showing the newest ${view.rows.length.toLocaleString()} of ${view.totalRowCount.toLocaleString()} source observations.`
       : null;
   });
-  readonly priorityCards = computed<HealthPriorityCardView[]>(() => [
-    priorityCard(
-      'sleep',
-      'Sleep',
-      'bedtime',
-      'sleep',
-      buildSleepPriorityRows(this.prioritySleepSessions()),
-      this.prioritySleepStatus(),
-      'No Sleep sessions in the last 30 days.',
-    ),
-    priorityCard(
-      'heart_rate',
-      'Heart rate',
-      'favorite',
-      HEALTH_METRIC_IDS.HeartRate,
-      buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
-      this.priorityHeartRateStatus(),
-      'No Heart rate summaries in the last 30 days.',
-    ),
-    priorityCard(
-      'heart_rate_variability',
-      'HRV',
-      'ecg_heart',
-      HEALTH_METRIC_IDS.HeartRateVariability,
-      buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
-      this.priorityHrvStatus(),
-      'No HRV summaries in the last 30 days.',
-    ),
-  ]);
+  readonly priorityCards = computed<HealthPriorityCardView[]>(() => {
+    const availabilityIsKnown = this.availabilityFilteringActive();
+    const available = new Set(this.availableMetricSelections());
+    return [
+      priorityCard(
+        'sleep',
+        'Sleep',
+        'bedtime',
+        'sleep',
+        buildSleepPriorityRows(this.prioritySleepSessions()),
+        this.prioritySleepStatus(),
+        'No Sleep sessions in the last 30 days.',
+        !availabilityIsKnown || available.has('sleep'),
+      ),
+      priorityCard(
+        'heart_rate',
+        'Heart rate',
+        'favorite',
+        HEALTH_METRIC_IDS.HeartRate,
+        buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
+        this.priorityHeartRateStatus(),
+        'No Heart rate summaries in the last 30 days.',
+        !availabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
+      ),
+      priorityCard(
+        'heart_rate_variability',
+        'HRV',
+        'ecg_heart',
+        HEALTH_METRIC_IDS.HeartRateVariability,
+        buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
+        this.priorityHrvStatus(),
+        'No HRV summaries in the last 30 days.',
+        !availabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
+      ),
+    ];
+  });
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => syncStateView(state))
     .sort((left, right) => left.label.localeCompare(right.label)));
@@ -341,6 +370,70 @@ export class HealthWorkspaceComponent {
       this.selectedMetric.set(HEALTH_METRIC_IDS.RestingHeartRate);
       this.selectedEndDate.set(this.todayDate);
       this.selectedRange.set(savedRange);
+    });
+
+    effect(onCleanup => {
+      const uid = this.userService.user()?.uid || null;
+      let subscription: Subscription | null = null;
+      this.hasAnySleepSession.set(null);
+      this.sleepMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
+      if (uid) {
+        subscription = this.sleepService.watchHasAnySleepSession(uid).subscribe({
+          next: hasSession => {
+            this.hasAnySleepSession.set(hasSession);
+            this.sleepMetricAvailabilityStatus.set('ready');
+          },
+          error: error => {
+            this.hasAnySleepSession.set(null);
+            this.sleepMetricAvailabilityStatus.set(loadErrorStatus(error));
+          },
+        });
+      }
+      onCleanup(() => subscription?.unsubscribe());
+    });
+
+    effect(() => {
+      const uid = this.userService.user()?.uid || null;
+      this.refreshRevision();
+      const generation = ++this.metricAvailabilityGeneration;
+      this.availableHealthMetricIds.set(uid ? null : []);
+      this.healthMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
+      if (!uid) {
+        return;
+      }
+      void this.healthService.loadAvailableMetricIds(uid).then(metricIds => {
+        if (generation !== this.metricAvailabilityGeneration) {
+          return;
+        }
+        this.availableHealthMetricIds.set(metricIds);
+        this.healthMetricAvailabilityStatus.set('ready');
+      }).catch(error => {
+        if (generation !== this.metricAvailabilityGeneration) {
+          return;
+        }
+        this.availableHealthMetricIds.set(null);
+        this.healthMetricAvailabilityStatus.set(loadErrorStatus(error));
+      });
+    });
+
+    effect(() => {
+      if (!this.availabilityFilteringActive()) {
+        return;
+      }
+      const selections = this.availableMetricSelections();
+      if (selections.includes(this.selectedMetric())) {
+        return;
+      }
+      const priorityFallbacks: readonly HealthWorkspaceMetricSelection[] = [
+        'sleep',
+        HEALTH_METRIC_IDS.HeartRate,
+        HEALTH_METRIC_IDS.HeartRateVariability,
+        HEALTH_METRIC_IDS.RestingHeartRate,
+      ];
+      const fallback = priorityFallbacks.find(metric => selections.includes(metric)) || selections[0];
+      if (fallback) {
+        this.selectedMetric.set(fallback);
+      }
     });
 
     effect(onCleanup => {
@@ -624,6 +717,7 @@ function priorityCard(
   rows: readonly HealthPriorityRow[],
   status: HealthLoadStatus,
   emptyText: string,
+  available: boolean,
 ): HealthPriorityCardView {
   return {
     id,
@@ -631,6 +725,7 @@ function priorityCard(
     icon,
     metric,
     rows: rows.map(row => ({ ...row, presentation: providerView(row.provider).presentation })),
+    available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',
     emptyText,

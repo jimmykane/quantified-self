@@ -79,6 +79,13 @@
   padding: 0.25rem;
 }
 
+.health-metric-empty {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  margin: 0;
+  padding: 0.75rem;
+}
+
 .health-metric-group h3 {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-small);

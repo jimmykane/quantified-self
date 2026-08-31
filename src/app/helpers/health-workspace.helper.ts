@@ -242,13 +242,16 @@ export function navigateHealthWorkspaceWindow(
   return { ...state, endDate: new Date(nextEndMs).toISOString().slice(0, 10) };
 }
 
-export function buildHealthMetricCatalogGroups(): HealthMetricCatalogGroup[] {
+export function buildHealthMetricCatalogGroups(
+  availableMetricIds?: readonly HealthMetricId[],
+): HealthMetricCatalogGroup[] {
   const definitions = Object.values(HEALTH_METRIC_CATALOG);
+  const available = availableMetricIds === undefined ? null : new Set(availableMetricIds);
   return CATEGORY_ORDER.map(category => ({
     id: category,
     label: CATEGORY_LABELS[category],
     metrics: definitions
-      .filter(definition => definition.category === category)
+      .filter(definition => definition.category === category && (!available || available.has(definition.id)))
       .sort((left, right) => compareText(left.label, right.label)),
   })).filter(group => group.metrics.length > 0);
 }

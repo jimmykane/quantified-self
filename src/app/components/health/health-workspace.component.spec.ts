@@ -5,6 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import {
   HEALTH_COVERAGE_STATUSES,
+  HEALTH_METRIC_CATALOG,
   HEALTH_METRIC_IDS,
   HEALTH_NORMALIZATION_STATUSES,
   HEALTH_PROVIDERS,
@@ -23,7 +24,7 @@ import {
 import { ProviderPresentation } from '@shared/provider-presentation';
 import { SLEEP_PROVIDERS, SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, throwError } from 'rxjs';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
@@ -186,6 +187,7 @@ describe('HealthWorkspaceComponent', () => {
   let component: HealthWorkspaceComponent;
   let router: Router;
   let loadMetricRange: ReturnType<typeof vi.fn>;
+  let loadAvailableMetricIds: ReturnType<typeof vi.fn>;
   let updateHealthWorkspaceRange: ReturnType<typeof vi.fn>;
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let syncStates: BehaviorSubject<HealthSyncState[]>;
@@ -193,9 +195,20 @@ describe('HealthWorkspaceComponent', () => {
   async function createComponent(
     loadImplementation?: (metricId: HealthMetricId) => Promise<HealthWorkspaceRangeLoad>,
     savedRange?: AppHealthWorkspaceRange,
+    availability: {
+      metricIds?: readonly HealthMetricId[];
+      healthError?: unknown;
+      hasSleep?: boolean;
+      sleepError?: unknown;
+    } = {},
   ): Promise<void> {
     loadMetricRange = vi.fn().mockImplementation((_uid: string, request: { metricId: HealthMetricId }) =>
       loadImplementation ? loadImplementation(request.metricId) : Promise.resolve(rangeLoad(request.metricId)));
+    loadAvailableMetricIds = availability.healthError
+      ? vi.fn().mockRejectedValue(availability.healthError)
+      : vi.fn().mockResolvedValue(
+        availability.metricIds || Object.keys(HEALTH_METRIC_CATALOG) as HealthMetricId[],
+      );
     updateHealthWorkspaceRange = vi.fn().mockResolvedValue(undefined);
     const user = signal({
       uid: 'user-1',
@@ -222,8 +235,23 @@ describe('HealthWorkspaceComponent', () => {
           useValue: { user },
         },
         { provide: AppUserSettingsQueryService, useValue: { updateHealthWorkspaceRange } },
-        { provide: AppHealthService, useValue: { loadMetricRange, watchSyncStates: () => syncStates.asObservable() } },
-        { provide: AppSleepService, useValue: { watchForDashboard: () => of([sleepSession()]) } },
+        {
+          provide: AppHealthService,
+          useValue: {
+            loadMetricRange,
+            loadAvailableMetricIds,
+            watchSyncStates: () => syncStates.asObservable(),
+          },
+        },
+        {
+          provide: AppSleepService,
+          useValue: {
+            watchForDashboard: () => of([sleepSession()]),
+            watchHasAnySleepSession: () => availability.sleepError
+              ? throwError(() => availability.sleepError)
+              : of(availability.hasSleep ?? true),
+          },
+        },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
       ],
     })
@@ -286,6 +314,36 @@ describe('HealthWorkspaceComponent', () => {
     expect(updateHealthWorkspaceRange).toHaveBeenCalledWith('user-1', '14d');
     expect(router.url).not.toContain('?');
     expect(component.isSavingRange()).toBe(false);
+  });
+
+  it('shows only metrics with stored history and falls back from an unavailable default', async () => {
+    await createComponent(undefined, undefined, {
+      metricIds: [HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.HeartRate],
+      hasSleep: false,
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const metricLabels = [...host.querySelectorAll('.health-metric-option')]
+      .map(option => option.textContent?.trim());
+    expect(metricLabels).toEqual(['Heart rate', 'Steps']);
+    expect(host.textContent).not.toContain('Sleep overview');
+    expect(host.textContent).not.toContain('Resting heart rate');
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
+    expect((host.querySelector('[aria-label="Open Heart rate"]') as HTMLButtonElement).disabled).toBe(false);
+    expect((host.querySelector('[aria-label="Open Sleep"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((host.querySelector('[aria-label="Open HRV"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the complete catalog visible when availability discovery fails', async () => {
+    await createComponent(undefined, undefined, {
+      healthError: new Error('offline'),
+      sleepError: new Error('offline'),
+    });
+
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics))
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+    expect(component.showSleepMetric()).toBe(true);
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
   });
 
   it('restores a saved range when settings hydrate after the signed-in account', async () => {
@@ -369,6 +427,7 @@ describe('HealthWorkspaceComponent', () => {
   it('refreshes selected and priority data when sync-state timestamps advance', async () => {
     await createComponent();
     expect(loadMetricRange).toHaveBeenCalledTimes(3);
+    expect(loadAvailableMetricIds).toHaveBeenCalledTimes(1);
 
     syncStates.next([{
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -380,6 +439,7 @@ describe('HealthWorkspaceComponent', () => {
     await fixture.whenStable();
 
     expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(6);
+    expect(loadAvailableMetricIds).toHaveBeenCalledTimes(2);
   });
 
   it('shows the newest provider sync timestamp even when an older field is also present', async () => {

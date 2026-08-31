@@ -188,6 +188,22 @@ describe('Health workspace helpers', () => {
     expect(new Set(metricIds).size).toBe(metricIds.length);
   });
 
+  it('keeps category ordering while hiding catalog metrics without stored data', () => {
+    const groups = buildHealthMetricCatalogGroups([
+      HEALTH_METRIC_IDS.Steps,
+      HEALTH_METRIC_IDS.HeartRate,
+      HEALTH_METRIC_IDS.BodyWeight,
+    ]);
+
+    expect(groups.map(group => group.id)).toEqual(['cardiovascular', 'movement', 'body']);
+    expect(groups.flatMap(group => group.metrics.map(metric => metric.id))).toEqual([
+      HEALTH_METRIC_IDS.HeartRate,
+      HEALTH_METRIC_IDS.Steps,
+      HEALTH_METRIC_IDS.BodyWeight,
+    ]);
+    expect(buildHealthMetricCatalogGroups([])).toEqual([]);
+  });
+
   it('keeps providers, accounts, semantics, native values, gaps, and conflicts isolated', () => {
     const records = [
       sourceRecord({ id: 'garmin-one', provider: HEALTH_PROVIDERS.GarminAPI, accountKey: 'secret-account-a' }),
