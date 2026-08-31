@@ -177,6 +177,10 @@ describe('HomeComponent', () => {
         );
 
         expect(integrationCards.length).toBe(5);
+        expect(text).toContain('Import your Garmin, Suunto, COROS, and Wahoo activity history');
+        expect(text).not.toContain('FIT-backed Wahoo history');
+        expect(text).not.toContain('rolling 5 years');
+        expect(text).not.toContain('last 3 months');
         expect(text).toContain('Automatically send new Garmin, COROS, or Wahoo activities to Suunto');
         expect(text).toContain('Automatic Sync for All Services');
         expect(text).toContain('Automatic Sync Between Services');
