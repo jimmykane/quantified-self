@@ -344,6 +344,24 @@ describe('EventCardChartPanelComponent', () => {
     expect(intersectionObserverObserveSpies).toHaveLength(0);
   });
 
+  it('keeps compact preview chrome while enabling the production tooltip and interactions', async () => {
+    component.previewMode = true;
+    component.previewInteractions = true;
+    component.overlayOptions = [{ dataType: 'heartRate', label: 'Heart Rate', color: '#ff0000', unit: 'bpm' }];
+    component.showResetChartState = true;
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
+    expect(option?.tooltip?.show).toBe(true);
+    expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.series?.[0]?.silent).toBe(false);
+    expect(chart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
+    expect(intersectionObserverObserveSpies).toHaveLength(1);
+  });
+
   it('clears the active tooltip before replacing series for an overlay', async () => {
     await renderComponent();
 

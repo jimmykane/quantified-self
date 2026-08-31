@@ -25,6 +25,7 @@ import type {
   EventChartZoneColorPiece,
 } from '../../helpers/event-echarts-data.helper';
 import type { EventChartRange } from '../../helpers/event-chart-range.helper';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { SharedModule } from '../../modules/shared.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
@@ -161,6 +162,7 @@ export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
   private hasPlayedAnimation = false;
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
     && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   readonly xAxisType = XAxisTypes.Duration;

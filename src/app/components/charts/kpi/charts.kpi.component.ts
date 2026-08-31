@@ -971,7 +971,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       series: [
         {
           type: 'line',
-          silent: this.compactRow,
+          silent: false,
           data: trendData,
           smooth: true,
           showSymbol: hasSingleTrendPoint,
@@ -1052,10 +1052,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     isMobileTooltipViewport: boolean,
     sparklineStyle: KpiSparklineStyle,
   ): Record<string, unknown> {
-    if (this.compactRow) {
-      return { show: false };
-    }
-
     return {
       show: true,
       trigger: 'axis',

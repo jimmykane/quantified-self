@@ -13,6 +13,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
 import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
 
 describe('HomeWorkoutPreviewComponent', () => {
@@ -40,8 +41,10 @@ describe('HomeWorkoutPreviewComponent', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     viewportObserverCallback = undefined;
-    vi.stubGlobal('IntersectionObserver', vi.fn((callback: IntersectionObserverCallback) => {
-      viewportObserverCallback = callback;
+    vi.stubGlobal('IntersectionObserver', vi.fn((callback: IntersectionObserverCallback, options?: IntersectionObserverInit) => {
+      if (options?.threshold === 0.1) {
+        viewportObserverCallback = callback;
+      }
       return {
         observe: observeViewport,
         unobserve: vi.fn(),
@@ -86,7 +89,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders real workout chart panels directly in non-interactive preview mode', async () => {
+  it('renders compact workout charts with the production tooltip and haptic interactions', async () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(2));
 
@@ -134,13 +137,15 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(panels).toHaveLength(4);
     expect(options).toHaveLength(4);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
+    expect(panels.every(panel => panel.previewInteractions)).toBe(true);
+    expect(panels.every(panel => panel.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
     expect(panels.every(panel => panel.useAnimations)).toBe(true);
     expect(panels.map(panel => panel.panel?.displayName)).toEqual(['Heart Rate', 'Altitude', 'Power', 'Depth']);
     expect(panels.every(panel => panel.zoneLegendItems.length === 0)).toBe(true);
     expect(panels.every(panel => panel.gradeLegendItems.length === 0)).toBe(true);
-    expect(options.every(option => option.tooltip.show === false)).toBe(true);
+    expect(options.every(option => option.tooltip.show === true)).toBe(true);
     expect(options.every(option => option.yAxis.axisLabel?.show === false)).toBe(true);
-    expect(options.every(option => option.series.every(series => series.silent))).toBe(true);
+    expect(options.every(option => option.series.every(series => !series.silent))).toBe(true);
     expect(heartRateOption?.visualMap?.[0]?.pieces.map(piece => piece.color)).toEqual([
       AppColors.LightBlue,
       AppColors.Blue,
@@ -171,7 +176,16 @@ describe('HomeWorkoutPreviewComponent', () => {
       opacity: 1,
       origin: 'start',
     }));
-    expect(chart.on).not.toHaveBeenCalled();
+    expect(chart.on).toHaveBeenCalled();
+    expect(loader.attachMobileSeriesTapFeedback.mock.calls.filter(
+      call => call[1] === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    ).length).toBeGreaterThanOrEqual(4);
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
+      chart,
+      DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
+    expect(getComputedStyle(fixture.nativeElement).pointerEvents).not.toBe('none');
+    expect(fixture.nativeElement.querySelector('.workout-preview__charts')?.getAttribute('role')).toBe('group');
     expect(fixture.nativeElement.querySelector('.workout-preview')).toBeNull();
     expect(text).not.toContain('Illustrative analysis');
     expect(text).not.toContain('Workout charts');

@@ -16,6 +16,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { HomeDashboardPreviewComponent } from './home-dashboard-preview.component';
 
 describe('HomeDashboardPreviewComponent', () => {
@@ -68,6 +69,7 @@ describe('HomeDashboardPreviewComponent', () => {
       DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
     ]);
     expect(kpiComponents.every(component => component.compactRow)).toBe(true);
+    expect(kpiComponents.every(component => component.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
     expect(kpiComponents.map(component => component.primaryValueText)).toEqual(['62', '+8', '72%']);
     expect(clusterMap.style.getPropertyValue('--cluster-small')).toBe('#87d4ff');
     expect(clusterMarkers).toHaveLength(4);
@@ -77,5 +79,20 @@ describe('HomeDashboardPreviewComponent', () => {
     expect(text).toContain('KPI');
     expect(text).toContain('Custom');
     expect(text).toContain('Map');
+    expect(fixture.nativeElement.querySelector('.dashboard-preview__tiles').hasAttribute('inert')).toBe(false);
+    const options = loader.setOption.mock.calls.map(call => call[1] as {
+      tooltip?: { show?: boolean };
+      series?: Array<{ silent?: boolean }>;
+    });
+    expect(options.every(option => option.tooltip?.show === true)).toBe(true);
+    expect(options.every(option => option.series?.every(series => series.silent === false))).toBe(true);
+    expect(loader.attachMobileSeriesTapFeedback.mock.calls.filter(
+      call => call[1] === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    ).length).toBeGreaterThanOrEqual(3);
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
+      chart,
+      DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
+    expect(getComputedStyle(fixture.nativeElement).pointerEvents).not.toBe('none');
   });
 });

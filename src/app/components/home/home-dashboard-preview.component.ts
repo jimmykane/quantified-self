@@ -11,6 +11,7 @@ import {
   DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
   DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { resolveMapClusterPaintTokens } from '../../services/map/map-cluster-style.helper';
@@ -41,6 +42,7 @@ export class HomeDashboardPreviewComponent {
   readonly fitnessChartType = DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE;
   readonly formChartType = DASHBOARD_FORM_NOW_KPI_CHART_TYPE;
   readonly easyChartType = DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE;
+  readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
 
   readonly fitnessCtl: DashboardFitnessCtlContext = {
     latestDayMs: PREVIEW_WEEK_MS,

@@ -42,7 +42,6 @@
   height: 190px;
   background: var(--mat-sys-surface-container-lowest);
   overflow: hidden;
-  pointer-events: none;
   touch-action: pan-y;
   user-select: none;
 
@@ -104,7 +103,6 @@
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  pointer-events: none;
   touch-action: pan-y;
   user-select: none;
 }

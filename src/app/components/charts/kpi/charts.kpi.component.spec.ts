@@ -211,7 +211,7 @@ describe('ChartsKpiComponent', () => {
     expect(component.titleDisplay).toBe('M/S');
   });
 
-  it('keeps full titles and applies row layout in compact row mode', async () => {
+  it('keeps full titles and chart interactions while applying row layout in compact row mode', async () => {
     component.compactRow = true;
     component.reserveTitleActionSpace = true;
     component.chartType = DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE;
@@ -243,8 +243,9 @@ describe('ChartsKpiComponent', () => {
       && typeof arg === 'object'
       && 'tooltip' in (arg as Record<string, unknown>)
     )) as Record<string, any> | undefined;
-    expect(option?.tooltip?.show).toBe(false);
-    expect(option?.series?.[0]?.silent).toBe(true);
+    expect(option?.tooltip?.show).toBe(true);
+    expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
+    expect(option?.series?.[0]?.silent).toBe(false);
   });
 
   it('updates compact title alias when action-space reservation toggles without data changes', async () => {

@@ -1,7 +1,7 @@
 :host {
   display: block;
   margin-top: 1rem;
-  pointer-events: none;
+  touch-action: pan-y;
   user-select: none;
 }
 
