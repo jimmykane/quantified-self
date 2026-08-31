@@ -3,21 +3,37 @@ const PARSER_PLACEHOLDER_CREATOR_NAMES = new Set([
   'unknown device',
 ]);
 
-/**
- * Returns an existing creator name only when it is meaningful enough to carry
- * across source-file parsing. Parser placeholders must yield to newly recovered
- * device metadata.
- */
-export function getPreservableActivityCreatorName(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const creatorName = value.trim();
+function getMeaningfulActivityCreatorName(value: unknown): string | null {
+  const creatorName = normalizeActivityCreatorName(value);
   if (!creatorName) {
     return null;
   }
 
-  const normalizedName = creatorName.toLowerCase().replace(/\s+/g, ' ');
-  return PARSER_PLACEHOLDER_CREATOR_NAMES.has(normalizedName) ? null : creatorName;
+  return isParserPlaceholderCreatorName(creatorName) ? null : creatorName;
+}
+
+/**
+ * Preserves the existing creator unless it is a parser placeholder and the new
+ * parse recovered a meaningful replacement.
+ */
+export function getActivityCreatorNameCarryover(existingValue: unknown, parsedValue: unknown): string | null {
+  const existingCreatorName = normalizeActivityCreatorName(existingValue);
+  if (!existingCreatorName) {
+    return null;
+  }
+
+  if (!isParserPlaceholderCreatorName(existingCreatorName)) {
+    return existingCreatorName;
+  }
+
+  return getMeaningfulActivityCreatorName(parsedValue) ? null : existingCreatorName;
+}
+
+function normalizeActivityCreatorName(value: unknown): string | null {
+  return typeof value === 'string' ? value.trim() || null : null;
+}
+
+function isParserPlaceholderCreatorName(value: string): boolean {
+  const normalizedName = value.toLowerCase().replace(/\s+/g, ' ');
+  return PARSER_PLACEHOLDER_CREATOR_NAMES.has(normalizedName);
 }

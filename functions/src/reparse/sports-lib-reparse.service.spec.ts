@@ -1017,6 +1017,34 @@ describe('sports-lib-reparse.service', () => {
         },
     );
 
+    it.each(['Unknown', 'Unknown Device', ''])(
+        'resolveActivityEditCarryover should retain a placeholder when the new creator is %j',
+        (parsedCreatorName) => {
+            const parsedActivity = {
+                creator: { name: parsedCreatorName },
+                startDate: new Date('2026-01-01T10:00:00.000Z'),
+                endDate: new Date('2026-01-01T10:30:00.000Z'),
+                type: 'Ride',
+                getStat: vi.fn(() => null),
+            };
+            const parsedEvent = {
+                getActivities: () => [parsedActivity],
+            } as any;
+
+            resolveActivityEditCarryover(parsedEvent, [{
+                id: 'a1',
+                data: () => ({
+                    creator: { name: 'Unknown Device' },
+                    startDate: new Date('2026-01-01T10:00:00.000Z'),
+                    endDate: new Date('2026-01-01T10:30:00.000Z'),
+                    type: 'Ride',
+                }),
+            } as any]);
+
+            expect(parsedActivity.creator.name).toBe('Unknown Device');
+        },
+    );
+
     it('resolveActivityEditCarryover should leave creator unchanged on ambiguous matches', () => {
         const sharedStart = new Date('2026-01-01T10:00:00.000Z');
         const activityOne = { creator: { name: 'keep-me' }, startDate: sharedStart, type: 'Run', getStat: vi.fn(() => null) };

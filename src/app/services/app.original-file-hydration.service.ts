@@ -19,7 +19,7 @@ import { AppCacheService } from './app.cache.service';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import { AppEventInterface, OriginalFileMetaData } from '@shared/app-event.interface';
 import { createParsingOptions } from '@shared/parsing-options';
-import { getPreservableActivityCreatorName } from '@shared/activity-creator-name';
+import { getActivityCreatorNameCarryover } from '@shared/activity-creator-name';
 
 export interface ParseOptions {
   skipEnrichment?: boolean;
@@ -512,7 +512,10 @@ export class AppOriginalFileHydrationService {
       return;
     }
 
-    const existingCreatorName = getPreservableActivityCreatorName(existingActivity.creator?.name);
+    const existingCreatorName = getActivityCreatorNameCarryover(
+      existingActivity.creator?.name,
+      parsedActivity.creator?.name,
+    );
     if (existingCreatorName && parsedActivity.creator) {
       parsedActivity.creator.name = existingCreatorName;
     }

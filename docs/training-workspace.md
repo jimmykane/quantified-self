@@ -1777,6 +1777,12 @@ whether the scheduled event or route scanner can discover and enqueue new candid
 already queued work can dispatch. A `RUNNING` Cloud Tasks queue does not enable automatic reparse, and a disabled scanner
 does not pause Cloud Tasks. Keep these labels distinct in operational UI and diagnostics.
 
+Source-backed reparses preserve meaningful existing activity creator names so user device renames survive parser
+upgrades. Parser placeholders (`Unknown` and `Unknown Device`) yield only when the newly parsed activity contains a
+meaningful creator identity; when the new parse is also blank or a placeholder, the existing placeholder remains. Keep
+this rule aligned across the backend reparse worker and both frontend source-hydration paths so loading the same retained
+original cannot produce different creator metadata.
+
 When Training appears stuck on Preparing:
 
 1. Check the browser snapshot status and console.

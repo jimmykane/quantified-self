@@ -11,7 +11,7 @@ Target version source of truth:
 
 When Quantified Self adopts the Sports Lib release that recovers a FIT activity creator from an explicitly local or
 creator `device_info` message, new imports persist that source-provided device identity. A targeted source-backed
-reparse also replaces legacy `Unknown` and `Unknown Device` creator placeholders with the newly parsed identity.
+reparse also replaces legacy `Unknown` and `Unknown Device` creator placeholders when it recovers a meaningful new identity.
 Meaningful existing creator names continue to win so user device renames survive reparsing.
 
 Use the ordinary targeted reparse only for retained original FIT files whose persisted creator is a placeholder. Do not
